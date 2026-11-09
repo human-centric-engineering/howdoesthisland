@@ -1,0 +1,202 @@
+openapi: 3.1.0
+info:
+  title: HowDoesThisLand persuasion assessment API
+  version: 0.5.0
+  description: >
+    Assess any content against ethos, pathos, logos and kairos, plus lenses
+    (telos, mythos, prepon), five rhetorical duties and thirteen influence perspectives. Driven by howdoesthisland_model.json. Each appeal is
+    scored by its own LLM judge; a deterministic quick scan is available for
+    instant, free, offline results.
+paths:
+  /v1/assess:
+    post:
+      summary: Assess content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssessRequest' }
+      responses:
+        '200':
+          description: Assessment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Assessment' }
+  /v1/assess/{appeal}:
+    post:
+      summary: Run a single judge (ethos, pathos, logos or lenses)
+      parameters:
+        - { name: appeal, in: path, required: true, schema: { type: string, enum: [ethos, pathos, logos, kairos, craft, audience, culture, lenses, influence] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssessRequest' }
+      responses:
+        '200':
+          description: One judge's output (see judge_output_schema in the model)
+  /v1/rewrite:
+    post:
+      summary: Produce an improved draft from an assessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, assessment]
+              properties:
+                content: { type: string }
+                assessment: { $ref: '#/components/schemas/Assessment' }
+                focus: { type: array, items: { type: string }, description: Dimension or appeal ids to prioritise }
+      responses:
+        '200':
+          description: Draft
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  draft: { type: string }
+                  placeholders: { type: array, items: { type: string }, description: Facts the author must supply }
+  /v1/eval:
+    post:
+      summary: Run the calibration set (howdoesthisland_eval_set.json) against the current model and return pass rates per appeal, flag and function
+      responses:
+        '200': { description: Calibration report }
+  /v1/model:
+    get:
+      summary: Return the current model (howdoesthisland_model.json)
+      responses:
+        '200': { description: The model }
+components:
+  schemas:
+    AssessRequest:
+      type: object
+      properties:
+        content: { type: string, description: Plain text. Supply this or source. }
+        source:
+          type: object
+          description: Server fetches and extracts text
+          properties:
+            url: { type: string, format: uri }
+            file_base64: { type: string }
+            media_type: { type: string, examples: [application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document] }
+        content_type: { type: string, default: general, description: A content_types id from the model }
+        audience:
+          type: object
+          properties:
+            involvement: { type: string, enum: [high, medium, low] }
+            awareness: { type: string, enum: [unaware, problem_aware, solution_aware, product_aware, most_aware] }
+            relationship: { type: string, enum: [cold, warm, trusted] }
+            decision_unit: { type: string, enum: [individual, group] }
+            archetype: { type: string, enum: [general, auditor, builder, pathfinder, connector, sceptic] }
+            role: { type: string, description: An exec_roles id (e.g. cfo, cto, gc, procurement, board). Overrides archetype. }
+            focus: { type: string, enum: [unknown, promotion, prevention] }
+            expertise: { type: string, enum: [novice, informed, expert] }
+        culture:
+          type: object
+          properties:
+            reader: { type: string, description: "A culture.countries id (e.g. jp, de, br) or 'global'" }
+            writer: { type: string, description: Optional; enables writer-to-reader gap analysis }
+        judges: { type: array, items: { type: string, enum: [craft, audience, culture, lenses, influence] }, description: Optional judges to run in addition to the four appeals }
+            description: { type: string, description: Free-text description of the reader }
+        mode: { type: string, enum: [quick, full], default: full, description: quick = deterministic scan only }
+        include: { type: array, items: { type: string, enum: [lenses, influence, duties, craft] }, default: [lenses, influence, duties, craft] }
+        model_version: { type: string, default: 0.1.0 }
+    Assessment:
+      type: object
+      properties:
+        model_version: { type: string }
+        mode: { type: string }
+        content_type: { type: string }
+        effective_weights: { type: object, additionalProperties: { type: number } }
+        scores:
+          type: object
+          properties:
+            overall: { type: number }
+            band: { type: string }
+            balance_index: { type: number }
+            ethos: { type: number }
+            pathos: { type: number }
+            logos: { type: number }
+            kairos: { type: number }
+        duties:
+          type: object
+          properties:
+            profile: { type: object, description: Percentages for teach, delight, move, steer, unsettle }
+            primary: { type: string }
+            target: { type: object, nullable: true }
+            fit: { type: number, nullable: true }
+        appeal_share: { type: object, description: Percentage of words per appeal plus neutral }
+        group_scores: { type: object, description: "0-100 scores for craft, audience and culture" }
+        culture:
+          type: object
+          properties:
+            reader: { type: object, description: Profile with Lewis blend, Hofstede scores and expected position on nine scales }
+            writer: { type: object, nullable: true }
+            positions: { type: object, description: "Where the text sits on each scale, 0-1" }
+            gaps: { type: array, items: { type: object }, description: Scales where writer and reader cultures differ most }
+        craft:
+          type: object
+          properties:
+            words: { type: integer }
+            speaking_sec: { type: integer }
+            gunning_fog: { type: number }
+            fk_grade: { type: number }
+            passive_pct: { type: number }
+            emotional_pct: { type: number }
+            devices: { type: object }
+        perspectives:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              score: { type: integer, minimum: 0, maximum: 4, nullable: true }
+              summary: { type: string }
+              levers:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    status: { type: string, enum: [present, absent, misused, not_applicable, unknown] }
+                    quote: { type: string }
+                    note: { type: string }
+        lenses: { type: object, additionalProperties: { type: number } }
+        dimensions:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              appeal: { type: string }
+              score: { type: integer, minimum: 0, maximum: 4 }
+              rationale: { type: string }
+        highlights:
+          type: array
+          items:
+            type: object
+            properties:
+              start: { type: integer }
+              end: { type: integer }
+              quote: { type: string }
+              appeal: { type: string }
+              dimension: { type: string }
+              polarity: { type: string, enum: [strength, weakness] }
+              note: { type: string }
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              appeal: { type: string }
+              dimension: { type: string }
+              move: { type: string }
+              issue: { type: string }
+              original: { type: string }
+              rewrite: { type: string }
+              impact: { type: string }
+        balance_findings: { type: array, items: { type: object, properties: { id: { type: string }, message: { type: string } } } }
+        red_flags: { type: array, items: { type: object, properties: { id: { type: string }, quote: { type: string }, severity: { type: string } } } }

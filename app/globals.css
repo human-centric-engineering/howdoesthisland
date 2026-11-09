@@ -1,4 +1,8 @@
 @import 'tailwindcss';
+/* HowDoesThisLand: keep the original artefact in prototype/ out of Tailwind's
+   automatic source scan, so its classes never reach the app's stylesheet.
+   Ledger: .context/app/platform-divergences.md row 4. */
+@source not '../prototype';
 /* The animate-in / fade / zoom / slide utilities used by components/ui/ overlays */
 @import 'tw-animate-css';
 @plugin '@tailwindcss/typography';

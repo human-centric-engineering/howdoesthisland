@@ -1,7 +1,7 @@
 {
-  "name": "sunrise",
-  "version": "0.18.0",
-  "description": "A production-ready Next.js starter template designed for rapid application development with AI assistance.",
+  "name": "howdoesthisland",
+  "version": "0.1.0",
+  "description": "Scores writing against ethos, pathos, logos and kairos, and suggests rewrites, in the browser or through an API. Built on the Sunrise starter template.",
   "private": true,
   "engines": {
     "node": ">=24",
@@ -89,25 +89,25 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/human-centric-engineering/sunrise.git"
+    "url": "git+https://github.com/human-centric-engineering/howdoesthisland.git"
   },
   "keywords": [
+    "persuasion",
+    "rhetoric",
+    "ethos",
+    "pathos",
+    "logos",
+    "kairos",
+    "writing-feedback",
     "nextjs",
-    "typescript",
-    "react",
-    "starter",
-    "template",
-    "boilerplate",
-    "prisma",
-    "tailwind",
-    "better-auth"
+    "sunrise"
   ],
   "author": "Human-Centric Engineering",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/human-centric-engineering/sunrise/issues"
+    "url": "https://github.com/human-centric-engineering/howdoesthisland/issues"
   },
-  "homepage": "https://github.com/human-centric-engineering/sunrise#readme",
+  "homepage": "https://github.com/human-centric-engineering/howdoesthisland#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.137.0",
     "@aws-sdk/client-s3": "^3.1161.0",

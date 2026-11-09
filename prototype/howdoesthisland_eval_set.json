@@ -1,0 +1,489 @@
+{
+  "meta": {
+    "name": "HowDoesThisLand calibration set",
+    "version": "0.4.0",
+    "bands": {
+      "low": "0-44",
+      "mid": "45-70",
+      "high": "71-100"
+    },
+    "how_to_use": "Run each case through the quick scan and the AI judges. A case passes an appeal if the score lands in the expected band; 'near' if it is one band away. Track pass rates over model versions. Expectations were set by hand and should be reviewed by two people before being used as ground truth."
+  },
+  "cases": [
+    {
+      "id": "ev01",
+      "title": "Hype-heavy SaaS landing page",
+      "content_type": "landing_page",
+      "audience": {},
+      "text": "Welcome to Nexora Solutions\n\nNexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly. Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.\n\nOur cutting-edge technology delivers unparalleled insights, helping you make better decisions. Studies show that data-driven companies are significantly more profitable.\n\nFeatures\n- Real-time dashboards\n- AI-powered forecasting\n- Seamless integrations with up to 200 tools\n\nWe are passionate about helping our customers succeed. Our team of experts is second to none.\n\nAct now! Limited time only: get 20% off your first year.\n\nContact us to learn more.",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "low",
+          "logos": "low",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [
+          "rf_hype",
+          "rf_false_urgency",
+          "rf_weasel"
+        ],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "eth_integrity",
+          "pat_stakes",
+          "log_evidence"
+        ],
+        "balance_rules": [],
+        "primary_duty": "teach"
+      },
+      "notes": "All four appeals weak; hype and manufactured urgency."
+    },
+    {
+      "id": "ev02",
+      "title": "Reader-centred bookkeeping landing page",
+      "content_type": "landing_page",
+      "audience": {},
+      "text": "It's 11pm on the last day of the quarter and you are still matching receipts to bank lines. You are not alone: most of the 140 practice owners we work with told us the same thing before they switched.\n\nBooks done and tax-ready every month, without you touching a receipt. Here's how it works:\n- Week one: we connect your bank feeds and set up receipt capture on your phone.\n- Every month: a one-page cash summary lands in your inbox by the 5th.\n- At year end: your accountant gets clean books, so their bill drops.\n\nBecause we reconcile daily rather than monthly, errors are caught while they are still small. Compared with a spreadsheet, clients save a median of 6 hours a month (2025 client survey, n=112).\n\n\"We cut month-end close from 9 days to 3.\" Priya Shah, Finance Director, Northwind Logistics\n\nYou might be wondering what happens if we get something wrong. If your accountant ever finds an error we made, we fix it free and refund that month. We are not the right fit for companies with more than 50 staff; at that size you need an in-house team, and we'll happily recommend one.\n\nWe take four new clients each month. Book a 20-minute call this week and you'll have a fixed quote within 2 working days.",
+      "expect": {
+        "appeals": {
+          "ethos": "high",
+          "pathos": "high",
+          "logos": "high",
+          "kairos": "mid"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_hype",
+          "rf_false_urgency"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "steer"
+      },
+      "notes": "Strong benchmark. Limit raised and answered."
+    },
+    {
+      "id": "ev03",
+      "title": "Duty-list CV",
+      "content_type": "cv_resume",
+      "audience": {},
+      "text": "Profile\nResults-driven and passionate engineering leader with extensive experience in software development. A strategic thinker and team player who is detail-oriented and hard-working.\n\nExperience\nHead of Engineering, FinServe Ltd (2019 to present)\nResponsible for managing the engineering department. Duties included hiring, line management and overseeing the delivery of the product roadmap.\n\nEngineering Manager, CloudCart (2015 to 2019)\nTasked with leading a team of developers. Helped to migrate the platform to the cloud, which significantly improved performance.",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "low",
+          "logos": "low",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "eth_competence",
+          "log_evidence"
+        ],
+        "balance_rules": [],
+        "primary_duty": "teach"
+      },
+      "notes": "Adjectives instead of achievements."
+    },
+    {
+      "id": "ev04",
+      "title": "Achievement-led CV",
+      "content_type": "cv_resume",
+      "audience": {},
+      "text": "Engineering leader who builds teams that ship weekly without burning out.\n\nHead of Engineering, Eagle Eye Solutions (2019 to 2024)\n- Grew the team from 6 to 25 engineers across three countries; regretted attrition under 5% a year.\n- Moved releases from monthly to daily by introducing trunk-based development and automated testing; change failure rate fell from 18% to 4%.\n- Led the move to AWS, cutting hosting costs by £240k a year.\n\nEngineering Manager, Third Bridge (2015 to 2019)\n- Rebuilt the search platform used by 1,200 analysts; median query time dropped from 3.2s to 0.4s.\n- Introduced DORA metrics and quarterly team health checks, later adopted across the engineering organisation.\n\n\"John turned a struggling team into the one everyone wanted to join.\" CTO, Eagle Eye Solutions",
+      "expect": {
+        "appeals": {
+          "ethos": "high",
+          "pathos": "low",
+          "logos": "high",
+          "kairos": "low"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_hype"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "teach"
+      },
+      "notes": "Pathos and kairos should be low but the overall high because CV weights favour ethos and logos."
+    },
+    {
+      "id": "ev05",
+      "title": "Sender-centred cold email",
+      "content_type": "sales_email",
+      "audience": {},
+      "text": "Subject: Quick question\n\nHi Sarah,\n\nI hope this email finds you well! My name is Tom and I am the Business Development Manager at BrightPath Consulting. We are a leading provider of digital transformation solutions and we have worked with many of the world's top companies.\n\nWe offer a wide range of services including cloud migration, process optimisation and change management. Our innovative approach delivers outstanding results for our clients.\n\nI would love to set up a 45-minute call to walk you through our capabilities and discuss how we could potentially work together.\n\nLet me know if you have any questions!\n\nTom",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "low",
+          "logos": "low",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "eth_goodwill",
+          "pat_stakes",
+          "kai_call"
+        ],
+        "balance_rules": [
+          "br_all_about_me"
+        ],
+        "primary_duty": "teach"
+      },
+      "notes": "Classic self-oriented outreach."
+    },
+    {
+      "id": "ev06",
+      "title": "Reader-centred cold email",
+      "content_type": "sales_email",
+      "audience": {},
+      "text": "Subject: Your Q3 churn note\n\nHi Sarah,\n\nYour Q3 update said 40% of customer losses happen in the first month. That's usually an onboarding problem, not a product one.\n\nWe helped Brightwave, a payroll SaaS about your size, cut first-month churn from 38% to 21% in one quarter by adding a day-7 check-in call and a three-step setup guide. Nothing to install.\n\nWith renewals coming up in January, fixing month one now would protect next year's numbers.\n\nIf it's useful, I can send the two-page playbook we used. Just reply \"send it\". No call needed.\n\nTom",
+      "expect": {
+        "appeals": {
+          "ethos": "mid",
+          "pathos": "mid",
+          "logos": "mid",
+          "kairos": "high"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_controlling",
+          "rf_false_urgency"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "steer"
+      },
+      "notes": "Kairos strong: real trigger, timing, easy ask."
+    },
+    {
+      "id": "ev07",
+      "title": "Manipulative sales page",
+      "content_type": "landing_page",
+      "audience": {},
+      "text": "WARNING: Your savings are being destroyed every single day you wait.\n\nBanks don't want you to know this secret. Our system has guaranteed results and never fails. Thousands of people have already made a fortune.\n\nAct now! Only 3 spots left and the price doubles at midnight. Don't miss out.\n\nYou must sign up today or live with the consequences.\n\n[Yes, I want financial freedom]   [No thanks, I prefer being broke]",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "mid",
+          "logos": "low",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [
+          "rf_false_urgency",
+          "rf_absolute_promise",
+          "rf_confirmshaming",
+          "rf_fear",
+          "rf_controlling"
+        ],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "eth_integrity",
+          "kai_integrity"
+        ],
+        "balance_rules": [],
+        "primary_duty": null
+      },
+      "notes": "Should trigger most red flags; integrity dimensions near zero."
+    },
+    {
+      "id": "ev08",
+      "title": "Data-dump board update",
+      "content_type": "exec_briefing",
+      "audience": {},
+      "text": "Q3 Operations Update\n\nThroughput rose 4.2% quarter on quarter to 18,400 units. Average handling time fell from 6.1 to 5.7 minutes. Defect rate was 1.8% against a target of 1.5%. Overtime spend was £212k, 9% over budget. Supplier on-time delivery was 91.3%. Headcount closed at 412, with 23 leavers and 31 joiners. The warehouse management system upgrade is 60% complete. Customer satisfaction scored 7.9 out of 10.",
+      "expect": {
+        "appeals": {
+          "ethos": "mid",
+          "pathos": "low",
+          "logos": "high",
+          "kairos": "low"
+        },
+        "overall": "mid",
+        "flags_present": [],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "kai_moment",
+          "pat_stakes",
+          "lens_telos"
+        ],
+        "balance_rules": [
+          "br_dry",
+          "br_no_ask"
+        ],
+        "primary_duty": "teach"
+      },
+      "notes": "Facts without meaning, stakes or ask."
+    },
+    {
+      "id": "ev09",
+      "title": "Decision-ready board paper",
+      "content_type": "exec_briefing",
+      "audience": {},
+      "text": "Recommendation: approve £1.2m to automate picking in the Leeds warehouse this quarter.\n\nWhy now: our main carrier raises surcharges by 14% from April, and Leeds is already at 96% capacity. Waiting a year costs roughly £680k in surcharges and overtime.\n\nWhat we'd get: picking errors fall from 1.8% to under 0.5% (based on the Bristol pilot, which ran for six months), freeing 22 roles for redeployment, not redundancy. Payback in 21 months.\n\nRisks: installation disrupts one shift for three weeks; we've scheduled it for February, our quietest month. If the vendor misses milestones, the contract lets us withhold 30% of the fee.\n\nAlternatives considered: more temporary staff (cheaper this year, more expensive by year two) and doing nothing (surcharges hit regardless).\n\nDecision needed by 15 December to hold the February installation slot.",
+      "expect": {
+        "appeals": {
+          "ethos": "high",
+          "pathos": "mid",
+          "logos": "high",
+          "kairos": "high"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_false_urgency"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "steer"
+      },
+      "notes": "Benchmark exec communication."
+    },
+    {
+      "id": "ev10",
+      "title": "One-child fundraising appeal",
+      "content_type": "fundraising_appeal",
+      "audience": {},
+      "text": "Amara is nine. Every morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.\n\nLast year, a well built by supporters like you in her neighbour's village cut that walk to ten minutes. School attendance there rose from 54% to 89% in a single term.\n\nAmara's village is next on our list. The drilling team is already in the region until March, which keeps the cost to £4,800, about half what it would be to bring them back later.\n\n£25 pays for one metre of pipe. Will you give £25 today so Amara can spend her mornings in class?",
+      "expect": {
+        "appeals": {
+          "ethos": "mid",
+          "pathos": "high",
+          "logos": "mid",
+          "kairos": "high"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_fear",
+          "rf_false_urgency"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "move"
+      },
+      "notes": "Story plus evidence plus genuine timing."
+    },
+    {
+      "id": "ev11",
+      "title": "Doom-laden climate message",
+      "content_type": "speech",
+      "audience": {},
+      "text": "We are running out of time. The planet is burning, the oceans are dying and the damage may already be irreversible. Every year brings worse floods, worse fires and worse famines. Scientists warn of catastrophe. Our children will inherit a ruined world. The situation is devastating and the window is closing fast. If we fail, it will be a disaster for everyone.",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "mid",
+          "logos": "low",
+          "kairos": "mid"
+        },
+        "overall": "low",
+        "flags_present": [
+          "rf_fear"
+        ],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "kai_efficacy",
+          "log_evidence"
+        ],
+        "balance_rules": [
+          "br_doom"
+        ],
+        "primary_duty": "unsettle"
+      },
+      "notes": "High stakes, no efficacy."
+    },
+    {
+      "id": "ev12",
+      "title": "Corporate-spin reorganisation memo",
+      "content_type": "change_message",
+      "audience": {},
+      "text": "Subject: Exciting organisational update\n\nTeam,\n\nAs part of our ongoing journey to unlock synergies and drive operational excellence, we are pleased to announce a realignment of our go-to-market structure, effective immediately. This holistic transformation will empower us to leverage our capabilities and deliver best-in-class value to stakeholders.\n\nSome roles will be impacted. Further details will be cascaded in due course.\n\nWe are confident this exciting change positions us for future success.\n\nLeadership Team",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "low",
+          "logos": "low",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [
+          "rf_buzzword_cluster",
+          "rf_hype"
+        ],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "eth_integrity",
+          "pat_empathy",
+          "eth_goodwill"
+        ],
+        "balance_rules": [],
+        "primary_duty": null
+      },
+      "notes": "Spin, no candour, no 'what it means for you'."
+    },
+    {
+      "id": "ev13",
+      "title": "Candid reorganisation memo",
+      "content_type": "change_message",
+      "audience": {},
+      "text": "Subject: Changes to our sales teams, and what they mean for you\n\nTeam,\n\nI'll start with the hard part. We are merging our two regional sales teams into one, and four roles will close. Everyone affected has already heard from me personally this morning, and each has a support package and a named contact in HR.\n\nWhy now: two thirds of our new customers now buy across both regions, and our split teams mean they deal with two account managers. They have told us, clearly, that this is confusing.\n\nFor most of you, your accounts and manager stay the same. If your patch changes, your manager will meet you this week to walk through it.\n\nI know this is unsettling, and some of you will feel we should have done it differently. My door is open on Thursday afternoon, or reply to this email and I'll call you.\n\nMaya",
+      "expect": {
+        "appeals": {
+          "ethos": "high",
+          "pathos": "high",
+          "logos": "mid",
+          "kairos": "high"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_buzzword_cluster",
+          "rf_hype"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "teach"
+      },
+      "notes": "Candour, empathy, why now, path."
+    },
+    {
+      "id": "ev14",
+      "title": "Strategic-narrative pitch summary",
+      "content_type": "pitch_deck",
+      "audience": {},
+      "text": "Slide 1. The world changed: buyers now do 70% of their research before they ever speak to sales.\nSlide 2. Winners and losers: teams that teach buyers are growing; teams that pitch features are stalling.\nSlide 3. The promised land: every buyer arrives at the first call already knowing why you're different.\nSlide 4. How we get there: Guidepost turns your best sales conversations into short, searchable explainers buyers actually read.\nSlide 5. Proof: 31 customers, net revenue retention of 128%, and median sales cycles down from 94 to 61 days.\nSlide 6. Why us: founders who ran enablement at two unicorns; 9 of our first 10 customers came by referral.\nSlide 7. The ask: £3m seed to reach 150 customers by the end of 2027.",
+      "expect": {
+        "appeals": {
+          "ethos": "high",
+          "pathos": "mid",
+          "logos": "high",
+          "kairos": "mid"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_hype"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "move"
+      },
+      "notes": "Raskin-style narrative with proof."
+    },
+    {
+      "id": "ev15",
+      "title": "LinkedIn post with a turn",
+      "content_type": "social_post",
+      "audience": {},
+      "text": "I fired my best salesperson.\n\nNot because she missed targets. She beat them every quarter.\n\nI let her go because every new hire who sat next to her quit within six months. She closed deals by hoarding leads and belittling colleagues, and I'd been too dazzled by her numbers to see it.\n\nThe year after she left, team revenue went up 30%. Not because anyone replaced her, but because eleven people stopped being afraid.\n\nYour top performer might be your biggest bottleneck. Who's the brilliant person on your team that nobody dares to challenge?",
+      "expect": {
+        "appeals": {
+          "ethos": "mid",
+          "pathos": "high",
+          "logos": "mid",
+          "kairos": "low"
+        },
+        "overall": "mid",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_hype"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "unsettle"
+      },
+      "notes": "Surprise and story; kairos naturally low."
+    },
+    {
+      "id": "ev16",
+      "title": "Superlative press release",
+      "content_type": "press_release",
+      "audience": {},
+      "text": "FOR IMMEDIATE RELEASE\n\nZentrix Unveils Revolutionary Game-Changing Platform\n\nZentrix, the world-class, industry-leading innovator in cutting-edge enterprise solutions, today announced the launch of its next-generation, best-in-class platform. The state-of-the-art solution empowers organisations to seamlessly leverage synergies across the value chain.\n\n\"We are incredibly excited to bring this amazing innovation to market,\" said the CEO. \"It is truly unparalleled.\"\n\nFor more information, visit our website.",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "low",
+          "logos": "low",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [
+          "rf_hype",
+          "rf_buzzword_cluster"
+        ],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "log_evidence",
+          "kai_moment"
+        ],
+        "balance_rules": [],
+        "primary_duty": null
+      },
+      "notes": "No news hook, no facts."
+    },
+    {
+      "id": "ev17",
+      "title": "Spec-only product description",
+      "content_type": "product_description",
+      "audience": {},
+      "text": "Model X200 Kettle\n- 1.7 litre capacity\n- 3000W element\n- Stainless steel body\n- 360-degree base\n- Auto shut-off\n- Limescale filter",
+      "expect": {
+        "appeals": {
+          "ethos": "low",
+          "pathos": "low",
+          "logos": "mid",
+          "kairos": "low"
+        },
+        "overall": "low",
+        "flags_present": [],
+        "flags_absent": [],
+        "recommend_dimensions": [
+          "pat_stakes",
+          "pat_vividness"
+        ],
+        "balance_rules": [],
+        "primary_duty": "teach"
+      },
+      "notes": "Features, no benefits."
+    },
+    {
+      "id": "ev18",
+      "title": "Rousing speech excerpt",
+      "content_type": "speech",
+      "audience": {},
+      "text": "We meet at a moment of change and challenge. Not because the future is fixed, but because, for the first time, it is ours to shape.\n\nTen years ago, one in four of our graduates found work within six months. Today it is nearly four in five. That did not happen by luck. It happened because teachers stayed late, employers opened their doors and students refused to give up.\n\nBut the job is not finished. Next year, a quarter of the roles our graduates apply for will ask for skills we do not yet teach. So tonight I'm asking each of you for one thing: give one hour a month to mentor a student. One hour. One student. One future.\n\nWe have done hard things before. We can do this one together.",
+      "expect": {
+        "appeals": {
+          "ethos": "mid",
+          "pathos": "high",
+          "logos": "mid",
+          "kairos": "high"
+        },
+        "overall": "high",
+        "flags_present": [],
+        "flags_absent": [
+          "rf_fear",
+          "rf_false_urgency"
+        ],
+        "recommend_dimensions": [],
+        "balance_rules": [],
+        "primary_duty": "move"
+      },
+      "notes": "Tricolon, antithesis, kairos with hope."
+    }
+  ]
+}
