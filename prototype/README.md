@@ -1,3 +1,7 @@
+> **In this repo** this folder is the original Claude artefact, kept as the reference the
+> app is built from. Nothing outside it imports from it. Start with [`BRIEF.md`](./BRIEF.md).
+> The build below runs from this folder.
+
 # HowDoesThisLand prototype (React + Tailwind)
 
 Persuasion assessment against ethos, pathos, logos and kairos, with lenses, five rhetorical duties and thirteen influence perspectives.
