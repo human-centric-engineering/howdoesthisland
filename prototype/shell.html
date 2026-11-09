@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HowDoesThisLand: the art of changing minds</title>
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#202024" media="(prefers-color-scheme: dark)">
+<script>try{var t=JSON.parse(localStorage.getItem("peithia:theme")||"null");if(t&&t!=="system")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=GFS+Didot&family=Geist:wght@300..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Tyrian & Graphite */
+  --bg:#F1F1EF; --surface:#FFFFFF; --surface-2:#F6F6F4; --ink:#1B1B1F; --muted:#6A6A72; --line:#E2E2DE;
+  --accent:#8A2D6E; --accent-ink:#FFFFFF; --accent-soft:#F6E9F1; --scrim:rgba(27,27,31,.42); --shadow:rgba(27,27,31,.16);
+  --ethos:#3457B2; --ethos-hl:#E2E8F8; --pathos:#C4472F; --pathos-hl:#FBE5DF; --logos:#13785A; --logos-hl:#D9EFE6;
+  --kairos:#A86E0C; --kairos-hl:#F7EBD3; --lenses:#2F7A88; --lenses-hl:#DCEFF2; --craft:#4E5B73; --craft-hl:#E3E7EE; --audience:#5F6E1C; --audience-hl:#EAEED7; --culture:#8A2D6E; --culture-hl:#F6E9F1; --warn:#C4472F; --ok:#13785A;
+  --display:"Instrument Serif","Iowan Old Style",Georgia,serif; --ui:"Geist","Helvetica Neue",Arial,sans-serif; --read:var(--ui); --greek:"GFS Didot","Palatino Linotype",Palatino,Georgia,serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#18181B; --surface:#202024; --surface-2:#28282D; --ink:#ECECEF; --muted:#9C9CA5; --line:#323238;
+  --accent:#E393C7; --accent-ink:#1B1B1F; --accent-soft:rgba(227,147,199,.13); --scrim:rgba(0,0,0,.55); --shadow:rgba(0,0,0,.45);
+  --ethos:#93AAF0; --ethos-hl:rgba(147,170,240,.16); --pathos:#F2937C; --pathos-hl:rgba(242,147,124,.15); --logos:#62CBA4; --logos-hl:rgba(98,203,164,.14);
+  --kairos:#E5B65C; --kairos-hl:rgba(229,182,92,.15); --lenses:#7FC5D2; --lenses-hl:rgba(127,197,210,.14); --craft:#A9B4C8; --craft-hl:rgba(169,180,200,.14); --audience:#C2D06A; --audience-hl:rgba(194,208,106,.14); --culture:#E393C7; --culture-hl:rgba(227,147,199,.13); --warn:#F2937C; --ok:#62CBA4; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#18181B; --surface:#202024; --surface-2:#28282D; --ink:#ECECEF; --muted:#9C9CA5; --line:#323238;
+  --accent:#E393C7; --accent-ink:#1B1B1F; --accent-soft:rgba(227,147,199,.13); --scrim:rgba(0,0,0,.55); --shadow:rgba(0,0,0,.45);
+  --ethos:#93AAF0; --ethos-hl:rgba(147,170,240,.16); --pathos:#F2937C; --pathos-hl:rgba(242,147,124,.15); --logos:#62CBA4; --logos-hl:rgba(98,203,164,.14);
+  --kairos:#E5B65C; --kairos-hl:rgba(229,182,92,.15); --lenses:#7FC5D2; --lenses-hl:rgba(127,197,210,.14); --craft:#A9B4C8; --craft-hl:rgba(169,180,200,.14); --audience:#C2D06A; --audience-hl:rgba(194,208,106,.14); --culture:#E393C7; --culture-hl:rgba(227,147,199,.13); --warn:#F2937C; --ok:#62CBA4; color-scheme:dark;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.55;font-feature-settings:"ss01","cv11";letter-spacing:-.005em;-webkit-font-smoothing:antialiased;transition:background-color .2s}
+
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--accent-soft)}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+/*TAILWIND*/
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script type="application/json" id="model-data">__MODEL__</script>
+<script type="application/json" id="eval-data">__EVAL__</script>
+<script>/*APP*/</script>
+</body>
+</html>
