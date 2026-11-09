@@ -105,6 +105,23 @@ not a finding.
 calibration) has no DOM and no framework, and its README says to reuse it in the
 API service. It is the first thing to port, as typed modules.
 
+Three things in it to fix in the port rather than carry across. They are left
+alone here, because this folder stays as delivered:
+
+- **`validJudgeOutput()` checks only that the reply has an array.** It never
+  checks the entries: their dimension ids, or that each score is a number from
+  0 to 4. A judge replying `{ dimension_scores: [{ dimension: "nope", score: "7" }] }`
+  passes, and `assemble()` then looks up a dimension that does not exist. In the
+  app, a judge's reply is external data, and gets a Zod schema.
+- **`locate()` finds a quote in `text.toLowerCase()` and returns offsets into
+  `text`.** Lower-casing can change a string's length (`İ` becomes two code
+  units), so a highlight after such a character lands one place off per
+  occurrence.
+- **`rewritePrompt()` picks the duty the audience needs by `=== 40`.** That works
+  only because `fnTarget()` gives the primary duty exactly 40. Take the
+  highest-weighted duty instead, so a change to the weights cannot silently
+  drop the guidance.
+
 ## 6. The draft API, and what is wrong with it
 
 `howdoesthisland_api.yaml` describes `POST /v1/assess`,
@@ -177,14 +194,20 @@ Each is a product call for the owner, not something to settle while building.
   check behaviour against.
 - **Excluded from the tooling.** ESLint ignores it through the fork-owned seam
   (`lib/app/eslint.config.mjs`), Prettier through `.prettierignore` (divergence
-  ledger row 3), and TypeScript never includes it (`tsconfig.json` includes only
-  `.ts` and `.tsx`). CodeQL still analyses it on GitHub.
+  ledger row 3), Tailwind's automatic source scan through `@source not` in
+  `app/globals.css` (ledger row 4), and TypeScript never includes it
+  (`tsconfig.json` includes only `.ts` and `.tsx`). Without the Tailwind line,
+  the prototype's classes were compiled into the app's stylesheet, about 15 KB
+  of rules nothing uses. CodeQL still analyses it on GitHub.
 - **Changed from the delivery:**
-  - a three-line note at the top of `README.md`, pointing here;
+  - a note at the top of `README.md`, pointing here and warning against
+    building inside the repo;
   - the zip's `package.json` is left out. It was an unnamed scaffold listing the
     four build tools the README's build command installs anyway, and as a
     manifest in a public repo it would draw dependency alerts for a folder
     nothing runs;
   - the draft API, delivered beside the zip, is added.
-- **Building it:** the commands in `README.md` run from this folder. They expect
-  the model and eval set alongside, which they are.
+- **Building it:** copy the folder outside the repo first. The commands in
+  `README.md` install their tools with `npm i`, and with no `package.json` here
+  npm would write them into the app's root manifest, replacing Tailwind 4 with
+  Tailwind 3. The build expects the model and eval set alongside, which they are.

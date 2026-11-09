@@ -1,6 +1,8 @@
 > **In this repo** this folder is the original Claude artefact, kept as the reference the
 > app is built from. Nothing outside it imports from it. Start with [`BRIEF.md`](./BRIEF.md).
-> The build below runs from this folder.
+> **Don't run the build below inside this repo.** This folder has no `package.json`, so `npm i`
+> would install into the app's own and replace its Tailwind 4 with Tailwind 3. Copy the folder
+> outside the repo to build it.
 
 # HowDoesThisLand prototype (React + Tailwind)
 

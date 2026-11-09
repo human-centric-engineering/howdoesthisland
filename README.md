@@ -14,7 +14,8 @@ through an API.
 > **Status: planning.** Nothing is built yet. The working reference is the
 > original Claude artefact in [`prototype/`](./prototype/); start with
 > [`prototype/BRIEF.md`](./prototype/BRIEF.md). The plan lives in the HCE Hub
-> (project `howdoesthisland`), and its spec in [`.context/app/`](./.context/app/).
+> (project `howdoesthisland`); its spec will be written into
+> [`.context/app/`](./.context/app/) as it is planned.
 
 > **Built on Sunrise.** HowDoesThisLand is a leaf app on the
 > [Sunrise](https://github.com/human-centric-engineering/sunrise) starter
@@ -53,8 +54,21 @@ Open http://localhost:3026. The port is set by `PORT` in the committed
 `.env.development`, so it does not clash with the other HCE apps on the same
 machine.
 
+### Using Docker
+
+```bash
+docker-compose up                                    # Start app + database
+docker-compose exec web npx prisma migrate dev       # Run migrations (first time)
+```
+
+### First admin account
+
 On a fresh database, the first account you create at `/signup` becomes the
 admin. There are no default login credentials.
+
+`npm run db:seed` also creates `system@sunrise.local`, a user that owns the
+seeded orchestration configuration. It has no password and cannot sign in, and
+it does not count as the first account.
 
 ### Commands
 
