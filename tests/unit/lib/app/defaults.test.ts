@@ -402,7 +402,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     risk: 'a stray flat-config block would apply lint rules to every fork',
     // The root eslint.config.mjs spreads this array last; that spread itself is
     // exercised by every `npm run lint` run.
-    assert: () => expect(appEslintConfig).toEqual([]),
+    // FORK (HowDoesThisLand): pinned to our one block, the prototype ignore.
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () => expect(appEslintConfig).toEqual([{ ignores: ['prototype/**'] }]),
   },
   {
     seam: 'lib/app/jobs.ts',
@@ -568,7 +570,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/reserved-tiers.ts',
     risk: 'a stray entry would switch OFF the guard that keeps a reserved tier empty — and it is upstream, where core is the only thing that could put a file there, that the guard is the promise rather than a formality',
-    assert: () => expect(occupiedTiers).toEqual([]),
+    // FORK (HowDoesThisLand): pinned to the tier we fill, our docs.
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () => expect(occupiedTiers).toEqual(['.context/app']),
   },
   {
     seam: 'lib/app/own-modules.ts',

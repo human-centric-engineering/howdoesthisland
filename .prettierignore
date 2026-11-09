@@ -49,3 +49,7 @@ coverage
 # Per-developer local Claude Code settings (gitignored, written by the CLI).
 # Format is owned by the tool, so Prettier should not gate `npm run validate` on it.
 .claude/settings.local.json
+
+# HowDoesThisLand: the original artefact, kept verbatim as the porting
+# reference (prototype/BRIEF.md). Ledger: .context/app/platform-divergences.md row 3.
+prototype
