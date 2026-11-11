@@ -119,6 +119,7 @@ import { initAppAuthorizationPolicy } from '@/lib/app/authorization';
 import { ORG_TIER_ADMIN_PAGES, adminPageTier } from '@/lib/auth/admin-tier';
 import { APP_ORG_TIER_ADMIN_ROUTES } from '@/lib/app/admin-tier-routes';
 import { appOrgAdminLandingRoute } from '@/lib/app/admin-landing';
+import { appSignupOrgResolver } from '@/lib/app/signup-org'; // FORK (HowDoesThisLand), t-6
 import { orgAdminLanding } from '@/lib/auth/admin-landing';
 import {
   getAppOrgTierAdminPages,
@@ -469,6 +470,12 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         register.mockRestore();
       }
     },
+  },
+  // FORK (HowDoesThisLand): the signup-org seam this fork carries (t-6).
+  {
+    seam: 'lib/app/signup-org.ts',
+    risk: 'a stray resolver would move every uninvited signup out of the install org, as the OWNER of whatever org it names, on every install',
+    assert: () => expect(appSignupOrgResolver).toBeNull(),
   },
   {
     seam: 'lib/app/mcp-resources.ts',

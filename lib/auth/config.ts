@@ -27,6 +27,7 @@ import {
   type SignupRecord,
 } from '@/lib/tenancy/membership';
 import { ORG_ROLES } from '@/lib/tenancy/roles';
+import { uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
 import { isMultiTenant } from '@/lib/tenancy/context';
 import {
   getPendingSignup,
@@ -181,15 +182,19 @@ async function recordPendingMembership(
     }
   }
 
+  // FORK (t-6): an uninvited signup joins the org the fork's resolver names,
+  // as if invited there; with none registered, `admission` is `invitation`.
+  const admission = invitation ?? (viaInvitation ? null : await uninvitedSignupAdmission(user));
+
   let memberships;
   try {
-    memberships = await membershipsForNewUser(user, invitation);
+    memberships = await membershipsForNewUser(user, admission);
   } catch (error) {
     logger.error('Failed to decide the org membership for a new user', error, {
       email: user.email,
-      invitedOrgId: invitation?.orgId ?? null,
+      invitedOrgId: admission?.orgId ?? null,
     });
-    memberships = undecidedMembershipsForNewUser(user, invitation);
+    memberships = undecidedMembershipsForNewUser(user, admission);
   }
 
   try {
