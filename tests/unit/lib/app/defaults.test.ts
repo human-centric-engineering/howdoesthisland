@@ -261,8 +261,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/public-nav.ts',
     risk: 'a stray non-null list would silently REPLACE the marketing nav',
+    // FORK (HowDoesThisLand): header nav pinned to our routes; the footer lists stay default.
+    // Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(publicNavItems).toBeNull();
+      expect(publicNavItems?.map((i) => i.href)).toEqual(['/about', '/contact']);
       expect(footerNavItems).toBeNull();
       expect(footerLegalItems).toBeNull();
     },
@@ -270,20 +272,32 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/protected-nav.ts',
     risk: 'a stray non-null list would silently REPLACE the authenticated nav',
-    assert: () => expect(protectedNavItems).toBeNull(),
+    // FORK (HowDoesThisLand): pinned to our signed-in nav, landing on /home.
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () =>
+      expect(protectedNavItems?.map((i) => i.href)).toEqual([
+        '/home',
+        '/profile',
+        '/settings',
+        '/admin',
+      ]),
   },
   {
     seam: 'lib/app/auth-landing.ts',
     risk: 'a stray value would send every install somewhere else after login',
+    // FORK (HowDoesThisLand): pinned to /home (D22).
+    // Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(appAuthLandingRoute).toBeNull();
-      expect(appAuthLandingLabel).toBeNull();
+      expect(appAuthLandingRoute).toBe('/home');
+      expect(appAuthLandingLabel).toBe('Home');
     },
   },
   {
     seam: 'lib/app/footer.ts',
     risk: 'a stray value would rewrite — or silently remove — the attribution line on every install, on both the public and authenticated footers',
-    assert: () => expect(footerCopyright).toBeNull(),
+    // FORK (HowDoesThisLand): pinned to our attribution line.
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () => expect(footerCopyright).toBe('© HowDoesThisLand · The art of changing minds'),
   },
   {
     seam: 'lib/app/emails.ts',
@@ -384,7 +398,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/protected-routes.ts',
     risk: 'a stray path would put a public route behind auth on every install',
-    assert: () => expect(appProtectedRoutes).toEqual([]),
+    // FORK (HowDoesThisLand): pinned to /home, the signed-in landing.
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () => expect(appProtectedRoutes).toEqual(['/home']),
   },
   {
     seam: 'lib/app/credential-paths.ts',
@@ -610,9 +626,12 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     // that can never fail.
     assert: async () => {
       const seam = await vi.importActual<typeof import('@/lib/app/brand')>('@/lib/app/brand');
-      expect(seam.appBrandName).toBeNull();
+      // FORK (HowDoesThisLand): pinned to our name and description; no legal
+      // entity is named yet, so that field stays at the default.
+      // Ledger: .context/app/platform-divergences.md row 2.
+      expect(seam.appBrandName).toBe('HowDoesThisLand');
       expect(seam.appBrandLegalName).toBeNull();
-      expect(seam.appBrandDescription).toBeNull();
+      expect(seam.appBrandDescription).toMatch(/^HowDoesThisLand reads your CV/);
     },
   },
   {

@@ -36,10 +36,16 @@ describe('BrandMark default', () => {
   // mocks the seam HOISTED. Driving a brand from here needs doMock +
   // resetModules + re-import, which races the module graph and failed on CI.
 
-  it('renders as a bare string with no wrapper element (byte-for-byte header)', async () => {
+  // FORK (HowDoesThisLand): the scaffold now renders the Galley Proof wordmark,
+  // so the bare-string case is replaced by the shape we ship.
+  // Ledger: .context/app/platform-divergences.md row 7.
+  it('renders the wordmark, whose text is the brand name alone', async () => {
     const container = await renderBrandMark();
-    // No element node is added — just the text node, so the surrounding <Link>
-    // styling is preserved exactly.
-    expect(container.children).toHaveLength(0);
+    const mark = container.querySelector('.hd-wordmark');
+    expect(mark).not.toBeNull();
+    expect(container.children).toHaveLength(1);
+    // The proof caret is CSS decoration, so it never reaches the text or the
+    // link's accessible name.
+    expect(mark?.textContent).toBe('Sunrise');
   });
 });

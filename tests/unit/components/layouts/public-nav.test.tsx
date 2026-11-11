@@ -45,6 +45,13 @@ afterEach(() => {
 describe('PublicNav', () => {
   it('renders the platform default links when no override is set', async () => {
     vi.resetModules();
+    // FORK (HowDoesThisLand): our seam is filled, so the default case renders
+    // the seam as Sunrise ships it. Ledger: .context/app/platform-divergences.md row 7.
+    vi.doMock('@/lib/app/public-nav', () => ({
+      publicNavItems: null,
+      footerNavItems: null,
+      footerLegalItems: null,
+    }));
     const { PublicNav } = await import('@/components/layouts/public-nav');
     render(React.createElement(PublicNav));
 
