@@ -1,58 +1,206 @@
-/* app/brand-theme.css
+/* app/brand-theme.css — HowDoesThisLand's look: Galley Proof (D15).
  *
- * Fork-owned per-surface theming. SHIPS EMPTY — vanilla Sunrise is byte-for-byte
- * unchanged: with no overrides here, every surface inherits app/globals.css's
- * `@theme` defaults. A fork fills this file to repaint one surface (e.g. its
- * consumer-facing pages) while leaving others (e.g. `/admin`) on the platform
- * defaults, including future upstream palette tweaks. No platform layout or page
- * is ever edited — that's the whole point of the seam.
+ * Fork-owned. An editor's desk: a grey desk under paper sheets, ink type,
+ * the editor's red for marks, and the four appeal colours. Fraunces for display,
+ * Spectral for reading text, Martian Mono for the editor's voice. Dark mode is a
+ * lightbox. The source this was lifted from was the t-3 design lab
+ * (`components/app/design-lab/proof/`, deleted in t-4; see git history).
  *
- * Imported once in app/layout.tsx AFTER globals.css. Keep these selectors
- * UNLAYERED (no `@layer`): Tailwind 4 emits its `@theme` tokens inside a layer at
- * `:root`, so an unlayered selector here beats them by layer order, and a
- * descendant subtree pin beats the `<html>`-level scope by specificity.
+ * Every rule is scoped to the consumer surface, so `/admin` keeps Sunrise's own
+ * palette and type. The mechanism and its six constraints are in
+ * `.context/ui/surface-theming.md`; the two that shape this file:
  *
- * MECHANISM
- *   proxy.ts classifies each request via `classifySurface(pathname)` and sets the
- *   `x-surface` request header; the root layout puts it on `<html data-surface>`;
- *   `<SurfaceSync>` keeps that attribute correct across client-side navigation.
- *   Because the marker is on `<html>`, body-portaled overlays (Radix dialog /
- *   dropdown / popover / toast, the cookie-consent modal) inherit it too — they
- *   mount at document.body, outside any route-group subtree, which is exactly why
- *   the marker must live at the root and not on a `(group)/layout.tsx`.
+ * - Token overrides stay UNLAYERED, so they beat Tailwind's `@theme` tokens,
+ *   which are emitted inside a layer.
+ * - Element and component rules go in `@layer base` / `@layer components`, so a
+ *   Tailwind utility on the element still wins. An unlayered `h1 {}` here would
+ *   beat every `font-*` utility on every heading.
  *
- * The two surfaces vanilla Sunrise classifies are `admin` and `consumer`
- * (see lib/app/surface.ts — the policy seam). Redeclare only the tokens you
- * change; everything else inherits, so upstream palette changes flow through the
- * tokens you didn't touch.
- *
- * --------------------------------------------------------------------------
- * EXAMPLE (commented out — uncomment and adjust to brand a surface). Note the
- * TWO dark-mode selector FORMS; they are NOT interchangeable (see the docs):
- *
- *   [data-surface='consumer'] {                 // light, on <html>
- *     --color-primary: #0a1a3a;
- *     --color-background: #fbf6ec;
- *     --color-foreground: #16213d;
- *   }
- *   [data-surface='consumer'].dark {            // dark: `.dark` is on the SAME
- *     --color-primary: #ffc73a;                 // element (<html>) -> COMPOUND
- *     --color-background: #0a1a3a;
- *     --color-foreground: #f2eede;
- *   }
- *
- * For a surface PINNED on a descendant element (a wrapper that sets its own
- * `data-surface`), the dark scope is a DESCENDANT selector instead, because the
- * pin sits below `<html>.dark`:
- *
- *   .dark [data-surface='canvas'] { --color-background: #0a0a0a; ... }
- *
- * And because a pin only re-tokenises its own subtree, an ANCESTOR that frames it
- * (e.g. a `<main>`) still shows the parent surface's background; paint it with
- * `:has()`:
- *
- *   main:has([data-surface='canvas']) { background-color: #ffffff; }
- *
- * See .context/ui/surface-theming.md for all six design constraints.
- * --------------------------------------------------------------------------
+ * The fonts are loaded by `components/app/brand/fonts.ts`, whose variables sit
+ * on `<html>` (ledger row 5).
  */
+
+/* ---------------------------------------------------------------- tokens */
+
+[data-surface='consumer'] {
+  /* Galley Proof's own tokens, for the app's components. */
+  --hd-desk: #e9e8e3;
+  --hd-paper: #fdfdfb;
+  --hd-ink: #141414;
+  --hd-muted: #6b6a66;
+  --hd-faint: #a9a7a0;
+  --hd-rule: #d6d4cc;
+  --hd-red: #d7263d;
+  --hd-blue: #1e50c8;
+  --hd-ethos: #1e50c8;
+  --hd-pathos: #d7263d;
+  --hd-logos: #0f7b6c;
+  --hd-kairos: #c26a00;
+  color-scheme: light;
+
+  /* The platform's tokens, so shadcn components and Sunrise pages follow. */
+  --color-background: var(--hd-desk);
+  --color-foreground: var(--hd-ink);
+  --color-card: var(--hd-paper);
+  --color-card-foreground: var(--hd-ink);
+  --color-popover: var(--hd-paper);
+  --color-popover-foreground: var(--hd-ink);
+  /* Primary is ink, not red: red is the editor's mark, and a page of red Save
+     buttons would spend it. Destructive keeps a red of its own. */
+  --color-primary: var(--hd-ink);
+  --color-primary-foreground: var(--hd-paper);
+  --color-secondary: #dfded8;
+  --color-secondary-foreground: var(--hd-ink);
+  --color-muted: #e1e0da;
+  --color-muted-foreground: var(--hd-muted);
+  --color-accent: #f1e1df;
+  --color-accent-foreground: var(--hd-ink);
+  --color-destructive: #b3122a;
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--hd-rule);
+  --color-input: var(--hd-rule);
+  --color-ring: var(--hd-red);
+
+  /* Type: Tailwind's preflight reads `--font-sans` for the page's base face. */
+  --font-sans: var(--hd-font-read), Georgia, 'Times New Roman', serif;
+  --font-serif: var(--hd-font-display), Georgia, serif;
+  --font-mono: var(--hd-font-mono), ui-monospace, Menlo, monospace;
+
+  /* Square corners: proofs are cut paper. */
+  --radius-xs: 0px;
+  --radius-sm: 1px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 3px;
+}
+
+/* Dark: `.dark` is on the same element as `data-surface` (<html>), so the
+   selector is compound, not descendant (constraint 4). */
+[data-surface='consumer'].dark {
+  --hd-desk: #0d0e11;
+  --hd-paper: #16181d;
+  --hd-ink: #e9e7e1;
+  --hd-muted: #9a988f;
+  --hd-faint: #5e5d58;
+  --hd-rule: #2a2d34;
+  --hd-red: #ff5c6c;
+  --hd-blue: #7aa2ff;
+  --hd-ethos: #7aa2ff;
+  --hd-pathos: #ff6b7a;
+  --hd-logos: #4fd1b8;
+  --hd-kairos: #ffae42;
+  color-scheme: dark;
+
+  --color-secondary: #22252c;
+  --color-muted: #1d2026;
+  --color-accent: #2a1c21;
+  --color-destructive: #ff5c6c;
+  --color-destructive-foreground: #0d0e11;
+}
+
+/* ------------------------------------------------------------- elements */
+
+@layer base {
+  [data-surface='consumer'] body {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  [data-surface='consumer'] :is(h1, h2, h3) {
+    font-family: var(--font-serif);
+    letter-spacing: -0.02em;
+  }
+
+  [data-surface='consumer'] ::selection {
+    background: color-mix(in srgb, var(--hd-red) 22%, transparent);
+  }
+
+  /* The frame's header nav speaks in the editor's voice. These reach into the
+     platform header's markup, so a change upstream loses the styling and
+     nothing else: the links keep working in the platform's own type. */
+  [data-surface='consumer'] header nav a {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  [data-surface='consumer'] header nav a[aria-current='page'] {
+    box-shadow: inset 0 -2px 0 var(--hd-red);
+  }
+}
+
+/* ----------------------------------------------------------- components */
+
+@layer components {
+  .hd-wordmark {
+    font-family: var(--hd-font-display), Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variation-settings: 'SOFT' 100;
+  }
+
+  /* `/ ''` is the alternative text: the caret is decoration, not a word. */
+  .hd-wordmark::after {
+    content: '‸' / '';
+    margin-left: 1px;
+    font-family: var(--hd-font-mono), ui-monospace, monospace;
+    font-weight: 400;
+    color: var(--hd-red, currentColor);
+  }
+
+  /* Small caps-and-mono label above a block: "Galley 00 · Home". */
+  .hd-slug {
+    font: 400 0.66rem/1.3 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hd-muted);
+  }
+
+  /* A paper sheet on the desk, with crop marks at two corners. */
+  .hd-sheet {
+    position: relative;
+    background: var(--hd-paper);
+    box-shadow:
+      0 1px 0 var(--hd-rule),
+      0 24px 50px -30px rgb(0 0 0 / 0.35);
+  }
+
+  .hd-sheet::before,
+  .hd-sheet::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border: 0 solid var(--hd-faint);
+    pointer-events: none;
+  }
+
+  .hd-sheet::before {
+    top: -12px;
+    left: -12px;
+    border-width: 0 1px 1px 0;
+  }
+
+  .hd-sheet::after {
+    right: -12px;
+    bottom: -12px;
+    border-width: 1px 0 0 1px;
+  }
+
+  /* A proof mark in the margin: a ringed code, then the note. */
+  .hd-proof-mark {
+    font: 400 0.7rem/1.45 var(--font-mono);
+    color: var(--hd-red);
+  }
+
+  .hd-proof-mark b {
+    display: inline-block;
+    min-width: 26px;
+    margin-right: 6px;
+    padding: 1px 4px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    text-align: center;
+    font-weight: 500;
+  }
+}

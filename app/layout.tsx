@@ -13,6 +13,9 @@ import { AnalyticsScripts, UserIdentifier, PageTracker } from '@/components/anal
 import { SurfaceSync } from '@/components/surface-sync';
 import { DEFAULT_SURFACE } from '@/lib/app/surface';
 import { BRAND } from '@/lib/brand';
+// HowDoesThisLand: next/font variables on <html>, so portaled overlays get them
+// too. Ledger: .context/app/platform-divergences.md row 5.
+import { appFontVariables } from '@/components/app/brand/fonts';
 
 // Root metadata, driven entirely by the BRAND seam (#519). The `template`
 // gives every page that sets only a plain string title consistent branding;
@@ -40,7 +43,7 @@ export default async function RootLayout({
   const surface = headersList.get('x-surface') ?? DEFAULT_SURFACE;
 
   return (
-    <html lang="en" data-surface={surface} suppressHydrationWarning>
+    <html lang="en" data-surface={surface} className={appFontVariables} suppressHydrationWarning>
       <head>
         <script
           nonce={nonce}
