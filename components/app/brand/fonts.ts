@@ -21,7 +21,7 @@ const display = Fraunces({
 
 const read = Spectral({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
+  weight: ['400', '500', '600'],
   style: ['normal', 'italic'],
   variable: '--hd-font-read',
 });

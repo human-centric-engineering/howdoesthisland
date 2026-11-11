@@ -119,7 +119,6 @@
      nothing else: the links keep working in the platform's own type. */
   [data-surface='consumer'] header nav a {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
