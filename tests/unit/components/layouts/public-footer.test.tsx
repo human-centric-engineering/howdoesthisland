@@ -46,6 +46,9 @@ afterEach(() => {
 describe('PublicFooter', () => {
   it('renders the platform default nav, legal links, and copyright', async () => {
     vi.resetModules();
+    // FORK (HowDoesThisLand): our seam is filled, so the default case renders
+    // the seam as Sunrise ships it. Ledger: .context/app/platform-divergences.md row 7.
+    vi.doMock('@/lib/app/footer', () => ({ footerCopyright: null }));
     const { PublicFooter } = await import('@/components/layouts/public-footer');
     render(React.createElement(PublicFooter));
 

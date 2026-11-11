@@ -62,6 +62,9 @@ describe('ProtectedNav', () => {
   it('renders the platform default links when no override is set', async () => {
     asUser();
     vi.resetModules();
+    // FORK (HowDoesThisLand): our seam is filled, so the default case renders
+    // the seam as Sunrise ships it. Ledger: .context/app/platform-divergences.md row 7.
+    vi.doMock('@/lib/app/protected-nav', () => ({ protectedNavItems: null }));
     const { ProtectedNav } = await import('@/components/layouts/protected-nav');
     render(React.createElement(ProtectedNav));
 

@@ -39,6 +39,11 @@ vi.mock('@/lib/app/brand', () => ({
   appBrandDescription: null,
 }));
 
+// FORK (HowDoesThisLand): our footer seam replaces the attribution line, which
+// would hide the brand wiring these cases test, so they render it as shipped.
+// Ledger: .context/app/platform-divergences.md row 7.
+vi.mock('@/lib/app/footer', () => ({ footerCopyright: null }));
+
 // The footers render a Cookie Preferences control, which needs consent context.
 // Unrelated to brand; stubbed so these cases can render the real components.
 vi.mock('@/lib/consent', () => ({ useConsent: () => ({ openPreferences: vi.fn() }) }));
