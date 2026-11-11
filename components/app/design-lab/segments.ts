@@ -1,6 +1,13 @@
 import type { Sample } from '@/components/app/design-lab/sample';
 
-export type Annotation = Sample['before']['annotations'][number];
+type SampleAnnotation = Sample['before']['annotations'][number];
+
+/** A sample annotation with its offsets widened from the sample's literals. */
+export type Annotation = Omit<SampleAnnotation, 'start' | 'end' | 'change'> & {
+  start: number;
+  end: number;
+  change: number;
+};
 
 export interface Segment {
   text: string;
