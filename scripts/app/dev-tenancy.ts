@@ -28,6 +28,14 @@ import {
 /** Postgres refuses the login: wrong password, or no such role. */
 const LOGIN_REFUSED = new Set(['28P01', '28000']);
 
+/**
+ * The role logged in but cannot use the schema. Without USAGE the schema drops
+ * out of the search path, so `"user"` does not resolve (42P01) — the state a
+ * `db:reset` leaves, since it recreates the schema and its grants go with it.
+ * With USAGE but no table grant, the privilege check itself can refuse (42501).
+ */
+const SCHEMA_UNUSABLE = new Set(['42501', '42P01']);
+
 function errorCode(err: unknown): string | undefined {
   if (typeof err !== 'object' || err === null || !('code' in err)) return undefined;
   return typeof err.code === 'string' ? err.code : undefined;
@@ -48,8 +56,7 @@ async function probeAppRole(): Promise<AppRoleProbe> {
     );
     return { connected: true, usable: rows[0]?.usable === true };
   } catch (err) {
-    // Without USAGE on the schema the table cannot even be named.
-    if (errorCode(err) === '42501') return { connected: true, usable: false };
+    if (SCHEMA_UNUSABLE.has(errorCode(err) ?? '')) return { connected: true, usable: false };
     throw err;
   } finally {
     await client.end();

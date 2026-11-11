@@ -61,7 +61,7 @@ In order. The first failure stops the run.
 
 | Step            | What it does                                                                                                                                                                                                                                                                                                               |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Environment     | Checks the lines above: `multi`, `DATABASE_URL` connecting as `TENANCY_APP_ROLE`, `MIGRATE_DATABASE_URL` connecting as someone else, and a password set.                                                                                                                                                                   |
+| Environment     | Checks the lines above: `multi`, `DATABASE_URL` connecting as `TENANCY_APP_ROLE`, `MIGRATE_DATABASE_URL` connecting as someone else to the same database, and a password set that `DATABASE_URL` carries.                                                                                                                  |
 | App role        | Logs in as the app role and checks it can use the schema. If it cannot, runs `npm run db:tenancy:role -- --create`, which creates the role or re-applies its grants.                                                                                                                                                       |
 | Policies        | Runs `npm run db:tenancy:enable`, which turns row-level security on and forces it on every tenant-owned table. It prints `no change` when they are already on.                                                                                                                                                             |
 | OpenAI provider | Creates the `openai` provider row from the platform's known-provider entry if it is missing: OpenAI-compatible, `https://api.openai.com/v1`, key read from `OPENAI_API_KEY`. No seed creates it. An inactive row is reported, not changed.                                                                                 |
@@ -76,8 +76,8 @@ and [`isolation.md`](../tenancy/isolation.md#the-role-split).
 
 A reset rebuilds the schema from the migrations. The app role survives but
 loses its grants, and the policies come back switched off. **Run the script
-before you start the app again.** Until it has run, an app at `multi` sees every
-workspace's rows. The reset re-seeds as the owner on its own. The script then
+before you start the app again.** Until it has run, the app role cannot use
+the schema, so an app at `multi` fails on its first query. The reset re-seeds as the owner on its own. The script then
 re-grants the role, re-enables the policies, and puts back the provider row and
 the embedding model.
 

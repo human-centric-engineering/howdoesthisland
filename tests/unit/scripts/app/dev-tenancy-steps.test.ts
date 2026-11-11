@@ -76,6 +76,16 @@ describe('parseEnv', () => {
       { MIGRATE_DATABASE_URL: GOOD_ENV.DATABASE_URL },
       'MIGRATE_DATABASE_URL must connect as the owner',
     ],
+    [
+      'an app DSN whose password is not TENANCY_APP_ROLE_PASSWORD',
+      { DATABASE_URL: 'postgresql://howdoesthisland_app:other@localhost:5432/hdtl' },
+      'DATABASE_URL must carry TENANCY_APP_ROLE_PASSWORD',
+    ],
+    [
+      'the two DSNs naming different databases',
+      { MIGRATE_DATABASE_URL: 'postgresql://owner:pw@localhost:5432/other' },
+      'DATABASE_URL must name the same database as MIGRATE_DATABASE_URL',
+    ],
     ['a DSN that is not postgres', { MIGRATE_DATABASE_URL: 'mysql://a:b@h/db' }, 'postgresql://'],
     ['a missing DSN', { MIGRATE_DATABASE_URL: undefined }, 'MIGRATE_DATABASE_URL'],
   ])('refuses %s', (_label, override, message) => {

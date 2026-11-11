@@ -178,6 +178,13 @@ describe('scripts/app/dev-tenancy', () => {
       await expect(deps.probeAppRole()).resolves.toEqual({ connected: true, usable: false });
     });
 
+    it('reports a schema without USAGE (after db:reset) as connected but unusable', async () => {
+      const deps = await captureDeps();
+      // No USAGE drops the schema from the search path, so "user" does not resolve.
+      mockQuery.mockRejectedValueOnce(pgError('42P01'));
+      await expect(deps.probeAppRole()).resolves.toEqual({ connected: true, usable: false });
+    });
+
     it('rethrows an unexpected query error and still closes the client', async () => {
       const deps = await captureDeps();
       mockClientEnd.mockClear();

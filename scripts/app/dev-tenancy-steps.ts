@@ -59,12 +59,16 @@ export interface StepResult {
   detail: string;
 }
 
-function dsnUser(dsn: string): string | null {
+function dsnPart(dsn: string, part: 'username' | 'password' | 'pathname'): string | null {
   try {
-    return decodeURIComponent(new URL(dsn).username) || null;
+    return decodeURIComponent(new URL(dsn)[part]) || null;
   } catch {
     return null;
   }
+}
+
+function dsnUser(dsn: string): string | null {
+  return dsnPart(dsn, 'username');
 }
 
 const postgresDsn = z
@@ -93,6 +97,24 @@ const envSchema = z
         code: 'custom',
         path: ['DATABASE_URL'],
         message: 'must connect as TENANCY_APP_ROLE',
+      });
+    }
+    // db:tenancy:role sets the password from TENANCY_APP_ROLE_PASSWORD; a DSN
+    // carrying another one could never log in, however often the role is reset.
+    if (dsnPart(env.DATABASE_URL, 'password') !== env.TENANCY_APP_ROLE_PASSWORD) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DATABASE_URL'],
+        message: 'must carry TENANCY_APP_ROLE_PASSWORD as its password',
+      });
+    }
+    // The role is granted, and the policies enabled, through the owner DSN;
+    // the probe and the drift check run through the app DSN.
+    if (dsnPart(env.DATABASE_URL, 'pathname') !== dsnPart(env.MIGRATE_DATABASE_URL, 'pathname')) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DATABASE_URL'],
+        message: 'must name the same database as MIGRATE_DATABASE_URL',
       });
     }
     if (dsnUser(env.MIGRATE_DATABASE_URL) === env.TENANCY_APP_ROLE) {
@@ -144,7 +166,8 @@ export async function ensureAppRole(
   return {
     step: 'app role',
     outcome: before.connected ? 'updated' : 'created',
-    detail: before.connected ? 'grants re-applied' : 'created and granted',
+    // A refused login is a missing role or a changed password; Postgres does not say which.
+    detail: before.connected ? 'grants re-applied' : 'created, or password reset, and granted',
   };
 }
 
