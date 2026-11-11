@@ -21,4 +21,4 @@
  * Boundary-clean: a plain string array (no imports), safe to import at the
  * proxy runtime.
  */
-export const appProtectedRoutes: string[] = [];
+export const appProtectedRoutes: string[] = ['/home'];

@@ -39,4 +39,8 @@
  * an embedded widget — where naming the platform operator at the foot of the
  * page is a leak rather than a credit.
  */
-export const footerCopyright: string | false | null = null;
+// HowDoesThisLand: the product name with its tagline, and no year, so it never
+// goes stale. The holder is the product, as the default would be: no legal
+// entity is named until there is one to name (`appBrandLegalName`).
+export const footerCopyright: string | false | null =
+  '© HowDoesThisLand · The art of changing minds';

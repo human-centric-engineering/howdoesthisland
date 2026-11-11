@@ -27,7 +27,13 @@
 import type { PublicNavItem } from '@/lib/public-nav/types';
 
 /** Header nav. `null` = platform default; a non-null array replaces it. */
-export const publicNavItems: PublicNavItem[] | null = null;
+export const publicNavItems: PublicNavItem[] | null = [
+  // HowDoesThisLand: only routes that exist. The wordmark links home, so Home
+  // is not repeated; each later public page (/scan, /model, /developers) adds
+  // its own item when it lands. Text only: the Galley Proof nav has no icons.
+  { href: '/about', label: 'About' },
+  { href: '/contact', label: 'Contact' },
+];
 
 /** Footer link cluster. `null` = platform default; a non-null array replaces it. */
 export const footerNavItems: PublicNavItem[] | null = null;

@@ -18,7 +18,7 @@
  */
 
 /** Product name — page titles, header/footer brand, emails. `null` → "Sunrise". */
-export const appBrandName: string | null = null;
+export const appBrandName: string | null = 'HowDoesThisLand';
 
 /**
  * Copyright holder, where it differs from the product (e.g. product "ConQuest"
@@ -31,4 +31,5 @@ export const appBrandLegalName: string | null = null;
  * `null` → the product name — deliberately not a sentence, because a wrong
  * sentence is worse than a short one (#519).
  */
-export const appBrandDescription: string | null = null;
+export const appBrandDescription: string | null =
+  'HowDoesThisLand reads your CV, pitch or proposal the way your reader will, and shows you how to strengthen the case.';

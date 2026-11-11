@@ -5,6 +5,9 @@ import { ProtectedFooter } from '@/components/layouts/protected-footer';
 import { MaintenanceWrapperWithAdminNotice } from '@/components/maintenance-wrapper';
 import { BRAND } from '@/lib/brand';
 import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
+// HowDoesThisLand: the workspace slot beside the nav. Ledger:
+// .context/app/platform-divergences.md row 6.
+import { WorkspaceSlot } from '@/components/app/shell/workspace-slot';
 
 export const metadata: Metadata = {
   title: {
@@ -31,7 +34,15 @@ export default function ProtectedLayout({
   return (
     <MaintenanceWrapperWithAdminNotice>
       <div className="bg-background flex min-h-screen flex-col">
-        <AppHeader logoHref={AUTH_LANDING_ROUTE} navigation={<ProtectedNav />} />
+        <AppHeader
+          logoHref={AUTH_LANDING_ROUTE}
+          navigation={
+            <>
+              <ProtectedNav />
+              <WorkspaceSlot />
+            </>
+          }
+        />
         <main className="container mx-auto flex-1 px-4 py-8">{children}</main>
         <ProtectedFooter />
       </div>
