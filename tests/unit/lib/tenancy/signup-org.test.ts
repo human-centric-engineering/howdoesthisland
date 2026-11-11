@@ -11,9 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('@/lib/logging', () => ({ logger: mockLogger }));
 vi.mock('@/lib/db/client', () => ({ prisma: {} }));
+// Mocked, not read: each case passes its resolver in, and a filled seam must
+// not change what this file measures.
+vi.mock('@/lib/app/signup-org', () => ({ appSignupOrgResolver: null }));
 
 import { uninvitedSignupAdmission, type SignupOrgResolver } from '@/lib/tenancy/signup-org';
-import { appSignupOrgResolver } from '@/lib/app/signup-org';
 
 const ORG = 'cmorg00000000000000newws1';
 const signup = { email: 'ada@example.com', name: 'Ada', role: 'USER' };
@@ -30,8 +32,7 @@ function db(found: { id: string } | null | Error = { id: ORG }) {
 beforeEach(() => vi.clearAllMocks());
 
 describe('uninvitedSignupAdmission', () => {
-  it('ships with no resolver, and then answers null without reading anything', async () => {
-    expect(appSignupOrgResolver).toBeNull();
+  it('with no resolver, answers null without reading anything', async () => {
     const database = db();
 
     await expect(uninvitedSignupAdmission(signup, null, database)).resolves.toBeNull();
