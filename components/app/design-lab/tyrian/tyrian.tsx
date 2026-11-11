@@ -196,7 +196,7 @@ function pickOption(options: readonly string[]): string {
   return options.find((o) => want.some((w) => o.startsWith(w))) ?? options[0];
 }
 
-function Header({ active }: { active: string }) {
+function Header() {
   const items = ['Assess', 'Sample report', 'The model', 'API', 'About'];
   return (
     <header className="top">
@@ -206,7 +206,7 @@ function Header({ active }: { active: string }) {
       </span>
       <nav aria-label="Main">
         {items.map((i) => (
-          <a key={i} href="#hero" aria-current={i === active ? 'page' : undefined}>
+          <a key={i} href="#hero">
             {i}
           </a>
         ))}
@@ -229,7 +229,7 @@ function Hero() {
     <section id="hero" className="screen">
       <div className="wrap">
         <p className="screen-label">Screen 1 · Landing hero</p>
-        <Header active="" />
+        <Header />
         <div className="hero">
           <div>
             <h1>

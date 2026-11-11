@@ -9,10 +9,12 @@ export interface Segment {
 
 /**
  * Split a text into paragraphs, and each paragraph into runs that either carry
- * one annotation or none. Annotations are offsets into the whole text and do
- * not overlap (the generator drops overlaps).
+ * one annotation or none. Annotations are offsets into the whole text, taken in
+ * order of start; one that overlaps an earlier one is dropped rather than
+ * duplicating text.
  */
 export function segmentParagraphs(text: string, annotations: readonly Annotation[]): Segment[][] {
+  const ordered = [...annotations].sort((a, b) => a.start - b.start);
   const paragraphs: Segment[][] = [];
   let offset = 0;
   for (const para of text.split('\n\n')) {
@@ -20,9 +22,10 @@ export function segmentParagraphs(text: string, annotations: readonly Annotation
     const end = start + para.length;
     const runs: Segment[] = [];
     let cursor = start;
-    for (const a of annotations) {
+    for (const a of ordered) {
       if (a.end <= start || a.start >= end) continue;
       const from = Math.max(a.start, start);
+      if (from < cursor) continue; // overlaps the mark before it
       const to = Math.min(a.end, end);
       if (from > cursor) runs.push({ text: text.slice(cursor, from) });
       runs.push({ text: text.slice(from, to), annotation: a });
@@ -33,8 +36,4 @@ export function segmentParagraphs(text: string, annotations: readonly Annotation
     offset = end + 2;
   }
   return paragraphs;
-}
-
-export function bandFor(score: number, bands: Sample['bands']): string {
-  return bands.find((b) => score >= b.min && score <= b.max)?.label ?? '';
 }

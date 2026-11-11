@@ -32,7 +32,7 @@ function ticks(score: number): string {
   return '▮'.repeat(n) + '▯'.repeat(10 - n);
 }
 
-/** Wavy proof underline in the appeal's colour, with a numbered reference for the editor's changes. */
+/** Wavy proof underline in the appeal's colour; the editor's changes also carry their number. */
 function Runs({ runs, refs }: { runs: Segment[]; refs: boolean }) {
   return (
     <>
@@ -45,9 +45,9 @@ function Runs({ runs, refs }: { runs: Segment[]; refs: boolean }) {
             title={`${r.annotation.dimension}: ${r.annotation.note}`}
           >
             {r.text}
-            {refs && (
+            {refs && r.annotation.change > 0 && (
               <span className="ref" style={{ color: `var(--${r.annotation.appeal})` }}>
-                {r.annotation.change > 0 ? r.annotation.change : '·'}
+                {r.annotation.change}
               </span>
             )}
           </span>

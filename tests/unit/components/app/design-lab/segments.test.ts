@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bandFor, segmentParagraphs, type Annotation } from '@/components/app/design-lab/segments';
+import { segmentParagraphs, type Annotation } from '@/components/app/design-lab/segments';
 import { SAMPLE } from '@/components/app/design-lab/sample';
 
 function ann(start: number, end: number, change = 0): Annotation {
@@ -38,29 +38,33 @@ describe('segmentParagraphs', () => {
     ]);
   });
 
+  it('takes marks in order of start, whatever order they arrive in', () => {
+    const text = 'one two three';
+    const two = ann(4, 7);
+    const one = ann(0, 3);
+    expect(segmentParagraphs(text, [two, one])).toEqual([
+      [
+        { text: 'one', annotation: one },
+        { text: ' ' },
+        { text: 'two', annotation: two },
+        { text: ' three' },
+      ],
+    ]);
+  });
+
+  it('drops a mark that overlaps the one before it rather than repeating text', () => {
+    const text = 'abcdefgh';
+    const first = ann(0, 5);
+    const overlapping = ann(3, 7);
+    const runs = segmentParagraphs(text, [first, overlapping]).flat();
+    expect(runs).toEqual([{ text: 'abcde', annotation: first }, { text: 'fgh' }]);
+  });
+
   it('reproduces every annotated quote of the real sample exactly', () => {
     const runs = segmentParagraphs(SAMPLE.before.text, SAMPLE.before.annotations).flat();
     const marked = runs.filter((r) => r.annotation);
     expect(marked.map((r) => r.text)).toEqual(SAMPLE.before.annotations.map((a) => a.quote));
     // and nothing is lost or duplicated between the runs
     expect(runs.map((r) => r.text).join('')).toBe(SAMPLE.before.text.replace(/\n\n/g, ''));
-  });
-});
-
-describe('bandFor', () => {
-  it.each([
-    [0, 'Weak'],
-    [39, 'Weak'],
-    [40, 'Developing'],
-    [74, 'Solid'],
-    [75, 'Strong'],
-    [100, 'Exceptional'],
-  ])('puts %i in %s', (score, label) => {
-    expect(bandFor(score, SAMPLE.bands)).toBe(label);
-  });
-
-  it('agrees with the band the engine assigned to the sample', () => {
-    expect(bandFor(SAMPLE.before.scores.overall, SAMPLE.bands)).toBe(SAMPLE.before.scores.band);
-    expect(bandFor(SAMPLE.after.scores.overall, SAMPLE.bands)).toBe(SAMPLE.after.scores.band);
   });
 });
