@@ -570,9 +570,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/reserved-tiers.ts',
     risk: 'a stray entry would switch OFF the guard that keeps a reserved tier empty — and it is upstream, where core is the only thing that could put a file there, that the guard is the promise rather than a formality',
-    // FORK (HowDoesThisLand): pinned to the tier we fill, our docs.
+    // FORK (HowDoesThisLand): pinned to the tiers we fill: our components and our docs.
     // Ledger: .context/app/platform-divergences.md row 2.
-    assert: () => expect(occupiedTiers).toEqual(['.context/app']),
+    assert: () => expect(occupiedTiers).toEqual(['components/app', '.context/app']),
   },
   {
     seam: 'lib/app/own-modules.ts',
