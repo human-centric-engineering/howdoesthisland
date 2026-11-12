@@ -109,8 +109,9 @@ export function WorkspaceInviteForm({ orgId }: WorkspaceInviteFormProps) {
       <CardHeader>
         <CardTitle className="text-lg">Invite someone</CardTitle>
         <CardDescription>
-          If they already use {BRAND.name}, they accept the invitation when they sign in. If not,
-          they get an email to create an account. They appear under Members once they accept.
+          Either way they get an email. If they already use {BRAND.name}, it points them to their
+          workspace settings to accept. If not, it has a link to create an account. They appear
+          under Members once they accept.
         </CardDescription>
       </CardHeader>
       <CardContent>

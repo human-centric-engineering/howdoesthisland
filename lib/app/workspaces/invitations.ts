@@ -23,9 +23,12 @@
  * service account, or core holds a sign-up invitation for that address into
  * another org (which this must not re-target, as core's route must not). Each
  * is logged. Both sending branches send one email, so the two take about as
- * long as each other; the no-send cases are quicker, and say nothing about an
- * account, since one is a member the inviter can already see and the other
- * is an address with no account.
+ * long as each other. The no-send cases are quicker, and timing is the one
+ * place they show: a quick answer for someone not on the roster means the
+ * service account or a sign-up invitation pending elsewhere, the second of
+ * which implies no account. Accepted as narrow: it needs an invitation
+ * already pending into another org, and evening it out would mean a padded
+ * delay on every invite.
  *
  * Who may invite is the policy's (the route hands it the org resource, as
  * core's does), and what may be invited is core's `checkInvitationInto`: the

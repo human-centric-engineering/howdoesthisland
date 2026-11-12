@@ -30,7 +30,11 @@ describe('collectAppSubjectData', () => {
 
     const calls = vi.mocked(prisma.workspaceInvitation.findMany).mock.calls.map((c) => c[0]);
     expect(calls).toEqual([
-      { where: { userId: 'user-1' }, orderBy: { createdAt: 'asc' } },
+      {
+        where: { userId: 'user-1' },
+        omit: { invitedByUserId: true },
+        orderBy: { createdAt: 'asc' },
+      },
       {
         where: { invitedByUserId: 'user-1' },
         omit: { userId: true },

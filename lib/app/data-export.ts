@@ -130,7 +130,13 @@ export function initAppSubjectSources(): void {
  */
 export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
   const [received, sent] = await Promise.all([
-    prisma.workspaceInvitation.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    // The ones to them, without the inviter's id (their name is in the
+    // invitation email, and the id is someone else's data).
+    prisma.workspaceInvitation.findMany({
+      where: { userId },
+      omit: { invitedByUserId: true },
+      orderBy: { createdAt: 'asc' },
+    }),
     // The ones they sent, without the invitee: that is someone else's data.
     prisma.workspaceInvitation.findMany({
       where: { invitedByUserId: userId },
