@@ -97,4 +97,47 @@ describe('CreateWorkspaceDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it('shows it is working and cannot be closed while the create is in flight', async () => {
+    let resolve: (value: unknown) => void = () => {};
+    vi.mocked(apiClient.post).mockReturnValue(new Promise((r) => (resolve = r)));
+    const { user, onOpenChange, onCreated } = setup();
+
+    await user.type(screen.getByRole('textbox'), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    expect(await screen.findByRole('button', { name: /Creating/ })).toBeDisabled();
+    expect(screen.getByRole('textbox')).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    resolve({ id: 'org-9', name: 'Acme' });
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('clears what was typed and the last failure when closed', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('You already own 5 workspaces.', 'WORKSPACE_LIMIT_REACHED', 409)
+    );
+    const onOpenChange = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <CreateWorkspaceDialog open onOpenChange={onOpenChange} onCreated={vi.fn()} />
+    );
+
+    await user.type(screen.getByRole('textbox'), 'Sixth');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+    await screen.findByRole('alert');
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+
+    rerender(
+      <CreateWorkspaceDialog open={false} onOpenChange={onOpenChange} onCreated={vi.fn()} />
+    );
+    rerender(<CreateWorkspaceDialog open onOpenChange={onOpenChange} onCreated={vi.fn()} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
