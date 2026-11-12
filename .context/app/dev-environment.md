@@ -81,6 +81,21 @@ the schema, so an app at `multi` fails on its first query. The reset re-seeds as
 re-grants the role, re-enables the policies, and puts back the provider row and
 the embedding model.
 
+## Check that a signup gets its workspace
+
+Every uninvited signup gets a workspace of its own, granted OpenAI and a $10
+monthly budget (`lib/app/workspaces/provision.ts`). With the database in shape:
+
+```bash
+RESEND_API_KEY= npx tsx --env-file=.env.local scripts/app/smoke-signup-workspace.ts
+```
+
+It signs up one person by password and one by OAuth (no identity provider is
+reached), reads back each one's membership, active org, provider grant, budget
+and platform agents, then runs the sweep that erases signup workspaces nobody
+joined (`lib/app/workspaces/sweep.ts`). It cleans up after itself. Exit 0 means
+it passed.
+
 ## Gotchas
 
 - **Never point `DATABASE_URL` at the owner.** On a superuser or a `BYPASSRLS`

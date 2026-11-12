@@ -34,6 +34,19 @@
  *
  * Full guide: CUSTOMIZATION.md §4 · .context/orchestration/scheduling.md
  */
+import { registerAppJob } from '@/lib/orchestration/maintenance/app-jobs';
+import { sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
+
+/** The signup-workspace sweep's name, as the tick logs it. */
+export const SIGNUP_WORKSPACE_SWEEP_JOB = 'app:signup-workspace-sweep';
+
 export function initAppJobs(): void {
-  // No app jobs by default.
+  // Erase signup workspaces nobody joined (t-7). Org is a system model and the
+  // pass spans every org, so it runs once under the system scope.
+  registerAppJob({
+    name: SIGNUP_WORKSPACE_SWEEP_JOB,
+    intervalMs: 15 * 60 * 1000,
+    scope: { system: 'signup workspaces span orgs; Org is a system model' },
+    run: () => sweepSignupWorkspaces(),
+  });
 }
