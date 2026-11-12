@@ -32,7 +32,11 @@
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { createOrg, OrgLifecycleError } from '@/lib/tenancy/lifecycle';
-import { writeOrgProviderPolicy, writeOrgQuotas } from '@/lib/tenancy/org-settings';
+import {
+  isSettingsWriteConflict,
+  writeOrgProviderPolicy,
+  writeOrgQuotas,
+} from '@/lib/tenancy/org-settings';
 import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-policy';
 import { forgetOrgCap } from '@/lib/orchestration/llm/spend-caps';
 import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
@@ -55,6 +59,13 @@ const SLUG_STEM_MAX = 40;
 
 /** Attempts at a free slug before giving up. Each retry adds a random suffix. */
 const SLUG_ATTEMPTS = 4;
+
+/**
+ * Tries at each settings write. Each is a serializable read-modify-write, and
+ * a concurrent write to the same org (the platform-agents marker the reconcile
+ * in `createOrg` writes) fails one of them with `P2034`, which a retry clears.
+ */
+const SETTINGS_WRITE_ATTEMPTS = 3;
 
 /** Longest part of a person's name used in the workspace name. */
 const NAME_MAX = 150;
@@ -156,8 +167,19 @@ async function grantProvider(orgId: string): Promise<boolean> {
     return false;
   }
   // No jurisdiction restriction: none is ruled for this app yet.
-  await writeOrgProviderPolicy(orgId, { approved: [provider.id] });
+  await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved: [provider.id] }));
   return true;
+}
+
+/** Run a settings write, retrying it on a serializable clash. */
+async function withConflictRetry<T>(write: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await write();
+    } catch (error) {
+      if (attempt >= SETTINGS_WRITE_ATTEMPTS || !isSettingsWriteConflict(error)) throw error;
+    }
+  }
 }
 
 /**
@@ -171,11 +193,18 @@ export async function provisionSignupWorkspace(
   const org = await createWorkspaceOrg(name, slugStem(workspaceOwnerName(signup)));
   const orgId = org.id;
 
-  // Each step on its own: one failing does not stop the others.
+  // Each step on its own: one failing does not stop the others. The mark
+  // goes first: it is what lets the sweep reclaim the org if the signup fails.
   const steps: Array<[string, () => Promise<unknown>]> = [
-    ['mark', () => writeSignupWorkspaceMarker(orgId, true)],
+    ['mark', () => withConflictRetry(() => writeSignupWorkspaceMarker(orgId, true))],
     ['grant', () => grantProvider(orgId)],
-    ['budget', () => writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })],
+    [
+      'budget',
+      () =>
+        withConflictRetry(() =>
+          writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })
+        ),
+    ],
   ];
   let granted = false;
   for (const [step, run] of steps) {

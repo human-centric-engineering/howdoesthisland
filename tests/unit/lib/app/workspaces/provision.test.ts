@@ -14,6 +14,7 @@
  * `provisionSignupWorkspace`. Changing the resolver should fail it.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Prisma } from '@prisma/client';
 
 const mockLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('@/lib/logging', () => ({ logger: mockLogger }));
@@ -23,6 +24,10 @@ const store = vi.hoisted(() => ({
   settings: new Map<string, unknown>(),
   providers: new Map<string, string>(),
   failUpdate: false,
+  /** Updates still to fail with a serializable clash before they succeed. */
+  conflicts: 0,
+  /** The error each conflicting update rejects with. */
+  conflictError: new Error('unset'),
 }));
 
 const fakePrisma = vi.hoisted(() => {
@@ -34,6 +39,10 @@ const fakePrisma = vi.hoisted(() => {
     ),
     update: vi.fn(({ where, data }: { where: { id: string }; data: { settings: unknown } }) => {
       if (store.failUpdate) return Promise.reject(new Error('write failed'));
+      if (store.conflicts > 0) {
+        store.conflicts--;
+        return Promise.reject(store.conflictError);
+      }
       // A plain object is the column; anything else here is `Prisma.DbNull`.
       const value =
         typeof data.settings === 'object' &&
@@ -125,6 +134,11 @@ beforeEach(() => {
   store.providers.clear();
   store.providers.set('openai', OPENAI_ID);
   store.failUpdate = false;
+  store.conflicts = 0;
+  store.conflictError = new Prisma.PrismaClientKnownRequestError('clash', {
+    code: 'P2034',
+    clientVersion: 't',
+  });
   events.length = 0;
   reconciledWith.length = 0;
   createOrgAgainst(new Set());
@@ -223,6 +237,45 @@ describe('provisionSignupWorkspace', () => {
       .map(([, , context]) => (context as { step: string }).step);
     expect(steps).toEqual(['mark', 'grant', 'budget']);
     expect(mockReconcile).not.toHaveBeenCalled();
+  });
+});
+
+describe('provisionSignupWorkspace on a write clash', () => {
+  it('retries a clashing settings write, so the workspace is still marked', async () => {
+    store.conflicts = 2; // the mark clashes twice, then lands on its third try
+
+    const orgId = await provisionSignupWorkspace(ada);
+
+    const settings = store.settings.get(orgId);
+    expect(settings).toMatchObject({ app: { signupWorkspace: true } });
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+
+  it('gives up on a write after three clashes, logs that step, and carries on', async () => {
+    store.conflicts = 3;
+
+    const orgId = await provisionSignupWorkspace(ada);
+
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'New workspace not fully set up',
+      store.conflictError,
+      { orgId, step: 'mark' }
+    );
+    const settings = store.settings.get(orgId);
+    expect(settings).not.toMatchObject({ app: { signupWorkspace: true } });
+    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
+  });
+
+  it('does not retry a write that failed for another reason', async () => {
+    store.failUpdate = true;
+
+    await provisionSignupWorkspace(ada);
+
+    // One attempt each at the mark, the grant and the budget.
+    expect(fakePrisma.org.update).toHaveBeenCalledTimes(3);
   });
 });
 
