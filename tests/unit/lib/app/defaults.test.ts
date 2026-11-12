@@ -343,7 +343,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       expect(getAppSubjectSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
       ]);
-      expect(getAppExcludedSubjectSources()).toEqual([]);
+      // FORK (HowDoesThisLand): and the framework store's four models excluded,
+      // holding no personal data (t-10). Ledger row 2.
+      expect(getAppExcludedSubjectSources().map((entry) => entry.model)).toEqual([
+        'Framework',
+        'FrameworkVersion',
+        'FrameworkNode',
+        'FrameworkLink',
+      ]);
     },
   },
   {
