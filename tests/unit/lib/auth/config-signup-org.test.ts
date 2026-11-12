@@ -13,9 +13,8 @@
  *   session on that org;
  * - invited signups and the first human never ask the resolver, nor does a
  *   signup whose bootstrap check failed before ruling out the first human;
- * - at `multi`, an after hook with no readable record writes nothing for a
- *   signup the resolver applies to (the sign-in heal places it), where at
- *   `single` it still writes the install-org default;
+ * - an after hook with no readable record writes the install-org default, at
+ *   `single` and at `multi`, without asking the resolver again;
  * - a resolver that throws, answers nothing, or names a missing org falls back
  *   to the install org, logged at `error`;
  * - with no resolver the decision is today's, at `single` and at `multi`.
@@ -255,27 +254,20 @@ describe('with a signup-org resolver registered', () => {
     expect(memberships).toEqual([{ orgId: NEW_ORG, userId: USER_ID, role: ORG_OWNER_ROLE }]);
   });
 
-  it('at multi, an after hook with no readable record writes nothing rather than the install org', async () => {
-    // No request state and a row without the record columns.
-    await userCreateAfterHook(newUser(), { path: '/sign-up/email' });
+  it.each(['single', 'multi'] as const)(
+    'at %s, an after hook with no readable record writes the install-org default, without asking the resolver',
+    async (mode) => {
+      mockEnv.TENANCY_MODE = mode;
+      // No request state and a row without the record columns.
+      await userCreateAfterHook(newUser(), { path: '/sign-up/email' });
 
-    expect(mockPrisma.orgMembership.upsert).not.toHaveBeenCalled();
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining('No org membership written for new user'),
-      expect.objectContaining({ userId: USER_ID })
-    );
-  });
-
-  it('at single, an after hook with no readable record still writes the install-org default', async () => {
-    mockEnv.TENANCY_MODE = 'single';
-
-    await userCreateAfterHook(newUser(), { path: '/sign-up/email' });
-
-    const memberships = mockPrisma.orgMembership.upsert.mock.calls.map(([args]) => args.create);
-    expect(memberships).toEqual([
-      { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
-    ]);
-  });
+      const memberships = mockPrisma.orgMembership.upsert.mock.calls.map(([args]) => args.create);
+      expect(memberships).toEqual([
+        { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
+      ]);
+      expect(seam.resolver).not.toHaveBeenCalled();
+    }
+  );
 
   it.each([
     ['throws', () => Promise.reject(new Error('org service down')), 'Signup org resolver failed'],

@@ -27,7 +27,7 @@ import {
   type SignupRecord,
 } from '@/lib/tenancy/membership';
 import { ORG_ROLES } from '@/lib/tenancy/roles';
-import { signupOrgResolverApplies, uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
+import { uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
 import { isMultiTenant } from '@/lib/tenancy/context';
 import {
   getPendingSignup,
@@ -259,11 +259,6 @@ function membershipsWithoutRecord(
 ): NewUserMemberships | null {
   if (isInvitedSignup()) return undecidedMembershipsForNewUser(user, invitedSignupInvitation());
   if (isOAuthSignup && isMultiTenant()) return null;
-  // FORK (t-6): at `multi` an uninvited signup the resolver applies to was
-  // meant for the resolver's org, and the install org is the vendor's. Write
-  // nothing: the row's record is still in the database, and the sign-in heal
-  // (which runs only for a user with no membership) places them from it.
-  if (isMultiTenant() && signupOrgResolverApplies(user)) return null;
   return { membership: initialMembershipFor(user) };
 }
 

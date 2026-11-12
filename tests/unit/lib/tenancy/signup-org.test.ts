@@ -15,11 +15,7 @@ vi.mock('@/lib/db/client', () => ({ prisma: {} }));
 // not change what this file measures.
 vi.mock('@/lib/app/signup-org', () => ({ appSignupOrgResolver: null }));
 
-import {
-  signupOrgResolverApplies,
-  uninvitedSignupAdmission,
-  type SignupOrgResolver,
-} from '@/lib/tenancy/signup-org';
+import { uninvitedSignupAdmission, type SignupOrgResolver } from '@/lib/tenancy/signup-org';
 
 const ORG = 'cmorg00000000000000newws1';
 const signup = { email: 'ada@example.com', name: 'Ada', emailVerified: false, role: 'USER' };
@@ -92,16 +88,4 @@ describe('uninvitedSignupAdmission', () => {
       expect(rest.at(-1)).toMatchObject({ email: 'ada@example.com' });
     }
   );
-});
-
-describe('signupOrgResolverApplies', () => {
-  const resolver: SignupOrgResolver = () => ORG;
-
-  it.each([
-    ['a registered resolver and an ordinary signup', resolver, 'USER', true],
-    ['no resolver', null, 'USER', false],
-    ['a platform admin', resolver, 'ADMIN', false],
-  ] as const)('answers %s for %s', (_l, registered, role, expected) => {
-    expect(signupOrgResolverApplies({ ...signup, role }, registered)).toBe(expected);
-  });
 });
