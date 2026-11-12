@@ -46,6 +46,11 @@ export interface UninvitedSignup {
   email: string;
   /** Their display name, as supplied at signup. */
   name: string;
+  /**
+   * Whether the address is verified: `true` for an OAuth signup, `false` for a
+   * password signup, whose address is checked only after the account exists.
+   */
+  emailVerified: boolean;
 }
 
 /**
@@ -83,7 +88,11 @@ export async function uninvitedSignupAdmission(
 
   let orgId: unknown;
   try {
-    orgId = await resolver({ email: user.email, name: user.name });
+    orgId = await resolver({
+      email: user.email,
+      name: user.name,
+      emailVerified: user.emailVerified,
+    });
   } catch (error) {
     logger.error('Signup org resolver failed; the signup joins the install org', error, {
       email: user.email,

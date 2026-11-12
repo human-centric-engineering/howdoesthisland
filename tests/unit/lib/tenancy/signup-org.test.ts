@@ -22,7 +22,7 @@ import {
 } from '@/lib/tenancy/signup-org';
 
 const ORG = 'cmorg00000000000000newws1';
-const signup = { email: 'ada@example.com', name: 'Ada', role: 'USER' };
+const signup = { email: 'ada@example.com', name: 'Ada', emailVerified: false, role: 'USER' };
 
 function db(found: { status: string } | null | Error = { status: 'ACTIVE' }) {
   const findUnique = vi.fn(() =>
@@ -51,7 +51,11 @@ describe('uninvitedSignupAdmission', () => {
     await expect(uninvitedSignupAdmission(signup, resolver, database)).resolves.toEqual({
       orgId: ORG,
     });
-    expect(resolver).toHaveBeenCalledWith({ email: 'ada@example.com', name: 'Ada' });
+    expect(resolver).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      name: 'Ada',
+      emailVerified: false,
+    });
     expect(database.org.findUnique).toHaveBeenCalledWith({
       where: { id: ORG },
       select: { status: true },

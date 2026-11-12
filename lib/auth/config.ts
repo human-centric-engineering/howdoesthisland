@@ -168,7 +168,7 @@ async function recordPendingMembership(
   user: UserCreateData,
   invitation: InvitationMetadata | null,
   viaInvitation: boolean,
-  askSignupOrgResolver = true // FORK (t-6)
+  askSignupOrgResolver = false // FORK (t-6): only the uninvited-signup path asks
 ): Promise<SignupRecord> {
   // Three steps, each with its own failure: the fallback below is for a
   // decision that failed, and must not narrow a role when only recording did.

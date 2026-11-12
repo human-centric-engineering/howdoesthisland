@@ -192,7 +192,11 @@ describe('with a signup-org resolver registered', () => {
     async (_label, path) => {
       const { data, memberships, activeOrgId } = await signUp(path);
 
-      expect(seam.resolver).toHaveBeenCalledWith({ email: 'ada@example.com', name: 'Ada' });
+      expect(seam.resolver).toHaveBeenCalledWith({
+        email: 'ada@example.com',
+        name: 'Ada',
+        emailVerified: false,
+      });
       expect(data).toMatchObject({ signupOrgId: NEW_ORG, signupOrgRole: ORG_OWNER_ROLE });
       expect(memberships).toEqual([{ orgId: NEW_ORG, userId: USER_ID, role: ORG_OWNER_ROLE }]);
       expect(activeOrgId).toBe(NEW_ORG);
