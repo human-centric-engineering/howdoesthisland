@@ -258,7 +258,8 @@ export interface InvitationForInvitee {
 
 /**
  * The person's open invitations: pending, unexpired, into an active
- * workspace. Read in the system scope because they span workspaces the person
+ * workspace they are not already in (they may have joined some other way, or
+ * been re-invited while an accept was finishing). Read in the system scope because they span workspaces the person
  * is not in; the `userId` filter is the only fence, and it is the caller's own id.
  */
 export async function listInvitationsFor(userId: string): Promise<InvitationForInvitee[]> {
@@ -268,7 +269,7 @@ export async function listInvitationsFor(userId: string): Promise<InvitationForI
         userId,
         status: 'PENDING',
         expiresAt: { gt: new Date() },
-        org: { status: 'ACTIVE' },
+        org: { status: 'ACTIVE', memberships: { none: { userId } } },
       },
       select: {
         id: true,
@@ -313,7 +314,7 @@ export async function listInvitationsFor(userId: string): Promise<InvitationForI
  * The invitation, if it is `userId`'s and still open. Someone else's is
  * answered exactly as a missing one, so an id says nothing about who holds it.
  */
-async function requireOpenInvitation(invitationId: string, userId: string) {
+async function requireOpenInvitation(invitationId: string, userId: string, now: Date) {
   const invitation = await prisma.workspaceInvitation.findUnique({
     where: { id: invitationId },
     select: { id: true, orgId: true, userId: true, role: true, status: true, expiresAt: true },
@@ -327,7 +328,7 @@ async function requireOpenInvitation(invitationId: string, userId: string) {
       'This invitation has already been answered'
     );
   }
-  if (invitation.expiresAt <= new Date()) {
+  if (invitation.expiresAt <= now) {
     throw new WorkspaceInvitationError(
       'INVITATION_EXPIRED',
       'This invitation has expired. Ask the workspace to invite you again.'
@@ -336,9 +337,16 @@ async function requireOpenInvitation(invitationId: string, userId: string) {
   return { ...invitation, orgId: invitation.orgId };
 }
 
-/** Move an open invitation to `status`, once: false if another answer got there first. */
-async function claim(invitationId: string, status: 'ACCEPTED' | 'DECLINED'): Promise<boolean> {
-  const now = new Date();
+/**
+ * Move an open invitation to `status`, once: false if another answer got
+ * there first. Takes the same `now` the check read, so an invitation that
+ * lapses between the two is reported as expired by the check, not as answered.
+ */
+async function claim(
+  invitationId: string,
+  status: 'ACCEPTED' | 'DECLINED',
+  now: Date
+): Promise<boolean> {
   const { count } = await prisma.workspaceInvitation.updateMany({
     where: { id: invitationId, status: 'PENDING', expiresAt: { gt: now } },
     data: { status, respondedAt: now },
@@ -374,8 +382,9 @@ export async function acceptInvitation(
   userId: string
 ): Promise<{ orgId: string; role: OrgRole }> {
   return runAsSystem('app.workspace-invitations: an invitee accepts their own', async () => {
-    const invitation = await requireOpenInvitation(invitationId, userId);
-    if (!(await claim(invitation.id, 'ACCEPTED'))) throw alreadyAnswered();
+    const now = new Date();
+    const invitation = await requireOpenInvitation(invitationId, userId, now);
+    if (!(await claim(invitation.id, 'ACCEPTED', now))) throw alreadyAnswered();
 
     try {
       const membership = await addMember(
@@ -400,7 +409,8 @@ export async function acceptInvitation(
 /** Decline: the invitation is closed and the workspace can see it was declined. */
 export async function declineInvitation(invitationId: string, userId: string): Promise<void> {
   await runAsSystem('app.workspace-invitations: an invitee declines their own', async () => {
-    const invitation = await requireOpenInvitation(invitationId, userId);
-    if (!(await claim(invitation.id, 'DECLINED'))) throw alreadyAnswered();
+    const now = new Date();
+    const invitation = await requireOpenInvitation(invitationId, userId, now);
+    if (!(await claim(invitation.id, 'DECLINED', now))) throw alreadyAnswered();
   });
 }

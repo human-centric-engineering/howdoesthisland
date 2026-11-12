@@ -503,6 +503,16 @@ describe('acceptInvitation', () => {
     expect(mockAddMember).not.toHaveBeenCalled();
   });
 
+  it('claims with the same clock the expiry check read, so a lapse between them reads as expired', async () => {
+    await acceptInvitation(INVITATION_ID, INVITEE_ID);
+
+    const claim = vi.mocked(prisma.workspaceInvitation.updateMany).mock.calls[0][0] as {
+      where: { expiresAt: { gt: Date } };
+      data: { respondedAt: Date };
+    };
+    expect(claim.where.expiresAt.gt).toBe(claim.data.respondedAt);
+  });
+
   it('answers 409 when another request claims it first (updateMany count 0), adding no one', async () => {
     vi.mocked(prisma.workspaceInvitation.updateMany).mockResolvedValue({ count: 0 });
 
@@ -685,7 +695,7 @@ describe('listInvitationsFor', () => {
       userId: INVITEE_ID,
       status: 'PENDING',
       expiresAt: { gt: expect.any(Date) },
-      org: { status: 'ACTIVE' },
+      org: { status: 'ACTIVE', memberships: { none: { userId: INVITEE_ID } } },
     });
     expect(args?.orderBy).toEqual({ createdAt: 'desc' });
   });

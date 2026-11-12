@@ -42,7 +42,9 @@ export function WorkspaceInvitations({ invitations }: WorkspaceInvitationsProps)
   const save = useSaveFailure({ fallback: 'That did not work. Try again in a moment.' });
 
   const open = invitations.filter((invitation) => !answered.has(invitation.id));
-  if (open.length === 0) return null;
+  // Kept while it has an error to show: a failed answer refreshes the page,
+  // and when that empties the list the message would go with it.
+  if (open.length === 0 && !save.failure) return null;
 
   const answer = async (invitation: InvitationForInvitee, choice: 'accept' | 'decline') => {
     save.clear();

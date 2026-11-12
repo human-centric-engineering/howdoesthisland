@@ -137,6 +137,23 @@ describe('WorkspaceInvitations', () => {
     expect(apiClient.post).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the error on screen when the refresh after a failure empties the list', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('That invitation has expired.', 'INVITATION_EXPIRED', 410)
+    );
+    const user = userEvent.setup();
+    const { rerender } = render(<WorkspaceInvitations invitations={[GLOBEX]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Accept the invitation to Globex' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That invitation has expired.');
+
+    // The refreshed page no longer lists it.
+    rerender(<WorkspaceInvitations invitations={[]} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('That invitation has expired.');
+    expect(screen.queryByText('Globex')).not.toBeInTheDocument();
+  });
+
   it('disables every button while one answer is in flight', async () => {
     let resolve: (value: unknown) => void = () => {};
     vi.mocked(apiClient.post).mockReturnValue(new Promise((r) => (resolve = r)));
