@@ -8,7 +8,15 @@ const mockLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.f
 vi.mock('@/lib/logging', () => ({ logger: mockLogger }));
 
 const mockFindMany = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/db/client', () => ({ prisma: { org: { findMany: mockFindMany } } }));
+const mockMemberCount = vi.hoisted(() => vi.fn());
+const mockUserCount = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/db/client', () => ({
+  prisma: {
+    org: { findMany: mockFindMany },
+    orgMembership: { count: mockMemberCount },
+    user: { count: mockUserCount },
+  },
+}));
 
 const mockEraseOrg = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/privacy/erase-org', () => ({ eraseOrg: mockEraseOrg }));
@@ -35,6 +43,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockEraseOrg.mockResolvedValue({});
   mockWriteMarker.mockResolvedValue(undefined);
+  mockMemberCount.mockResolvedValue(0);
+  mockUserCount.mockResolvedValue(0);
 });
 
 describe('sweepSignupWorkspaces', () => {
@@ -66,6 +76,50 @@ describe('sweepSignupWorkspaces', () => {
     expect(mockEraseOrg).toHaveBeenCalledWith({ orgId: 'abandoned', actorUserId: SWEEP_ACTOR });
     expect(mockWriteMarker).toHaveBeenCalledTimes(1);
     expect(mockWriteMarker).toHaveBeenCalledWith('joined', false);
+  });
+
+  it('limits the pass to the given orgs', async () => {
+    mockFindMany.mockResolvedValue([]);
+
+    await sweepSignupWorkspaces(NOW, ['o1', 'o2']);
+
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          settings: { path: ['app', 'signupWorkspace'], equals: true },
+          id: { in: ['o1', 'o2'] },
+        },
+      })
+    );
+  });
+
+  it('leaves a memberless one alone while an account still claims it', async () => {
+    // The signup named this org, but its membership write failed; the sign-in
+    // heal writes it later.
+    mockFindMany.mockResolvedValue([org('pending', old, 0)]);
+    mockUserCount.mockResolvedValue(1);
+
+    await expect(sweepSignupWorkspaces(NOW)).resolves.toEqual({
+      settled: 0,
+      erased: 0,
+      failed: 0,
+    });
+    expect(mockUserCount).toHaveBeenCalledWith({ where: { signupOrgId: 'pending' } });
+    expect(mockEraseOrg).not.toHaveBeenCalled();
+    expect(mockWriteMarker).not.toHaveBeenCalled();
+  });
+
+  it('does not erase one that gained a member after the list was read', async () => {
+    mockFindMany.mockResolvedValue([org('late', old, 0)]);
+    mockMemberCount.mockResolvedValue(1);
+
+    await expect(sweepSignupWorkspaces(NOW)).resolves.toEqual({
+      settled: 0,
+      erased: 0,
+      failed: 0,
+    });
+    expect(mockMemberCount).toHaveBeenCalledWith({ where: { orgId: 'late' } });
+    expect(mockEraseOrg).not.toHaveBeenCalled();
   });
 
   it('never touches the install org', async () => {

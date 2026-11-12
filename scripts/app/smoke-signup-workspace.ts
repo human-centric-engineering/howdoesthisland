@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   });
   orgIds.add(orphan);
   const later = new Date(Date.now() + ABANDONED_AFTER_MS + 60_000);
-  const result = await system(() => sweepSignupWorkspaces(later));
+  const result = await system(() => sweepSignupWorkspaces(later, [...orgIds]));
   const remaining = await system(() =>
     prisma.org.findMany({
       where: { id: { in: [...orgIds] } },

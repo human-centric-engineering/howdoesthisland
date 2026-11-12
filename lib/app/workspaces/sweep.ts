@@ -16,6 +16,13 @@
  * - **with no member, older than {@link ABANDONED_AFTER_MS}**: erases it with
  *   `eraseOrg`, the platform's own org erasure. The grace period is far longer
  *   than any signup request, so a signup still in flight is never swept.
+ * - **claimed by an account but not yet joined**: left alone. A user row whose
+ *   `signupOrgId` names the org is a signup that succeeded but whose membership
+ *   write failed; the sign-in heal writes it later. Erasing the org would take
+ *   that person's workspace away.
+ *
+ * Both checks are made again just before an erase, so a member who joined
+ * since the list was read is not erased with the org.
  *
  * An org a platform admin creates is never marked, so never swept.
  *
@@ -48,11 +55,32 @@ export interface SignupWorkspaceSweepResult {
   failed: number;
 }
 
+/**
+ * Whether anyone has claimed the org: a member, or an account whose signup
+ * named it and whose membership is still to be written.
+ */
+async function isClaimed(orgId: string): Promise<boolean> {
+  const [members, pending] = await Promise.all([
+    prisma.orgMembership.count({ where: { orgId } }),
+    prisma.user.count({ where: { signupOrgId: orgId } }),
+  ]);
+  return members > 0 || pending > 0;
+}
+
+/**
+ * @param now the time the grace period is measured back from.
+ * @param onlyOrgIds limit the pass to these orgs. For the smoke script, so it
+ *   never erases someone else's workspace in a shared database.
+ */
 export async function sweepSignupWorkspaces(
-  now: Date = new Date()
+  now: Date = new Date(),
+  onlyOrgIds?: readonly string[]
 ): Promise<SignupWorkspaceSweepResult> {
   const marked = await prisma.org.findMany({
-    where: { settings: { path: [APP_SETTINGS_KEY, SIGNUP_WORKSPACE_MARKER], equals: true } },
+    where: {
+      settings: { path: [APP_SETTINGS_KEY, SIGNUP_WORKSPACE_MARKER], equals: true },
+      ...(onlyOrgIds ? { id: { in: [...onlyOrgIds] } } : {}),
+    },
     select: { id: true, createdAt: true, _count: { select: { memberships: true } } },
   });
 
@@ -67,6 +95,8 @@ export async function sweepSignupWorkspaces(
         await writeSignupWorkspaceMarker(org.id, false);
         result.settled++;
       } else if (org.createdAt.getTime() <= cutoff) {
+        // Checked again here: the list above may be stale.
+        if (await isClaimed(org.id)) continue;
         await eraseOrg({ orgId: org.id, actorUserId: SWEEP_ACTOR });
         logger.info('Abandoned signup workspace erased', { orgId: org.id });
         result.erased++;
