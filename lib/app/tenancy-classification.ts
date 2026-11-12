@@ -20,6 +20,7 @@
  *
  * Full guide: .context/architecture/multi-tenancy.md "Classifying your models"
  */
+import { registerAppTenancyClassification } from '@/lib/tenancy/classification';
 
 /**
  * Classify your tier's models that carry no `orgId`.
@@ -57,5 +58,11 @@
  * client is being built.
  */
 export function initAppTenancyClassification(): void {
-  // No app tenancy classifications by default.
+  registerAppTenancyClassification({
+    tier: 'app',
+    // HowDoesThisLand (t-10): the framework store. Every workspace reads the
+    // same published versions; only the import and publish scripts write
+    // them, in the system scope (lib/app/frameworks/repo.ts).
+    globalConfig: ['Framework', 'FrameworkVersion', 'FrameworkNode', 'FrameworkLink'],
+  });
 }

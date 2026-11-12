@@ -380,7 +380,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppTenancyClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
-      expect(appTenancyClassifications().size).toBe(0);
+      // FORK (HowDoesThisLand): pinned to our one registration, the framework
+      // store's shared-config tables (t-10). Ledger: .context/app/platform-divergences.md row 2.
+      expect([...appTenancyClassifications().keys()].sort()).toEqual([
+        'Framework',
+        'FrameworkLink',
+        'FrameworkNode',
+        'FrameworkVersion',
+      ]);
     },
   },
   {
@@ -694,6 +701,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       // workspace smoke (t-7). Ledger: .context/app/platform-divergences.md row 2.
       expect(appCoverageExclusions.map((e) => e.pattern)).toEqual([
         'scripts/app/smoke-signup-workspace.ts',
+        // FORK (HowDoesThisLand): and the framework store's smoke and commands (t-10).
+        'scripts/app/smoke-framework-store.ts',
+        'scripts/app/frameworks/*.ts',
       ]);
       expect(appAlwaysRunTests).toEqual([]);
       expect(appOwnerlessSurfaceExceptions).toEqual([]);

@@ -53,3 +53,7 @@ coverage
 # HowDoesThisLand: the original artefact, kept verbatim as the porting
 # reference (prototype/BRIEF.md). Ledger: .context/app/platform-divergences.md row 3.
 prototype
+
+# HowDoesThisLand: framework data files, byte-identical copies of the reviewed
+# model, checksummed by test (t-10). Ledger: .context/app/platform-divergences.md row 3.
+lib/app/frameworks/*/data

@@ -62,4 +62,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/signup-org.ts',
   // The workspace a signup gets, and the sweep for abandoned ones (t-7).
   'lib/app/workspaces/',
+  // The framework store: tables, definitions, import and publish (t-10).
+  'lib/app/frameworks/',
 ];
