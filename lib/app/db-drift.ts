@@ -48,6 +48,23 @@
  *
  * Full guide: CUSTOMIZATION.md §5 · .context/database/prisma-unmodelled-objects.md
  */
+import { registerAppDriftProbe, constraintExists } from '@/lib/db/drift-probes';
+
 export function registerAppDriftProbes(): void {
-  // No app drift probes by default.
+  // t-9: the hand-written FKs from a workspace invitation to `user` (the
+  // migration header says why they are not Prisma relations). The ON DELETE
+  // action is pinned: CASCADE takes an invitee's invitations with their
+  // account, SET NULL keeps the workspace's record when the inviter goes.
+  registerAppDriftProbe({
+    name: 'app_workspace_invitation_userId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_workspace_invitation',
+    probe: constraintExists('app_workspace_invitation_userId_fkey', 'ON DELETE CASCADE'),
+  });
+  registerAppDriftProbe({
+    name: 'app_workspace_invitation_invitedByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_workspace_invitation',
+    probe: constraintExists('app_workspace_invitation_invitedByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

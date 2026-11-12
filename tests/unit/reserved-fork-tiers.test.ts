@@ -211,11 +211,13 @@ describe('reserved fork tiers', () => {
       .split('\n')
       .filter((line) => /^\s*(model|enum|type|view)\s+\w+/.test(line));
 
+    // FORK (HowDoesThisLand): pinned to our models, as the FORK NOTE above
+    // asks (t-9). Ledger: .context/app/platform-divergences.md row 11.
     expect(
       declarations,
       'prisma/schema/app.prisma is fork-reserved and ships empty; platform ' +
         'app-domain models belong in prisma/schema/platform.prisma.'
-    ).toEqual([]);
+    ).toEqual(['model WorkspaceInvitation {', 'enum WorkspaceInvitationStatus {']);
   });
 
   it('the reservation is documented in both places a fork would look', () => {

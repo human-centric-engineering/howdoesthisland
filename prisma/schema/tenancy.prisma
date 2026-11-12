@@ -88,6 +88,10 @@ model Org {
   waitlistListStates                WaitlistListState[]
   waitlistConfirmTokens             WaitlistConfirmToken[]
 
+  // FORK (HowDoesThisLand): back-relations for the app's tenant-owned models
+  // (prisma/schema/app.prisma). Divergence ledger row 10.
+  workspaceInvitations WorkspaceInvitation[]
+
   @@map("org")
 }
 

@@ -433,6 +433,12 @@ describe('tenancyDriftProbes', () => {
 describe('shipped lib/app/db-drift.ts scaffold', () => {
   it('registers zero probes by default (Sunrise ships the scaffold empty)', () => {
     registerAppDriftProbes();
-    expect(getAppDriftProbes()).toEqual([]);
+    // FORK (HowDoesThisLand): pinned to our two probes, the hand-written FKs
+    // from a workspace invitation to user (t-9). Ledger:
+    // .context/app/platform-divergences.md row 11.
+    expect(getAppDriftProbes().map((probe) => probe.name)).toEqual([
+      'app_workspace_invitation_userId_fkey (hand-written FK → user)',
+      'app_workspace_invitation_invitedByUserId_fkey (hand-written FK → user)',
+    ]);
   });
 });

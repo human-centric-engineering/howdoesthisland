@@ -48,6 +48,8 @@
  *
  * Full guide: .context/privacy/data-export.md · CUSTOMIZATION.md §4
  */
+import { prisma } from '@/lib/db/client';
+import { registerAppSubjectSources } from '@/lib/privacy/subject-source-registry';
 
 /** Identity of the subject being exported. */
 export interface AppSubjectQuery {
@@ -102,7 +104,19 @@ export type AppSubjectData = Record<string, unknown>;
  * `rows.length ? rows : undefined` is the shape to avoid.
  */
 export function initAppSubjectSources(): void {
-  // No app subject sources by default.
+  registerAppSubjectSources({
+    tier: 'app',
+    sources: [
+      {
+        model: 'WorkspaceInvitation',
+        section: 'workspaceInvitations',
+        disposition: 'export',
+        description:
+          'Invitations into a workspace that were sent to you, and the ones you sent (without who they went to).',
+      },
+    ],
+    excluded: [],
+  });
 }
 
 /**
@@ -114,7 +128,20 @@ export function initAppSubjectSources(): void {
  * collector awaits its queries, and the empty default must not force forks to
  * change the signature just to add one.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function collectAppSubjectData(_subject: AppSubjectQuery): Promise<AppSubjectData> {
-  return {};
+export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
+  const [received, sent] = await Promise.all([
+    prisma.workspaceInvitation.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    // The ones they sent, without the invitee: that is someone else's data.
+    prisma.workspaceInvitation.findMany({
+      where: { invitedByUserId: userId },
+      omit: { userId: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
+  return {
+    workspaceInvitations: [
+      ...received.map((row) => ({ ...row, yourPart: 'invitee' as const })),
+      ...sent.map((row) => ({ ...row, yourPart: 'inviter' as const })),
+    ],
+  };
 }

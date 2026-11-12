@@ -10,3 +10,39 @@
 //
 // See CUSTOMIZATION.md §5 for the FK/onDelete rules a model with a `userId`
 // must follow (GDPR erasure depends on them).
+
+/// An invitation into a workspace for someone who already has an account
+/// (t-9). The invitee sees it in the app and accepts or declines it; accepting
+/// adds them through core's `addMember()`. A person with no account is invited
+/// by core's sign-up invitation instead, from the same form.
+///
+/// One row per person per workspace: re-inviting someone who declined, let it
+/// expire, or left resets the row to PENDING, so no partial unique index is
+/// needed (B13). `userId` and `invitedByUserId` are plain strings with
+/// hand-written FKs in the migration, so `User` (core) is not edited.
+model WorkspaceInvitation {
+  id              String                    @id @default(cuid())
+  orgId           String?
+  org             Org?                      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// The invitee. FK → user, ON DELETE CASCADE (an invitation is theirs).
+  userId          String
+  role            OrgRole                   @default(MEMBER)
+  status          WorkspaceInvitationStatus @default(PENDING)
+  /// Who sent it. FK → user, ON DELETE SET NULL (the workspace keeps the record).
+  invitedByUserId String?
+  expiresAt       DateTime
+  respondedAt     DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([orgId, userId])
+  @@index([userId, status])
+  @@index([orgId])
+  @@map("app_workspace_invitation")
+}
+
+enum WorkspaceInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
