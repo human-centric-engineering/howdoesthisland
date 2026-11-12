@@ -672,7 +672,11 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/ci.ts',
     risk: 'a stray coverage exclusion would switch the per-file 80% floor OFF for that path on every install, a stray always-run entry would make every scoped run load a test whose file the install may not even have, and a stray ownerless-surface exception would let a route read rows nobody owns without the policy being asked — the first silences a gate, the second breaks the gate that replaced it, the third exempts a file from the authorization seam',
     assert: () => {
-      expect(appCoverageExclusions).toEqual([]);
+      // FORK (HowDoesThisLand): pinned to our one exclusion, the signup
+      // workspace smoke (t-7). Ledger: .context/app/platform-divergences.md row 2.
+      expect(appCoverageExclusions.map((e) => e.pattern)).toEqual([
+        'scripts/app/smoke-signup-workspace.ts',
+      ]);
       expect(appAlwaysRunTests).toEqual([]);
       expect(appOwnerlessSurfaceExceptions).toEqual([]);
     },
