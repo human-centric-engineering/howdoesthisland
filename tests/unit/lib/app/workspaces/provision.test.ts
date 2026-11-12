@@ -8,6 +8,10 @@
  * against it. What only a real database can show (the membership, the active
  * org, the agents' bindings) is the smoke script's:
  * `scripts/app/smoke-signup-workspace.ts`.
+ *
+ * FORK NOTE: the last block reads the real `lib/app/signup-org.ts` on purpose:
+ * it pins that this app's filled seam hands signups to
+ * `provisionSignupWorkspace`. Changing the resolver should fail it.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
