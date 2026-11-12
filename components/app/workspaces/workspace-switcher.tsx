@@ -10,7 +10,9 @@
  * which it switches into.
  *
  * Shows nothing until the list has loaded, and nothing if it cannot be read:
- * a header control that fails to load should not take the page with it.
+ * a header control that fails to load should not take the page with it. The
+ * list is re-read after a switch and each time the menu opens, since the
+ * header outlives navigation; a re-read that fails keeps the last list.
  * A suspended workspace is listed but cannot be picked, as the switch would
  * refuse it.
  */
@@ -47,12 +49,14 @@ export function WorkspaceSwitcher() {
     fields: NO_SERVER_FIELDS,
   });
 
+  // A failed re-read keeps the list already shown; only a first load that
+  // fails leaves the switcher hidden.
   const load = useCallback(async () => {
     try {
       const parsed = workspaceListSchema.safeParse(await apiClient.get<unknown>(API.ORGS.LIST));
-      setList(parsed.success ? parsed.data : null);
+      if (parsed.success) setList(parsed.data);
     } catch {
-      setList(null);
+      // Keep what is shown.
     }
   }, []);
 
@@ -87,8 +91,17 @@ export function WorkspaceSwitcher() {
   return (
     <div className="flex items-center gap-2">
       {/* Opening the menu is the next attempt, so an old failure clears;
-          otherwise it would sit in the header on every page. */}
-      <DropdownMenu onOpenChange={(open) => open && save.clear()}>
+          otherwise it would sit in the header on every page. The list is
+          re-read too. */}
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (!open) return;
+          save.clear();
+          // The header outlives navigation, so memberships changed elsewhere
+          // (an invitation accepted, a removal) are picked up when you look.
+          void load();
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"

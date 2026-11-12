@@ -35,11 +35,12 @@ A person may own at most `MAX_OWNED_WORKSPACES` (10, in
 memberships outside the install org, not workspaces created, so it needs no
 record of who made what: handing a workspace over frees a place. Past it,
 `POST /api/v1/workspaces` answers 409 `WORKSPACE_LIMIT_REACHED`. The count and
-the create cannot share a transaction, so the count is taken again once the
-org exists and before it is granted anything: a create that raced past the cap
-is erased (`eraseOrg`, in a system scope) and refused the same way. Creates
-that race each other may all undo themselves; the person is left under the cap
-to try again.
+the create cannot share a transaction, so once the org exists, and before it
+is granted anything, the person's owned workspaces are ranked by when they
+became owner. One ranked past the cap is erased (`eraseOrg`, in a system
+scope) and refused the same way, so of two racing creates the earlier keeps
+its place. In a narrow commit-order window both can stay, leaving the person
+one over; closing that needs a per-person lock this tier cannot take.
 
 ## The routes the UI uses are core's
 

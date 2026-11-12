@@ -19,7 +19,8 @@ export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 
 /** `GET /api/v1/orgs` data. */
 export const workspaceListSchema = z.object({
-  activeOrgId: z.string().nullable(),
+  // Only `orgs`: both readers take the active one from `orgs[].active`, so a
+  // field neither reads must not be able to fail the parse.
   orgs: z.array(workspaceSummarySchema),
 });
 

@@ -15,12 +15,15 @@
  * counted (a platform admin owns it by role, not by choice).
  *
  * The count and the create cannot share a transaction (`createOrg` runs its
- * own), so creates racing from one person can each pass the first check. So
- * the count is taken again once the org exists and **before** it is equipped:
- * one over the cap is erased, never granted a provider or a budget, and the
- * request answers 409 like any other refusal. Racing creates that all see the
- * overshoot all undo themselves, which leaves the person under the cap to try
- * again; that is the price of not holding a lock per person.
+ * own), so creates racing from one person (a double submit, two tabs) can
+ * each pass the first check. So once the org exists, and **before** it is
+ * equipped, the person's owned workspaces are ranked by when they became
+ * owner: one ranked past the cap is erased, never granted a provider or a
+ * budget, and refused with the same 409. Every racer reads the same order, so
+ * the earliest keeps its place and only the overshoot is undone. One window
+ * remains: if the earlier insert commits after the later one has ranked, both
+ * stay and the person ends one over. Closing it needs a lock per person held
+ * across `createOrg`, which this tier cannot take; one over is accepted.
  */
 import { APIError } from '@/lib/api/errors';
 import { prisma } from '@/lib/db/client';
@@ -48,7 +51,7 @@ export interface CreatedWorkspace {
 export class WorkspaceLimitError extends APIError {
   constructor(readonly limit: number) {
     super(
-      `You can own at most ${limit} workspaces. Hand one over or leave one to make another.`,
+      `You already own ${limit} workspaces, the most one person can.`,
       'WORKSPACE_LIMIT_REACHED',
       409,
       { limit }
@@ -65,6 +68,23 @@ export async function countOwnedWorkspaces(userId: string): Promise<number> {
 }
 
 /**
+ * Where `orgId` falls among the workspaces this person owns, earliest first
+ * (0-based; ties broken by membership id so every reader agrees). The
+ * install org is left out, as the count leaves it out.
+ */
+async function ownedWorkspaceRank(userId: string, orgId: string): Promise<number> {
+  const owned = await prisma.orgMembership.findMany({
+    where: { userId, role: ORG_OWNER_ROLE, orgId: { not: INSTALL_ORG_ID } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { orgId: true },
+  });
+  const rank = owned.findIndex((membership) => membership.orgId === orgId);
+  // Not found means the membership is not visible: treat it as past the cap
+  // rather than equip a workspace the ranking could not place.
+  return rank === -1 ? Number.POSITIVE_INFINITY : rank;
+}
+
+/**
  * Create a team workspace owned by `ownerUserId`. Throws
  * {@link WorkspaceLimitError} past the cap; a failure to create the org
  * propagates. A failure equipping it is logged and does not throw (see
@@ -78,7 +98,7 @@ export async function createTeamWorkspace(input: {
   if (owned >= MAX_OWNED_WORKSPACES) throw new WorkspaceLimitError(MAX_OWNED_WORKSPACES);
 
   const org = await createWorkspaceOrg(input.name, slugStem(input.name), input.ownerUserId);
-  if ((await countOwnedWorkspaces(input.ownerUserId)) > MAX_OWNED_WORKSPACES) {
+  if ((await ownedWorkspaceRank(input.ownerUserId, org.id)) >= MAX_OWNED_WORKSPACES) {
     await undoOverCapWorkspace(org.id, input.ownerUserId);
     throw new WorkspaceLimitError(MAX_OWNED_WORKSPACES);
   }

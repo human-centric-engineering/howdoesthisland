@@ -136,7 +136,8 @@ describe('WorkspaceSwitcher', () => {
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith('/api/v1/orgs/switch', { body: { orgId: 'o2' } });
-    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    // On mount, on opening the menu, and after the switch.
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(3));
     expect(await screen.findByRole('button', { name: /Switch workspace/ })).toHaveTextContent(
       'Acme'
     );
@@ -246,8 +247,39 @@ describe('WorkspaceSwitcher', () => {
     await user.type(await screen.findByRole('textbox'), 'Fresh');
     await user.click(screen.getByRole('button', { name: 'Create workspace' }));
 
-    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+    // On mount, on opening the menu, and after the create.
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(3));
     expect(apiClient.post).not.toHaveBeenCalledWith('/api/v1/orgs/switch', expect.anything());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('re-reads the list each time the menu opens, picking up a workspace joined elsewhere', async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceSwitcher />);
+    await screen.findByRole('button', { name: /Switch workspace/ });
+    vi.mocked(apiClient.get).mockResolvedValue({
+      ...LIST,
+      orgs: [...LIST.orgs, org({ id: 'o7', name: 'Joined Later' })],
+    });
+
+    await openMenu(user);
+
+    expect(await screen.findByRole('menuitem', { name: /Joined Later/ })).toBeInTheDocument();
+  });
+
+  it('keeps the list it has when a re-read fails', async () => {
+    const user = userEvent.setup();
+    render(<WorkspaceSwitcher />);
+    await screen.findByRole('button', { name: /Switch workspace/ });
+    vi.mocked(apiClient.get).mockRejectedValue(new Error('offline'));
+
+    await openMenu(user);
+
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+    // The open menu hides the rest of the page from the accessibility tree.
+    expect(
+      screen.getByRole('button', { name: /Switch workspace/, hidden: true })
+    ).toHaveTextContent('Personal');
+    expect(await screen.findByRole('menuitem', { name: /Acme/ })).toBeInTheDocument();
   });
 });

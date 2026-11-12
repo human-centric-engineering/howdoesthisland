@@ -12,7 +12,7 @@ const mockLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.f
 vi.mock('@/lib/logging', () => ({ logger: mockLogger }));
 
 vi.mock('@/lib/db/client', () => ({
-  prisma: { orgMembership: { count: vi.fn() } },
+  prisma: { orgMembership: { count: vi.fn(), findMany: vi.fn() } },
 }));
 
 const mockCreateWorkspaceOrg = vi.hoisted(() => vi.fn());
@@ -54,7 +54,18 @@ beforeEach(() => {
   mockCreateWorkspaceOrg.mockResolvedValue(ORG);
   mockEquipWorkspace.mockResolvedValue({ granted: true });
   mockEraseOrg.mockResolvedValue({ erasedAt: new Date(), members: 1 });
+  vi.mocked(prisma.orgMembership.findMany).mockResolvedValue(ranked(0) as never);
 });
+
+/** The caller's owned workspaces, earliest first, with the new one after `before` others. */
+function ranked(before: number, after = 0) {
+  const other = (i: number) => ({ orgId: `cmother${String(i).padStart(19, '0')}` });
+  return [
+    ...Array.from({ length: before }, (_, i) => other(i)),
+    { orgId: ORG.id },
+    ...Array.from({ length: after }, (_, i) => other(before + i)),
+  ];
+}
 
 describe('countOwnedWorkspaces', () => {
   it('counts only this user’s OWNER memberships, leaving the install org out', async () => {
@@ -160,22 +171,32 @@ describe('createTeamWorkspace', () => {
   });
 
   describe('a create that raced past the cap', () => {
-    it('keeps a workspace that lands exactly on the cap', async () => {
-      vi.mocked(prisma.orgMembership.count)
-        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES - 1)
-        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES);
+    beforeEach(() => {
+      vi.mocked(prisma.orgMembership.count).mockResolvedValue(MAX_OWNED_WORKSPACES - 1);
+    });
+
+    it('keeps the racer that became owner first, ranking owned workspaces by join order', async () => {
+      // A slower racer joined after this one: this one still ranks last in.
+      vi.mocked(prisma.orgMembership.findMany).mockResolvedValue(
+        ranked(MAX_OWNED_WORKSPACES - 1, 1) as never
+      );
 
       await expect(
         createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
       ).resolves.toMatchObject({ id: ORG.id });
+      expect(prisma.orgMembership.findMany).toHaveBeenCalledWith({
+        where: { userId: USER_ID, role: ORG_OWNER_ROLE, orgId: { not: INSTALL_ORG_ID } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { orgId: true },
+      });
       expect(mockEraseOrg).not.toHaveBeenCalled();
       expect(mockEquipWorkspace).toHaveBeenCalled();
     });
 
-    it('erases one that lands over the cap in a system scope, unequipped, and refuses', async () => {
-      vi.mocked(prisma.orgMembership.count)
-        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES - 1)
-        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES + 1);
+    it('erases the racer ranked past the cap in a system scope, unequipped, and refuses', async () => {
+      vi.mocked(prisma.orgMembership.findMany).mockResolvedValue(
+        ranked(MAX_OWNED_WORKSPACES) as never
+      );
 
       await expect(
         createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
@@ -184,15 +205,22 @@ describe('createTeamWorkspace', () => {
       expect(mockRunAsSystem).toHaveBeenCalledTimes(1);
       expect(mockEraseOrg).toHaveBeenCalledWith({ orgId: ORG.id, actorUserId: CAP_UNDO_ACTOR });
       expect(mockEquipWorkspace).not.toHaveBeenCalled();
-      expect(prisma.orgMembership.count).toHaveBeenLastCalledWith({
-        where: { userId: USER_ID, role: ORG_OWNER_ROLE, orgId: { not: INSTALL_ORG_ID } },
-      });
+    });
+
+    it('treats a new workspace missing from the ranking as past the cap', async () => {
+      vi.mocked(prisma.orgMembership.findMany).mockResolvedValue([] as never);
+
+      await expect(
+        createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
+      ).rejects.toBeInstanceOf(WorkspaceLimitError);
+      expect(mockEraseOrg).toHaveBeenCalledWith({ orgId: ORG.id, actorUserId: CAP_UNDO_ACTOR });
+      expect(mockEquipWorkspace).not.toHaveBeenCalled();
     });
 
     it('still refuses, and logs, when the undo itself fails', async () => {
-      vi.mocked(prisma.orgMembership.count)
-        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES - 1)
-        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES + 1);
+      vi.mocked(prisma.orgMembership.findMany).mockResolvedValue(
+        ranked(MAX_OWNED_WORKSPACES) as never
+      );
       const failure = new Error('erase failed');
       mockEraseOrg.mockRejectedValue(failure);
 
