@@ -78,7 +78,7 @@ caller or the workspace: who may invite is core's policy (the workspace's
 owners and admins, acting in it), and what may be invited is core's
 `checkInvitationInto` (only an owner invites an owner; not the install org;
 not a suspended workspace). Core's own route still answers 409 for an existing
-account; the upstream issue asks for that to change.
+account; sunrise#1242 asks for that to change.
 
 One row per person per workspace: re-inviting someone who declined, let it
 lapse or left reopens it. An invitation is claimed before `addMember()` runs,
