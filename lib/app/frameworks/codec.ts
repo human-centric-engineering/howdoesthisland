@@ -68,6 +68,10 @@ function readEntities(list: unknown, where: string, problems: string[]): JsonObj
   return entities;
 }
 
+function recordId(kind: string, key: string): string {
+  return `${kind}\u0000${key}`;
+}
+
 function nameOf(record: JsonObject): string | null {
   return typeof record.name === 'string' ? record.name : null;
 }
@@ -86,9 +90,13 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
     if (!(section in document)) problems.push(`missing section "${section}"`);
   }
 
-  // Records by kind, for duplicate checks and reference resolution.
+  // Records by kind, for duplicate checks and reference resolution. A record
+  // that failed its schema is still registered, so references TO it resolve
+  // and one bad record is reported once, not again by everything naming it;
+  // its own reference fields are not read (`invalid`), for the same reason.
   const records = new Map<string, Map<string, JsonObject>>();
-  const addNode = (node: NodeRecord, record: JsonObject, where: string) => {
+  const invalid = new Set<string>();
+  const addNode = (node: NodeRecord, record: JsonObject, where: string, valid: boolean) => {
     const ofKind = records.get(node.kind) ?? new Map<string, JsonObject>();
     if (ofKind.has(node.key)) {
       problems.push(`${where}: duplicate key "${node.key}"`);
@@ -96,7 +104,8 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
     }
     ofKind.set(node.key, record);
     records.set(node.kind, ofKind);
-    nodes.push(node);
+    if (valid) nodes.push(node);
+    else invalid.add(recordId(node.kind, node.key));
   };
 
   const checkSchema = (schema: z.ZodType, value: unknown, where: string): boolean => {
@@ -139,7 +148,8 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
         addCollectionEntity(spec, entity, position, where);
       });
     }
-    if (checkSchema(sectionSchema, remainder, section)) {
+    {
+      const valid = checkSchema(sectionSchema, remainder, section);
       addNode(
         {
           kind: SECTION_KIND,
@@ -150,7 +160,8 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
           attributes: remainder,
         },
         remainder,
-        section
+        section,
+        valid
       );
     }
   }
@@ -161,7 +172,7 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
     position: number,
     where: string
   ): void {
-    if (!checkSchema(spec.schema, entity, where)) return;
+    const valid = checkSchema(spec.schema, entity, where);
     const attributes: JsonObject = { ...entity };
     const key = String(entity.id);
     if (spec.nested) {
@@ -169,11 +180,12 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
       delete attributes[field];
       const children = entity[field];
       if (!Array.isArray(children)) {
-        problems.push(`${where}.${field}: expected a list of records`);
+        // Reported by the parent's schema when it states the field's type.
+        if (valid) problems.push(`${where}.${field}: expected a list of records`);
       } else {
         readEntities(children, `${where}.${field}`, problems).forEach((child, index) => {
           const childWhere = `${where}.${field}[${String(child.id)}]`;
-          if (!checkSchema(schema, child, childWhere)) return;
+          const childValid = checkSchema(schema, child, childWhere);
           addNode(
             {
               kind,
@@ -184,7 +196,8 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
               attributes: child,
             },
             child,
-            childWhere
+            childWhere,
+            childValid
           );
         });
       }
@@ -193,17 +206,19 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
       { kind: spec.kind, key, parentKey: null, name: nameOf(entity), position, attributes },
       // References are read from the full record, nested fields included.
       entity,
-      where
+      where,
+      valid
     );
   }
 
-  const links = resolveReferences(def, records, problems);
+  const links = resolveReferences(def, records, invalid, problems);
   return { nodes, links, problems };
 }
 
 function resolveReferences(
   def: FrameworkDefinition,
   records: Map<string, Map<string, JsonObject>>,
+  invalid: ReadonlySet<string>,
   problems: string[]
 ): LinkRecord[] {
   const links: LinkRecord[] = [];
@@ -217,6 +232,7 @@ function resolveReferences(
 
     for (const [fromKey, record] of holders) {
       if (fromKeyFixed !== null && fromKey !== fromKeyFixed) continue;
+      if (invalid.has(recordId(fromKind, fromKey))) continue;
       const picked = ref.pick(record);
       if (picked === null || picked === undefined) continue;
       const ids = Array.isArray(picked) ? picked : [picked];
