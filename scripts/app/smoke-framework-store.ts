@@ -39,7 +39,6 @@ const FILE = 'lib/app/frameworks/howdoesthisland/data/model-0.5.1.json';
 let failures = 0;
 
 function check(ok: boolean, what: string): void {
-  // eslint-disable-next-line no-console
   console.log(`  ${ok ? '✓' : '✗'} ${what}`);
   if (!ok) failures++;
 }
@@ -74,7 +73,7 @@ async function main(): Promise<number> {
   check(again.outcome === 'unchanged', 'importing the same file again writes nothing');
 
   const changed = JSON.parse(raw) as { appeals: { name: string }[] };
-  (changed.appeals[0] as { name: string }).name = 'Changed';
+  changed.appeals[0].name = 'Changed';
   const refused = await system(() =>
     importVersion(repo, howDoesThisLand, JSON.stringify(changed))
   ).then(
@@ -100,14 +99,12 @@ async function main(): Promise<number> {
     await system(() => eraseOrg({ orgId: org.id, actorUserId: 'smoke' })).catch(() => undefined);
   }
 
-  // eslint-disable-next-line no-console
   console.log(failures === 0 ? 'Framework store smoke passed' : `${failures} check(s) failed`);
   return failures === 0 ? 0 : 1;
 }
 
-main()
+void main()
   .catch((err: unknown) => {
-    // eslint-disable-next-line no-console
     console.error(err);
     return 1;
   })

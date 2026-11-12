@@ -16,8 +16,8 @@ describe('model-0.5.1.json', () => {
     expect(readFileSync(DATA).equals(readFileSync(PROTOTYPE))).toBe(true);
   });
 
-  it('has the recorded sha256', () => {
-    expect(sha256(readFileSync(DATA, 'utf8'))).toBe(SHA256_0_5_1);
+  it('has the recorded sha256', async () => {
+    expect(await sha256(readFileSync(DATA, 'utf8'))).toBe(SHA256_0_5_1);
   });
 
   it('is version 0.5.1, as its name says', () => {

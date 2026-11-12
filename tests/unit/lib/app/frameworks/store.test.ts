@@ -22,7 +22,7 @@ const RAW_0_5_0 = readFileSync('tests/unit/lib/app/frameworks/fixtures/model-0.5
 /** 0.5.1 with one appeal renamed: the same version number, different bytes. */
 function edited(name = 'Edited'): string {
   const doc = JSON.parse(RAW) as { appeals: JsonObject[] };
-  doc.appeals[0]!.name = name;
+  doc.appeals[0].name = name;
   return JSON.stringify(doc);
 }
 
@@ -51,7 +51,7 @@ describe('importVersion()', () => {
       version: '0.5.1',
       schemaVersion: '4',
       status: 'DRAFT',
-      sourceSha256: sha256(RAW),
+      sourceSha256: await sha256(RAW),
     });
     const stored = repo.versions.get(result.version.id)!;
     expect(stored.nodes).toHaveLength(result.nodeCount);
@@ -72,7 +72,7 @@ describe('importVersion()', () => {
     const first = await importVersion(repo, howDoesThisLand, RAW);
     const second = await importVersion(repo, howDoesThisLand, edited());
     expect(second.outcome).toBe('replaced');
-    expect(second.version.sourceSha256).toBe(sha256(edited()));
+    expect(second.version.sourceSha256).toBe(await sha256(edited()));
     const stored = repo.versions.get(first.version.id)!;
     expect(stored.nodes.find((n) => n.kind === 'appeal' && n.key === 'ethos')?.name).toBe('Edited');
   });
@@ -182,7 +182,7 @@ describe('materialise()', () => {
     await materialise(repo, howDoesThisLand, version.id);
     await importVersion(repo, howDoesThisLand, edited('Changed again'));
     const model = await materialise(repo, howDoesThisLand, version.id);
-    expect((model.appeals as JsonObject[])[0]!.name).toBe('Changed again');
+    expect((model.appeals as JsonObject[])[0].name).toBe('Changed again');
     expect(repo.calls.readNodes).toBe(2);
   });
 

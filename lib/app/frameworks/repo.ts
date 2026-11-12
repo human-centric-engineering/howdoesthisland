@@ -12,7 +12,6 @@
  * These are shared-config tables (`globalConfig`): at `multi` the caller runs
  * in the system scope (the import and publish scripts do).
  */
-import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import type { LinkRecord, NodeRecord } from '@/lib/app/frameworks/types';
@@ -97,7 +96,7 @@ async function writeRecords(
 ): Promise<void> {
   const ids = new Map<string, string>();
   const nodeRows = content.nodes.map((node) => {
-    const id = randomUUID();
+    const id = globalThis.crypto.randomUUID();
     ids.set(`${node.kind}\u0000${node.key}`, id);
     return {
       id,

@@ -253,7 +253,7 @@ function resolveReferences(
           problems.push(`ambiguous reference: ${where} → "${id}" is a ${matches.join(' and a ')}`);
           continue;
         }
-        const toKind = matches[0] as string;
+        const toKind = matches[0];
         const identity = `${fromKind}\u0000${fromKey}\u0000${toKind}\u0000${id}\u0000${ref.relation}`;
         if (seen.has(identity)) continue;
         seen.add(identity);

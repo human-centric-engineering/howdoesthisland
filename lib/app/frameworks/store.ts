@@ -14,7 +14,6 @@
  * - **The round trip is exact**, and a published version's materialised model
  *   is cached for the life of the process, since it cannot change.
  */
-import { createHash } from 'node:crypto';
 import { compose, decompose } from '@/lib/app/frameworks/codec';
 import type { FrameworkRepo, StoredVersion } from '@/lib/app/frameworks/repo';
 import type { FrameworkDefinition, JsonObject } from '@/lib/app/frameworks/types';
@@ -37,8 +36,10 @@ export class FrameworkStoreError extends Error {
   }
 }
 
-export function sha256(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
+/** sha256 of a text's UTF-8 bytes, as hex. Web Crypto, so it runs in any realm. */
+export async function sha256(text: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export type ImportOutcome = 'created' | 'replaced' | 'unchanged';
@@ -79,7 +80,7 @@ export async function importVersion(
   }
 
   const { version, schemaVersion } = def.versionOf(document as JsonObject);
-  const sourceSha256 = sha256(raw);
+  const sourceSha256 = await sha256(raw);
   const content = { version, schemaVersion, sourceDocument: document, sourceSha256, nodes, links };
   const counts = { nodeCount: nodes.length, linkCount: links.length };
 

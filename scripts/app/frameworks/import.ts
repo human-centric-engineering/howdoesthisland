@@ -20,7 +20,7 @@ runImport(process.argv.slice(2), {
   readFile: (path) => readFileSync(path, 'utf8'),
   runAsSystem,
   // A command's own output, for the person who ran it.
-  // eslint-disable-next-line no-console
+
   out: (line) => console.log(line),
 })
   .then(async (code) => {
@@ -28,7 +28,6 @@ runImport(process.argv.slice(2), {
     process.exit(code);
   })
   .catch(async (err: unknown) => {
-    // eslint-disable-next-line no-console
     console.error(err);
     await prisma.$disconnect();
     process.exit(2);

@@ -128,7 +128,7 @@ describe('createDraft()', () => {
   it('writes each link between the ids given to the records it joins', async () => {
     await repo.createDraft({ slug: 'f', name: 'F', summary: 's' }, content);
     const nodes = (
-      tx.frameworkNode.createMany.mock.calls[0]![0] as {
+      tx.frameworkNode.createMany.mock.calls[0][0] as {
         data: { id: string; key: string; versionId: string }[];
       }
     ).data;

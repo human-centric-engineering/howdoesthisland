@@ -107,7 +107,7 @@ describe('decompose() refuses', () => {
 
   it('a dangling reference', () => {
     const doc = model();
-    list(doc, 'moves')[0]!.dimensions = ['no_such_dimension'];
+    list(doc, 'moves')[0].dimensions = ['no_such_dimension'];
     expect(decompose(howDoesThisLand, doc).problems).toEqual([
       expect.stringMatching(
         /^unresolved reference: moves\[\]\.dimensions on ".+" → "no_such_dimension"/
@@ -117,7 +117,7 @@ describe('decompose() refuses', () => {
 
   it('a reference that is not a string id', () => {
     const doc = model();
-    list(doc, 'archetypes')[1]!.primary = 7;
+    list(doc, 'archetypes')[1].primary = 7;
     expect(decompose(howDoesThisLand, doc).problems).toEqual([
       expect.stringMatching(/^archetypes\[.+\]: primary: /),
     ]);
@@ -134,7 +134,7 @@ describe('decompose() refuses', () => {
 
   it('a record failing its kind’s schema', () => {
     const doc = model();
-    delete list(doc, 'appeals')[0]!.name;
+    delete list(doc, 'appeals')[0].name;
     expect(decompose(howDoesThisLand, doc).problems).toEqual([
       expect.stringMatching(/^appeals\[ethos\]: name: /),
     ]);
@@ -159,7 +159,7 @@ describe('decompose() refuses', () => {
 
   it('a record with no id', () => {
     const doc = model();
-    delete list(doc, 'duties')[0]!.id;
+    delete list(doc, 'duties')[0].id;
     expect(decompose(howDoesThisLand, doc).problems).toContain(
       'duties[0]: a record with no string id'
     );
@@ -168,7 +168,7 @@ describe('decompose() refuses', () => {
   it('a collection that is not a list, and a nested one that is not', () => {
     const doc = model();
     (doc.knowledge_refs as JsonObject).concepts = {};
-    const perspective = list(doc, 'perspectives')[0]!;
+    const perspective = list(doc, 'perspectives')[0];
     perspective.levers = 'none';
     const { problems } = decompose(howDoesThisLand, doc);
     expect(problems).toContain('knowledge_refs.concepts: expected a list of records');
@@ -189,8 +189,8 @@ describe('decompose() refuses', () => {
 
   it('reports every problem, not just the first', () => {
     const doc = model();
-    list(doc, 'moves')[0]!.dimensions = ['nope'];
-    delete list(doc, 'appeals')[0]!.name;
+    list(doc, 'moves')[0].dimensions = ['nope'];
+    delete list(doc, 'appeals')[0].name;
     doc.surprise = 1;
     expect(decompose(howDoesThisLand, doc).problems).toHaveLength(3);
   });
@@ -216,8 +216,8 @@ describe('decompose() and references with more than one target kind', () => {
   it('refuses an id that names records of two of its target kinds', () => {
     // moves[].dimensions may name a dimension, a lens or an extra dimension.
     const doc = model();
-    const move = list(doc, 'moves')[0]!;
-    const target = (move.dimensions as string[])[0]!;
+    const move = list(doc, 'moves')[0];
+    const target = (move.dimensions as string[])[0];
     list(doc, 'lenses').push({ id: target, name: 'A lens with a dimension’s id' });
     expect(decompose(howDoesThisLand, doc).problems).toContain(
       `ambiguous reference: moves[].dimensions on "${String(move.id)}" → "${target}" is a dimension and a lens`
@@ -226,7 +226,7 @@ describe('decompose() and references with more than one target kind', () => {
 
   it('writes one link for an id a record lists twice', () => {
     const doc = model();
-    const appeal = list(doc, 'appeals')[0]!;
+    const appeal = list(doc, 'appeals')[0];
     const research = appeal.research as string[];
     appeal.research = [...research, research[0]];
     const { links, problems } = decompose(howDoesThisLand, doc);
