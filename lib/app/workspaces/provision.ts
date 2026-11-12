@@ -29,8 +29,6 @@
  * org, the vendor's own, which is worse. A failure to create the org throws,
  * and the seam then falls back to the install org, logged.
  */
-import { randomBytes } from 'node:crypto';
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { createOrg, OrgLifecycleError } from '@/lib/tenancy/lifecycle';
@@ -73,7 +71,7 @@ export function workspaceOwnerName(signup: Pick<UninvitedSignup, 'name' | 'email
 /** The workspace's name: "Ada Lovelace's workspace". */
 export function workspaceName(signup: Pick<UninvitedSignup, 'name' | 'email'>): string {
   const owner = workspaceOwnerName(signup);
-  return owner === 'My' ? 'My workspace' : `${owner}’s workspace`;
+  return owner === 'My' ? 'My workspace' : `${owner}\u2019s workspace`;
 }
 
 /**
@@ -84,7 +82,7 @@ export function workspaceName(signup: Pick<UninvitedSignup, 'name' | 'email'>): 
 export function slugStem(name: string): string {
   const stem = name
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -93,8 +91,9 @@ export function slugStem(name: string): string {
   return stem || 'workspace';
 }
 
+/** Six hex characters, from Web Crypto (a `node:` import is outside the `lib/app` boundary). */
 function randomSuffix(): string {
-  return randomBytes(3).toString('hex');
+  return globalThis.crypto.randomUUID().slice(0, 6);
 }
 
 /**
@@ -133,14 +132,13 @@ export async function writeSignupWorkspaceMarker(orgId: string, marked: boolean)
       await tx.org.update({
         where: { id: orgId },
         data: {
-          settings:
-            Object.keys(settings).length === 0
-              ? Prisma.DbNull
-              : (settings as Prisma.InputJsonObject),
+          // Never empty in practice (the grant and the budget sit beside the
+          // marker); `{}` reads as "nothing set" to every slice reader.
+          settings,
         },
       });
     },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    { isolationLevel: 'Serializable' }
   );
 }
 
