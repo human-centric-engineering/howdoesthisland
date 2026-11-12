@@ -31,7 +31,7 @@
  */
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
-import { createOrg, OrgLifecycleError } from '@/lib/tenancy/lifecycle';
+import { createOrg, OrgLifecycleError, type OrgRecord } from '@/lib/tenancy/lifecycle';
 import {
   isSettingsWriteConflict,
   writeOrgProviderPolicy,
@@ -108,14 +108,21 @@ function randomSuffix(): string {
 }
 
 /**
- * Create the org under a slug derived from the owner's name. `Org.slug` is
- * unique across every org, so a taken slug is retried with a random suffix.
+ * Create the org under a slug derived from its name. `Org.slug` is unique
+ * across every org, so a taken slug is retried with a random suffix. With an
+ * `ownerUserId` the founding `OWNER` is written in the same transaction as
+ * the org (a team workspace, t-8); without one the first member becomes it
+ * (the signup workspace, joined by the seam).
  */
-async function createWorkspaceOrg(name: string, stem: string) {
+export async function createWorkspaceOrg(
+  name: string,
+  stem: string,
+  ownerUserId?: string
+): Promise<OrgRecord> {
   for (let attempt = 0; attempt < SLUG_ATTEMPTS; attempt++) {
     const slug = attempt === 0 ? stem : `${stem}-${randomSuffix()}`;
     try {
-      return await createOrg({ slug, name });
+      return await createOrg({ slug, name, ...(ownerUserId ? { ownerUserId } : {}) });
     } catch (error) {
       if (error instanceof OrgLifecycleError && error.code === 'SLUG_TAKEN') continue;
       throw error;
@@ -183,20 +190,25 @@ async function withConflictRetry<T>(write: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Create a workspace for a person signing up and return its id. See the
- * module header for what it is given and what a failure does.
+ * Give a newly created workspace what every workspace starts with: the
+ * OpenAI grant and the default budget, then its platform agents again now the
+ * grant exists. Shared by the signup workspace and the team workspace (t-8),
+ * so the two cannot drift.
+ *
+ * `firstSteps` run before the grant (the signup workspace's marker). Each
+ * step runs on its own and a failure is logged at `error`, never thrown: the
+ * org already exists and is the caller's, and a platform admin can finish the
+ * set-up on `/admin`.
+ *
+ * @param source the reconcile's trigger label, for its logs.
  */
-export async function provisionSignupWorkspace(
-  signup: Pick<UninvitedSignup, 'name' | 'email'>
-): Promise<string> {
-  const name = workspaceName(signup);
-  const org = await createWorkspaceOrg(name, slugStem(workspaceOwnerName(signup)));
-  const orgId = org.id;
-
-  // Each step on its own: one failing does not stop the others. The mark
-  // goes first: it is what lets the sweep reclaim the org if the signup fails.
+export async function equipWorkspace(
+  orgId: string,
+  source: string,
+  firstSteps: Array<[string, () => Promise<unknown>]> = []
+): Promise<{ granted: boolean }> {
   const steps: Array<[string, () => Promise<unknown>]> = [
-    ['mark', () => withConflictRetry(() => writeSignupWorkspaceMarker(orgId, true))],
+    ...firstSteps,
     ['grant', () => grantProvider(orgId)],
     [
       'budget',
@@ -228,15 +240,33 @@ export async function provisionSignupWorkspace(
   // Imported on use, as `createOrg` does; an import failure is logged too.
   if (granted) {
     await import('@/lib/orchestration/agents/reconcile-platform-agents')
-      .then(({ tryReconcilePlatformAgents }) =>
-        tryReconcilePlatformAgents(orgId, 'app.signup-workspace')
-      )
+      .then(({ tryReconcilePlatformAgents }) => tryReconcilePlatformAgents(orgId, source))
       .catch((error: unknown) => {
         logger.error('New workspace agents not reconciled; the maintenance job catches up', error, {
           orgId,
         });
       });
   }
+
+  return { granted };
+}
+
+/**
+ * Create a workspace for a person signing up and return its id. See the
+ * module header for what it is given and what a failure does.
+ */
+export async function provisionSignupWorkspace(
+  signup: Pick<UninvitedSignup, 'name' | 'email'>
+): Promise<string> {
+  const name = workspaceName(signup);
+  const org = await createWorkspaceOrg(name, slugStem(workspaceOwnerName(signup)));
+  const orgId = org.id;
+
+  // The mark goes first: it is what lets the sweep reclaim the org if the
+  // signup fails.
+  const { granted } = await equipWorkspace(orgId, 'app.signup-workspace', [
+    ['mark', () => withConflictRetry(() => writeSignupWorkspaceMarker(orgId, true))],
+  ]);
 
   logger.info('Signup workspace created', { orgId, slug: org.slug, granted });
   return orgId;
