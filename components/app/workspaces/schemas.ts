@@ -40,3 +40,32 @@ export const workspaceMemberSchema = z.object({
 
 /** `GET /api/v1/orgs/[id]/members` data. */
 export const workspaceMembersSchema = z.object({ members: z.array(workspaceMemberSchema) });
+
+/** The app's invitation routes (t-9). */
+export const WORKSPACE_INVITATIONS_ENDPOINT = '/api/v1/workspaces/invitations';
+export const workspaceInvitationsEndpoint = (orgId: string): string =>
+  `/api/v1/workspaces/${encodeURIComponent(orgId)}/invitations`;
+export const answerInvitationEndpoint = (
+  invitationId: string,
+  answer: 'accept' | 'decline'
+): string => `${WORKSPACE_INVITATIONS_ENDPOINT}/${encodeURIComponent(invitationId)}/${answer}`;
+
+/** One row of `GET /api/v1/workspaces/invitations`. */
+export const invitationForInviteeSchema = z.object({
+  id: z.string(),
+  workspace: z.object({ id: z.string(), name: z.string() }),
+  role: z.enum(ORG_ROLES),
+  invitedBy: z.string().nullable(),
+  expiresAt: z.string(),
+});
+
+export type InvitationForInvitee = z.infer<typeof invitationForInviteeSchema>;
+
+/** `GET /api/v1/workspaces/invitations` data. */
+export const myInvitationsSchema = z.object({ invitations: z.array(invitationForInviteeSchema) });
+
+/** `POST /api/v1/workspaces/invitations/[id]/accept` data. */
+export const acceptedInvitationSchema = z.object({ orgId: z.string(), role: z.enum(ORG_ROLES) });
+
+/** `POST /api/v1/workspaces/[id]/invitations` data. */
+export const sentInvitationSchema = z.object({ email: z.string(), message: z.string() });

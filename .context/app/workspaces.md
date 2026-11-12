@@ -7,13 +7,15 @@ the app's side; the org model itself is core's
 
 ## Where each piece lives
 
-| Piece                                    | Where                                                                    |
-| ---------------------------------------- | ------------------------------------------------------------------------ |
-| A workspace of one's own at signup (t-7) | `lib/app/signup-org.ts` → `lib/app/workspaces/provision.ts`              |
-| Sweeping signup workspaces nobody joined | `lib/app/workspaces/sweep.ts`, registered in `lib/app/jobs.ts`           |
-| Creating a team workspace (t-8)          | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`               |
-| Switching workspace                      | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot |
-| Members and invitations                  | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)    |
+| Piece                                    | Where                                                                                           |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| A workspace of one's own at signup (t-7) | `lib/app/signup-org.ts` → `lib/app/workspaces/provision.ts`                                     |
+| Sweeping signup workspaces nobody joined | `lib/app/workspaces/sweep.ts`, registered in `lib/app/jobs.ts`                                  |
+| Creating a team workspace (t-8)          | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`                                      |
+| Switching workspace                      | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot                        |
+| Members and invitations                  | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)                           |
+| Inviting, account or not (t-9)           | `POST /api/v1/workspaces/[id]/invitations` → `lib/app/workspaces/invitations.ts`                |
+| Answering an invitation (t-9)            | `GET /api/v1/workspaces/invitations`, `POST …/invitations/[invitationId]/accept` and `/decline` |
 
 ## What every new workspace gets
 
@@ -47,14 +49,49 @@ one over; closing that needs a per-person lock this tier cannot take.
 The switcher reads `GET /api/v1/orgs` and switches with
 `POST /api/v1/orgs/switch`. The settings page reads
 `GET /api/v1/orgs/[id]/members` and renders core's own `MembersTable` (role
-change, removal) and `MemberInviteForm` (invite, re-send a pending one), the
-components core's `/admin/members` uses. It adds no rule of its own. Core
+change, removal), the component core's `/admin/members` uses. Inviting is the
+app's own route and form (below). It adds no rule of its own. Core
 admits only a workspace's `OWNER` or `ADMIN` to the roster and invitations, so
 a `MEMBER` is told to ask one of them instead. The page exists so a workspace
 owner manages people inside the app's frame rather than in `/admin`.
 
-Core's invitation refuses an address that already has an account. Since every
-signup gets a workspace, most teammates will have one: inviting them is t-9.
+## Inviting people (t-9)
+
+Since every signup gets a workspace, most teammates already have an account.
+Core's org invitation refuses those addresses with a 409 that says so, and
+core's add-by-id adds someone without asking them. So the settings page uses
+the app's `WorkspaceInviteForm` and `POST /api/v1/workspaces/[id]/invitations`
+instead, which take both:
+
+- **An address with an account** gets a `WorkspaceInvitation` row (14 days)
+  and an email pointing at `/settings/workspace`, where they accept or
+  decline it. Accepting adds them through core's `addMember()` with the invited
+  role, and switches them into the workspace.
+- **An address without one** gets core's sign-up invitation
+  (`deliverInvitation`, 7 days), under the same rules core's route applies.
+
+**The answer never says which.** Every case answers 202 with the same body,
+including the ones where nothing is sent (already a member, the service
+account, a sign-up invitation pending into another org). Both sending branches
+send one email, so they take about as long. Errors are only ever about the
+caller or the workspace: who may invite is core's policy (the workspace's
+owners and admins, acting in it), and what may be invited is core's
+`checkInvitationInto` (only an owner invites an owner; not the install org;
+not a suspended workspace). Core's own route still answers 409 for an existing
+account; sunrise#1242 asks for that to change.
+
+One row per person per workspace: re-inviting someone who declined, let it
+lapse or left reopens it. An invitation is claimed before `addMember()` runs,
+so it is used once however many requests race, and the claim is undone if
+core refuses for any reason but "already a member".
+
+The invitee reads their invitations across workspaces they are not in, so
+those reads run in the system scope, filtered by their own id; another
+person's invitation id is answered as not found. The model is tenant-owned
+(row isolation, the org export, cascade with the workspace); the invitee's
+rows go with their account and the inviter's id is cleared (hand-written FKs,
+drift-probed). Pending, declined and lapsed rows are not swept: there is one
+per person per workspace, and they go with either.
 
 ## At `TENANCY_MODE=single`
 

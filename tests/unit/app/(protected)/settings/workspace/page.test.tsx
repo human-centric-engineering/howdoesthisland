@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Workspace settings page (t-8): gating by tenancy mode and role, and what
+ * Workspace settings page (t-8, t-9): gating by tenancy mode and role, and what
  * each role is shown.
  *
  * @see app/(protected)/settings/workspace/page.tsx
@@ -31,8 +31,20 @@ vi.mock('next/navigation', () => ({
 // Core's own components, covered by core's tests; here we check what the page
 // hands them.
 vi.mock('@/components/admin/members/member-invite-form', () => ({
-  MemberInviteForm: ({ orgId }: { orgId: string }) => (
+  MemberInviteForm: () => <div data-testid="core-invite-form" />,
+}));
+vi.mock('@/components/app/workspaces/workspace-invite-form', () => ({
+  WorkspaceInviteForm: ({ orgId }: { orgId: string }) => (
     <div data-testid="invite-form" data-org={orgId} />
+  ),
+}));
+vi.mock('@/components/app/workspaces/workspace-invitations', () => ({
+  WorkspaceInvitations: ({ invitations }: { invitations: Array<{ id: string }> }) => (
+    <ul data-testid="invitations">
+      {invitations.map((invitation) => (
+        <li key={invitation.id}>{invitation.id}</li>
+      ))}
+    </ul>
   ),
 }));
 vi.mock('@/components/admin/members/members-table', () => ({
@@ -63,6 +75,21 @@ const orgs = (role: string, active = true) => ({
   meta: undefined,
 });
 
+const INVITATIONS = {
+  ok: true,
+  data: {
+    invitations: [
+      {
+        id: 'inv-1',
+        workspace: { id: 'org-2', name: 'Globex' },
+        role: 'MEMBER',
+        invitedBy: 'Ann',
+        expiresAt: '2026-12-01T00:00:00.000Z',
+      },
+    ],
+  },
+};
+
 const ROSTER = {
   ok: true,
   data: {
@@ -73,6 +100,14 @@ const ROSTER = {
   },
 };
 
+/** Answers the two server loads by URL: the caller's invitations and the roster. */
+function mockLoads(overrides: { invitations?: unknown; roster?: unknown } = {}) {
+  m.loadServerData.mockImplementation(async (url: string) => {
+    if (url === '/api/v1/workspaces/invitations') return overrides.invitations ?? INVITATIONS;
+    return overrides.roster ?? ROSTER;
+  });
+}
+
 describe('WorkspaceSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -81,7 +116,7 @@ describe('WorkspaceSettingsPage', () => {
     m.notFound.mockImplementation(() => {
       throw new Error('NEXT_NOT_FOUND');
     });
-    m.loadServerData.mockResolvedValue(ROSTER);
+    mockLoads();
   });
 
   it('is not found at single tenancy, before reading anything', async () => {
@@ -97,8 +132,27 @@ describe('WorkspaceSettingsPage', () => {
     render(await WorkspaceSettingsPage());
 
     expect(screen.getByText(/not in a workspace right now/)).toBeInTheDocument();
-    expect(m.loadServerData).not.toHaveBeenCalled();
+    expect(m.loadServerData).not.toHaveBeenCalledWith('/api/v1/orgs/org-1/members');
     expect(screen.queryByTestId('invite-form')).not.toBeInTheDocument();
+  });
+
+  it('shows invitations to someone with no active workspace', async () => {
+    m.requireServerData.mockResolvedValue(orgs('OWNER', false));
+
+    render(await WorkspaceSettingsPage());
+
+    expect(m.loadServerData).toHaveBeenCalledWith('/api/v1/workspaces/invitations');
+    expect(screen.getByTestId('invitations')).toHaveTextContent('inv-1');
+  });
+
+  it('shows the invitations notice when the load fails with no active workspace', async () => {
+    m.requireServerData.mockResolvedValue(orgs('OWNER', false));
+    mockLoads({ invitations: { ok: false, failure: { kind: 'http', status: 500 } } });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByText(/your invitations/)).toBeInTheDocument();
+    expect(screen.queryByTestId('invitations')).not.toBeInTheDocument();
   });
 
   it.each(['OWNER', 'ADMIN'])(
@@ -116,6 +170,7 @@ describe('WorkspaceSettingsPage', () => {
       expect(table).toHaveAttribute('data-me', 'me');
       expect(screen.getByText('bob@example.com')).toBeInTheDocument();
       expect(screen.getByTestId('invite-form')).toHaveAttribute('data-org', 'org-1');
+      expect(screen.queryByTestId('core-invite-form')).not.toBeInTheDocument();
     }
   );
 
@@ -125,14 +180,42 @@ describe('WorkspaceSettingsPage', () => {
     render(await WorkspaceSettingsPage());
 
     expect(screen.getByText(/Only the workspace.s owners and admins/)).toBeInTheDocument();
-    expect(m.loadServerData).not.toHaveBeenCalled();
+    expect(m.loadServerData).not.toHaveBeenCalledWith('/api/v1/orgs/org-1/members');
     expect(screen.queryByTestId('invite-form')).not.toBeInTheDocument();
     expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
   });
 
+  it('shows a member their invitations', async () => {
+    m.requireServerData.mockResolvedValue(orgs('MEMBER'));
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByTestId('invitations')).toHaveTextContent('inv-1');
+  });
+
+  it('shows the invitations notice, not the list, when the invitations load fails', async () => {
+    m.requireServerData.mockResolvedValue(orgs('OWNER'));
+    mockLoads({ invitations: { ok: false, failure: { kind: 'http', status: 500 } } });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByText(/your invitations/)).toBeInTheDocument();
+    expect(screen.queryByTestId('invitations')).not.toBeInTheDocument();
+    expect(screen.getByTestId('members-table')).toBeInTheDocument();
+  });
+
+  it('shows the invitations notice when the invitations body is malformed', async () => {
+    m.requireServerData.mockResolvedValue(orgs('MEMBER'));
+    mockLoads({ invitations: { ok: true, data: { invitations: [{ id: 5 }] } } });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByText(/your invitations/)).toBeInTheDocument();
+  });
+
   it('shows a load-failed notice, still with the invite form, when the roster fails', async () => {
     m.requireServerData.mockResolvedValue(orgs('OWNER'));
-    m.loadServerData.mockResolvedValue({ ok: false, failure: { kind: 'http', status: 500 } });
+    mockLoads({ roster: { ok: false, failure: { kind: 'http', status: 500 } } });
 
     render(await WorkspaceSettingsPage());
 
@@ -143,7 +226,7 @@ describe('WorkspaceSettingsPage', () => {
 
   it('shows the load-failed notice when the roster body is malformed', async () => {
     m.requireServerData.mockResolvedValue(orgs('OWNER'));
-    m.loadServerData.mockResolvedValue({ ok: true, data: { members: [{ id: 5 }] } });
+    mockLoads({ roster: { ok: true, data: { members: [{ id: 5 }] } } });
 
     render(await WorkspaceSettingsPage());
 

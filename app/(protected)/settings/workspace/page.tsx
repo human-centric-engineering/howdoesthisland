@@ -1,16 +1,21 @@
 /**
- * Workspace settings (t-8): who is in the active workspace, and inviting
- * someone new into it.
+ * Workspace settings (t-8, t-9): the caller's own invitations into other
+ * workspaces, who is in the active workspace, and inviting people into it.
  *
- * A thin shell over core: `GET /api/v1/orgs` for the active workspace and
- * the caller's role in it, `GET /api/v1/orgs/[id]/members` for the roster,
- * and core's own `MembersTable` (role change, removal) and `MemberInviteForm`
- * (invite, re-send a pending one), the components core's `/admin/members`
- * uses. This page adds no rule of its own: the API decides who may do what.
- * Core lets an `OWNER` or `ADMIN` read the roster and invite, and nobody
- * else, so a `MEMBER` is told who to ask instead of being shown a 403. It
- * lives here rather than sending people to `/admin/members` so a workspace
- * owner stays in the app's own frame.
+ * A thin shell over the API: `GET /api/v1/workspaces/invitations` for the
+ * caller's invitations, `GET /api/v1/orgs` for the active workspace and the
+ * caller's role in it, `GET /api/v1/orgs/[id]/members` for the roster, and
+ * core's own `MembersTable` (role change, removal), the component core's
+ * `/admin/members` uses. Inviting is the app's `WorkspaceInviteForm` (t-9)
+ * rather than core's `MemberInviteForm`, which answers 409 for an address
+ * with an account and so tells an admin who has one; the app's route invites
+ * both and answers the same either way.
+ *
+ * This page adds no rule of its own: the API decides who may do what. Core
+ * lets an `OWNER` or `ADMIN` read the roster and invite, and nobody else, so
+ * a `MEMBER` is told who to ask instead of being shown a 403. Invitations to
+ * the caller show for everyone, in a workspace or not: the invitation email
+ * links here.
  *
  * Not found at `TENANCY_MODE=single`, where there is one shared org and the
  * platform admin manages its users on `/admin/users`.
@@ -23,29 +28,50 @@ import { loadServerData, requireServerData } from '@/lib/api/server-load';
 import { isMultiTenant } from '@/lib/tenancy/context';
 import { orgAdministers } from '@/lib/tenancy/roles';
 import { LoadFailedNotice } from '@/components/admin/load-failed-notice';
-import { MemberInviteForm } from '@/components/admin/members/member-invite-form';
 import { MembersTable, type OrgMember } from '@/components/admin/members/members-table';
-import { workspaceListSchema, workspaceMembersSchema } from '@/components/app/workspaces/schemas';
+import { WorkspaceInviteForm } from '@/components/app/workspaces/workspace-invite-form';
+import { WorkspaceInvitations } from '@/components/app/workspaces/workspace-invitations';
+import {
+  myInvitationsSchema,
+  WORKSPACE_INVITATIONS_ENDPOINT,
+  workspaceListSchema,
+  workspaceMembersSchema,
+} from '@/components/app/workspaces/schemas';
 
 export const metadata: Metadata = {
   title: 'Workspace settings',
-  description: 'Members of this workspace, and inviting people into it',
+  description: 'Members of this workspace, inviting people into it, and invitations to you',
 };
 
 export default async function WorkspaceSettingsPage() {
   if (!isMultiTenant()) notFound();
   const session = await requireAuth();
 
-  const { data } = await requireServerData<unknown>(API.ORGS.LIST);
-  const active = workspaceListSchema.parse(data).orgs.find((org) => org.active);
+  const [orgs, mine] = await Promise.all([
+    requireServerData<unknown>(API.ORGS.LIST),
+    loadServerData<unknown>(WORKSPACE_INVITATIONS_ENDPOINT),
+  ]);
+  const active = workspaceListSchema.parse(orgs.data).orgs.find((org) => org.active);
+  const parsedInvitations = mine.ok ? myInvitationsSchema.safeParse(mine.data) : null;
+  const invitations = parsedInvitations?.success ? parsedInvitations.data.invitations : null;
+
+  const invitationsSection = invitations ? (
+    <WorkspaceInvitations invitations={invitations} />
+  ) : (
+    <LoadFailedNotice what="your invitations" />
+  );
 
   if (!active) {
     return (
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Workspace settings</h1>
-        <p className="text-muted-foreground">
-          You are not in a workspace right now. Choose one from the switcher at the top of the page.
-        </p>
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">Workspace settings</h1>
+          <p className="text-muted-foreground">
+            You are not in a workspace right now. Choose one from the switcher at the top of the
+            page.
+          </p>
+        </div>
+        {invitationsSection}
       </div>
     );
   }
@@ -68,9 +94,11 @@ export default async function WorkspaceSettingsPage() {
         </p>
       </div>
 
+      {invitationsSection}
+
       {administers ? (
         <>
-          <MemberInviteForm orgId={active.id} />
+          <WorkspaceInviteForm orgId={active.id} />
           <section aria-labelledby="members-heading" className="space-y-3">
             <h2 id="members-heading" className="text-lg font-semibold">
               Members

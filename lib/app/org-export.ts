@@ -82,6 +82,27 @@
  *
  * Full guide: .context/privacy/org-export.md (Fork tables)
  */
+import { prisma } from '@/lib/db/client';
+import { ownedBy } from '@/lib/privacy/org-sources';
+import { registerAppOrgSources } from '@/lib/privacy/org-source-registry';
+
 export function initAppOrgSources(): void {
-  // No app org sources by default.
+  registerAppOrgSources({
+    tier: 'app',
+    sources: [
+      {
+        model: 'WorkspaceInvitation',
+        section: 'workspaceInvitations',
+        disposition: 'export',
+        description:
+          'Invitations the workspace sent to people who already had an account, and how each was answered.',
+        fetch: ({ orgId }) =>
+          prisma.workspaceInvitation.findMany({
+            where: ownedBy(orgId),
+            orderBy: { createdAt: 'asc' },
+          }),
+      },
+    ],
+    excluded: [],
+  });
 }

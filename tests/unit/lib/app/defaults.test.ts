@@ -69,6 +69,7 @@ import { appOwnModules } from '@/lib/app/own-modules';
 import { APP_CAPABILITY_PAIRS, APP_UNCHECKED_SEEDS } from '@/lib/app/capability-seed-pairs';
 import * as userCreatedHooks from '@/lib/auth/user-created-hooks';
 import { collectAppSubjectData } from '@/lib/app/data-export';
+import { prisma } from '@/lib/db/client';
 import {
   getAppSubjectSources,
   getAppExcludedSubjectSources,
@@ -325,14 +326,23 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/data-export.ts',
     risk: 'a stray collector would leak app rows into every install’s subject-access export, and a stray declaration would pre-account for a table nobody decided about',
     assert: async () => {
-      expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual(
-        {}
-      );
+      // FORK (HowDoesThisLand): pinned to our one section and one source, the
+      // workspace invitations (t-9). The reads are stubbed: this pins the
+      // shape, not the query. Ledger: .context/app/platform-divergences.md row 2.
+      const findMany = vi
+        .spyOn(prisma.workspaceInvitation, 'findMany')
+        .mockResolvedValue([] as never);
+      expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
+        workspaceInvitations: [],
+      });
+      findMany.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
       // exercises the REAL seam. A stray source here would also silence the
       // fork-accounting rule in export-sources.test.ts for that model.
       __resetAppSubjectSourceRegistryForTests();
-      expect(getAppSubjectSources()).toEqual([]);
+      expect(getAppSubjectSources().map((source) => [source.model, source.section])).toEqual([
+        ['WorkspaceInvitation', 'workspaceInvitations'],
+      ]);
       expect(getAppExcludedSubjectSources()).toEqual([]);
     },
   },
@@ -342,7 +352,11 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppOrgSourceRegistryForTests();
       // The reads trigger the lazy init, so this exercises the REAL file.
-      expect(getAppOrgSources()).toEqual([]);
+      // FORK (HowDoesThisLand): pinned to our one source, the workspace
+      // invitations (t-9). Ledger: .context/app/platform-divergences.md row 2.
+      expect(getAppOrgSources().map((source) => [source.model, source.section])).toEqual([
+        ['WorkspaceInvitation', 'workspaceInvitations'],
+      ]);
       expect(getAppExcludedOrgSources()).toEqual([]);
       expect(appOrgDeclarationsFailed()).toBe(false);
     },
@@ -353,7 +367,11 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppOwnerClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
-      expect(appOwnerClassifications()).toEqual({});
+      // FORK (HowDoesThisLand): pinned to our one model, the workspace
+      // invitation, as not personal (t-9). Ledger: .context/app/platform-divergences.md row 2.
+      expect(
+        Object.entries(appOwnerClassifications()).map(([model, rule]) => [model, rule.kind])
+      ).toEqual([['WorkspaceInvitation', 'not-personal']]);
     },
   },
   {

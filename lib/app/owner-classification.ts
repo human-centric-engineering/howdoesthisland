@@ -62,6 +62,17 @@
  * Do not import the Prisma client (`@/lib/db`) from here: this runs while that
  * client is being built.
  */
+import { registerAppOwnerClassification } from '@/lib/db/owner-classification';
+
 export function initAppOwnerClassification(): void {
-  // No app owner classifications by default.
+  registerAppOwnerClassification({
+    tier: 'app',
+    models: {
+      WorkspaceInvitation: {
+        kind: 'not-personal',
+        because:
+          'The workspace’s record of who it invited; its owners and admins manage it. `userId` is the invitee, who reads their own through a system-scope read filtered by their id.',
+      },
+    },
+  });
 }
