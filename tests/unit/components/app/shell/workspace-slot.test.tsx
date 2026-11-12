@@ -1,19 +1,42 @@
 // @vitest-environment happy-dom
 
 /**
- * WorkspaceSlot renders nothing until f-workspaces fills it, so the signed-in
- * header shows no empty switcher.
+ * WorkspaceSlot shows the switcher at TENANCY_MODE=multi and nothing at
+ * single, where every account shares the install org.
  *
  * @see components/app/shell/workspace-slot.tsx
  */
 
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+
+const isMultiTenant = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/tenancy/context', () => ({ isMultiTenant }));
+vi.mock('@/components/app/workspaces/workspace-switcher', () => ({
+  WorkspaceSwitcher: () => <div data-testid="switcher" />,
+}));
+
 import { WorkspaceSlot } from '@/components/app/shell/workspace-slot';
 
 describe('WorkspaceSlot', () => {
-  it('renders nothing while there are no workspaces', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders the workspace switcher when the install is multi-tenant', () => {
+    isMultiTenant.mockReturnValue(true);
+
+    render(<WorkspaceSlot />);
+
+    expect(screen.getByTestId('switcher')).toBeInTheDocument();
+  });
+
+  it('renders nothing when the install is single-tenant', () => {
+    isMultiTenant.mockReturnValue(false);
+
     const { container } = render(<WorkspaceSlot />);
+
     expect(container).toBeEmptyDOMElement();
   });
 });
