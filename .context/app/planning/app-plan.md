@@ -63,8 +63,8 @@ the browser. BRIEF §3–§7 describe it in full. What matters for the plan:
 
 ### The fork
 
-Sunrise `v0.18.0`, set up as HowDoesThisLand in t-1 (PR #5, merged). Dev port 3026. Two
-seams are filled: `lib/app/eslint.config.mjs` (ignores `prototype/**`) and
+Sunrise `v0.18.0`, set up as HowDoesThisLand in t-1 (PR #5, merged). Dev port 3018,
+registered in the HCE dev-proxy. Two seams are filled: `lib/app/eslint.config.mjs` (ignores `prototype/**`) and
 `lib/app/reserved-tiers.ts` (`.context/app`), both pinned in
 `tests/unit/lib/app/defaults.test.ts`. The divergence ledger has rows 1–4. Everything else
 is at its shipped default: `prisma/schema/app.prisma` has no models, `components/app/` is
