@@ -9,13 +9,16 @@
  * Set it to a function, and `userCreateBeforeHook` treats an uninvited signup
  * as an invitation into the org it returns. The first member of an org becomes
  * its `OWNER`, and the first session starts in it. Invited signups and the
- * first human on a fresh database (a platform admin) are never asked.
+ * first human on a fresh database (a platform admin) are never asked, nor is a
+ * signup whose first-admin bootstrap check failed before it could rule out the
+ * first human: that signup takes the install-org default.
  *
  * **Contract.**
  * - Return the id of an org that already exists: it runs before the user row
- *   does. An org it creates for a signup that then fails is left with no
- *   members — the resolver's owner sweeps those (see the PR for t-6).
- * - A throw, an empty answer, or an org that does not exist or is suspended
+ *   does. An org it creates for a signup that then fails (a duplicate email,
+ *   a double submit) is left with no members, and nothing in this repo sweeps
+ *   those yet: a resolver that creates orgs must ship that sweep with it.
+ * - A throw, an empty answer, or an org that does not exist or is not `ACTIVE`
  *   falls back to the install org, logged at `error`. The signup is never refused.
  * - Never return an org the person should not be in: every org it names, they
  *   join. A password signup's address is not verified yet (`emailVerified` is
@@ -24,7 +27,9 @@
  * - The first member of an org becomes its `OWNER`, with no admin in the loop.
  *   Never name an org that could have no members but still holds data (one
  *   whose members all left), or that two concurrent signups could both find
- *   empty: both would be recorded as `OWNER`.
+ *   empty: both would be recorded as `OWNER`. And if reading the org's member
+ *   count fails, the signup is recorded as `MEMBER`, so a new org can end up
+ *   with no `OWNER` until a platform admin promotes one.
  * - It runs inside the signup request, so keep it cheap. `createOrg` also runs
  *   the platform-agent reconcile for the new org before it returns.
  *
