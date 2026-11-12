@@ -20,7 +20,7 @@ import { uninvitedSignupAdmission, type SignupOrgResolver } from '@/lib/tenancy/
 const ORG = 'cmorg00000000000000newws1';
 const signup = { email: 'ada@example.com', name: 'Ada', role: 'USER' };
 
-function db(found: { id: string } | null | Error = { id: ORG }) {
+function db(found: { status: string } | null | Error = { status: 'ACTIVE' }) {
   const findUnique = vi.fn(() =>
     found instanceof Error ? Promise.reject(found) : Promise.resolve(found)
   );
@@ -50,7 +50,7 @@ describe('uninvitedSignupAdmission', () => {
     expect(resolver).toHaveBeenCalledWith({ email: 'ada@example.com', name: 'Ada' });
     expect(database.org.findUnique).toHaveBeenCalledWith({
       where: { id: ORG },
-      select: { id: true },
+      select: { status: true },
     });
   });
 
@@ -70,6 +70,7 @@ describe('uninvitedSignupAdmission', () => {
     ['answers an empty string', () => '', db(), 'named no org'],
     ['answers a non-string', () => 42 as unknown as string, db(), 'named no org'],
     ['names a missing org', () => ORG, db(null), 'does not exist'],
+    ['names a suspended org', () => ORG, db({ status: 'SUSPENDED' }), 'not active'],
     ['names an org that cannot be read', () => ORG, db(new Error('db')), 'Failed to read'],
   ])(
     'falls back to null, logged at error, when the resolver %s',

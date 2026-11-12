@@ -15,8 +15,8 @@
  * - Return the id of an org that already exists: it runs before the user row
  *   does. An org it creates for a signup that then fails is left with no
  *   members — the resolver's owner sweeps those (see the PR for t-6).
- * - A throw, an empty answer, or an org that does not exist falls back to the
- *   install org, logged at `error`. The signup is never refused.
+ * - A throw, an empty answer, or an org that does not exist or is suspended
+ *   falls back to the install org, logged at `error`. The signup is never refused.
  * - Never return an org the person should not be in: every org it names, they
  *   join.
  *

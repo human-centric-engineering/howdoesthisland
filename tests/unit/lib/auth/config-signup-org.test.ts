@@ -169,7 +169,7 @@ beforeEach(() => {
   mockPrisma.user.count.mockResolvedValue(3);
   mockPrisma.user.update.mockResolvedValue({});
   mockPrisma.user.findUnique.mockResolvedValue({ erasureRequestedAt: null });
-  mockPrisma.org.findUnique.mockResolvedValue({ id: NEW_ORG });
+  mockPrisma.org.findUnique.mockResolvedValue({ status: 'ACTIVE' });
   mockPrisma.orgMembership.upsert.mockResolvedValue({ id: 'm1' });
   // The resolved org is new: nobody is in it yet.
   mockPrisma.orgMembership.count.mockResolvedValue(0);

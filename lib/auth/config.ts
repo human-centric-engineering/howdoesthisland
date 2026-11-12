@@ -202,7 +202,7 @@ async function recordPendingMembership(
   } catch (error) {
     logger.error('Failed to record the org membership for a new user', error, {
       email: user.email,
-      invitedOrgId: invitation?.orgId ?? null,
+      invitedOrgId: admission?.orgId ?? null,
     });
   }
   return signupRecordFor(memberships);

@@ -22,7 +22,8 @@
  * install org they administer.
  *
  * Every failure falls back to the install org, logged at `error`: a resolver
- * that throws, answers nothing, or names an org that does not exist. Failing
+ * that throws, answers nothing, or names an org that does not exist or is not
+ * `ACTIVE` (a suspended org's members are locked out of it). Failing
  * the signup instead would turn a fault in the fork's code into a person who
  * cannot create an account.
  *
@@ -80,7 +81,7 @@ export async function uninvitedSignupAdmission(
   }
 
   try {
-    const org = await db.org.findUnique({ where: { id: orgId }, select: { id: true } });
+    const org = await db.org.findUnique({ where: { id: orgId }, select: { status: true } });
     if (!org) {
       logger.error(
         'Signup org resolver named an org that does not exist; the signup joins the install org',
@@ -88,6 +89,13 @@ export async function uninvitedSignupAdmission(
           email: user.email,
           orgId,
         }
+      );
+      return null;
+    }
+    if (org.status !== 'ACTIVE') {
+      logger.error(
+        'Signup org resolver named an org that is not active; the signup joins the install org',
+        { email: user.email, orgId, status: org.status }
       );
       return null;
     }
