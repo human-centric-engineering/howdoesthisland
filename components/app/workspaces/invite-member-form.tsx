@@ -111,12 +111,14 @@ export function InviteMemberForm({ orgId, canInviteOwner }: InviteMemberFormProp
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="invite-name">Name</Label>
+          <Label htmlFor="invite-name" className="flex h-5 items-center gap-1">
+            Name
+          </Label>
           <Input id="invite-name" autoComplete="off" disabled={isLoading} {...register('name')} />
           <FormError message={errors.name?.message} />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="invite-email" className="flex items-center gap-1">
+          <Label htmlFor="invite-email" className="flex h-5 items-center gap-1">
             Email
             <FieldHelp title="Who to invite">
               The invitation is emailed here, and they join when they accept it and create their
@@ -134,7 +136,7 @@ export function InviteMemberForm({ orgId, canInviteOwner }: InviteMemberFormProp
         </div>
       </div>
       <div className="space-y-2 sm:max-w-[16rem]">
-        <Label htmlFor="invite-role" className="flex items-center gap-1">
+        <Label htmlFor="invite-role" className="flex h-5 items-center gap-1">
           Role
           <FieldHelp title="Their role in this workspace">
             Members work on the workspace&rsquo;s projects. Admins can also see who is in it and

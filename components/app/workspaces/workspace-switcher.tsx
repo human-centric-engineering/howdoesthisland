@@ -100,8 +100,12 @@ export function WorkspaceSwitcher() {
             return (
               <DropdownMenuItem
                 key={org.id}
-                disabled={suspended || org.active}
-                onSelect={() => void switchTo(org.id)}
+                // The current one stays enabled so it reads as chosen, not as
+                // unavailable; picking it again just closes the menu.
+                disabled={suspended}
+                onSelect={() => {
+                  if (!org.active) void switchTo(org.id);
+                }}
                 className="gap-2"
               >
                 <Check
