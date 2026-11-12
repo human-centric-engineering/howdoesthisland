@@ -65,13 +65,20 @@ export function WorkspaceSwitcher() {
     setSwitching(true);
     try {
       await apiClient.post<unknown>(API.ORGS.SWITCH, { body: { orgId } });
-      await load();
       router.refresh();
     } catch (err) {
       save.report(err);
     } finally {
+      // Reloaded either way: after a create whose switch failed, the new
+      // workspace must still appear so it can be picked rather than remade.
+      await load();
       setSwitching(false);
     }
+  };
+
+  const afterCreate = async (workspace: { id: string } | null) => {
+    if (workspace) await switchTo(workspace.id);
+    else await load();
   };
 
   if (!list) return null;
@@ -79,7 +86,9 @@ export function WorkspaceSwitcher() {
 
   return (
     <div className="flex items-center gap-2">
-      <DropdownMenu>
+      {/* Opening the menu is the next attempt, so an old failure clears;
+          otherwise it would sit in the header on every page. */}
+      <DropdownMenu onOpenChange={(open) => open && save.clear()}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -136,11 +145,7 @@ export function WorkspaceSwitcher() {
         </DropdownMenuContent>
       </DropdownMenu>
       <SaveError failure={save.failure} />
-      <CreateWorkspaceDialog
-        open={creating}
-        onOpenChange={setCreating}
-        onCreated={(workspace) => switchTo(workspace.id)}
-      />
+      <CreateWorkspaceDialog open={creating} onOpenChange={setCreating} onCreated={afterCreate} />
     </div>
   );
 }

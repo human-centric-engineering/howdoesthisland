@@ -40,8 +40,11 @@ const SERVER_FIELDS: Partial<Record<string, keyof CreateWorkspaceInput>> = { nam
 export interface CreateWorkspaceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Called with the new workspace once it exists. */
-  onCreated: (workspace: { id: string; name: string }) => Promise<void> | void;
+  /**
+   * Called once the workspace exists: with it, or with `null` when the route
+   * answered success in a shape this dialog cannot read (it was still made).
+   */
+  onCreated: (workspace: { id: string; name: string } | null) => Promise<void> | void;
 }
 
 export function CreateWorkspaceDialog({
@@ -69,18 +72,22 @@ export function CreateWorkspaceDialog({
 
   const onSubmit = async (data: CreateWorkspaceInput) => {
     setIsLoading(true);
+    let response: unknown;
     try {
-      const created = createdWorkspaceSchema.parse(
-        await apiClient.post<unknown>(WORKSPACES_ENDPOINT, { body: data })
-      );
-      await onCreated(created);
-      reset();
-      onOpenChange(false);
+      response = await apiClient.post<unknown>(WORKSPACES_ENDPOINT, { body: data });
     } catch (err) {
       save.report(err);
-    } finally {
       setIsLoading(false);
+      return;
     }
+    // From here the workspace exists. Nothing below may read as a failed
+    // save: "Try again" would make a second one, and spend a place under the
+    // cap. An answer this dialog cannot read is still a success.
+    const created = createdWorkspaceSchema.safeParse(response);
+    reset();
+    setIsLoading(false);
+    onOpenChange(false);
+    await onCreated(created.success ? created.data : null);
   };
 
   const handleOpenChange = (next: boolean) => {

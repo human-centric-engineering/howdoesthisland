@@ -26,8 +26,16 @@ vi.mock('@/lib/app/workspaces/provision', async (importOriginal) => {
   };
 });
 
+const mockEraseOrg = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/privacy/erase-org', () => ({ eraseOrg: mockEraseOrg }));
+const mockRunAsSystem = vi.hoisted(() =>
+  vi.fn((_reason: string, fn: () => Promise<unknown>) => fn())
+);
+vi.mock('@/lib/tenancy/context', () => ({ runAsSystem: mockRunAsSystem }));
+
 import { prisma } from '@/lib/db/client';
 import {
+  CAP_UNDO_ACTOR,
   countOwnedWorkspaces,
   createTeamWorkspace,
   WorkspaceLimitError,
@@ -45,6 +53,7 @@ beforeEach(() => {
   vi.mocked(prisma.orgMembership.count).mockResolvedValue(0);
   mockCreateWorkspaceOrg.mockResolvedValue(ORG);
   mockEquipWorkspace.mockResolvedValue({ granted: true });
+  mockEraseOrg.mockResolvedValue({ erasedAt: new Date(), members: 1 });
 });
 
 describe('countOwnedWorkspaces', () => {
@@ -148,5 +157,55 @@ describe('createTeamWorkspace', () => {
     ).rejects.toThrow('db down');
     expect(mockEquipWorkspace).not.toHaveBeenCalled();
     expect(mockLogger.info).not.toHaveBeenCalled();
+  });
+
+  describe('a create that raced past the cap', () => {
+    it('keeps a workspace that lands exactly on the cap', async () => {
+      vi.mocked(prisma.orgMembership.count)
+        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES - 1)
+        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES);
+
+      await expect(
+        createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
+      ).resolves.toMatchObject({ id: ORG.id });
+      expect(mockEraseOrg).not.toHaveBeenCalled();
+      expect(mockEquipWorkspace).toHaveBeenCalled();
+    });
+
+    it('erases one that lands over the cap in a system scope, unequipped, and refuses', async () => {
+      vi.mocked(prisma.orgMembership.count)
+        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES - 1)
+        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES + 1);
+
+      await expect(
+        createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
+      ).rejects.toBeInstanceOf(WorkspaceLimitError);
+
+      expect(mockRunAsSystem).toHaveBeenCalledTimes(1);
+      expect(mockEraseOrg).toHaveBeenCalledWith({ orgId: ORG.id, actorUserId: CAP_UNDO_ACTOR });
+      expect(mockEquipWorkspace).not.toHaveBeenCalled();
+      expect(prisma.orgMembership.count).toHaveBeenLastCalledWith({
+        where: { userId: USER_ID, role: ORG_OWNER_ROLE, orgId: { not: INSTALL_ORG_ID } },
+      });
+    });
+
+    it('still refuses, and logs, when the undo itself fails', async () => {
+      vi.mocked(prisma.orgMembership.count)
+        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES - 1)
+        .mockResolvedValueOnce(MAX_OWNED_WORKSPACES + 1);
+      const failure = new Error('erase failed');
+      mockEraseOrg.mockRejectedValue(failure);
+
+      await expect(
+        createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
+      ).rejects.toBeInstanceOf(WorkspaceLimitError);
+
+      expect(mockEquipWorkspace).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Team workspace past the ownership cap could not be undone',
+        failure,
+        { orgId: ORG.id, ownerUserId: USER_ID }
+      );
+    });
   });
 });

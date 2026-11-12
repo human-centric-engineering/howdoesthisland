@@ -35,16 +35,22 @@ A person may own at most `MAX_OWNED_WORKSPACES` (10, in
 memberships outside the install org, not workspaces created, so it needs no
 record of who made what: handing a workspace over frees a place. Past it,
 `POST /api/v1/workspaces` answers 409 `WORKSPACE_LIMIT_REACHED`. The count and
-the create are not one transaction, so a person racing two creates can land
-one over; the cap limits clutter and spend, not access.
+the create cannot share a transaction, so the count is taken again once the
+org exists and before it is granted anything: a create that raced past the cap
+is erased (`eraseOrg`, in a system scope) and refused the same way. Creates
+that race each other may all undo themselves; the person is left under the cap
+to try again.
 
 ## The routes the UI uses are core's
 
 The switcher reads `GET /api/v1/orgs` and switches with
 `POST /api/v1/orgs/switch`. The settings page reads
-`GET /api/v1/orgs/[id]/members` and invites with
-`POST /api/v1/orgs/[id]/invitations`. Core admits only a workspace's `OWNER`
-or `ADMIN` to the last two, so a `MEMBER` is told to ask one of them instead.
+`GET /api/v1/orgs/[id]/members` and renders core's own `MembersTable` (role
+change, removal) and `MemberInviteForm` (invite, re-send a pending one), the
+components core's `/admin/members` uses. It adds no rule of its own. Core
+admits only a workspace's `OWNER` or `ADMIN` to the roster and invitations, so
+a `MEMBER` is told to ask one of them instead. The page exists so a workspace
+owner manages people inside the app's frame rather than in `/admin`.
 
 Core's invitation refuses an address that already has an account. Since every
 signup gets a workspace, most teammates will have one: inviting them is t-9.

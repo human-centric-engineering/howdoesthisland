@@ -28,10 +28,28 @@ vi.mock('next/navigation', () => ({
   notFound: m.notFound,
   useRouter: () => ({ refresh: vi.fn() }),
 }));
-// The form is covered by its own test; here we check what the page hands it.
-vi.mock('@/components/app/workspaces/invite-member-form', () => ({
-  InviteMemberForm: ({ orgId, canInviteOwner }: { orgId: string; canInviteOwner: boolean }) => (
-    <div data-testid="invite-form" data-org={orgId} data-owner={String(canInviteOwner)} />
+// Core's own components, covered by core's tests; here we check what the page
+// hands them.
+vi.mock('@/components/admin/members/member-invite-form', () => ({
+  MemberInviteForm: ({ orgId }: { orgId: string }) => (
+    <div data-testid="invite-form" data-org={orgId} />
+  ),
+}));
+vi.mock('@/components/admin/members/members-table', () => ({
+  MembersTable: ({
+    orgId,
+    members,
+    currentUserId,
+  }: {
+    orgId: string;
+    members: Array<{ id: string; email: string }>;
+    currentUserId: string | null;
+  }) => (
+    <ul data-testid="members-table" data-org={orgId} data-me={currentUserId ?? ''}>
+      {members.map((member) => (
+        <li key={member.id}>{member.email}</li>
+      ))}
+    </ul>
   ),
 }));
 
@@ -83,29 +101,23 @@ describe('WorkspaceSettingsPage', () => {
     expect(screen.queryByTestId('invite-form')).not.toBeInTheDocument();
   });
 
-  it('shows an owner the roster, marks them as you, and lets them invite owners', async () => {
-    m.requireServerData.mockResolvedValue(orgs('OWNER'));
+  it.each(['OWNER', 'ADMIN'])(
+    'gives an %s the roster and the invite form for the active workspace',
+    async (role) => {
+      m.requireServerData.mockResolvedValue(orgs(role));
 
-    render(await WorkspaceSettingsPage());
+      render(await WorkspaceSettingsPage());
 
-    expect(m.requireServerData).toHaveBeenCalledWith('/api/v1/orgs');
-    expect(m.loadServerData).toHaveBeenCalledWith('/api/v1/orgs/org-1/members');
-    expect(screen.getByRole('heading', { name: 'Acme' })).toBeInTheDocument();
-    expect(screen.getByText('(you)')).toBeInTheDocument();
-    expect(screen.getByText('bob@example.com')).toBeInTheDocument();
-    const form = screen.getByTestId('invite-form');
-    expect(form).toHaveAttribute('data-org', 'org-1');
-    expect(form).toHaveAttribute('data-owner', 'true');
-  });
-
-  it('shows an admin the roster and the form without the Owner option', async () => {
-    m.requireServerData.mockResolvedValue(orgs('ADMIN'));
-
-    render(await WorkspaceSettingsPage());
-
-    expect(screen.getByText('bob@example.com')).toBeInTheDocument();
-    expect(screen.getByTestId('invite-form')).toHaveAttribute('data-owner', 'false');
-  });
+      expect(m.requireServerData).toHaveBeenCalledWith('/api/v1/orgs');
+      expect(m.loadServerData).toHaveBeenCalledWith('/api/v1/orgs/org-1/members');
+      expect(screen.getByRole('heading', { name: 'Acme' })).toBeInTheDocument();
+      const table = screen.getByTestId('members-table');
+      expect(table).toHaveAttribute('data-org', 'org-1');
+      expect(table).toHaveAttribute('data-me', 'me');
+      expect(screen.getByText('bob@example.com')).toBeInTheDocument();
+      expect(screen.getByTestId('invite-form')).toHaveAttribute('data-org', 'org-1');
+    }
+  );
 
   it('tells a member to ask an owner or admin, without fetching the roster', async () => {
     m.requireServerData.mockResolvedValue(orgs('MEMBER'));

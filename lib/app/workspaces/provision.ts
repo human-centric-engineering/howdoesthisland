@@ -207,26 +207,24 @@ export async function equipWorkspace(
   source: string,
   firstSteps: Array<[string, () => Promise<unknown>]> = []
 ): Promise<{ granted: boolean }> {
-  const steps: Array<[string, () => Promise<unknown>]> = [
-    ...firstSteps,
-    ['grant', () => grantProvider(orgId)],
-    [
-      'budget',
-      () =>
-        withConflictRetry(() =>
-          writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })
-        ),
-    ],
-  ];
-  let granted = false;
-  for (const [step, run] of steps) {
+  /** Runs one step; a failure is logged, never thrown (see above). */
+  const attempt = async <T>(step: string, run: () => Promise<T>): Promise<T | undefined> => {
     try {
-      const result = await run();
-      if (step === 'grant') granted = result === true;
+      return await run();
     } catch (error) {
       logger.error('New workspace not fully set up', error, { orgId, step });
+      return undefined;
     }
-  }
+  };
+
+  for (const [step, run] of firstSteps) await attempt(step, run);
+  // Read off the grant's own call, not off a step label a caller could reuse.
+  const granted = (await attempt('grant', () => grantProvider(orgId))) === true;
+  await attempt('budget', () =>
+    withConflictRetry(() =>
+      writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })
+    )
+  );
 
   // This process at once; other processes within each cache's TTL. A policy
   // read before the grant (the reconcile in `createOrg` reads it) would

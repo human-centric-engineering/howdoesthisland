@@ -156,6 +156,21 @@ describe('WorkspaceSwitcher', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('clears a failed switch when the menu is opened again', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('That workspace is suspended.', 'FORBIDDEN', 403)
+    );
+    const user = userEvent.setup();
+    render(<WorkspaceSwitcher />);
+    await openMenu(user);
+    await user.click(await screen.findByRole('menuitem', { name: /Acme/ }));
+    await screen.findByRole('alert');
+
+    await openMenu(user);
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
   it('links to workspace settings when a workspace is active', async () => {
     const user = userEvent.setup();
     render(<WorkspaceSwitcher />);
@@ -195,5 +210,44 @@ describe('WorkspaceSwitcher', () => {
       })
     );
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it('still lists a workspace it created when the switch into it fails', async () => {
+    const withFresh = {
+      ...LIST,
+      orgs: [...LIST.orgs, org({ id: 'o9', name: 'Fresh' })],
+    };
+    vi.mocked(apiClient.get).mockResolvedValueOnce(LIST).mockResolvedValue(withFresh);
+    vi.mocked(apiClient.post).mockImplementation(async (url: string) => {
+      if (url === '/api/v1/workspaces') return { id: 'o9', name: 'Fresh' };
+      throw new APIClientError('Switch failed', 'INTERNAL_ERROR', 500);
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceSwitcher />);
+    await openMenu(user);
+    await user.click(await screen.findByRole('menuitem', { name: /New workspace/ }));
+    await user.type(await screen.findByRole('textbox'), 'Fresh');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Switch failed');
+    expect(refresh).not.toHaveBeenCalled();
+    await openMenu(user);
+    expect(await screen.findByRole('menuitem', { name: /Fresh/ })).toBeInTheDocument();
+  });
+
+  it('reloads the list without switching when the create answer is unreadable', async () => {
+    vi.mocked(apiClient.post).mockImplementation(async (url: string) =>
+      url === '/api/v1/workspaces' ? { unexpected: true } : {}
+    );
+    const user = userEvent.setup();
+    render(<WorkspaceSwitcher />);
+    await openMenu(user);
+    await user.click(await screen.findByRole('menuitem', { name: /New workspace/ }));
+    await user.type(await screen.findByRole('textbox'), 'Fresh');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+    expect(apiClient.post).not.toHaveBeenCalledWith('/api/v1/orgs/switch', expect.anything());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

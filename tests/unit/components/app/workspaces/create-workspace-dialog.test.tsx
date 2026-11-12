@@ -140,4 +140,16 @@ describe('CreateWorkspaceDialog', () => {
     expect(screen.getByRole('textbox')).toHaveValue('');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('treats an unreadable success as created: closes, hands on null, shows no error', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ renamed: 'org-9' });
+    const { user, onCreated, onOpenChange } = setup();
+
+    await user.type(screen.getByRole('textbox'), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Create workspace' }));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(null));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
