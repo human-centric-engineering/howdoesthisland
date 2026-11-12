@@ -50,9 +50,12 @@ npm run db:migrate:dev
 npm run dev
 ```
 
-Open http://localhost:3018. The port is set by `PORT` in the committed
-`.env.development`, so it does not clash with the other HCE apps on the same
-machine.
+Open http://localhost:3018, after setting `BETTER_AUTH_URL` and
+`NEXT_PUBLIC_APP_URL` in `.env.local` to that URL (`.env.example` ships them on
+`:3000`). The port is set by `PORT` in the committed `.env.development`, and is
+registered in the HCE [dev-proxy](https://github.com/human-centric-engineering/dev-proxy),
+so it does not clash with the other HCE apps on the same machine. With the proxy
+applied, use https://howdoesthisland.test instead, and point both URLs at it.
 
 ### Using Docker
 
