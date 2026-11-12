@@ -24,5 +24,8 @@ Persuasion assessment against ethos, pathos, logos and kairos, with lenses, five
     npx tailwindcss -c tailwind.config.js -i src/input.css -o dist/app.css --minify
     python3 build.py   # expects howdoesthisland_model.json and howdoesthisland_eval_set.json alongside
 
+## Reference check
+Run `python3 tools/validate_refs.py howdoesthisland_model.json howdoesthisland_eval_set.json` before every release. It exits non-zero if any id in a reference field fails to resolve. The rules it enforces are listed in the model under `meta.reference_rules`.
+
 ## AI judges
 In claude.ai the page uses the artifact `sample` capability (`claude.use("sample")`). Outside Claude, swap that for calls to your own API: `engine.judgePrompt(group, text, ctx)` builds each prompt and `engine.validJudgeOutput` checks replies.
