@@ -39,5 +39,13 @@
  *     (await createOrg({ slug: `ws-${randomUUID()}`, name: `${name}'s workspace` })).id;
  */
 import type { SignupOrgResolver } from '@/lib/tenancy/signup-org';
+import { provisionSignupWorkspace } from '@/lib/app/workspaces/provision';
 
-export const appSignupOrgResolver: SignupOrgResolver | null = null;
+/**
+ * HowDoesThisLand (t-7, D1): every uninvited signup gets a workspace of its
+ * own, granted OpenAI and the default budget. The orgs it creates for a signup
+ * that then fails are erased by the sweep in `lib/app/workspaces/sweep.ts`,
+ * registered in `lib/app/jobs.ts`.
+ */
+export const appSignupOrgResolver: SignupOrgResolver | null = (signup) =>
+  provisionSignupWorkspace(signup);
