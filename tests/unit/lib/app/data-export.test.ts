@@ -5,6 +5,12 @@
  * Prisma is mocked at the delegate; the assertions are on the queries asked
  * and on how rows are labelled and pared, which is the collector's own work.
  *
+ * FORK NOTE — this file tests this fork's own filling of the subject-export
+ * seam, so it reads `@/lib/app/data-export` for real on purpose. A change to
+ * what `collectAppSubjectData` returns, or to the tables it reads, should
+ * change these expectations; the shipped-empty row for the seam is pinned
+ * separately in tests/unit/lib/app/defaults.test.ts (ledger row 2).
+ *
  * @see lib/app/data-export.ts
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
