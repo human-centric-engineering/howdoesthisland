@@ -100,6 +100,8 @@ vi.mock('@/lib/orchestration/agents/reconcile-platform-agents', () => ({
 
 import { OrgLifecycleError } from '@/lib/tenancy/lifecycle';
 import {
+  createWorkspaceOrg,
+  equipWorkspace,
   provisionSignupWorkspace,
   slugStem,
   workspaceName,
@@ -307,5 +309,131 @@ describe('appSignupOrgResolver', () => {
       expect.objectContaining({ name: 'Ada Lovelace’s workspace' })
     );
     expect(store.settings.has(orgId as string)).toBe(true);
+  });
+});
+
+describe('equipWorkspace', () => {
+  const ORG_ID = 'cmorg00000000000000equip01';
+
+  beforeEach(() => {
+    store.settings.set(ORG_ID, null);
+  });
+
+  it('writes the OpenAI grant and the $10 budget, and reports granted', async () => {
+    const result = await equipWorkspace(ORG_ID, 'app.team-workspace');
+
+    expect(result).toEqual({ granted: true });
+    const settings = store.settings.get(ORG_ID);
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
+  });
+
+  it('reconciles the agents once the grant exists, labelled with the source', async () => {
+    await equipWorkspace(ORG_ID, 'app.team-workspace');
+
+    expect(mockReconcile).toHaveBeenCalledWith(ORG_ID, 'app.team-workspace');
+    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: [OPENAI_ID] });
+  });
+
+  it('runs the first steps before the grant', async () => {
+    const order: string[] = [];
+    fakePrisma.aiProviderConfig.findUnique.mockImplementationOnce(({ where }) => {
+      order.push('grant-lookup');
+      return Promise.resolve(
+        store.providers.has(where.slug) ? { id: store.providers.get(where.slug) } : null
+      );
+    });
+    const first = vi.fn(() => {
+      order.push('first');
+      return Promise.resolve();
+    });
+
+    await equipWorkspace(ORG_ID, 'src', [['first', first]]);
+
+    expect(order).toEqual(['first', 'grant-lookup']);
+  });
+
+  it('logs a failing first step and still runs later steps, the grant and the reconcile', async () => {
+    const boom = new Error('step failed');
+    const after = vi.fn(() => Promise.resolve());
+
+    const result = await equipWorkspace(ORG_ID, 'src', [
+      ['one', () => Promise.reject(boom)],
+      ['two', after],
+    ]);
+
+    expect(result).toEqual({ granted: true });
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).toHaveBeenCalledWith('New workspace not fully set up', boom, {
+      orgId: ORG_ID,
+      step: 'one',
+    });
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reconcile when no provider could be granted', async () => {
+    store.providers.clear();
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toEqual({ granted: false });
+    expect(mockReconcile).not.toHaveBeenCalled();
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
+  });
+
+  it('does not reconcile when the grant write fails', async () => {
+    store.failUpdate = true;
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toEqual({ granted: false });
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('forgets the cached policy and caps before reconciling', async () => {
+    await equipWorkspace(ORG_ID, 'src');
+
+    expect(events.slice(0, 3).sort()).toEqual([
+      'forget-cap',
+      'forget-policy',
+      'forget-request-cap',
+    ]);
+    expect(events[3]).toBe('reconcile');
+  });
+});
+
+describe('createWorkspaceOrg', () => {
+  it('forwards the owner to createOrg, so the founding OWNER is written with the org', async () => {
+    createOrgAgainst(new Set());
+
+    await createWorkspaceOrg('Design Team', 'design-team', 'cmuser00000000000000000001');
+
+    expect(mockCreateOrg).toHaveBeenCalledWith({
+      slug: 'design-team',
+      name: 'Design Team',
+      ownerUserId: 'cmuser00000000000000000001',
+    });
+  });
+
+  it('omits ownerUserId entirely when there is none', async () => {
+    createOrgAgainst(new Set());
+
+    await createWorkspaceOrg('Ada', 'ada');
+
+    const arg = mockCreateOrg.mock.calls[0][0];
+    expect(arg).toEqual({ slug: 'ada', name: 'Ada' });
+    expect(arg).not.toHaveProperty('ownerUserId');
+  });
+
+  it('keeps the owner across a slug retry', async () => {
+    createOrgAgainst(new Set(['design-team']));
+
+    await createWorkspaceOrg('Design Team', 'design-team', 'cmuser00000000000000000001');
+
+    expect(mockCreateOrg).toHaveBeenCalledTimes(2);
+    expect(mockCreateOrg.mock.calls[1][0]).toMatchObject({
+      ownerUserId: 'cmuser00000000000000000001',
+    });
   });
 });
