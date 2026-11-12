@@ -11,7 +11,11 @@
  * - registered, an uninvited password signup and an uninvited OAuth signup each
  *   end with exactly one membership, in the resolved org as OWNER, and a first
  *   session on that org;
- * - invited signups and the first human never ask the resolver;
+ * - invited signups and the first human never ask the resolver, nor does a
+ *   signup whose bootstrap check failed before ruling out the first human;
+ * - at `multi`, an after hook with no readable record writes nothing for a
+ *   signup the resolver applies to (the sign-in heal places it), where at
+ *   `single` it still writes the install-org default;
  * - a resolver that throws, answers nothing, or names a missing org falls back
  *   to the install org, logged at `error`;
  * - with no resolver the decision is today's, at `single` and at `multi`.
@@ -223,6 +227,50 @@ describe('with a signup-org resolver registered', () => {
 
     expect(seam.resolver).not.toHaveBeenCalled();
     expect(memberships).toEqual([{ orgId: INSTALL_ORG_ID, userId: USER_ID, role: ORG_OWNER_ROLE }]);
+  });
+
+  it('a bootstrap check that fails before ruling out the first human never asks the resolver', async () => {
+    mockPrisma.authBootstrap.findUnique.mockRejectedValue(new Error('db'));
+
+    const { data, memberships } = await signUp('/sign-up/email');
+
+    expect(seam.resolver).not.toHaveBeenCalled();
+    expect(data).toMatchObject({ signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
+    expect(memberships).toEqual([
+      { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
+    ]);
+  });
+
+  it('a bootstrap check that fails after finding other humans still asks the resolver', async () => {
+    mockPrisma.authBootstrap.findUnique.mockResolvedValue(null);
+    mockPrisma.authBootstrap.upsert.mockRejectedValue(new Error('db'));
+
+    const { memberships } = await signUp('/sign-up/email');
+
+    expect(seam.resolver).toHaveBeenCalledOnce();
+    expect(memberships).toEqual([{ orgId: NEW_ORG, userId: USER_ID, role: ORG_OWNER_ROLE }]);
+  });
+
+  it('at multi, an after hook with no readable record writes nothing rather than the install org', async () => {
+    // No request state and a row without the record columns.
+    await userCreateAfterHook(newUser(), { path: '/sign-up/email' });
+
+    expect(mockPrisma.orgMembership.upsert).not.toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('No org membership written for new user'),
+      expect.objectContaining({ userId: USER_ID })
+    );
+  });
+
+  it('at single, an after hook with no readable record still writes the install-org default', async () => {
+    mockEnv.TENANCY_MODE = 'single';
+
+    await userCreateAfterHook(newUser(), { path: '/sign-up/email' });
+
+    const memberships = mockPrisma.orgMembership.upsert.mock.calls.map(([args]) => args.create);
+    expect(memberships).toEqual([
+      { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
+    ]);
   });
 
   it.each([

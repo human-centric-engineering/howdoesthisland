@@ -27,7 +27,7 @@ import {
   type SignupRecord,
 } from '@/lib/tenancy/membership';
 import { ORG_ROLES } from '@/lib/tenancy/roles';
-import { uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
+import { signupOrgResolverApplies, uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
 import { isMultiTenant } from '@/lib/tenancy/context';
 import {
   getPendingSignup,
@@ -167,7 +167,8 @@ function redeemedInvitation(metadata: InvitationMetadata): RedeemedInvitation {
 async function recordPendingMembership(
   user: UserCreateData,
   invitation: InvitationMetadata | null,
-  viaInvitation: boolean
+  viaInvitation: boolean,
+  askSignupOrgResolver = true // FORK (t-6)
 ): Promise<SignupRecord> {
   // Three steps, each with its own failure: the fallback below is for a
   // decision that failed, and must not narrow a role when only recording did.
@@ -184,7 +185,11 @@ async function recordPendingMembership(
 
   // FORK (t-6): an uninvited signup joins the org the fork's resolver names,
   // as if invited there; with none registered, `admission` is `invitation`.
-  const admission = invitation ?? (viaInvitation ? null : await uninvitedSignupAdmission(user));
+  // Not asked when the caller could not rule out the first human, whose home
+  // is the install org (see `firstHumanRuledOut` in the before hook).
+  const admission =
+    invitation ??
+    (viaInvitation || !askSignupOrgResolver ? null : await uninvitedSignupAdmission(user));
 
   let memberships;
   try {
@@ -254,6 +259,11 @@ function membershipsWithoutRecord(
 ): NewUserMemberships | null {
   if (isInvitedSignup()) return undecidedMembershipsForNewUser(user, invitedSignupInvitation());
   if (isOAuthSignup && isMultiTenant()) return null;
+  // FORK (t-6): at `multi` an uninvited signup the resolver applies to was
+  // meant for the resolver's org, and the install org is the vendor's. Write
+  // nothing: the row's record is still in the database, and the sign-in heal
+  // (which runs only for a user with no membership) places them from it.
+  if (isMultiTenant() && signupOrgResolverApplies(user)) return null;
   return { membership: initialMembershipFor(user) };
 }
 
@@ -416,14 +426,22 @@ export async function userCreateBeforeHook(
   // Concurrency: two simultaneous first-signups could both read a count of 0
   // before the marker is written and both be promoted. This window only exists
   // on a brand-new, operator-controlled database and is benign.
+  //
+  // FORK (t-6): set once this signup is known not to be the first human. A
+  // check that fails before then leaves the signup as USER, and it must not
+  // also be handed to the signup org resolver, or the operator's first account
+  // lands in a customer org instead of the install org.
+  let firstHumanRuledOut = false;
   try {
     const alreadyBootstrapped = await prisma.authBootstrap.findUnique({
       where: { id: AUTH_BOOTSTRAP_ID },
       select: { id: true },
     });
+    if (alreadyBootstrapped) firstHumanRuledOut = true; // FORK (t-6)
 
     if (!alreadyBootstrapped) {
       const existingHumanCount = await prisma.user.count({ where: humanWhere });
+      if (existingHumanCount > 0) firstHumanRuledOut = true; // FORK (t-6)
 
       if (existingHumanCount === 0) {
         // First real human → promote. The marker is written by the after hook
@@ -471,7 +489,8 @@ export async function userCreateBeforeHook(
   const record = await recordPendingMembership(
     user,
     invitedSignupInvitation(),
-    oauthInvitationAccepted || isInvitedSignup()
+    oauthInvitationAccepted || isInvitedSignup(),
+    firstHumanRuledOut // FORK (t-6)
   );
   return { data: { ...user, ...record } };
 }
