@@ -264,6 +264,17 @@ function resolveReferences(
   return links;
 }
 
+/**
+ * A stored record's attributes, checked rather than cast: they come back from
+ * a JSON column, and an import only ever writes objects there.
+ */
+function storedObject(node: NodeRecord): JsonObject {
+  if (!isJsonObject(node.attributes)) {
+    throw new Error(`stored record ${node.kind} "${node.key}" is not an object`);
+  }
+  return node.attributes;
+}
+
 /** Rebuilds the file from its records. The inverse of `decompose()`. */
 export function compose(def: FrameworkDefinition, nodes: readonly NodeRecord[]): JsonObject {
   const byKind = new Map<string, NodeRecord[]>();
@@ -281,12 +292,12 @@ export function compose(def: FrameworkDefinition, nodes: readonly NodeRecord[]):
       for (const child of ordered(spec.nested.kind)) {
         const parent = child.parentKey ?? '';
         const list = children.get(parent) ?? [];
-        list.push(child.attributes as JsonObject);
+        list.push(storedObject(child));
         children.set(parent, list);
       }
     }
     return ordered(spec.kind).map((node) => {
-      const record = { ...(node.attributes as JsonObject) };
+      const record = { ...storedObject(node) };
       if (spec.nested) record[spec.nested.field] = children.get(node.key) ?? [];
       return record;
     });
@@ -305,7 +316,7 @@ export function compose(def: FrameworkDefinition, nodes: readonly NodeRecord[]):
     }
     const node = sections.get(section);
     if (!node) continue;
-    const value: JsonObject = { ...(node.attributes as JsonObject) };
+    const value: JsonObject = { ...storedObject(node) };
     for (const spec of specs) value[spec.path[1] as string] = entities(spec);
     document[section] = value;
   }

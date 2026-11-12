@@ -238,3 +238,19 @@ describe('decompose() and references with more than one target kind', () => {
     ).toHaveLength(1);
   });
 });
+
+describe('compose()', () => {
+  it('refuses a stored record whose attributes are not an object', () => {
+    const node: NodeRecord = {
+      kind: 'appeal',
+      key: 'ethos',
+      parentKey: null,
+      name: 'Ethos',
+      position: 0,
+      attributes: 'corrupted',
+    };
+    expect(() => compose(howDoesThisLand, [node])).toThrow(
+      'stored record appeal "ethos" is not an object'
+    );
+  });
+});

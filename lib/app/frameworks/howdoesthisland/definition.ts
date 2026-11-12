@@ -7,6 +7,7 @@
  * and `extra_dimensions`' grounding, which `prototype/tools/validate_refs.py`
  * also checks. A model with any reference that does not resolve is refused.
  */
+import { isJsonObject } from '@/lib/app/frameworks/codec';
 import {
   SECTION_KIND,
   type CollectionSpec,
@@ -113,9 +114,7 @@ const nested =
   (outer: string, inner: string) =>
   (record: JsonObject): unknown => {
     const value = record[outer];
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? (value as JsonObject)[inner]
-      : undefined;
+    return isJsonObject(value) ? value[inner] : undefined;
   };
 
 const KNOWLEDGE = [
@@ -235,9 +234,7 @@ const references: ReferenceSpec[] = [
     field: 'scoring.integrity_caps[].dimension',
     pick: (record) =>
       Array.isArray(record.integrity_caps)
-        ? record.integrity_caps.map((cap: unknown) =>
-            typeof cap === 'object' && cap !== null ? (cap as JsonObject).dimension : cap
-          )
+        ? record.integrity_caps.map((cap: unknown) => (isJsonObject(cap) ? cap.dimension : cap))
         : undefined,
     targets: DIMENSION_LIKE,
   },
@@ -304,7 +301,8 @@ export const howDoesThisLand: FrameworkDefinition = {
   collections,
   references,
   versionOf: (document) => {
-    const meta = document.meta as JsonObject;
+    // decompose() has already checked meta against its schema.
+    const meta = isJsonObject(document.meta) ? document.meta : {};
     return { version: String(meta.version), schemaVersion: String(meta.schema_version) };
   },
 };
