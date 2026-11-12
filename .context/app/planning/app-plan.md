@@ -63,7 +63,7 @@ the browser. BRIEF §3–§7 describe it in full. What matters for the plan:
 
 ### The fork
 
-Sunrise `v0.18.0`, set up as HowDoesThisLand in t-1 (PR #5, merged). Dev port 3026. Two
+Sunrise `v0.18.0`, set up as HowDoesThisLand in t-1 (PR #5, merged). Dev port 3018 (moved from 3026 to the dev-proxy registry's app block). Two
 seams are filled: `lib/app/eslint.config.mjs` (ignores `prototype/**`) and
 `lib/app/reserved-tiers.ts` (`.context/app`), both pinned in
 `tests/unit/lib/app/defaults.test.ts`. The divergence ledger has rows 1–4. Everything else
