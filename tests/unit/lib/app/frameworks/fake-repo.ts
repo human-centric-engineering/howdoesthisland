@@ -12,6 +12,11 @@ import type {
   VersionContent,
 } from '@/lib/app/frameworks/repo';
 import type { LinkRecord, NodeRecord } from '@/lib/app/frameworks/types';
+import type {
+  FrameworkCatalog,
+  ServedFramework,
+  ServedVersion,
+} from '@/lib/app/frameworks/api/catalog';
 
 export interface FakeVersion extends StoredVersion {
   nodes: NodeRecord[];
@@ -95,4 +100,35 @@ export class FakeFrameworkRepo implements FrameworkRepo {
     // Shuffled, so compose() is proved to order by position, not by storage.
     return Promise.resolve(v ? [...v.nodes].reverse() : []);
   }
+}
+
+/**
+ * The public catalog over a fake repo's state, with the real one's rules: a
+ * draft is never listed, and a framework with nothing published is absent.
+ */
+export function fakeCatalog(repo: FakeFrameworkRepo): FrameworkCatalog {
+  const served = (slug: string): ServedFramework | null => {
+    const header = repo.frameworks.get(slug);
+    const versions = [...repo.versions.values()]
+      .filter((v) => v.frameworkSlug === slug && v.status !== 'DRAFT')
+      .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0))
+      .map(
+        (v): ServedVersion => ({
+          id: v.id,
+          version: v.version,
+          schemaVersion: v.schemaVersion,
+          status: v.status === 'RETIRED' ? 'RETIRED' : 'PUBLISHED',
+          publishedAt: v.publishedAt,
+          sourceSha256: v.sourceSha256,
+        })
+      );
+    return header && versions.length ? { ...header, versions } : null;
+  };
+  return {
+    listFrameworks: () =>
+      Promise.resolve(
+        [...repo.frameworks.keys()].sort().flatMap((slug) => served(slug) ?? [])
+      ),
+    findFramework: (slug) => Promise.resolve(served(slug)),
+  };
 }

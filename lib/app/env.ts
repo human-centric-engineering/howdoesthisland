@@ -42,4 +42,17 @@ import { z } from 'zod';
  *
  * Full guide: CUSTOMIZATION.md §4 · .context/environment/overview.md
  */
-export const appEnvSchema = z.object({});
+export const appEnvSchema = z.object({
+  /**
+   * The culture module (app-plan D11): the Hofstede and Lewis data, and
+   * everything built on it. `true` or `false`; unset means on outside
+   * production and off in production, until the owner settles the data's
+   * terms (`l2`). Read through `isCultureEnabled()`
+   * (`lib/app/frameworks/culture.ts`), never directly.
+   */
+  CULTURE_MODULE_ENABLED: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((val) => (val === undefined ? undefined : val === 'true'))
+    .describe('Serve the culture module (defaults to on outside production, off in production)'),
+});

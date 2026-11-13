@@ -442,8 +442,13 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/env.ts',
     risk: 'a stray key would make an unset env var fail boot on every install',
-    // An empty z.object() accepts (and strips) anything → parses {} to {}.
-    assert: () => expect(appEnvSchema.parse({})).toEqual({}),
+    // FORK (HowDoesThisLand): pinned to our one key, the culture switch (D11),
+    // which is optional, so an unset env still parses. From t-11.
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () => {
+      expect(Object.keys(appEnvSchema.shape)).toEqual(['CULTURE_MODULE_ENABLED']);
+      expect(appEnvSchema.parse({})).toEqual({});
+    },
   },
   {
     seam: 'lib/app/eslint.config.mjs',
