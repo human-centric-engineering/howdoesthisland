@@ -1,4 +1,5 @@
 import { BRAND } from '@/lib/brand';
+import { EyeMark } from '@/components/app/brand/eye-mark';
 import { Wordmark } from '@/components/app/brand/wordmark';
 
 /**
@@ -8,11 +9,17 @@ import { Wordmark } from '@/components/app/brand/wordmark';
  * and does NOT change it after release; its header asks a fork to replace the
  * body, so this is not a divergence.
  *
- * HowDoesThisLand renders the Galley Proof wordmark (D15). `BRAND.name` stays
- * the identity and accessible name; the surrounding `<Link>` supplies the link.
+ * HowDoesThisLand renders its mark, the reader's eye, beside the Galley Proof
+ * wordmark (D15). The eye is decorative, so `BRAND.name` stays the identity and
+ * the accessible name; the surrounding `<Link>` supplies the link.
  *
  * Full guide: CUSTOMIZATION.md §2.
  */
 export function BrandMark(): React.ReactNode {
-  return <Wordmark name={BRAND.name} />;
+  return (
+    <span className="inline-flex items-center gap-2 align-middle">
+      <EyeMark className="h-[1.4em] w-auto shrink-0" />
+      <Wordmark name={BRAND.name} />
+    </span>
+  );
 }

@@ -47,5 +47,9 @@ describe('BrandMark default', () => {
     // The proof caret is CSS decoration, so it never reaches the text or the
     // link's accessible name.
     expect(mark?.textContent).toBe('Sunrise');
+    // The eye beside it is decorative too: hidden from assistive tech, and it
+    // adds nothing to the text.
+    expect(container.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.textContent).toBe('Sunrise');
   });
 });
