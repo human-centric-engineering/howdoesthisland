@@ -7,7 +7,7 @@
  * case holding the case's input, `quickScan()`'s result, and `assemble()`'s
  * result twice — with no judge outputs (the quick-scan path the free scan and
  * the judge-failure fallback use), and with the synthetic judge outputs in
- * `synthetic.ts` (the merge path). `manifest.json` records the sha256 of the
+ * `synthetic.ts` (the merge path, with a `source`). `manifest.json` records the sha256 of the
  * engine, the model and the eval set the run read, and the case list.
  *
  * **Why it runs from a copy.** `prototype/` stays as delivered and no app code
@@ -18,15 +18,28 @@
  * Deterministic: the engine has no `Math.random` and no `Date`, and nothing
  * here adds either. Running it twice gives identical bytes — that is the check
  * that the fixtures are a baseline rather than a sample. Every case is run and
- * serialised before anything is written; only then is the fixture directory
- * emptied (so a case no longer recorded does not linger) and rewritten. A run
- * that throws partway therefore leaves the committed baseline as it was.
+ * serialised before anything is written, then written in full to a sibling
+ * staging directory, and only then swapped in for the old one (so a case no
+ * longer recorded does not linger). A run that throws partway, in the engine
+ * or on a write, therefore leaves the committed baseline as it was.
+ *
+ * `manifest.json` also records the sha256 of the recorder's own files
+ * ({@link RECORDER}): `fixtures.test.ts` fails when any input to the bytes
+ * has changed since they were written.
  *
  * Exit 0 written, 1 the corpus failed its coverage check or the engine did not
  * load.
  */
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -41,7 +54,27 @@ const SOURCES = {
   model: 'prototype/howdoesthisland_model.json',
   evalSet: 'prototype/howdoesthisland_eval_set.json',
 } as const;
+/**
+ * The recorder's own files. They decide the corpus, the synthetic judge
+ * outputs, the calls made and the bytes written, so a change to any of them
+ * stales the fixtures as surely as a change to the engine does.
+ */
+const RECORDER = [
+  'scripts/app/baseline/canonical.ts',
+  'scripts/app/baseline/corpus.ts',
+  'scripts/app/baseline/record.ts',
+  'scripts/app/baseline/synthetic.ts',
+] as const;
 const OUT = 'tests/fixtures/app/engine-baseline';
+/** Written in full first, then swapped in for {@link OUT}. */
+const STAGING = `${OUT}.staging`;
+
+/**
+ * The `source` handed to the judged `assemble()`. The prototype app passes
+ * where the text came from, and `assemble()` returns it as is, so the merge
+ * path is recorded with one rather than with the `null` default.
+ */
+const sourceFor = (id: string) => `baseline:${id}`;
 
 const versionSchema = z.object({ meta: z.object({ version: z.string() }) });
 
@@ -138,7 +171,8 @@ async function main(): Promise<number> {
         c.text,
         c.ctx,
         structuredClone(q),
-        structuredClone(judgeOutputs)
+        structuredClone(judgeOutputs),
+        sourceFor(c.id)
       );
       files.set(
         `${c.source}/${c.id}.json`,
@@ -166,15 +200,27 @@ async function main(): Promise<number> {
             { path: SOURCES[k], sha256: sha256(readFileSync(copy[k])) },
           ])
         ),
+        recorder: Object.fromEntries(
+          RECORDER.map((file) => [file, sha256(readFileSync(path.join(ROOT, file)))])
+        ),
         modelVersion,
         evalSetVersion: evalSet.meta.version,
         cases: cases.map((c) => `${c.source}/${c.id}.json`),
       })
     );
 
+    const staging = path.join(ROOT, STAGING);
+    rmSync(staging, { recursive: true, force: true });
+    try {
+      for (const dir of ['eval', 'corpus']) mkdirSync(path.join(staging, dir), { recursive: true });
+      for (const [rel, body] of files) writeFileSync(path.join(staging, rel), body);
+    } catch (err) {
+      rmSync(staging, { recursive: true, force: true });
+      throw err;
+    }
+    // The old baseline goes only once the new one is complete on disk.
     rmSync(path.join(ROOT, OUT), { recursive: true, force: true });
-    for (const dir of ['eval', 'corpus']) mkdirSync(path.join(ROOT, OUT, dir), { recursive: true });
-    for (const [rel, body] of files) writeFileSync(path.join(ROOT, OUT, rel), body);
+    renameSync(staging, path.join(ROOT, OUT));
 
     console.log(`Wrote ${cases.length} cases and manifest.json to ${OUT}/`);
     return 0;

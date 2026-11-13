@@ -11,7 +11,7 @@
  *
  * What counts: any import specifier — static `import`/`export … from`, a bare
  * `import '…'`, dynamic `import('…')`, `require('…')` / `require.resolve('…')`,
- * `new URL('…', import.meta.url)`, the `vi.mock` family, and a CSS `@import` —
+ * `import.meta.resolve('…')`, `new URL('…', import.meta.url)`, the `vi.mock` family, and a CSS `@import` —
  * that resolves into `prototype/`, whether written
  * relative (`../../prototype/src/engine`), through the `@/` alias, or as a
  * bare `prototype/…` path. Reading a prototype file off disk is not an import
@@ -63,6 +63,8 @@ function importSpecifiers(source: string): string[] {
     /\bimport\s*['"]([^'"]+)['"]/g,
     // import('…') · require('…') · require.resolve('…') · vi.mock('…') and family
     /\b(?:import|require|require\.resolve|vi\.(?:mock|doMock|unmock|doUnmock|importActual|importMock))\s*\(\s*['"`]([^'"`]+)['"`]/g,
+    // import.meta.resolve('…')
+    /\bimport\.meta\.resolve\s*\(\s*['"`]([^'"`]+)['"`]/g,
     // new URL('…', import.meta.url)
     /\bnew\s+URL\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*import\.meta\.url/g,
     // CSS: @import '…' · @import url('…')
@@ -111,6 +113,7 @@ describe('the specifier matcher', () => {
       "await import(new URL('../../prototype/src/engine.js', import.meta.url).href);",
       'scripts/app/x.ts',
     ],
+    ["const u = import.meta.resolve('../../prototype/src/engine.js');", 'lib/app/x.ts'],
     ["@import '../prototype/src/input.css';", 'app/globals.css'],
     ['@import url("../prototype/src/input.css");', 'app/globals.css'],
     ['import {\n  createEngine,\n  craft,\n} from "../../prototype/src/engine";', 'lib/app/x.ts'],

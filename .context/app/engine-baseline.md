@@ -20,12 +20,13 @@ fixtures.
   different from it in others. Two texts have `İ` ahead of a sentence that
   `locate()` finds only case-insensitively, so its offset shift shows up.
 - `manifest.json`: the sha256 of `engine.js`, the model and the eval set the run
-  read, and the list of cases.
+  read, the sha256 of each of the recorder's own files, and the list of cases.
 
 Each case holds its input, `quickScan()`, the synthetic judge outputs, and
 `assemble()` twice. `assemble.quick` is called with no judge outputs, which is
-the quick-scan path. `assemble.full` is called with the synthetic outputs, which
-is the merge path.
+the quick-scan path. `assemble.full` is called with the synthetic outputs and a
+`source` of `baseline:<case id>`, which is the merge path. The prototype app
+passes where the text came from, and `assemble()` returns it unchanged.
 
 The synthetic judge outputs (`scripts/app/baseline/synthetic.ts`) are not
 plausible judgements. They are built from the model's ids and a fixed hash to
@@ -53,13 +54,15 @@ fails if anything does.
 
 The run is deterministic, so re-running it must leave `git status` clean. If it
 does not, the engine, the model or the corpus changed, and the diff names the
-cases that moved. Every case is computed before anything is written, so a run
-that fails partway leaves the committed fixtures as they were.
+cases that moved. Every case is computed and written to a staging directory
+before the old fixtures are replaced, so a run that fails partway leaves the
+committed fixtures as they were.
 
 `tests/unit/scripts/app/baseline/fixtures.test.ts` fails when the sha256 of
-`engine.js`, the model or the eval set no longer matches the manifest, so an
-edit to the prototype cannot leave a stale baseline unnoticed. It also holds the
-fixture files to the manifest's case list and to canonical form.
+`engine.js`, the model, the eval set or any file in `scripts/app/baseline/` no
+longer matches the manifest, so an edit to any of them cannot leave a stale
+baseline unnoticed. It also holds the fixture directory to exactly the
+manifest and the cases it lists, every file in canonical form.
 
 ## Comparing a port
 
