@@ -1,15 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="4.15 3.8 56 56" role="img" aria-label="HowDoesThisLand">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="2.65 2.3 59 59" role="img" aria-label="HowDoesThisLand">
   <!-- The reader's eye, drawn with a broad nib and canted like a raised brow:
        its upper lid is the proofreader's insert caret, in the editor's red, and it
-       glances up at that mark. Transparent, filling the square edge to edge; ink
-       on a light tab bar, the lightbox's light ink on a dark one. -->
-  <style>
-    .i { fill: #141414 } .r { fill: #d7263d }
-    @media (prefers-color-scheme: dark) { .i { fill: #e9e7e1 } .r { fill: #ff5c6c } }
-  </style>
+       glances up at that mark. Transparent and filling the square. The tab behind
+       it can be light or dark whatever the system theme (Arc's active tab is light
+       in dark mode), so the colours are fixed and a thin paper halo keeps the ink
+       visible on a dark tab. -->
   <g transform="rotate(-8 32 37)">
-    <path class="r" d="M4 38 Q18 25 31 11 Q46 23 60 38 Q46 31.5 31.5 23 Q17 28.5 4 38 Z"/>
-    <path class="i" d="M4 38 Q38 67 60 38 Q30 53.5 4 38 Z"/>
-    <path class="i" fill-rule="evenodd" d="M24 38.5a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0Z M33.2 35.4a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0Z"/>
+    <g fill="#fdfdfb" stroke="#fdfdfb" stroke-width="3" stroke-linejoin="round">
+      <path d="M4 38 Q18 25 31 11 Q46 23 60 38 Q46 31.5 31.5 23 Q17 28.5 4 38 Z"/>
+      <path d="M4 38 Q38 67 60 38 Q30 53.5 4 38 Z"/>
+      <circle cx="32.5" cy="38.5" r="8.5"/>
+    </g>
+    <path d="M4 38 Q18 25 31 11 Q46 23 60 38 Q46 31.5 31.5 23 Q17 28.5 4 38 Z" fill="#d7263d"/>
+    <path d="M4 38 Q38 67 60 38 Q30 53.5 4 38 Z" fill="#141414"/>
+    <path fill="#141414" fill-rule="evenodd" d="M24 38.5a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0Z M33.2 35.4a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0Z"/>
   </g>
 </svg>
