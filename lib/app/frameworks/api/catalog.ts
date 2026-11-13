@@ -68,7 +68,9 @@ function toServed(row: {
     const { status } = v;
     return status === 'PUBLISHED' || status === 'RETIRED' ? [{ ...v, status }] : [];
   });
-  return versions.length ? { slug: row.slug, name: row.name, summary: row.summary, versions } : null;
+  return versions.length
+    ? { slug: row.slug, name: row.name, summary: row.summary, versions }
+    : null;
 }
 
 export const prismaFrameworkCatalog: FrameworkCatalog = {

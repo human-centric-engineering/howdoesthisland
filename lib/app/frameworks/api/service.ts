@@ -31,9 +31,7 @@ import {
 } from '@/lib/app/frameworks/api/catalog';
 
 export type FrameworkApiErrorCode =
-  | 'FRAMEWORK_NOT_FOUND'
-  | 'FRAMEWORK_VERSION_NOT_FOUND'
-  | 'FRAMEWORK_KIND_NOT_FOUND';
+  'FRAMEWORK_NOT_FOUND' | 'FRAMEWORK_VERSION_NOT_FOUND' | 'FRAMEWORK_KIND_NOT_FOUND';
 
 /** A lookup that found nothing to serve. Always a 404. */
 export class FrameworkApiError extends Error {

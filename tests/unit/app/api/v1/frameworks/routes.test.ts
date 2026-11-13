@@ -22,10 +22,12 @@ import { GET as frameworkRoute } from '@/app/api/v1/frameworks/[slug]/route';
 import { GET as versionRoute } from '@/app/api/v1/frameworks/[slug]/versions/[version]/route';
 import { GET as kindRoute } from '@/app/api/v1/frameworks/[slug]/versions/[version]/[kind]/route';
 
-const mockEnv = vi.hoisted(() => ({
-  NODE_ENV: 'test' as 'development' | 'production' | 'test',
-  CULTURE_MODULE_ENABLED: undefined as boolean | undefined,
-}));
+const mockEnv = vi.hoisted(
+  (): {
+    NODE_ENV: 'development' | 'production' | 'test';
+    CULTURE_MODULE_ENABLED: boolean | undefined;
+  } => ({ NODE_ENV: 'test', CULTURE_MODULE_ENABLED: undefined })
+);
 vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 vi.mock('@/lib/app/frameworks/repo', async () => {

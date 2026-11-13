@@ -112,23 +112,19 @@ export function fakeCatalog(repo: FakeFrameworkRepo): FrameworkCatalog {
     const versions = [...repo.versions.values()]
       .filter((v) => v.frameworkSlug === slug && v.status !== 'DRAFT')
       .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0))
-      .map(
-        (v): ServedVersion => ({
-          id: v.id,
-          version: v.version,
-          schemaVersion: v.schemaVersion,
-          status: v.status === 'RETIRED' ? 'RETIRED' : 'PUBLISHED',
-          publishedAt: v.publishedAt,
-          sourceSha256: v.sourceSha256,
-        })
-      );
+      .map((v): ServedVersion => ({
+        id: v.id,
+        version: v.version,
+        schemaVersion: v.schemaVersion,
+        status: v.status === 'RETIRED' ? 'RETIRED' : 'PUBLISHED',
+        publishedAt: v.publishedAt,
+        sourceSha256: v.sourceSha256,
+      }));
     return header && versions.length ? { ...header, versions } : null;
   };
   return {
     listFrameworks: () =>
-      Promise.resolve(
-        [...repo.frameworks.keys()].sort().flatMap((slug) => served(slug) ?? [])
-      ),
+      Promise.resolve([...repo.frameworks.keys()].sort().flatMap((slug) => served(slug) ?? [])),
     findFramework: (slug) => Promise.resolve(served(slug)),
   };
 }
