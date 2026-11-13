@@ -78,4 +78,6 @@ engine produces neither today.
 
 A difference the port means to make, such as the `locate()` offset fix, should
 appear as a listed difference against the case that shows it. Do not re-record
-the baseline to absorb it.
+the baseline to absorb it. The port's list is
+`tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-differences.ts`,
+and [`engine.md`](./engine.md) explains each entry.

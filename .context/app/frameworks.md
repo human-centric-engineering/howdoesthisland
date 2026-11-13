@@ -114,6 +114,8 @@ it. Read it through `isCultureEnabled()` (`lib/app/frameworks/culture.ts`).
 With it off, the whole-model response leaves `culture` out and names it in
 `meta.omitted`, `kinds` drops the `culture_*` kinds, and those kinds are 404. Nothing
 outside the section refers into it, so the rest of the model stays whole.
+The engine follows the same switch: with it off, it reads no culture input and produces
+no culture output ([`engine.md`](./engine.md#the-culture-switch-d11)).
 
 ## Checking it
 
