@@ -207,6 +207,15 @@ export const appAlwaysRunTests: AppAlwaysRunTest[] = [
       'prototype/. The file that adds such an import is, by definition, one ' +
       'no import chain connects to this test.',
   },
+  {
+    // HowDoesThisLand (t-12).
+    path: 'tests/unit/scripts/app/baseline/fixtures.test.ts',
+    reason:
+      'reads prototype/ and tests/fixtures/app/engine-baseline/ off disk to ' +
+      'check the recorded sha256 values against the engine, model and eval ' +
+      'set. Nothing imports either, so an edit to prototype/src/engine.js ' +
+      'reaches this test through no import chain.',
+  },
 ];
 
 /**

@@ -32,7 +32,8 @@ plausible judgements. They are built from the model's ids and a fixed hash to
 reach the branches the port has to reproduce:
 
 - a score sent as a string, and one out of range;
-- a quote for each `locate()` path;
+- a quote for each `locate()` path, in every case whose text has a sentence of
+  more than six words (all but `ev17`, a bullet list);
 - and in each list, an id that does not exist.
 
 `judgePrompt`, `validJudgeOutput`, `rewritePrompt`, `calibrate` and `toApi` are
@@ -52,7 +53,13 @@ fails if anything does.
 
 The run is deterministic, so re-running it must leave `git status` clean. If it
 does not, the engine, the model or the corpus changed, and the diff names the
-cases that moved.
+cases that moved. Every case is computed before anything is written, so a run
+that fails partway leaves the committed fixtures as they were.
+
+`tests/unit/scripts/app/baseline/fixtures.test.ts` fails when the sha256 of
+`engine.js`, the model or the eval set no longer matches the manifest, so an
+edit to the prototype cannot leave a stale baseline unnoticed. It also holds the
+fixture files to the manifest's case list and to canonical form.
 
 ## Comparing a port
 
@@ -61,6 +68,10 @@ sorted (`scripts/app/baseline/canonical.ts`):
 
 - a property whose value is `undefined` is absent;
 - an `undefined` array slot, and `NaN`, are `null`.
+
+The writer refuses an integer-like key (`"10"`), whose position JSON does not
+let it sort, and any object that is not a plain one, such as a `Date`. The
+engine produces neither today.
 
 A difference the port means to make, such as the `locate()` offset fix, should
 appear as a listed difference against the case that shows it. Do not re-record

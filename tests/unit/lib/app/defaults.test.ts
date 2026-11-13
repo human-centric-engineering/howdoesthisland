@@ -719,10 +719,12 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         // FORK (HowDoesThisLand): and the engine-baseline recorder (t-12).
         'scripts/app/baseline/record.ts',
       ]);
-      // FORK (HowDoesThisLand): pinned to our one guard, the prototype import
-      // guard (t-12). Ledger: .context/app/platform-divergences.md row 2.
+      // FORK (HowDoesThisLand): pinned to our two repo-reading tests, the
+      // prototype import guard and the baseline drift check (t-12).
+      // Ledger: .context/app/platform-divergences.md row 2.
       expect(appAlwaysRunTests.map((e) => e.path)).toEqual([
         'tests/unit/lib/app/prototype-guard.test.ts',
+        'tests/unit/scripts/app/baseline/fixtures.test.ts',
       ]);
       expect(appOwnerlessSurfaceExceptions).toEqual([]);
     },
