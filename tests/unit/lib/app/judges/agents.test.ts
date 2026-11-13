@@ -66,7 +66,7 @@ describe('the judge slot list', () => {
   it('equals the bundled model 0.5.1 judges[] ids, in order', () => {
     // A version that adds or drops a judge fails here, rather than running a
     // slot with no agent or an agent with no slot.
-    expect(howDoesThisLand.judgeSlots).toEqual(bundledJudgeIds());
+    expect(howDoesThisLand.judges).toEqual({ kind: 'judge', slots: bundledJudgeIds() });
   });
 });
 
@@ -133,6 +133,16 @@ describe('judgeAgentDefinitions', () => {
       expect(instructions).toContain('Reply with exactly one JSON object');
     }
   );
+
+  it('describes what each judge assesses, not "the audience of a piece of writing"', () => {
+    const description = (slug: string) =>
+      definitions.find((d) => d.slug === slug)!.agent.description;
+    expect(description('hdtl-judge-audience')).toBe(
+      "HowDoesThisLand's audience judge. Assesses fit to the intended reader: level, first impression and assumed knowledge, from the brief the framework version gives it."
+    );
+    const judges = definitions.filter((d) => d.slug !== EDITOR_AGENT_SLUG);
+    expect(new Set(judges.map((d) => d.agent.description)).size).toBe(judges.length);
+  });
 
   it('keeps the persona and rubric out of the code-owned frame (they come from the version)', () => {
     const ethos = definitions.find((d) => d.slug === 'hdtl-judge-ethos')!;
@@ -203,6 +213,7 @@ describe('pickInterimBinding', () => {
 
   beforeEach(() => {
     process.env.T17_OPENAI_KEY = 'sk-test';
+    mockPolicy.apply.mockReset();
     mockPolicy.apply.mockImplementation(async (slugs) => slugs);
   });
   afterEach(() => {
@@ -275,6 +286,48 @@ describe('pickInterimBinding', () => {
     await expect(
       pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
     ).rejects.toBeInstanceOf(ProviderSeamUnavailableError);
+  });
+
+  it('answers null without asking the credential resolver when the model is inactive', async () => {
+    const resolver = vi.fn(async () => {
+      throw new Error('vault down');
+    });
+    registerProviderCredentialResolver(resolver);
+    await expect(
+      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], []))
+    ).resolves.toBeNull();
+    expect(resolver).not.toHaveBeenCalled();
+    expect(mockPolicy.apply).not.toHaveBeenCalled();
+  });
+
+  it('asks whether the org can reach OpenAI once for all ten agents, not once each', async () => {
+    const resolver = vi.fn(async () => ({ apiKey: 'sk-vault', identity: 'vault' }));
+    registerProviderCredentialResolver(resolver);
+    const pick = catalogue([provider()], both);
+    const bindings = await Promise.all(
+      judgeAgentDefinitions().map((d) => d.defaultBinding!(db, pick))
+    );
+    expect(bindings).toHaveLength(10);
+    expect(bindings.every((b) => b?.provider === 'openai')).toBe(true);
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(mockPolicy.apply).toHaveBeenCalledTimes(1);
+
+    // A new catalogue is a new pass, which asks again.
+    await pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both));
+    expect(resolver).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares a failure across the agents of one pass, asking a resolver that is down once', async () => {
+    const resolver = vi.fn(async () => {
+      throw new Error('vault down');
+    });
+    registerProviderCredentialResolver(resolver);
+    const pick = catalogue([provider()], both);
+    const results = await Promise.allSettled(
+      judgeAgentDefinitions().map((d) => d.defaultBinding!(db, pick))
+    );
+    expect(results.every((r) => r.status === 'rejected')).toBe(true);
+    expect(resolver).toHaveBeenCalledTimes(1);
   });
 
   it('throws when the credential resolver fails for OpenAI', async () => {

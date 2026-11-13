@@ -21,12 +21,15 @@ reconcile never touches those.
 The `hdtl-` prefix keeps clear of core's own slugs: registering a slug core
 uses would replace that agent in every org.
 
-**The slots are code.** `howDoesThisLand.judgeSlots` in the framework
-definition lists them, and `judgeAgentDefinitions()` makes one agent per slot.
-`tests/unit/lib/app/judges/agents.test.ts` pins the list to the bundled model's
-`judges[]`, so a model version that adds a judge fails there until the slot is
-added. Culture's agent exists whatever the culture switch says: the switch
-decides whether the slot runs, not whether its agent exists.
+**The slots are code.** `HOWDOESTHISLAND_JUDGE_SLOTS`
+(`lib/app/frameworks/howdoesthisland/judge-slots.ts`, a leaf module so the
+agent registry does not load the engine) lists them; the framework definition
+exposes them as `judges.slots`, and `judgeAgentDefinitions()` makes one agent
+per slot. Importing a model version whose `judges[]` adds, drops or renames a
+judge is refused by `decompose()`, so no version can name a judge without an
+agent or leave an agent without a judge; adding a slot needs code, including
+its agent description. Culture's agent exists whatever the culture switch
+says: the switch decides whether the slot runs, not whether its agent exists.
 
 **The instructions are a frame, not the task.** Each agent's code-owned
 instructions say only its role, that the content and its context (brief,
@@ -44,9 +47,16 @@ the binding until a workspace sets provider or model itself
 workspace that has not chosen.
 
 `pickInterimBinding()` answers `null`, so the agent inherits at run time, when
-OpenAI is inactive, the workspace is not approved for it, it has no key, or
-the model is inactive. A new workspace is approved for OpenAI just after
-`createOrg`'s reconcile, so its agents are bound by the reconcile provisioning
-runs after the grant. It throws, leaving the binding as it is until the next
-pass, when the org's policy, a fork eligibility rule or the credential
-resolver cannot be asked.
+the model is inactive, OpenAI is inactive, the workspace is not approved for
+it, or it has no key. It checks the model first, from the catalogue, so an
+inactive model never asks anything that can fail. It throws, leaving the
+binding as it is until the next pass, when the org's policy, a fork
+eligibility rule or the credential resolver cannot be asked. A new workspace
+is approved for OpenAI just after `createOrg`'s reconcile, so its agents are
+bound by the reconcile provisioning runs after the grant.
+
+**Overhead.** The ten agents share one provider, so whether the org can reach
+it is asked once per org per catalogue, not once per agent: a reconcile, or a
+maintenance pass over every org, asks the policy, the eligibility rule and a
+fork's credential resolver (which may call a vault) once per org. A failure is
+shared the same way, so a resolver that is down is asked once, not ten times.

@@ -211,8 +211,31 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
     );
   }
 
+  checkJudgeSlots(def, records, problems);
   const links = resolveReferences(def, records, invalid, problems);
   return { nodes, links, problems };
+}
+
+/**
+ * A version's judges must be the definition's slots: each slot is an agent in
+ * every workspace, so a judge the code does not know would run with no agent,
+ * and a slot the version drops would leave one with nothing to do.
+ */
+function checkJudgeSlots(
+  def: FrameworkDefinition,
+  records: ReadonlyMap<string, ReadonlyMap<string, JsonObject>>,
+  problems: string[]
+): void {
+  const { kind, slots } = def.judges;
+  const present = [...(records.get(kind)?.keys() ?? [])];
+  for (const id of present) {
+    if (!slots.includes(id)) {
+      problems.push(`judge "${id}" is not a judge slot this code runs (${slots.join(', ')})`);
+    }
+  }
+  for (const slot of slots) {
+    if (!present.includes(slot)) problems.push(`judge slot "${slot}" is missing`);
+  }
 }
 
 function resolveReferences(

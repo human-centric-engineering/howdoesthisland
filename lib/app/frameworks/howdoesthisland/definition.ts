@@ -10,6 +10,7 @@
 import { isJsonObject } from '@/lib/app/frameworks/codec';
 import { isCultureEnabled } from '@/lib/app/frameworks/culture';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
+import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
 import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import {
   SECTION_KIND,
@@ -294,23 +295,6 @@ const references: ReferenceSpec[] = [
   },
 ];
 
-/**
- * The nine judge slots, in the model's own order. Culture is listed whether or
- * not the culture switch is on: the switch decides whether the slot runs
- * (f-assessments), not whether its agent exists.
- */
-const judgeSlots = [
-  'judge_ethos',
-  'judge_pathos',
-  'judge_logos',
-  'judge_kairos',
-  'judge_lenses',
-  'judge_influence',
-  'judge_craft',
-  'judge_audience',
-  'judge_culture',
-] as const;
-
 export const howDoesThisLand: FrameworkDefinition = {
   slug: HOWDOESTHISLAND_SLUG,
   name: 'HowDoesThisLand',
@@ -320,7 +304,7 @@ export const howDoesThisLand: FrameworkDefinition = {
   sections,
   collections,
   references,
-  judgeSlots,
+  judges: { kind: 'judge', slots: HOWDOESTHISLAND_JUDGE_SLOTS },
   versionOf: (document) => {
     // decompose() has already checked meta against its schema.
     const meta = isJsonObject(document.meta) ? document.meta : {};
