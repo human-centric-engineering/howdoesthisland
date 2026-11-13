@@ -1,0 +1,5157 @@
+{
+  "assemble": {
+    "full": {
+      "appeal_share": {
+        "ethos": 18,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 82,
+        "pathos": 0
+      },
+      "audience": {
+        "archetype": "sceptic",
+        "awareness": "problem_aware",
+        "decision_unit": "group",
+        "expertise": "novice",
+        "focus": "unknown",
+        "involvement": "low",
+        "relationship": "trusted",
+        "role": "cmo"
+      },
+      "balance_findings": [
+        {
+          "id": "br_all_about_me",
+          "message": "The text talks mostly about the author. Flip it to the reader's world.",
+          "name": "All about the author"
+        },
+        {
+          "id": "br_no_ask",
+          "message": "Persuasive, but towards what? Add one specific next step.",
+          "name": "No clear ask"
+        },
+        {
+          "id": "br_doom",
+          "message": "The stakes are clear but the path isn't. Urgency plus optimism moves people; urgency alone overwhelms them.",
+          "name": "Urgency without hope"
+        }
+      ],
+      "content_type": "pitch_deck",
+      "craft": {
+        "avg_sentence": 9.9,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 5.1,
+        "fk_grade": 3.6,
+        "gunning_fog": 7,
+        "i": 0,
+        "passive_pct": 0,
+        "positivity": 50,
+        "sentences": 8,
+        "speaking_sec": 36,
+        "we": 1,
+        "words": 79,
+        "you": 1
+      },
+      "culture": {
+        "gaps": [
+          {
+            "diff": 0.41000000000000003,
+            "reader": 0.52,
+            "scale": "collective",
+            "writer": 0.10999999999999999
+          },
+          {
+            "diff": 0.35000000000000003,
+            "reader": 0.655,
+            "scale": "trust",
+            "writer": 0.305
+          },
+          {
+            "diff": 0.3167500000000001,
+            "reader": 0.6405000000000001,
+            "scale": "formality",
+            "writer": 0.32375
+          },
+          {
+            "diff": 0.28400000000000003,
+            "reader": 0.526,
+            "scale": "context",
+            "writer": 0.242
+          },
+          {
+            "diff": 0.23375,
+            "reader": 0.503125,
+            "scale": "directness",
+            "writer": 0.26937500000000003
+          },
+          {
+            "diff": 0.2,
+            "reader": 0.5,
+            "scale": "persuading",
+            "writer": 0.3
+          }
+        ],
+        "positions": {
+          "collective": 0.8,
+          "context": 0.5,
+          "directness": 1,
+          "expressiveness": 0.1,
+          "formality": 0.31,
+          "persuading": 0.06,
+          "time": 0.87,
+          "trust": 0.14,
+          "uncertainty": 0.98
+        },
+        "reader": {
+          "global": false,
+          "hofstede": {
+            "idv": 48,
+            "ivr": 26,
+            "lto": 51,
+            "mas": 56,
+            "pdi": 77,
+            "uai": 40
+          },
+          "id": "in",
+          "lewis": {
+            "linear": 0.15,
+            "multi": 0.5,
+            "reactive": 0.35
+          },
+          "lewis_label": "Mostly multi-active, with reactive traits",
+          "name": "India",
+          "targets": {
+            "collective": 0.52,
+            "context": 0.526,
+            "directness": 0.503125,
+            "expressiveness": 0.4415,
+            "formality": 0.6405000000000001,
+            "persuading": 0.5,
+            "time": 0.56,
+            "trust": 0.655,
+            "uncertainty": 0.4
+          },
+          "tolerance": 0.14
+        },
+        "source": "ai",
+        "writer": {
+          "id": "gb",
+          "lewis": {
+            "linear": 0.55,
+            "multi": 0.2,
+            "reactive": 0.25
+          },
+          "name": "United Kingdom",
+          "targets": {
+            "collective": 0.10999999999999999,
+            "context": 0.242,
+            "directness": 0.26937500000000003,
+            "expressiveness": 0.286,
+            "formality": 0.32375,
+            "persuading": 0.3,
+            "time": 0.41000000000000003,
+            "trust": 0.305,
+            "uncertainty": 0.35
+          }
+        }
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 3,
+          "source": "ai"
+        }
+      ],
+      "duties": {
+        "fit": 83,
+        "primary": "move",
+        "profile": {
+          "delight": 21,
+          "move": 37,
+          "steer": 21,
+          "teach": 1,
+          "unsettle": 19
+        },
+        "source": "ai",
+        "target": {
+          "delight": 25,
+          "move": 40,
+          "steer": 12,
+          "teach": 12,
+          "unsettle": 12
+        }
+      },
+      "effective_weights": {
+        "ethos": 0.303,
+        "kairos": 0.148,
+        "logos": 0.327,
+        "pathos": 0.222
+      },
+      "group_scores": {
+        "audience": 44,
+        "craft": 50,
+        "culture": 78
+      },
+      "highlights": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_comparison",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "end": 85,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 85,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "end": 41,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 355,
+          "flag": "rf_controlling",
+          "note": "Controlling language: Commands and pressure that threaten the reader's sense of choice, which tends to trigger reactance.",
+          "polarity": "weakness",
+          "quote": "Don't wait",
+          "source": "quick",
+          "start": 345
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_directness",
+          "end": 416,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN.",
+          "source": "ai",
+          "start": 357
+        }
+      ],
+      "judges": {
+        "audience": "Synthetic audience summary for fundraising-4.",
+        "craft": "Synthetic craft summary for fundraising-4.",
+        "culture": "Synthetic culture summary for fundraising-4.",
+        "ethos": "Synthetic ethos summary for fundraising-4.",
+        "kairos": "",
+        "lenses": "Synthetic lenses summary for fundraising-4.",
+        "logos": "Synthetic logos summary for fundraising-4.",
+        "pathos": "Synthetic pathos summary for fundraising-4."
+      },
+      "lenses": {
+        "lens_dialogue": 50,
+        "lens_mythos": 100,
+        "lens_prepon": 75,
+        "lens_telos": 50
+      },
+      "mode": "full",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Don't wait.",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "misused"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Donate today, and help another child like Maria hope again.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Donate today, and help another child like Maria hope again.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "Don't wait.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "This year, the well in her village works.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "misused"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "This year, the well in her village works.",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "This year, the well in her village works.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "This year, the well in her village works.",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Don't wait.",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "misused"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_critical."
+        }
+      ],
+      "perspectives_source": "ai",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_star_structure",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_polish",
+          "impact": "medium",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_reader_vocabulary",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "impact": "medium",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_preserve_freedom",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_clarity",
+          "impact": "medium",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_values_reframe",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_one_big_idea",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "impact": "medium",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_one_big_idea",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "impact": "medium",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_paint_dream_outcome",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "impact": "medium",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_kill_weasels",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_idiom",
+          "impact": "medium",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_cite_source",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 355,
+          "id": "rf_controlling",
+          "note": "Commands and pressure that threaten the reader's sense of choice, which tends to trigger reactance.",
+          "quote": "Don't wait",
+          "severity": "low",
+          "source": "quick",
+          "start": 345
+        },
+        {
+          "end": 416,
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "severity": "medium",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "end": 416,
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "severity": "high",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "end": 416,
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "severity": "low",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "end": 416,
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "severity": "high",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "end": 416,
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "severity": "low",
+          "source": "ai",
+          "start": 357
+        },
+        {
+          "end": 416,
+          "id": "rf_status_threat",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "severity": "low",
+          "source": "ai",
+          "start": 357
+        }
+      ],
+      "scores": {
+        "balance_index": 82,
+        "band": "Developing",
+        "ethos": 55,
+        "kairos": 54,
+        "logos": 40,
+        "overall": 52,
+        "pathos": 64
+      },
+      "source": "baseline:fundraising-4"
+    },
+    "quick": {
+      "appeal_share": {
+        "ethos": 0,
+        "kairos": 27,
+        "logos": 14,
+        "neutral": 3,
+        "pathos": 57
+      },
+      "audience": {
+        "archetype": "sceptic",
+        "awareness": "problem_aware",
+        "decision_unit": "group",
+        "expertise": "novice",
+        "focus": "unknown",
+        "involvement": "low",
+        "relationship": "trusted",
+        "role": "cmo"
+      },
+      "balance_findings": [
+        {
+          "id": "br_no_ask",
+          "message": "Persuasive, but towards what? Add one specific next step.",
+          "name": "No clear ask"
+        }
+      ],
+      "content_type": "pitch_deck",
+      "craft": {
+        "avg_sentence": 9.9,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 5.1,
+        "fk_grade": 3.6,
+        "gunning_fog": 7,
+        "i": 0,
+        "passive_pct": 0,
+        "positivity": 50,
+        "sentences": 8,
+        "speaking_sec": 36,
+        "we": 1,
+        "words": 79,
+        "you": 1
+      },
+      "culture": {
+        "gaps": [
+          {
+            "diff": 0.41000000000000003,
+            "reader": 0.52,
+            "scale": "collective",
+            "writer": 0.10999999999999999
+          },
+          {
+            "diff": 0.35000000000000003,
+            "reader": 0.655,
+            "scale": "trust",
+            "writer": 0.305
+          },
+          {
+            "diff": 0.3167500000000001,
+            "reader": 0.6405000000000001,
+            "scale": "formality",
+            "writer": 0.32375
+          },
+          {
+            "diff": 0.28400000000000003,
+            "reader": 0.526,
+            "scale": "context",
+            "writer": 0.242
+          },
+          {
+            "diff": 0.23375,
+            "reader": 0.503125,
+            "scale": "directness",
+            "writer": 0.26937500000000003
+          },
+          {
+            "diff": 0.2,
+            "reader": 0.5,
+            "scale": "persuading",
+            "writer": 0.3
+          }
+        ],
+        "positions": {
+          "collective": 0.7017543859649122,
+          "context": 0.5,
+          "directness": 0.3333333333333333,
+          "expressiveness": 0.5063291139240507,
+          "formality": 0.3846153846153846,
+          "persuading": 0.5,
+          "time": 0.25,
+          "trust": 0.75,
+          "uncertainty": 0.18987341772151897
+        },
+        "reader": {
+          "global": false,
+          "hofstede": {
+            "idv": 48,
+            "ivr": 26,
+            "lto": 51,
+            "mas": 56,
+            "pdi": 77,
+            "uai": 40
+          },
+          "id": "in",
+          "lewis": {
+            "linear": 0.15,
+            "multi": 0.5,
+            "reactive": 0.35
+          },
+          "lewis_label": "Mostly multi-active, with reactive traits",
+          "name": "India",
+          "targets": {
+            "collective": 0.52,
+            "context": 0.526,
+            "directness": 0.503125,
+            "expressiveness": 0.4415,
+            "formality": 0.6405000000000001,
+            "persuading": 0.5,
+            "time": 0.56,
+            "trust": 0.655,
+            "uncertainty": 0.4
+          },
+          "tolerance": 0.14
+        },
+        "source": "quick",
+        "writer": {
+          "id": "gb",
+          "lewis": {
+            "linear": 0.55,
+            "multi": 0.2,
+            "reactive": 0.25
+          },
+          "name": "United Kingdom",
+          "targets": {
+            "collective": 0.10999999999999999,
+            "context": 0.242,
+            "directness": 0.26937500000000003,
+            "expressiveness": 0.286,
+            "formality": 0.32375,
+            "persuading": 0.3,
+            "time": 0.41000000000000003,
+            "trust": 0.305,
+            "uncertainty": 0.35
+          }
+        }
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "About the reader 1 times, about the author 1 times.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "1 supporting signal.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "1 supporting signal.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "5 supporting signals, 0 weakening.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "1 supporting signal.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "0 supporting signals.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Average sentence 10 words; 0 over 30 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "2 supporting signals, 0 weakening.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "No clear call to action found.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Gunning Fog 7 (aim under 12 for executives); average sentence 10 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "4 paragraphs, about 2.0 sentences each.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "79 words; typical range for this content type is 150 to 900.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Fog 7 (aim under 9), 0% passive, 0 long sentences.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "0% of sentences use a linking word; 0% pick up a word from the sentence before.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Formality 38 of 100; this reader and form expect about 57.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "No obviously unsupported claims found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Reading level Fog 7 for a novice reader (aim 9 or under).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Opening line: 14 words.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "No undefined acronyms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "No exclusionary terms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Text 50, reader expects about 53 (0 = explicit, 100 = implicit).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Text 33, reader expects about 50 (0 = direct, 100 = indirect).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Text 50, reader expects about 50 (0 = applications-first, 100 = principles-first).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Text 38, reader expects about 64 (0 = informal, 100 = formal).",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Text 75, reader expects about 66 (0 = task, 100 = relationship).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Text 70, reader expects about 52 (0 = individual, 100 = group).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Text 25, reader expects about 56 (0 = deadline, 100 = long-term).",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Text 19, reader expects about 40 (0 = brief, 100 = detailed).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Text 51, reader expects about 44 (0 = restrained, 100 = expressive).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "No culture-bound idioms found.",
+          "score": 4,
+          "source": "quick"
+        }
+      ],
+      "duties": {
+        "fit": 40,
+        "primary": "move",
+        "profile": {
+          "delight": 0,
+          "move": 100,
+          "steer": 0,
+          "teach": 0,
+          "unsettle": 0
+        },
+        "source": "quick",
+        "target": {
+          "delight": 25,
+          "move": 40,
+          "steer": 12,
+          "teach": 12,
+          "unsettle": 12
+        }
+      },
+      "effective_weights": {
+        "ethos": 0.303,
+        "kairos": 0.148,
+        "logos": 0.327,
+        "pathos": 0.222
+      },
+      "group_scores": {
+        "audience": 81,
+        "craft": 71,
+        "culture": 85
+      },
+      "highlights": [
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "end": 85,
+          "note": "Stakes: pain and desire",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "quick",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 85,
+          "note": "Concreteness and vividness",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+          "source": "quick",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 130,
+          "note": "Concreteness and vividness",
+          "polarity": "strength",
+          "quote": "Some days she was too tired to go to school.",
+          "source": "quick",
+          "start": 86
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 173,
+          "note": "Concreteness and vividness",
+          "polarity": "strength",
+          "quote": "This year, the well in her village works.",
+          "source": "quick",
+          "start": 132
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 173,
+          "note": "Fit to the moment",
+          "polarity": "strength",
+          "quote": "This year, the well in her village works.",
+          "source": "quick",
+          "start": 132
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 229,
+          "note": "Concreteness and vividness",
+          "polarity": "strength",
+          "quote": "She is in class every day, and she wants to be a nurse.",
+          "source": "quick",
+          "start": 174
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 281,
+          "note": "Specific claims and evidence",
+          "polarity": "strength",
+          "quote": "Your gift of £25 keeps a well running for a month.",
+          "source": "quick",
+          "start": 231
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_identification",
+          "end": 343,
+          "note": "Identification and shared identity",
+          "polarity": "strength",
+          "quote": "Together we can reach 40 more villages before the dry season.",
+          "source": "quick",
+          "start": 282
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 343,
+          "note": "Identity, status and belonging",
+          "polarity": "strength",
+          "quote": "Together we can reach 40 more villages before the dry season.",
+          "source": "quick",
+          "start": 282
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 343,
+          "note": "Hope and agency",
+          "polarity": "strength",
+          "quote": "Together we can reach 40 more villages before the dry season.",
+          "source": "quick",
+          "start": 282
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 343,
+          "note": "Genuine, shared urgency",
+          "polarity": "strength",
+          "quote": "Together we can reach 40 more villages before the dry season.",
+          "source": "quick",
+          "start": 282
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 355,
+          "flag": "rf_controlling",
+          "note": "Controlling language: Commands and pressure that threaten the reader's sense of choice, which tends to trigger reactance.",
+          "polarity": "weakness",
+          "quote": "Don't wait",
+          "source": "quick",
+          "start": 345
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 416,
+          "note": "Fit to the moment",
+          "polarity": "strength",
+          "quote": "Donate today, and help another child like Maria hope again.",
+          "source": "quick",
+          "start": 357
+        }
+      ],
+      "judges": {},
+      "lenses": {
+        "lens_dialogue": 25,
+        "lens_mythos": 0,
+        "lens_prepon": 100,
+        "lens_telos": 25
+      },
+      "mode": "quick",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "status": "absent"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_antithesis",
+              "status": "absent"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "absent"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_levity",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_commitment",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authority",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "status": "absent"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "present"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "unknown"
+            }
+          ],
+          "score": 1,
+          "summary": ""
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "status": "absent"
+            },
+            {
+              "id": "lv_plu",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_tension",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_status",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_permission",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "absent"
+            },
+            {
+              "id": "lv_framing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "status": "absent"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_timely",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_fluency",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_attention",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_character",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_shape",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_turn",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_transformation",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_ingroup",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "note": "Controlling language",
+              "quote": "Don't wait",
+              "status": "misused"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_uncertainty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_credibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_intimacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_positive_balance",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_authentic",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_respect",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_equity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "status": "absent"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_courage",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        }
+      ],
+      "perspectives_source": "quick",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "example": true,
+          "impact": "high",
+          "issue": "Competence and judgement scores 1 of 4. Replace what you were responsible for with what changed because of you: action verb, what you did, measurable result.",
+          "move": "mv_duty_to_achievement",
+          "original": "Responsible for managing the engineering team.",
+          "rewrite": "Grew the engineering team from 6 to 25 and cut release time from monthly to daily.",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "example": true,
+          "impact": "medium",
+          "issue": "Borrowed credibility scores 0 of 4. Replace vague praise with a named source, their role and the outcome they got.",
+          "move": "mv_specific_testimonial",
+          "original": "\"Great service, highly recommend!\"",
+          "rewrite": "\"We cut month-end close from 9 days to 3.\" Priya Shah, Finance Director, Northwind Logistics",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "example": true,
+          "impact": "low",
+          "issue": "Integrity and candour scores 2 of 4. Delete self-awarded praise (world-class, revolutionary) and replace it with the fact that would have earned it.",
+          "move": "mv_cut_superlatives",
+          "original": "Our world-class support team is second to none.",
+          "rewrite": "A named engineer answers within 2 hours, 24/7.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "example": true,
+          "impact": "medium",
+          "issue": "Story and narrative scores 0 of 4. Insert a three-sentence story: who, what went wrong, what changed. Put it where the claim needs most belief.",
+          "move": "mv_add_micro_story",
+          "original": "Our method improves retention.",
+          "rewrite": "Sam ran a gym losing 30 members a month. We changed one thing: a call on day 7. Churn halved by spring.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_empathy",
+          "example": true,
+          "impact": "medium",
+          "issue": "Empathy and emotional resonance scores 1 of 4. Name what the reader is probably feeling, tentatively ('It can feel like...').",
+          "move": "mv_label_feeling",
+          "original": "Our software handles compliance.",
+          "rewrite": "It can feel like every audit is a fresh scramble. It does not have to be.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "example": true,
+          "impact": "medium",
+          "issue": "Surprise, humour and delight scores 1 of 4. Include one thing the reader would not predict: a counter-intuitive fact, a reversal, a reframe. Then pay it off.",
+          "move": "mv_surprise_turn",
+          "original": "Most teams want to ship faster.",
+          "rewrite": "The fastest teams we studied ship less code, not more. Here's why.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_objections",
+          "example": true,
+          "impact": "medium",
+          "issue": "Objection handling scores 0 of 4. Name the sceptic's strongest objection and answer it with evidence. Two-sided beats one-sided for sceptical readers.",
+          "move": "mv_raise_and_answer",
+          "original": "(Price not mentioned)",
+          "rewrite": "Yes, we cost more than a freelancer. You are paying for a team that does not disappear in August.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mechanism and reasoning scores 1 of 4. After each claim, add 'because...' or 'which means...'.",
+          "move": "mv_add_reason_why",
+          "original": "Our coffee tastes better.",
+          "rewrite": "Our coffee tastes better because we roast to order and ship within 48 hours.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "example": true,
+          "impact": "high",
+          "issue": "Structure and flow scores 2 of 4. Put the main claim or outcome in the first line. Build the case after.",
+          "move": "mv_lead_with_point",
+          "original": "Founded in 2010, we have worked across many sectors... (point in paragraph 4)",
+          "rewrite": "We cut onboarding time in half for B2B SaaS teams. Here is how.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cost of delay scores 0 of 4. Show what staying put costs per week, month or year, using the reader's numbers where possible.",
+          "move": "mv_cost_of_inaction",
+          "original": "Don't wait to fix your hiring process.",
+          "rewrite": "Each month a senior role stays open costs roughly [£X] in delayed delivery.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "example": true,
+          "impact": "medium",
+          "issue": "The call to act scores 0 of 4. End with a single, specific, low-friction action and say what happens when the reader takes it.",
+          "move": "mv_clear_cta",
+          "original": "Let us know if you have any questions.",
+          "rewrite": "Reply 'yes' and I will send two times for a 20-minute call next week.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "example": true,
+          "impact": "high",
+          "issue": "Mythos scores 0 of 4. Frame the message inside a bigger narrative: an old world, a shift, winners and losers, a promised land.",
+          "move": "mv_name_the_shift",
+          "original": "We sell sales software.",
+          "rewrite": "Buyers now do 70% of their research before talking to sales. The teams winning have stopped pitching and started teaching.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Telos scores 1 of 4. Write the single sentence you want the reader to remember. Put it near the start, repeat it at the end, and cut anything that doesn't serve it.",
+          "move": "mv_one_big_idea",
+          "original": "(Five equal points about features, pricing, history, team and roadmap)",
+          "rewrite": "One idea: we halve your onboarding time. Everything else is evidence for that.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cohesion scores 1 of 4. Link ideas explicitly with connectives, repeat key terms instead of synonyms, and start paragraphs by picking up the last thread.",
+          "move": null,
+          "original": "Costs rose. Our team is experienced. Clients like us.",
+          "rewrite": "Costs rose, so clients need a partner who can deliver for less. That's where our experience helps.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "example": true,
+          "impact": "low",
+          "issue": "Structure scores 2 of 4. Put the main point or ask in the first two sentences, then order the rest as reasons, proof, next step.",
+          "move": null,
+          "original": "We have been operating since 2010 and offer many services... (ask in the final paragraph)",
+          "rewrite": "We can halve your onboarding time. Here's how, and what it would take.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "example": true,
+          "impact": "low",
+          "issue": "Length scores 2 of 4. Cut anything that doesn't serve the one big idea; aim for the usual range for this content type.",
+          "move": null,
+          "original": "(A 600-word cold email)",
+          "rewrite": "(The same email at 120 words, with one ask)",
+          "source": "library"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "example": true,
+          "impact": "low",
+          "issue": "First impression scores 2 of 4. Open with the reader's situation, a specific fact or the big idea; cut greetings-as-content and background.",
+          "move": null,
+          "original": "I hope this email finds you well. My name is Tom and I work at BrightPath.",
+          "rewrite": "Your Q3 update mentioned the cloud migration twice.",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "example": true,
+          "impact": "low",
+          "issue": "Informal or formal scores 2 of 4. Informal: first names, contractions and a level tone are fine. Formal: titles, courteous openings and closings, respect for seniority.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_time",
+          "example": true,
+          "impact": "low",
+          "issue": "Deadline or long-term scores 2 of 4. Deadline: clear dates, quick wins, a reason to act now. Long-term: patience, lasting value, relationships over years; urgency can feel pushy.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 355,
+          "id": "rf_controlling",
+          "note": "Commands and pressure that threaten the reader's sense of choice, which tends to trigger reactance.",
+          "quote": "Don't wait",
+          "severity": "low",
+          "source": "quick",
+          "start": 345
+        }
+      ],
+      "scores": {
+        "balance_index": 85,
+        "band": "Developing",
+        "ethos": 40,
+        "kairos": 51,
+        "logos": 50,
+        "overall": 46,
+        "pathos": 47
+      },
+      "source": null
+    }
+  },
+  "id": "fundraising-4",
+  "input": {
+    "ctx": {
+      "archetype": "sceptic",
+      "audience": {
+        "awareness": "problem_aware",
+        "decision_unit": "group",
+        "expertise": "novice",
+        "focus": "unknown",
+        "involvement": "low",
+        "relationship": "trusted"
+      },
+      "contentType": "pitch_deck",
+      "culture": {
+        "reader": "in",
+        "writer": "gb"
+      },
+      "role": "cmo"
+    },
+    "text": "Last winter, Maria walked four kilometres every morning to carry water to her family. Some days she was too tired to go to school.\n\nThis year, the well in her village works. She is in class every day, and she wants to be a nurse.\n\nYour gift of £25 keeps a well running for a month. Together we can reach 40 more villages before the dry season.\n\nDon't wait. Donate today, and help another child like Maria hope again."
+  },
+  "judgeOutputs": {
+    "audience": {
+      "appeal": "audience",
+      "dimension_scores": [
+        {
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": "2"
+        },
+        {
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 7
+        },
+        {
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 0
+        },
+        {
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "aud_hook",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "aud_knowledge",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_paint_dream_outcome",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_paint_dream_outcome",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_status_threat",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic audience summary for fundraising-4."
+    },
+    "craft": {
+      "appeal": "craft",
+      "dimension_scores": [
+        {
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": "2"
+        },
+        {
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 7
+        },
+        {
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3
+        },
+        {
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 1
+        },
+        {
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 0
+        },
+        {
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "craft_structure",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "craft_length",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "craft_clarity",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "craft_cohesion",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "craft_tone",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_one_big_idea",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure."
+        },
+        {
+          "dimension": "craft_claims",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_one_big_idea",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic craft summary for fundraising-4."
+    },
+    "culture": {
+      "appeal": "culture",
+      "dimension_scores": [
+        {
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": "4"
+        },
+        {
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 7
+        },
+        {
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 3
+        },
+        {
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 0
+        },
+        {
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 4
+        },
+        {
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 3
+        },
+        {
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 3
+        },
+        {
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 4
+        },
+        {
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 3
+        },
+        {
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 3
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "cul_context",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "cul_directness",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "cul_persuading",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "cul_formality",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "cul_trust",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_kill_weasels",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context."
+        },
+        {
+          "dimension": "cul_idiom",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_kill_weasels",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic culture summary for fundraising-4.",
+      "text_positions": {
+        "collective": 0.8,
+        "context": "0.5",
+        "directness": 1.4,
+        "expressiveness": 0.1,
+        "formality": 0.31,
+        "persuading": 0.06,
+        "time": 0.87,
+        "trust": 0.14,
+        "uncertainty": 0.98
+      }
+    },
+    "ethos": {
+      "appeal": "ethos",
+      "dimension_scores": [
+        {
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": "4"
+        },
+        {
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 7
+        },
+        {
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 0
+        },
+        {
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 2
+        },
+        {
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 0
+        },
+        {
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "eth_competence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "eth_integrity",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "eth_goodwill",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "eth_borrowed",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "eth_identification",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_star_structure",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "eth_polish",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_star_structure",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic ethos summary for fundraising-4."
+    },
+    "influence": {
+      "appeal": "influence",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "present"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 0
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Don't wait.",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Donate today, and help another child like Maria hope again.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Donate today, and help another child like Maria hope again.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "Don't wait.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "This year, the well in her village works.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Together we can reach 40 more villages before the dry season.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "This year, the well in her village works.",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "This year, the well in her village works.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "This year, the well in her village works.",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "Your gift of £25 keeps a well running for a month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "She is in class every day, and she wants to be a nurse.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Don't wait.",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "Some days she was too tired to go to school.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_critical."
+        },
+        {
+          "id": "pv_zz_missing",
+          "levers": [],
+          "score": 4,
+          "summary": "Dropped."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_cite_source",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_cite_source",
+          "rewrite": "Dropped."
+        }
+      ],
+      "summary": "Synthetic influence summary for fundraising-4."
+    },
+    "kairos": {
+      "appeal": "kairos",
+      "dimension_scores": [
+        {
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": "1"
+        },
+        {
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 7
+        },
+        {
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 1
+        },
+        {
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 4
+        },
+        {
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "kai_moment",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "kai_stakes",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "kai_efficacy",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "kai_integrity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "kai_call",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_values_reframe",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_values_reframe",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ]
+    },
+    "lenses": {
+      "appeal": "lenses",
+      "dimension_scores": [
+        {
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": "2"
+        },
+        {
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 7
+        },
+        {
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 3
+        },
+        {
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "duties": {
+        "delight": 27,
+        "move": 47,
+        "steer": 27,
+        "teach": "1",
+        "unsettle": 24
+      },
+      "highlights": [
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "lens_mythos",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "lens_prepon",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_one_big_idea",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_one_big_idea",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic lenses summary for fundraising-4."
+    },
+    "logos": {
+      "appeal": "logos",
+      "dimension_scores": [
+        {
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": "0"
+        },
+        {
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 7
+        },
+        {
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 4
+        },
+        {
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 1
+        },
+        {
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 1
+        },
+        {
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "log_evidence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "log_mechanism",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "log_structure",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "log_comparison",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "log_objections",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_preserve_freedom",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence."
+        },
+        {
+          "dimension": "log_clarity",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_preserve_freedom",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic logos summary for fundraising-4."
+    },
+    "pathos": {
+      "appeal": "pathos",
+      "dimension_scores": [
+        {
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": "0"
+        },
+        {
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 7
+        },
+        {
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 4
+        },
+        {
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 4
+        },
+        {
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 3
+        },
+        {
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "pat_stakes",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "pat_vividness",
+          "polarity": "weakness",
+          "quote": "DONATE TODAY, AND HELP ANOTHER CHILD LIKE MARIA HOPE AGAIN."
+        },
+        {
+          "dimension": "pat_story",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Last   winter, Maria walked four kilometres every morning to carry water to her family."
+        },
+        {
+          "dimension": "pat_identity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Last winter, Maria walked four kilometres and then something the text never says"
+        },
+        {
+          "dimension": "pat_empathy",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_reader_vocabulary",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes."
+        },
+        {
+          "dimension": "pat_surprise",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_reader_vocabulary",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Donate today, and help another child like Maria hope again."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family."
+        }
+      ],
+      "summary": "Synthetic pathos summary for fundraising-4."
+    }
+  },
+  "quickScan": {
+    "craft": {
+      "avg_sentence": 9.9,
+      "devices": {
+        "alliteration": 0,
+        "anaphora": 0,
+        "antithesis": 0,
+        "questions": 0,
+        "tricolon": 0
+      },
+      "emotional_pct": 5.1,
+      "fk_grade": 3.6,
+      "gunning_fog": 7,
+      "i": 0,
+      "passive_pct": 0,
+      "positivity": 50,
+      "sentences": 8,
+      "speaking_sec": 36,
+      "we": 1,
+      "words": 79,
+      "you": 1
+    },
+    "culture": {
+      "positions": {
+        "collective": 0.7017543859649122,
+        "context": 0.5,
+        "directness": 0.3333333333333333,
+        "expressiveness": 0.5063291139240507,
+        "formality": 0.3846153846153846,
+        "persuading": 0.5,
+        "time": 0.25,
+        "trust": 0.75,
+        "uncertainty": 0.18987341772151897
+      },
+      "reader": {
+        "global": false,
+        "hofstede": {
+          "idv": 48,
+          "ivr": 26,
+          "lto": 51,
+          "mas": 56,
+          "pdi": 77,
+          "uai": 40
+        },
+        "id": "in",
+        "lewis": {
+          "linear": 0.15,
+          "multi": 0.5,
+          "reactive": 0.35
+        },
+        "name": "India",
+        "persuading": 0.5,
+        "region": "Asia-Pacific",
+        "targets": {
+          "collective": 0.52,
+          "context": 0.526,
+          "directness": 0.503125,
+          "expressiveness": 0.4415,
+          "formality": 0.6405000000000001,
+          "persuading": 0.5,
+          "time": 0.56,
+          "trust": 0.655,
+          "uncertainty": 0.4
+        },
+        "tolerance": 0.14
+      },
+      "writer": {
+        "global": false,
+        "hofstede": {
+          "idv": 89,
+          "ivr": 69,
+          "lto": 51,
+          "mas": 66,
+          "pdi": 35,
+          "uai": 35
+        },
+        "id": "gb",
+        "lewis": {
+          "linear": 0.55,
+          "multi": 0.2,
+          "reactive": 0.25
+        },
+        "name": "United Kingdom",
+        "persuading": 0.3,
+        "region": "Europe",
+        "targets": {
+          "collective": 0.10999999999999999,
+          "context": 0.242,
+          "directness": 0.26937500000000003,
+          "expressiveness": 0.286,
+          "formality": 0.32375,
+          "persuading": 0.3,
+          "time": 0.41000000000000003,
+          "trust": 0.305,
+          "uncertainty": 0.35
+        },
+        "tolerance": 0.14
+      }
+    },
+    "flags": [
+      {
+        "end": 355,
+        "id": "rf_controlling",
+        "note": "Commands and pressure that threaten the reader's sense of choice, which tends to trigger reactance.",
+        "quote": "Don't wait",
+        "severity": "low",
+        "source": "quick",
+        "start": 345
+      }
+    ],
+    "fns": {
+      "delight": 0,
+      "move": 100,
+      "steer": 0,
+      "teach": 0,
+      "unsettle": 0
+    },
+    "highlights": [
+      {
+        "appeal": "ethos",
+        "dimension": "eth_identification",
+        "end": 343,
+        "note": "Identification and shared identity",
+        "polarity": "strength",
+        "quote": "Together we can reach 40 more villages before the dry season.",
+        "source": "quick",
+        "start": 282
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_stakes",
+        "end": 85,
+        "note": "Stakes: pain and desire",
+        "polarity": "strength",
+        "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+        "source": "quick",
+        "start": 0
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 85,
+        "note": "Concreteness and vividness",
+        "polarity": "strength",
+        "quote": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+        "source": "quick",
+        "start": 0
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 130,
+        "note": "Concreteness and vividness",
+        "polarity": "strength",
+        "quote": "Some days she was too tired to go to school.",
+        "source": "quick",
+        "start": 86
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 173,
+        "note": "Concreteness and vividness",
+        "polarity": "strength",
+        "quote": "This year, the well in her village works.",
+        "source": "quick",
+        "start": 132
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 229,
+        "note": "Concreteness and vividness",
+        "polarity": "strength",
+        "quote": "She is in class every day, and she wants to be a nurse.",
+        "source": "quick",
+        "start": 174
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_identity",
+        "end": 343,
+        "note": "Identity, status and belonging",
+        "polarity": "strength",
+        "quote": "Together we can reach 40 more villages before the dry season.",
+        "source": "quick",
+        "start": 282
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_evidence",
+        "end": 281,
+        "note": "Specific claims and evidence",
+        "polarity": "strength",
+        "quote": "Your gift of £25 keeps a well running for a month.",
+        "source": "quick",
+        "start": 231
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_moment",
+        "end": 173,
+        "note": "Fit to the moment",
+        "polarity": "strength",
+        "quote": "This year, the well in her village works.",
+        "source": "quick",
+        "start": 132
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_moment",
+        "end": 416,
+        "note": "Fit to the moment",
+        "polarity": "strength",
+        "quote": "Donate today, and help another child like Maria hope again.",
+        "source": "quick",
+        "start": 357
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_efficacy",
+        "end": 343,
+        "note": "Hope and agency",
+        "polarity": "strength",
+        "quote": "Together we can reach 40 more villages before the dry season.",
+        "source": "quick",
+        "start": 282
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_integrity",
+        "end": 343,
+        "note": "Genuine, shared urgency",
+        "polarity": "strength",
+        "quote": "Together we can reach 40 more villages before the dry season.",
+        "source": "quick",
+        "start": 282
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 355,
+        "flag": "rf_controlling",
+        "note": "Controlling language: Commands and pressure that threaten the reader's sense of choice, which tends to trigger reactance.",
+        "polarity": "weakness",
+        "quote": "Don't wait",
+        "source": "quick",
+        "start": 345
+      }
+    ],
+    "levers": {
+      "lv_acceptance_latitude": {
+        "status": "unknown"
+      },
+      "lv_affirmation": {
+        "status": "unknown"
+      },
+      "lv_anaphora": {
+        "status": "unknown"
+      },
+      "lv_anchor": {
+        "status": "absent"
+      },
+      "lv_antithesis": {
+        "status": "absent"
+      },
+      "lv_argument_quality": {
+        "status": "unknown"
+      },
+      "lv_attention": {
+        "status": "unknown"
+      },
+      "lv_attractive": {
+        "status": "unknown"
+      },
+      "lv_authentic": {
+        "status": "unknown"
+      },
+      "lv_authority": {
+        "status": "absent"
+      },
+      "lv_autonomy": {
+        "status": "unknown"
+      },
+      "lv_brevity": {
+        "status": "unknown"
+      },
+      "lv_character": {
+        "status": "unknown"
+      },
+      "lv_choice": {
+        "status": "absent"
+      },
+      "lv_cognitive_load": {
+        "status": "unknown"
+      },
+      "lv_commitment": {
+        "status": "absent"
+      },
+      "lv_confirmation": {
+        "status": "unknown"
+      },
+      "lv_costly_signal": {
+        "status": "unknown"
+      },
+      "lv_counter_evidence": {
+        "status": "absent"
+      },
+      "lv_courage": {
+        "status": "unknown"
+      },
+      "lv_credibility": {
+        "status": "unknown"
+      },
+      "lv_easy": {
+        "status": "absent"
+      },
+      "lv_efficacy": {
+        "status": "unknown"
+      },
+      "lv_emotion_range": {
+        "status": "unknown"
+      },
+      "lv_endowment": {
+        "status": "unknown"
+      },
+      "lv_equity": {
+        "status": "unknown"
+      },
+      "lv_flourishing": {
+        "status": "unknown"
+      },
+      "lv_fluency": {
+        "status": "unknown"
+      },
+      "lv_framing": {
+        "status": "absent"
+      },
+      "lv_free": {
+        "status": "absent"
+      },
+      "lv_freedom": {
+        "note": "Controlling language",
+        "quote": "Don't wait",
+        "status": "misused"
+      },
+      "lv_identity_consistent": {
+        "status": "unknown"
+      },
+      "lv_imagery": {
+        "status": "unknown"
+      },
+      "lv_ingroup": {
+        "quote": "Together we can reach 40 more villages before the dry season.",
+        "status": "present"
+      },
+      "lv_intention_obstacle": {
+        "status": "unknown"
+      },
+      "lv_intimacy": {
+        "status": "unknown"
+      },
+      "lv_labelling": {
+        "status": "absent"
+      },
+      "lv_levity": {
+        "status": "unknown"
+      },
+      "lv_liking": {
+        "status": "absent"
+      },
+      "lv_low_self_orientation": {
+        "quote": "Your gift of £25 keeps a well running for a month.",
+        "status": "present"
+      },
+      "lv_motivation": {
+        "status": "unknown"
+      },
+      "lv_motive_honesty": {
+        "status": "unknown"
+      },
+      "lv_no_status_threat": {
+        "status": "unknown"
+      },
+      "lv_peripheral_cues": {
+        "status": "unknown"
+      },
+      "lv_permission": {
+        "status": "unknown"
+      },
+      "lv_plu": {
+        "status": "unknown"
+      },
+      "lv_positive_balance": {
+        "status": "unknown"
+      },
+      "lv_presuasion": {
+        "status": "unknown"
+      },
+      "lv_promise_clock": {
+        "status": "unknown"
+      },
+      "lv_prompt": {
+        "status": "absent"
+      },
+      "lv_reciprocity": {
+        "quote": "Your gift of £25 keeps a well running for a month.",
+        "status": "present"
+      },
+      "lv_reframe": {
+        "status": "unknown"
+      },
+      "lv_refutation": {
+        "status": "absent"
+      },
+      "lv_reg_fit": {
+        "status": "unknown"
+      },
+      "lv_reliability": {
+        "status": "unknown"
+      },
+      "lv_remarkable": {
+        "status": "unknown"
+      },
+      "lv_respect": {
+        "status": "unknown"
+      },
+      "lv_revisable": {
+        "status": "absent"
+      },
+      "lv_rhetorical_q": {
+        "status": "absent"
+      },
+      "lv_scarcity": {
+        "status": "absent"
+      },
+      "lv_shape": {
+        "status": "unknown"
+      },
+      "lv_social": {
+        "status": "unknown"
+      },
+      "lv_social_proof": {
+        "status": "absent"
+      },
+      "lv_social_responsibility": {
+        "status": "unknown"
+      },
+      "lv_status": {
+        "status": "unknown"
+      },
+      "lv_svm": {
+        "status": "absent"
+      },
+      "lv_tactic_visibility": {
+        "status": "unknown"
+      },
+      "lv_tension": {
+        "status": "unknown"
+      },
+      "lv_timely": {
+        "status": "unknown"
+      },
+      "lv_transformation": {
+        "status": "unknown"
+      },
+      "lv_tricolon": {
+        "status": "absent"
+      },
+      "lv_truthful": {
+        "status": "unknown"
+      },
+      "lv_turn": {
+        "status": "unknown"
+      },
+      "lv_uncertainty": {
+        "status": "unknown"
+      },
+      "lv_unity": {
+        "quote": "Together we can reach 40 more villages before the dry season.",
+        "status": "present"
+      },
+      "lv_values_match": {
+        "status": "unknown"
+      },
+      "lv_warmth": {
+        "status": "unknown"
+      },
+      "lv_who_benefits": {
+        "status": "absent"
+      }
+    },
+    "notes": {
+      "aud_hook": "Opening line: 14 words.",
+      "aud_inclusivity": "No exclusionary terms found.",
+      "aud_knowledge": "No undefined acronyms found.",
+      "aud_suitability": "Reading level Fog 7 for a novice reader (aim 9 or under).",
+      "craft_claims": "No obviously unsupported claims found.",
+      "craft_clarity": "Fog 7 (aim under 9), 0% passive, 0 long sentences.",
+      "craft_cohesion": "0% of sentences use a linking word; 0% pick up a word from the sentence before.",
+      "craft_length": "79 words; typical range for this content type is 150 to 900.",
+      "craft_structure": "4 paragraphs, about 2.0 sentences each.",
+      "craft_tone": "Formality 38 of 100; this reader and form expect about 57.",
+      "cul_collective": "Text 70, reader expects about 52 (0 = individual, 100 = group).",
+      "cul_context": "Text 50, reader expects about 53 (0 = explicit, 100 = implicit).",
+      "cul_directness": "Text 33, reader expects about 50 (0 = direct, 100 = indirect).",
+      "cul_expressiveness": "Text 51, reader expects about 44 (0 = restrained, 100 = expressive).",
+      "cul_formality": "Text 38, reader expects about 64 (0 = informal, 100 = formal).",
+      "cul_idiom": "No culture-bound idioms found.",
+      "cul_persuading": "Text 50, reader expects about 50 (0 = applications-first, 100 = principles-first).",
+      "cul_time": "Text 25, reader expects about 56 (0 = deadline, 100 = long-term).",
+      "cul_trust": "Text 75, reader expects about 66 (0 = task, 100 = relationship).",
+      "cul_uncertainty": "Text 19, reader expects about 40 (0 = brief, 100 = detailed).",
+      "eth_borrowed": "0 supporting signals, 0 weakening.",
+      "eth_competence": "0 supporting signals, 0 weakening.",
+      "eth_goodwill": "About the reader 1 times, about the author 1 times.",
+      "eth_identification": "1 supporting signal.",
+      "eth_integrity": "0 supporting signals, 0 weakening.",
+      "eth_polish": "0 supporting signals, 0 weakening.",
+      "kai_call": "No clear call to action found.",
+      "kai_efficacy": "1 supporting signal, 0 weakening.",
+      "kai_integrity": "1 supporting signal, 0 weakening.",
+      "kai_moment": "2 supporting signals, 0 weakening.",
+      "kai_stakes": "0 supporting signals.",
+      "lens_dialogue": "0 supporting signals, 0 weakening.",
+      "lens_mythos": "0 supporting signals.",
+      "lens_prepon": "Gunning Fog 7 (aim under 12 for executives); average sentence 10 words.",
+      "lens_telos": "0 supporting signals.",
+      "log_clarity": "Average sentence 10 words; 0 over 30 words.",
+      "log_comparison": "0 supporting signals.",
+      "log_evidence": "1 supporting signal, 0 weakening.",
+      "log_mechanism": "0 supporting signals.",
+      "log_objections": "0 supporting signals.",
+      "log_structure": "0 supporting signals.",
+      "pat_empathy": "0 supporting signals, 0 weakening.",
+      "pat_identity": "1 supporting signal.",
+      "pat_stakes": "1 supporting signal.",
+      "pat_story": "0 supporting signals.",
+      "pat_surprise": "0 supporting signals, 0 weakening.",
+      "pat_vividness": "5 supporting signals, 0 weakening.",
+      "undefined": " Lowered by a red flag."
+    },
+    "pvScores": {
+      "pv_behaviour_design": 0,
+      "pv_behavioural_econ": 0,
+      "pv_cialdini": 1,
+      "pv_critical": 0,
+      "pv_dual_process": null,
+      "pv_ethics": null,
+      "pv_godin": 0,
+      "pv_identity_values": 2,
+      "pv_motivation": null,
+      "pv_narrative": null,
+      "pv_resistance": 0,
+      "pv_rhetoric": 0,
+      "pv_trust": 2
+    },
+    "scores": {
+      "aud_hook": 2,
+      "aud_inclusivity": 4,
+      "aud_knowledge": 4,
+      "aud_suitability": 3,
+      "craft_claims": 4,
+      "craft_clarity": 4,
+      "craft_cohesion": 1,
+      "craft_length": 2,
+      "craft_structure": 2,
+      "craft_tone": 4,
+      "cul_collective": 3,
+      "cul_context": 4,
+      "cul_directness": 4,
+      "cul_expressiveness": 4,
+      "cul_formality": 2,
+      "cul_idiom": 4,
+      "cul_persuading": 4,
+      "cul_time": 2,
+      "cul_trust": 4,
+      "cul_uncertainty": 3,
+      "eth_borrowed": 0,
+      "eth_competence": 1,
+      "eth_goodwill": 2,
+      "eth_identification": 3,
+      "eth_integrity": 2,
+      "eth_polish": 3,
+      "kai_call": 0,
+      "kai_efficacy": 3,
+      "kai_integrity": 3,
+      "kai_moment": 4,
+      "kai_stakes": 0,
+      "lens_dialogue": 1,
+      "lens_mythos": 0,
+      "lens_prepon": 4,
+      "lens_telos": 1,
+      "log_clarity": 4,
+      "log_comparison": 1,
+      "log_evidence": 3,
+      "log_mechanism": 1,
+      "log_objections": 0,
+      "log_structure": 2,
+      "pat_empathy": 1,
+      "pat_identity": 3,
+      "pat_stakes": 2,
+      "pat_story": 0,
+      "pat_surprise": 1,
+      "pat_vividness": 4,
+      "undefined": null
+    },
+    "sentences": [
+      {
+        "end": 85,
+        "start": 0,
+        "text": "Last winter, Maria walked four kilometres every morning to carry water to her family.",
+        "words": 14
+      },
+      {
+        "end": 130,
+        "start": 86,
+        "text": "Some days she was too tired to go to school.",
+        "words": 10
+      },
+      {
+        "end": 173,
+        "start": 132,
+        "text": "This year, the well in her village works.",
+        "words": 8
+      },
+      {
+        "end": 229,
+        "start": 174,
+        "text": "She is in class every day, and she wants to be a nurse.",
+        "words": 13
+      },
+      {
+        "end": 281,
+        "start": 231,
+        "text": "Your gift of £25 keeps a well running for a month.",
+        "words": 11
+      },
+      {
+        "end": 343,
+        "start": 282,
+        "text": "Together we can reach 40 more villages before the dry season.",
+        "words": 11
+      },
+      {
+        "end": 356,
+        "start": 345,
+        "text": "Don't wait.",
+        "words": 2
+      },
+      {
+        "end": 416,
+        "start": 357,
+        "text": "Donate today, and help another child like Maria hope again.",
+        "words": 10
+      }
+    ],
+    "words": 79
+  },
+  "source": "corpus"
+}

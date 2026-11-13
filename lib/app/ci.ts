@@ -130,6 +130,16 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'system, the database and process.exit, run by hand. The commands ' +
       'themselves are in cli.ts, which stays gated and has its own tests.',
   },
+  {
+    // HowDoesThisLand (t-12), by name: canonical.ts, corpus.ts and
+    // synthetic.ts beside it stay gated.
+    pattern: 'scripts/app/baseline/record.ts',
+    reason:
+      'a tsx entry point run by hand to re-record the engine baseline: it ' +
+      'copies prototype/ to a temp directory, imports it from there and writes ' +
+      'tests/fixtures/app/engine-baseline/. Nothing imports it. Its logic is ' +
+      'in the three modules beside it, which have their own tests.',
+  },
 ];
 
 /** One test that must run regardless of what the module graph says. */
@@ -188,7 +198,25 @@ export interface AppAlwaysRunTest {
  * ];
  * ```
  */
-export const appAlwaysRunTests: AppAlwaysRunTest[] = [];
+export const appAlwaysRunTests: AppAlwaysRunTest[] = [
+  {
+    // HowDoesThisLand (t-12).
+    path: 'tests/unit/lib/app/prototype-guard.test.ts',
+    reason:
+      'walks the source tree for import specifiers that resolve into ' +
+      'prototype/. The file that adds such an import is, by definition, one ' +
+      'no import chain connects to this test.',
+  },
+  {
+    // HowDoesThisLand (t-12).
+    path: 'tests/unit/scripts/app/baseline/fixtures.test.ts',
+    reason:
+      'reads prototype/ and tests/fixtures/app/engine-baseline/ off disk to ' +
+      'check the recorded sha256 values against the engine, model and eval ' +
+      'set. Nothing imports either, so an edit to prototype/src/engine.js ' +
+      'reaches this test through no import chain.',
+  },
+];
 
 /**
  * One source file allowed to read `AiWorkflowExecution`, `AiConversation` or
