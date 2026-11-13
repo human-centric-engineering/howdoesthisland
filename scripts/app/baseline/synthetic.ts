@@ -154,14 +154,13 @@ export function syntheticJudgeOutputs(
 ): Record<SyntheticGroup, Record<string, unknown>> {
   const S = sentences.length ? sentences : ['(empty)'];
   const quotes = highlightQuotes(S);
-  const out = {} as Record<SyntheticGroup, Record<string, unknown>>;
 
-  for (const group of SYNTHETIC_GROUPS) {
+  const one = (group: SyntheticGroup): Record<string, unknown> => {
     const key = `${caseId}|${group}`;
 
     if (group === 'influence') {
       const dims = model.dimensions;
-      out[group] = {
+      return {
         appeal: 'influence',
         summary: `Synthetic influence summary for ${caseId}.`,
         perspectives: [
@@ -187,7 +186,6 @@ export function syntheticJudgeOutputs(
         ],
         recommendations: recommendations(model, dims, key),
       };
-      continue;
     }
 
     const dims = dimensionsOf(model, group);
@@ -242,7 +240,18 @@ export function syntheticJudgeOutputs(
         ])
       );
     }
-    out[group] = output;
-  }
-  return out;
+    return output;
+  };
+
+  return {
+    ethos: one('ethos'),
+    pathos: one('pathos'),
+    logos: one('logos'),
+    kairos: one('kairos'),
+    lenses: one('lenses'),
+    craft: one('craft'),
+    audience: one('audience'),
+    culture: one('culture'),
+    influence: one('influence'),
+  };
 }
