@@ -33,9 +33,19 @@ describe('mainContent — where it reads from', () => {
     expect(r.text).toContain('## Why');
     expect(r.text).toContain('Section note');
     expect(r.text).toContain('Start free trial');
-    for (const gone of ['Acme', 'Pricing', 'Email', 'Related posts', '© Acme Ltd']) {
+    expect(r.text).toContain('Email');
+    for (const gone of ['Acme', 'Pricing', 'Related posts', '© Acme Ltd']) {
       expect(r.text).not.toContain(gone);
     }
+  });
+
+  it('keeps a hero header inside [role=main]', () => {
+    const r = mainContent(
+      page(
+        '<header>Site</header><div role="main"><header><h1>Ship faster</h1></header><p>Body.</p></div>'
+      )
+    );
+    expect(r.text).toBe('# Ship faster\n\nBody.');
   });
 
   it('reads [role=main] as <main>', () => {
@@ -116,9 +126,29 @@ describe('mainContent — forms', () => {
     expect(r.text).toBe('# Bin collection days\n\nBins are collected weekly.');
   });
 
-  it('removes a form that is only a form', () => {
+  it('keeps a body-wide form with no landmark or <h1>', () => {
     const r = mainContent(
-      page('<main><p>Read this.</p><form><label>Subscribe</label><input></form></main>')
+      page(
+        '<form id="aspnetForm"><div class="content"><h2>Opening hours</h2><p>9 to 5.</p></div></form>'
+      )
+    );
+    expect(r.source).toBe('body');
+    expect(r.text).toBe('## Opening hours\n\n9 to 5.');
+  });
+
+  it('keeps a call-to-action form inside <main>', () => {
+    const r = mainContent(
+      page(
+        '<main><p>Read this.</p><form><label>Get early access</label><input><button>Join the waitlist</button></form></main>'
+      )
+    );
+    expect(r.text).toContain('Get early access');
+    expect(r.text).toContain('Join the waitlist');
+  });
+
+  it('removes a search form by its role', () => {
+    const r = mainContent(
+      page('<main><p>Read this.</p><form role="search"><label>Search</label><input></form></main>')
     );
     expect(r.text).toBe('Read this.');
   });

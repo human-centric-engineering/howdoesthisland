@@ -38,7 +38,7 @@ import {
   type IntakeLimits,
 } from '@/lib/app/intake/extract-text';
 import { IntakeError, IntakeErrorCodes, unreadableFile } from '@/lib/app/intake/errors';
-import { mainContent, type MainContent } from '@/lib/app/intake/main-content';
+import { charsetOf, mainContent, type MainContent } from '@/lib/app/intake/main-content';
 import { logger } from '@/lib/logging';
 import { loggableUrl } from '@/lib/logging/redact-path';
 import { createSafeDispatcher, isUnsafeAddressRefusal } from '@/lib/security/safe-dispatcher';
@@ -111,7 +111,7 @@ export async function fetchPage(url: string, options: FetchPageOptions = {}): Pr
       logger.warn('Intake page fetch timed out', { url: loggableUrl(at.url) });
       throw new IntakeError(
         IntakeErrorCodes.FETCH_TIMEOUT,
-        `That page took longer than ${Math.round((options.timeoutMs ?? FETCH_TIMEOUT_MS) / 1000)} seconds to load.`
+        `That page took longer than ${duration(options.timeoutMs ?? FETCH_TIMEOUT_MS)} to load.`
       );
     }
     // A name that resolves inside the network reads the same as a name that
@@ -213,7 +213,8 @@ async function readPage(
 
   const contentType = response.headers.get('content-type') ?? '';
   const mediaType = contentType.split(';')[0].trim().toLowerCase();
-  const type = TYPES[mediaType];
+  // Own keys only: `constructor` is not a media type.
+  const type = Object.hasOwn(TYPES, mediaType) ? TYPES[mediaType] : undefined;
   if (!type) {
     await discard(response.body);
     throw new IntakeError(
@@ -275,7 +276,7 @@ async function discard(body: { cancel(): Promise<void> } | null | undefined): Pr
  * leaves the bytes as they are.
  */
 function asUtf8(bytes: Buffer, contentType: string): Buffer {
-  const charset = /;\s*charset\s*=\s*"?([\w.:-]+)"?/i.exec(contentType)?.[1];
+  const charset = charsetOf(contentType);
   if (!charset || /^utf-?8$/i.test(charset)) return bytes;
   let decoder: TextDecoder;
   try {
@@ -284,6 +285,12 @@ function asUtf8(bytes: Buffer, contentType: string): Buffer {
     return bytes;
   }
   return Buffer.from(decoder.decode(bytes), 'utf8');
+}
+
+function duration(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  const seconds = Math.round(ms / 1000);
+  return `${seconds} second${seconds === 1 ? '' : 's'}`;
 }
 
 function tooLarge(maxBytes: number): IntakeError {

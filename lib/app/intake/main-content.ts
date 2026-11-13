@@ -13,7 +13,10 @@
  * `<main><header>`, and the call to action is a button; both are what an
  * assessment of a landing page reads. Here `header` and `footer` go only when
  * they are the page's banner or footer (the ARIA rule: not inside `article`,
- * `aside`, `main`, `nav` or `section`), and buttons stay.
+ * `aside`, `main`, `nav` or `section`), and buttons and forms stay. A form
+ * is kept because a sign-up form is often the call to action, and ASP.NET
+ * WebForms wraps the whole page in one; a search form goes by its role, and
+ * inputs carry no text to read.
  *
  * jsdom does not run scripts or fetch subresources here (no `runScripts`, no
  * `resources`), so parsing a hostile page is safe. It is given the bytes and
@@ -35,13 +38,7 @@ const ALWAYS_REMOVED =
  * not the site. `aside` and `nav` complete the ARIA rule, though both are gone
  * by the time this is read.
  */
-const SECTIONING = 'article, aside, main, nav, section';
-
-/**
- * A form holding any of these is the page's wrapper, not a form: ASP.NET
- * WebForms puts the whole body in one `<form>`. Removing it would remove the page.
- */
-const PAGE_CONTENT = 'main, [role=main], article, h1';
+const SECTIONING = 'article, aside, main, nav, section, [role=main]';
 
 export interface MainContent {
   /** The main content as text, block structure kept, headings as Markdown. */
@@ -68,9 +65,6 @@ export function mainContent(html: Buffer | string, contentType = 'text/html'): M
     cleanInline(doc.querySelector('h1')?.textContent);
 
   for (const el of Array.from(doc.querySelectorAll(ALWAYS_REMOVED))) el.remove();
-  for (const el of Array.from(doc.querySelectorAll('form'))) {
-    if (!el.querySelector(PAGE_CONTENT)) el.remove();
-  }
   for (const el of Array.from(doc.querySelectorAll('header, footer'))) {
     if (!el.parentElement?.closest(SECTIONING)) el.remove();
   }
@@ -95,11 +89,16 @@ export function mainContent(html: Buffer | string, contentType = 'text/html'): M
  * declares nothing. So a page that declares nothing is read as UTF-8.
  */
 function htmlContentType(contentType: string, html: Buffer | string): string {
-  const charset = /;\s*charset\s*=\s*"?([\w.:-]+)"?/i.exec(contentType)?.[1];
+  const charset = charsetOf(contentType);
   if (charset) return `text/html; charset=${charset}`;
   if (typeof html === 'string') return 'text/html';
   // Latin-1 maps each byte to one character, so the prescan cannot fail to decode.
   const head = html.subarray(0, 1024).toString('latin1');
   // A BOM needs no check: it outranks the charset given here.
   return /<meta[^>]+charset/i.test(head) ? 'text/html' : 'text/html; charset=utf-8';
+}
+
+/** The `charset` parameter of a `Content-Type`, if it has one. */
+export function charsetOf(contentType: string): string | undefined {
+  return /;\s*charset\s*=\s*"?([\w.:-]+)"?/i.exec(contentType)?.[1];
 }

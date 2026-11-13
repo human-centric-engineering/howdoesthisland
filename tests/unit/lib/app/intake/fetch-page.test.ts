@@ -136,6 +136,9 @@ beforeAll(async () => {
     } else if (path === '/nowhere-redirect') {
       res.writeHead(302);
       res.end();
+    } else if (path === '/odd-type') {
+      res.writeHead(200, { 'Content-Type': 'constructor' });
+      res.end('not a type');
     } else if (path === '/untyped') {
       res.end('no content type at all');
     } else if (path === '/missing') {
@@ -378,16 +381,18 @@ describe('fetchPage — refusals', () => {
 
   it('times out a body that stops arriving', async () => {
     const started = Date.now();
-    await expectRefused(
+    const err = await expectRefused(
       fetchPage(site('/stall'), { ...viaTest, timeoutMs: 300 }),
       IntakeErrorCodes.FETCH_TIMEOUT
     );
+    expect(err.message).toBe('That page took longer than 300 ms to load.');
     expect(Date.now() - started).toBeLessThan(3000);
   });
 
   it.each([
     ['/logo', 'image/png'],
     ['/untyped', null],
+    ['/odd-type', 'constructor'],
   ])('refuses %s (content type %s)', async (path, contentType) => {
     const err = await expectRefused(
       fetchPage(site(path), viaTest),
