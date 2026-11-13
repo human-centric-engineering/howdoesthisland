@@ -47,7 +47,7 @@ export interface MainContent {
  * @param contentType the response's `Content-Type`, for its charset
  */
 export function mainContent(html: Buffer | string, contentType = 'text/html'): MainContent {
-  const dom = new JSDOM(html, { contentType: htmlContentType(contentType) });
+  const dom = new JSDOM(html, { contentType: htmlContentType(contentType, html) });
   const { document: doc } = dom.window;
 
   const title =
@@ -69,11 +69,22 @@ export function mainContent(html: Buffer | string, contentType = 'text/html'): M
 }
 
 /**
- * jsdom accepts only an HTML or XML type here, and throws on anything else.
- * The fetcher calls this for `text/html` and `application/xhtml+xml`; XHTML is
- * read as HTML (served pages are rarely well-formed XML), keeping its charset.
+ * The type jsdom reads the page as. jsdom accepts only an HTML or XML type
+ * here, and throws on anything else. The fetcher calls this for `text/html`
+ * and `application/xhtml+xml`; XHTML is read as HTML (served pages are rarely
+ * well-formed XML), keeping its charset.
+ *
+ * jsdom finds the encoding the way a browser does: a BOM, then this charset,
+ * then a `<meta charset>` in the first 1,024 bytes. With none of them it falls back to
+ * windows-1252, which garbles every non-ASCII character of a UTF-8 page that
+ * declares nothing. So a page that declares nothing is read as UTF-8.
  */
-function htmlContentType(contentType: string): string {
+function htmlContentType(contentType: string, html: Buffer | string): string {
   const charset = /;\s*charset\s*=\s*"?([\w.:-]+)"?/i.exec(contentType)?.[1];
-  return charset ? `text/html; charset=${charset}` : 'text/html';
+  if (charset) return `text/html; charset=${charset}`;
+  if (typeof html === 'string') return 'text/html';
+  // Latin-1 maps each byte to one character, so the prescan cannot fail to decode.
+  const head = html.subarray(0, 1024).toString('latin1');
+  // A BOM needs no check: it outranks the charset given here.
+  return /<meta[^>]+charset/i.test(head) ? 'text/html' : 'text/html; charset=utf-8';
 }

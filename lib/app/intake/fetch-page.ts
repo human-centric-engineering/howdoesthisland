@@ -64,6 +64,11 @@ const TYPES: Record<string, { ext: string; html?: true }> = {
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': { ext: '.pptx' },
 };
 
+const REQUEST_HEADERS = {
+  'User-Agent': 'HowDoesThisLand/1.0 (content assessment)',
+  Accept: `${Object.keys(TYPES).join(', ')}, */*;q=0.1`,
+};
+
 export interface FetchPageOptions {
   /** Overrides for the intake limits; `maxBytes` also caps the download. */
   limits?: Partial<IntakeLimits>;
@@ -146,21 +151,15 @@ async function fetchFollowingRedirects(
   for (let hop = 0; ; hop++) {
     assertFetchable(current, hop);
 
-    const init: RequestInit & { dispatcher: Agent } = {
-      redirect: 'manual',
-      signal,
-      dispatcher,
-      headers: {
-        'User-Agent': 'HowDoesThisLand/1.0 (content assessment)',
-        Accept: `${Object.keys(TYPES).join(', ')}, */*;q=0.1`,
-      },
-    };
-    const response = await fetch(current, init);
+    const response = await fetch(
+      current,
+      withDispatcher({ redirect: 'manual', signal, headers: REQUEST_HEADERS }, dispatcher)
+    );
 
     if (!REDIRECT_STATUSES.has(response.status)) return { response, url: current };
 
     // Release the socket: an unread body holds it out of the pool.
-    await response.body?.cancel().catch(() => {});
+    await discard(response.body);
     const location = response.headers.get('location');
     if (!location) return { response, url: current };
     if (hop >= MAX_REDIRECTS) {
@@ -188,7 +187,7 @@ async function readPage(
   signal: AbortSignal
 ): Promise<FetchedPage> {
   if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
+    await discard(response.body);
     logger.warn('Intake page fetch: not 2xx', { url: loggableUrl(url), status: response.status });
     throw new IntakeError(
       IntakeErrorCodes.FETCH_FAILED,
@@ -201,7 +200,7 @@ async function readPage(
   const mediaType = contentType.split(';')[0].trim().toLowerCase();
   const type = TYPES[mediaType];
   if (!type) {
-    await response.body?.cancel().catch(() => {});
+    await discard(response.body);
     throw new IntakeError(
       IntakeErrorCodes.UNSUPPORTED_TYPE,
       `We can't read ${mediaType ? `${mediaType} content` : 'a page that does not say what it is'}. Link to a web page, PDF, Word document, PowerPoint deck, Markdown or plain text file.`,
@@ -211,7 +210,7 @@ async function readPage(
 
   const declared = Number(response.headers.get('content-length'));
   if (declared > limits.maxBytes) {
-    await response.body?.cancel().catch(() => {});
+    await discard(response.body);
     throw tooLarge(limits.maxBytes);
   }
   const bytes = await readCapped(response.body, limits.maxBytes, signal);
@@ -226,6 +225,26 @@ async function readPage(
 
   const read = await extractText(bytes, `${nameFrom(url)}${type.ext}`, limits);
   return { ...read, url };
+}
+
+/**
+ * `init` with undici's `dispatcher` option, which Node's `fetch` honours and
+ * `RequestInit` does not declare.
+ */
+function withDispatcher<T extends RequestInit>(
+  init: T,
+  dispatcher: Agent
+): T & { dispatcher: Agent } {
+  return { ...init, dispatcher };
+}
+
+/** Cancel a body we will not read. One that already ended or errored has nothing to release. */
+async function discard(body: { cancel(): Promise<void> } | null | undefined): Promise<void> {
+  try {
+    await body?.cancel();
+  } catch {
+    // Already closed.
+  }
 }
 
 function tooLarge(maxBytes: number): IntakeError {
@@ -248,7 +267,7 @@ async function readCapped(
 ): Promise<Buffer> {
   if (!body) return Buffer.alloc(0);
   const reader = body.getReader();
-  const onAbort = (): void => void reader.cancel().catch(() => {});
+  const onAbort = (): void => void discard(reader);
   signal.addEventListener('abort', onAbort, { once: true });
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -259,7 +278,7 @@ async function readCapped(
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
+        await discard(reader);
         throw tooLarge(maxBytes);
       }
       chunks.push(value);
