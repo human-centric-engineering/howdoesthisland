@@ -91,6 +91,37 @@ describe('mainContent — title', () => {
     expect(mainContent(page('<nav><h1>Inside nav</h1></nav>')).title).toBe('Inside nav');
     expect(mainContent(page('<p>No headings</p>')).title).toBe('');
   });
+
+  it("does not take an inline SVG icon's <title> as the page's", () => {
+    const r = mainContent(
+      page(
+        '<svg><title>Menu icon</title></svg><h1>Pricing</h1>',
+        '<meta property="og:title" content="Acme pricing">'
+      )
+    );
+    expect(r.title).toBe('Acme pricing');
+  });
+});
+
+describe('mainContent — forms', () => {
+  it('keeps a page whose whole body is one <form> (ASP.NET WebForms)', () => {
+    const r = mainContent(
+      page(`
+        <form id="aspnetForm" method="post">
+          <nav><a href="/">Home</a></nav>
+          <main><h1>Bin collection days</h1><p>Bins are collected weekly.</p></main>
+        </form>`)
+    );
+    expect(r.source).toBe('main');
+    expect(r.text).toBe('# Bin collection days\n\nBins are collected weekly.');
+  });
+
+  it('removes a form that is only a form', () => {
+    const r = mainContent(
+      page('<main><p>Read this.</p><form><label>Subscribe</label><input></form></main>')
+    );
+    expect(r.text).toBe('Read this.');
+  });
 });
 
 describe('mainContent — encoding', () => {

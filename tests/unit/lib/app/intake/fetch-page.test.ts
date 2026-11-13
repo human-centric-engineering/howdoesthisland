@@ -130,6 +130,12 @@ beforeAll(async () => {
     } else if (path === '/logo') {
       res.writeHead(200, { 'Content-Type': 'image/png' });
       res.end(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    } else if (path === '/notes-latin1') {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=iso-8859-1' });
+      res.end(Buffer.from('Café crème, £5', 'latin1'));
+    } else if (path === '/nowhere-redirect') {
+      res.writeHead(302);
+      res.end();
     } else if (path === '/untyped') {
       res.end('no content type at all');
     } else if (path === '/missing') {
@@ -256,6 +262,11 @@ describe('fetchPage — what it reads', () => {
     expect(page.text).toBe(fixture('feedback.txt').toString('utf8').trim().replace(/\r\n?/g, '\n'));
   });
 
+  it('decodes plain text in the charset its Content-Type declares', async () => {
+    const page = await fetchPage(site('/notes-latin1'), viaTest);
+    expect(page.text).toBe('Café crème, £5');
+  });
+
   it(`follows up to ${MAX_REDIRECTS} redirects, and reports where it landed`, async () => {
     const page = await fetchPage(site('/hop/1'), viaTest);
 
@@ -320,7 +331,8 @@ describe('fetchPage — refusals', () => {
 
   it('refuses a redirect to a hostname that resolves inside the network', async () => {
     await expectRefused(fetchPage(site('/to-intranet'), viaTest), IntakeErrorCodes.FETCH_FAILED);
-    warnedWith({ reason: 'unsafe-address' });
+    // Logged against the hop that was refused, not the public URL asked for.
+    warnedWith({ reason: 'unsafe-address', url: 'http://intranet.t16.test/' });
   });
 
   it(`refuses more than ${MAX_REDIRECTS} redirects`, async () => {
@@ -333,13 +345,23 @@ describe('fetchPage — refusals', () => {
     expect(hits).toHaveLength(MAX_REDIRECTS + 1);
   });
 
+  it('refuses a redirect that does not say where to', async () => {
+    const err = await expectRefused(
+      fetchPage(site('/nowhere-redirect'), viaTest),
+      IntakeErrorCodes.FETCH_FAILED
+    );
+    expect(err.message).toBe('That page redirects without saying where to.');
+    expect(err.details).toEqual({ status: 302 });
+  });
+
   it('stops reading an oversize body mid-stream, not after buffering it', async () => {
     const maxBytes = 64 * 1024;
-    await expectRefused(
+    const err = await expectRefused(
       fetchPage(site('/huge'), { ...viaTest, limits: { maxBytes } }),
       IntakeErrorCodes.TOO_LARGE,
       413
     );
+    expect(err.message).toBe('That page is larger than 64 KB, the largest we read.');
     // The connection was dropped while the server still had most of 50 MB to send.
     await huge.closed;
     expect(huge.finished).toBe(false);

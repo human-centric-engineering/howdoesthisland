@@ -37,8 +37,8 @@ import {
   type ExtractedText,
   type IntakeLimits,
 } from '@/lib/app/intake/extract-text';
-import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
-import { mainContent } from '@/lib/app/intake/main-content';
+import { IntakeError, IntakeErrorCodes, unreadableFile } from '@/lib/app/intake/errors';
+import { mainContent, type MainContent } from '@/lib/app/intake/main-content';
 import { logger } from '@/lib/logging';
 import { loggableUrl } from '@/lib/logging/redact-path';
 import { createSafeDispatcher, isUnsafeAddressRefusal } from '@/lib/security/safe-dispatcher';
@@ -53,13 +53,13 @@ export const MAX_REDIRECTS = 5;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /** What a response's media type is read as, and the extension `extractText()` reads it by. */
-const TYPES: Record<string, { ext: string; html?: true }> = {
+const TYPES: Record<string, { ext: string; html?: true; text?: true }> = {
   'text/html': { ext: '.html', html: true },
   'application/xhtml+xml': { ext: '.html', html: true },
   'application/pdf': { ext: '.pdf' },
-  'text/plain': { ext: '.txt' },
-  'text/markdown': { ext: '.md' },
-  'text/x-markdown': { ext: '.md' },
+  'text/plain': { ext: '.txt', text: true },
+  'text/markdown': { ext: '.md', text: true },
+  'text/x-markdown': { ext: '.md', text: true },
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { ext: '.docx' },
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': { ext: '.pptx' },
 };
@@ -100,15 +100,15 @@ export async function fetchPage(url: string, options: FetchPageOptions = {}): Pr
   const signal = AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS);
   const dispatcher = options.dispatcher ?? (safeDispatcher ??= createSafeDispatcher());
 
-  let finalUrl = url;
+  // The hop being fetched, so a failure is logged against the URL that failed.
+  const at = { url };
   try {
-    const fetched = await fetchFollowingRedirects(url, dispatcher, signal);
-    finalUrl = fetched.url;
+    const fetched = await fetchFollowingRedirects(url, dispatcher, signal, at);
     return await readPage(fetched.response, fetched.url, limits, signal);
   } catch (err) {
     if (err instanceof IntakeError) throw err;
     if (signal.aborted) {
-      logger.warn('Intake page fetch timed out', { url: loggableUrl(finalUrl) });
+      logger.warn('Intake page fetch timed out', { url: loggableUrl(at.url) });
       throw new IntakeError(
         IntakeErrorCodes.FETCH_TIMEOUT,
         `That page took longer than ${Math.round((options.timeoutMs ?? FETCH_TIMEOUT_MS) / 1000)} seconds to load.`
@@ -118,7 +118,7 @@ export async function fetchPage(url: string, options: FetchPageOptions = {}): Pr
     // does not resolve, so the answer cannot be used to map the network. The
     // log keeps which it was.
     logger.warn('Intake page fetch failed', {
-      url: loggableUrl(finalUrl),
+      url: loggableUrl(at.url),
       reason: isUnsafeAddressRefusal(err) ? 'unsafe-address' : 'network',
       error: err instanceof Error ? err.message : String(err),
     });
@@ -145,10 +145,12 @@ function assertFetchable(url: string, hop: number): void {
 async function fetchFollowingRedirects(
   url: string,
   dispatcher: Agent,
-  signal: AbortSignal
+  signal: AbortSignal,
+  at: { url: string }
 ): Promise<{ response: Response; url: string }> {
   let current = url;
   for (let hop = 0; ; hop++) {
+    at.url = current;
     assertFetchable(current, hop);
 
     const response = await fetch(
@@ -161,9 +163,22 @@ async function fetchFollowingRedirects(
     // Release the socket: an unread body holds it out of the pool.
     await discard(response.body);
     const location = response.headers.get('location');
-    if (!location) return { response, url: current };
+    if (!location) {
+      logger.warn('Intake page fetch: redirect without Location', {
+        url: loggableUrl(current),
+        status: response.status,
+      });
+      throw new IntakeError(
+        IntakeErrorCodes.FETCH_FAILED,
+        'That page redirects without saying where to.',
+        { status: response.status }
+      );
+    }
     if (hop >= MAX_REDIRECTS) {
-      logger.warn('Intake page fetch: too many redirects', { url: loggableUrl(url) });
+      logger.warn('Intake page fetch: too many redirects', {
+        url: loggableUrl(url),
+        last: loggableUrl(current),
+      });
       throw new IntakeError(
         IntakeErrorCodes.FETCH_FAILED,
         `That page redirects more than ${MAX_REDIRECTS} times.`
@@ -216,14 +231,21 @@ async function readPage(
   const bytes = await readCapped(response.body, limits.maxBytes, signal);
 
   if (type.html) {
-    const page = mainContent(bytes, contentType);
+    let page: MainContent;
+    try {
+      page = mainContent(bytes, contentType);
+    } catch (err) {
+      // A parse failure is not a network failure; say which it was.
+      throw unreadableFile('a web page', err);
+    }
     // The main content is already text: read as text so `extractText()`
     // applies its limits without re-parsing it as HTML.
     const read = await extractText(Buffer.from(page.text, 'utf8'), 'page.txt', limits);
     return { ...read, title: page.title || hostOf(url), format: 'html', url };
   }
 
-  const read = await extractText(bytes, `${nameFrom(url)}${type.ext}`, limits);
+  const body = type.text ? asUtf8(bytes, contentType) : bytes;
+  const read = await extractText(body, `${nameFrom(url)}${type.ext}`, limits);
   return { ...read, url };
 }
 
@@ -247,10 +269,31 @@ async function discard(body: { cancel(): Promise<void> } | null | undefined): Pr
   }
 }
 
+/**
+ * A text body re-encoded as UTF-8, which is how `extractText()` reads it. The
+ * response's charset decides how it is decoded; an unknown or absent one
+ * leaves the bytes as they are.
+ */
+function asUtf8(bytes: Buffer, contentType: string): Buffer {
+  const charset = /;\s*charset\s*=\s*"?([\w.:-]+)"?/i.exec(contentType)?.[1];
+  if (!charset || /^utf-?8$/i.test(charset)) return bytes;
+  let decoder: TextDecoder;
+  try {
+    decoder = new TextDecoder(charset);
+  } catch {
+    return bytes;
+  }
+  return Buffer.from(decoder.decode(bytes), 'utf8');
+}
+
 function tooLarge(maxBytes: number): IntakeError {
+  const size =
+    maxBytes >= 1_048_576
+      ? `${Math.round(maxBytes / 1_048_576)} MB`
+      : `${Math.max(1, Math.round(maxBytes / 1024))} KB`;
   return new IntakeError(
     IntakeErrorCodes.TOO_LARGE,
-    `That page is larger than ${Math.round(maxBytes / 1_048_576)} MB, the largest we read.`,
+    `That page is larger than ${size}, the largest we read.`,
     { maxBytes }
   );
 }

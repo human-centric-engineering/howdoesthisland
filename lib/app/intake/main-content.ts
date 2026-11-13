@@ -26,12 +26,22 @@ import { cleanInline, extractText } from '@/lib/orchestration/knowledge/parsers/
 
 /** Never part of what the page says, wherever they sit. */
 const ALWAYS_REMOVED =
-  'script, style, noscript, template, iframe, svg, form, nav, aside, ' +
+  'script, style, noscript, template, iframe, svg, nav, aside, ' +
   '[role=navigation], [role=complementary], [role=banner], [role=contentinfo], [role=search], ' +
   '[hidden], [aria-hidden=true]';
 
-/** Sectioning elements inside which a `header`/`footer` belongs to that section, not the site. */
+/**
+ * Sectioning elements inside which a `header`/`footer` belongs to that section,
+ * not the site. `aside` and `nav` complete the ARIA rule, though both are gone
+ * by the time this is read.
+ */
 const SECTIONING = 'article, aside, main, nav, section';
+
+/**
+ * A form holding any of these is the page's wrapper, not a form: ASP.NET
+ * WebForms puts the whole body in one `<form>`. Removing it would remove the page.
+ */
+const PAGE_CONTENT = 'main, [role=main], article, h1';
 
 export interface MainContent {
   /** The main content as text, block structure kept, headings as Markdown. */
@@ -50,12 +60,17 @@ export function mainContent(html: Buffer | string, contentType = 'text/html'): M
   const dom = new JSDOM(html, { contentType: htmlContentType(contentType, html) });
   const { document: doc } = dom.window;
 
+  // `doc.title`, not `querySelector('title')`: that also matches an inline
+  // SVG icon's `<title>`.
   const title =
-    cleanInline(doc.querySelector('title')?.textContent) ||
+    cleanInline(doc.title) ||
     cleanInline(doc.querySelector('meta[property="og:title"]')?.getAttribute('content')) ||
     cleanInline(doc.querySelector('h1')?.textContent);
 
   for (const el of Array.from(doc.querySelectorAll(ALWAYS_REMOVED))) el.remove();
+  for (const el of Array.from(doc.querySelectorAll('form'))) {
+    if (!el.querySelector(PAGE_CONTENT)) el.remove();
+  }
   for (const el of Array.from(doc.querySelectorAll('header, footer'))) {
     if (!el.parentElement?.closest(SECTIONING)) el.remove();
   }
