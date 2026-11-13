@@ -13,10 +13,10 @@ Returns `{ text, wordCount, title, format, pageCount?, warnings }`.
 | Format     | Extensions      | Read by                  | Title                                   |
 | ---------- | --------------- | ------------------------ | --------------------------------------- |
 | PDF        | `.pdf`          | core `parseDocument()`   | PDF metadata, else file name            |
-| Word       | `.docx`         | core `parseDocument()`   | first heading, else file name           |
+| Word       | `.docx`         | mammoth's HTML, here     | first heading, else file name           |
 | PowerPoint | `.pptx`         | `lib/app/intake/pptx.ts` | deck metadata, else first slide's title |
 | HTML       | `.html`, `.htm` | core `parseDocument()`   | `<title>`, `og:title`, first `<h1>`     |
-| Markdown   | `.md`           | core `parseDocument()`   | first `# ` heading, else file name      |
+| Markdown   | `.md`           | core `parseDocument()`   | first `# ` heading outside a code fence |
 | Plain text | `.txt`          | core `parseDocument()`   | file name                               |
 
 `wordCount` counts words the way the engine does (`engine/text.ts`), so the
@@ -24,12 +24,16 @@ number a client sees before an assessment matches the one the engine uses.
 
 **Where intake departs from what core returns:**
 
-- **DOCX** text is rebuilt from the parsed sections, because core's `fullText`
-  drops headings. Mammoth's Markdown escapes (`harbours\.`) are removed.
+- **DOCX** is read here, from mammoth's HTML. Core's Markdown route inlines
+  every picture as a base64 data URI (a page with a logo then trips
+  `maxChars`), keeps Markdown syntax (`__bold__`, `[text](url)`) and drops a
+  heading with no body under it. Here pictures are removed, each paragraph,
+  heading, list item and table cell is a paragraph of text, and every heading
+  is kept.
 - **PPTX** is read here: core has no PowerPoint parser. Slides come in
   _presented_ order (`ppt/presentation.xml`'s slide list), not `slideN.xml`
   order, because a slide keeps its file number when it is moved. Each slide's
-  speaker notes follow it. Hidden slides are skipped with a warning. Slide
+  speaker notes follow it. Hidden slides (`show="0"` or `"false"`) are skipped with a warning. Slide
   numbers, dates, footers and headers are dropped.
 
 ## Refusals
@@ -37,15 +41,15 @@ number a client sees before an assessment matches the one the engine uses.
 Every refusal is an `IntakeError` (an `APIError`), so a route that lets it
 propagate answers with the status and code below.
 
-| Code                | Status | When                                                                            |
-| ------------------- | ------ | ------------------------------------------------------------------------------- |
-| `INVALID_FILE_TYPE` | 415    | not one of the extensions above (CSV and EPUB included)                         |
-| `FILE_TOO_LARGE`    | 413    | over `maxBytes` (checked first), or a PPTX whose XML expands past `maxXmlBytes` |
-| `TOO_MANY_PAGES`    | 422    | a PDF over `maxPages` pages, or a PPTX over `maxPages` slides (hidden included) |
-| `PDF_HAS_NO_TEXT`   | 422    | no PDF page has text (the parser's per-page `hasText`): scanned or blank        |
-| `NO_TEXT`           | 422    | any other file with no text                                                     |
-| `TEXT_TOO_LONG`     | 422    | more than `maxChars` characters of extracted text                               |
-| `FILE_UNREADABLE`   | 422    | the bytes are not the format the extension names                                |
+| Code                | Status | When                                                                             |
+| ------------------- | ------ | -------------------------------------------------------------------------------- |
+| `INVALID_FILE_TYPE` | 415    | not one of the extensions above (CSV and EPUB included)                          |
+| `FILE_TOO_LARGE`    | 413    | over `maxBytes` (checked first), or a PPTX whose XML expands past `maxXmlBytes`  |
+| `TOO_MANY_PAGES`    | 422    | a PDF over `maxPages` pages, or a PPTX over `maxPages` slides (hidden included)  |
+| `PDF_HAS_NO_TEXT`   | 422    | the PDF has no text at all: scanned or blank                                     |
+| `NO_TEXT`           | 422    | any other file with no text                                                      |
+| `TEXT_TOO_LONG`     | 422    | more than `maxChars` characters of extracted text                                |
+| `FILE_UNREADABLE`   | 422    | the bytes are not the format the extension names (the cause is logged, not sent) |
 
 Text over the limit is **refused, never truncated** (plan §8.2): an assessment
 of a document's first part reads as an assessment of all of it.
@@ -54,12 +58,12 @@ of a document's first part reads as an assessment of all of it.
 
 `DEFAULT_INTAKE_LIMITS`; pass a partial `limits` to tighten one.
 
-| Limit         | Default | Why                                                                               |
-| ------------- | ------- | --------------------------------------------------------------------------------- |
-| `maxBytes`    | 10 MB   | a text-heavy deck with some images                                                |
-| `maxPages`    | 100     | stops a cheap file costing a lot of parsing; `maxChars` binds first in practice   |
-| `maxChars`    | 40,000  | the pipeline's content limit, `MAX_TEXT_CHARS` (plan §8.2)                        |
-| `maxXmlBytes` | 20 MB   | a small PPTX can inflate to gigabytes; parts are streamed and the read stops here |
+| Limit         | Default | Why                                                                                                                |
+| ------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `maxBytes`    | 10 MB   | a text-heavy deck with some images                                                                                 |
+| `maxPages`    | 100     | PPTX: checked before any slide is read. PDF: checked after core parses it all, so there `maxBytes` bounds the work |
+| `maxChars`    | 40,000  | the pipeline's content limit, `MAX_TEXT_CHARS` (plan §8.2)                                                         |
+| `maxXmlBytes` | 20 MB   | a small PPTX can inflate to gigabytes; parts are streamed and the read stops here                                  |
 
 A route has its own request-body limit too. On Vercel that is 4.5 MB, which is
 about a 3.3 MB file once base64-encoded, so on that host the platform refuses a

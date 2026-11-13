@@ -1,9 +1,9 @@
 /**
  * Turn an uploaded file into the text an assessment reads (t-15).
  *
- * Reads PDF, DOCX, PPTX, HTML, Markdown and plain text. PowerPoint is read
- * here (`pptx.ts`); every other format goes through core's `parseDocument()`,
- * which this wraps rather than forks. Anything else is refused, as is a file
+ * Reads PDF, DOCX, PPTX, HTML, Markdown and plain text. PowerPoint
+ * (`pptx.ts`) and Word (below) are read here; every other format goes through
+ * core's `parseDocument()`, which this wraps rather than forks. Anything else is refused, as is a file
  * that is too big, too long, or has no text, each with its own code
  * (`IntakeErrorCodes`).
  *
@@ -15,9 +15,13 @@
  * passes the bytes with the name the client gave.
  */
 
+import { JSDOM } from 'jsdom';
+import mammoth from 'mammoth';
 import { parseDocument, type ParsedDocument } from '@/lib/orchestration/knowledge/parsers';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
 import { extractPptx } from '@/lib/app/intake/pptx';
+import { words } from '@/lib/app/frameworks/howdoesthisland/engine/text';
+import { logger } from '@/lib/logging';
 
 /** The pipeline's content limit, in characters (plan §8.2). */
 export const MAX_TEXT_CHARS = 40_000;
@@ -36,8 +40,9 @@ export interface IntakeLimits {
 /**
  * Defaults. 10 MB covers a text-heavy deck with a few images, and 40,000
  * characters is about 25 pages of prose, so 100 pages or slides is already
- * generous: what stops a long document in practice is `maxChars`. The page cap
- * exists to stop a cheap file making the parser do a lot of work for nothing.
+ * generous: what stops a long document in practice is `maxChars`. For PPTX the
+ * page cap is checked before any slide is read; for PDF it is checked after
+ * core's parser has run, so there `maxBytes` is what bounds the parser's work.
  */
 export const DEFAULT_INTAKE_LIMITS: IntakeLimits = {
   maxBytes: 10 * 1024 * 1024,
@@ -73,9 +78,8 @@ export interface ExtractedText {
   warnings: string[];
 }
 
-/** Counted the way the assessment engine counts (`engine/text.ts` `words`). */
-const WORD = /[\p{L}\p{N}'’-]+/gu;
-export const countWords = (text: string): number => text.match(WORD)?.length ?? 0;
+/** Counted the way the assessment engine counts: its own `words`. */
+export const countWords = (text: string): number => words(text).length;
 
 const baseName = (fileName: string): string => fileName.replace(/\.[^.]+$/, '');
 
@@ -98,20 +102,58 @@ function tidy(text: string): string {
     .trim();
 }
 
-/**
- * Mammoth writes DOCX as Markdown and escapes punctuation (`harbours\.`).
- * Those backslashes are not in the document, so they come out here.
- */
-const unescapeMarkdown = (text: string): string =>
-  text.replace(/\\([\\`*_{}[\]()#+\-.!<>|~])/g, '$1');
+/** Mammoth's HTML elements that are a paragraph of their own in the text. */
+const DOCX_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, td, th';
 
 /**
- * Core's DOCX `fullText` joins section bodies and drops their headings. The
- * headings are part of what a reader reads, so the text is rebuilt from the
- * sections with each heading as its own paragraph.
+ * Word, read here rather than through core. Core converts DOCX to Markdown:
+ * that inlines every picture as a base64 data URI, keeps Markdown syntax
+ * (`__bold__`, `[text](url)`), and drops any heading with no body under it.
+ * None of that is in what a reader reads. Mammoth's HTML is read as a DOM
+ * instead: pictures removed, each block its own paragraph, the first heading
+ * the title.
  */
-function docxText(parsed: ParsedDocument): string {
-  return parsed.sections.map((s) => [s.title, s.content].filter(Boolean).join('\n\n')).join('\n\n');
+async function readDocx(buffer: Buffer): Promise<Raw> {
+  const result = await mammoth.convertToHtml({ buffer });
+  const { document: doc } = new JSDOM('').window;
+  const body = doc.createElement('body');
+  body.innerHTML = result.value;
+  for (const img of Array.from(body.querySelectorAll('img'))) img.remove();
+
+  const paragraphs = Array.from(body.querySelectorAll(DOCX_BLOCKS))
+    // A block inside another (a paragraph in a table cell) is read by its outer one.
+    .filter((el) => !el.parentElement?.closest(DOCX_BLOCKS))
+    .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  const heading = body.querySelector('h1, h2, h3, h4, h5, h6')?.textContent ?? '';
+
+  return {
+    text: paragraphs.join('\n\n'),
+    title: heading.replace(/\s+/g, ' ').trim(),
+    warnings: result.messages.filter((m) => m.type === 'warning').map((m) => `DOCX: ${m.message}`),
+  };
+}
+
+/** The first ATX H1 outside a fenced code block, inline markup removed. */
+function markdownTitle(markdown: string): string | undefined {
+  let fence: string | null = null;
+  for (const line of markdown.split('\n')) {
+    const f = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (f) {
+      if (!fence) fence = f[0];
+      else if (f[0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const h1 = /^ {0,3}#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line)?.[1];
+    if (!h1) continue;
+    const plain = h1
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/(\*\*|__|\*|_|`)(.+?)\1/g, '$2')
+      .trim();
+    if (plain) return plain;
+  }
+  return undefined;
 }
 
 interface Raw {
@@ -121,23 +163,29 @@ interface Raw {
   warnings: string[];
 }
 
+/** The reason is logged, not returned: it names our parser and its internals. */
+function unreadable(format: IntakeFormat, err: unknown): IntakeError {
+  logger.warn('Intake could not read the file', {
+    format,
+    reason: err instanceof Error ? err.message : String(err),
+  });
+  return new IntakeError(
+    IntakeErrorCodes.UNREADABLE,
+    `This file could not be read as ${format.toUpperCase()}.`
+  );
+}
+
 async function readWithCore(
   buffer: Buffer,
   fileName: string,
-  format: Exclude<IntakeFormat, 'pptx'>,
+  format: Exclude<IntakeFormat, 'pptx' | 'docx'>,
   limits: IntakeLimits
 ): Promise<Raw> {
   let parsed: ParsedDocument;
   try {
     parsed = await parseDocument(buffer, fileName);
   } catch (err) {
-    throw new IntakeError(
-      IntakeErrorCodes.UNREADABLE,
-      `This file could not be read as ${format.toUpperCase()}.`,
-      {
-        reason: err instanceof Error ? err.message : 'parse failed',
-      }
-    );
+    throw unreadable(format, err);
   }
 
   switch (format) {
@@ -150,8 +198,9 @@ async function readWithCore(
           { pages: pages.length, maxPages: limits.maxPages }
         );
       }
-      // The parser's own per-page verdict, not a second heuristic.
-      if (!pages.some((p) => p.hasText)) {
+      // Any text at all. Not the parser's `hasText`: that is under 50
+      // characters a page, and a short digital PDF is not a scanned one.
+      if (!tidy(parsed.fullText)) {
         throw new IntakeError(
           IntakeErrorCodes.PDF_HAS_NO_TEXT,
           'This PDF has no text we can read. It may be scanned or blank: export it from the original document, or paste the text in.',
@@ -166,16 +215,12 @@ async function readWithCore(
         warnings: parsed.warnings,
       };
     }
-    case 'docx':
+    case 'markdown':
       return {
-        text: unescapeMarkdown(docxText(parsed)),
-        title: unescapeMarkdown(parsed.title),
+        text: parsed.fullText,
+        title: markdownTitle(parsed.fullText) ?? parsed.title,
         warnings: parsed.warnings,
       };
-    case 'markdown': {
-      const h1 = /^#\s+(.+?)\s*#*\s*$/m.exec(parsed.fullText)?.[1];
-      return { text: parsed.fullText, title: h1 ?? parsed.title, warnings: parsed.warnings };
-    }
     case 'html':
     case 'text':
       return { text: parsed.fullText, title: parsed.title, warnings: parsed.warnings };
@@ -215,12 +260,17 @@ export async function extractText(
     );
   }
 
-  const raw: Raw =
-    format === 'pptx'
-      ? await extractPptx(buffer, { maxSlides: lim.maxPages, maxXmlBytes: lim.maxXmlBytes }).then(
-          (r) => ({ text: r.text, title: r.title, pageCount: r.slideCount, warnings: r.warnings })
-        )
-      : await readWithCore(buffer, fileName, format, lim);
+  let raw: Raw;
+  if (format === 'pptx') {
+    const r = await extractPptx(buffer, { maxSlides: lim.maxPages, maxXmlBytes: lim.maxXmlBytes });
+    raw = { text: r.text, title: r.title, pageCount: r.slideCount, warnings: r.warnings };
+  } else if (format === 'docx') {
+    raw = await readDocx(buffer).catch((err: unknown) => {
+      throw unreadable(format, err);
+    });
+  } else {
+    raw = await readWithCore(buffer, fileName, format, lim);
+  }
 
   const text = tidy(raw.text);
   if (!text) {

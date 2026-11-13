@@ -253,3 +253,155 @@ describe('extractText — refusals', () => {
     }
   );
 });
+
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PKG_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+// A 1×1 PNG: enough for mammoth to inline it as a data URI if it is not removed.
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+/** A minimal Word file: `body` is the inside of `<w:body>`. */
+async function docx(body: string): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    '[Content_Types].xml',
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Default Extension="png" ContentType="image/png"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '</Types>'
+  );
+  zip.file(
+    '_rels/.rels',
+    `<Relationships xmlns="${PKG_REL_NS}"><Relationship Id="rId1" Type="${R_NS}/officeDocument" Target="word/document.xml"/></Relationships>`
+  );
+  zip.file(
+    'word/_rels/document.xml.rels',
+    `<Relationships xmlns="${PKG_REL_NS}">` +
+      `<Relationship Id="rImg" Type="${R_NS}/image" Target="media/image1.png"/>` +
+      `<Relationship Id="rLink" Type="${R_NS}/hyperlink" Target="https://example.com/a/very/long/url" TargetMode="External"/>` +
+      `<Relationship Id="rStyles" Type="${R_NS}/styles" Target="styles.xml"/>` +
+      '</Relationships>'
+  );
+  zip.file(
+    'word/styles.xml',
+    `<w:styles xmlns:w="${W_NS}">` +
+      [1, 2, 4]
+        .map(
+          (n) =>
+            `<w:style w:type="paragraph" w:styleId="Heading${n}"><w:name w:val="heading ${n}"/></w:style>`
+        )
+        .join('') +
+      '</w:styles>'
+  );
+  zip.file('word/media/image1.png', PNG_1X1);
+  zip.file(
+    'word/document.xml',
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}" xmlns:v="urn:schemas-microsoft-com:vml"><w:body>${body}</w:body></w:document>`
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+const wp = (inner: string, style?: string): string =>
+  `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}${inner}</w:p>`;
+const wr = (t: string, rPr = ''): string => `<w:r>${rPr}<w:t xml:space="preserve">${t}</w:t></w:r>`;
+
+/** A one-page PDF whose only text is `text`, in Helvetica. */
+function pdfWith(text: string): Buffer {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let out = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const o of offsets) out += `${String(o).padStart(10, '0')} 00000 n \n`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
+describe('extractText — review regressions', () => {
+  it('reads a DOCX with a picture without its data URI, and without Markdown syntax', async () => {
+    const buf = await docx(
+      wp(wr('Part one'), 'Heading1') +
+        wp(wr('Background'), 'Heading2') +
+        wp(
+          '<w:r><w:pict><v:shape><v:imagedata r:id="rImg"/></v:shape></w:pict></w:r>' +
+            wr('Key point', '<w:rPr><w:b/></w:rPr>') +
+            wr(', see ') +
+            `<w:hyperlink r:id="rLink">${wr('our site')}</w:hyperlink>` +
+            wr('.')
+        ) +
+        wp(wr('Deep detail'), 'Heading4') +
+        wp(wr('Last words.'))
+    );
+
+    const r = await extractText(buf, 'pictured.docx');
+
+    expect(r.text).toBe(
+      'Part one\n\nBackground\n\nKey point, see our site.\n\nDeep detail\n\nLast words.'
+    );
+    expect(r.title).toBe('Part one');
+    expect(r.text).not.toMatch(/data:|base64|__|\]\(|#/);
+  });
+
+  it('reads a short digital PDF rather than calling it scanned', async () => {
+    const r = await extractText(pdfWith('Great session, thanks.'), 'short.pdf');
+
+    expect(r.text).toBe('Great session, thanks.');
+    expect(r.pageCount).toBe(1);
+  });
+
+  it('skips a hidden slide written as show="false"', async () => {
+    const zip = await JSZip.loadAsync(fixture('deck.pptx'));
+    let rewritten = 0;
+    for (const path of Object.keys(zip.files).filter((p) => /^ppt\/slides\/[^/]+\.xml$/.test(p))) {
+      const xml = await zip.file(path)!.async('string');
+      if (xml.includes('show="0"')) {
+        zip.file(path, xml.replace('show="0"', 'show="false"'));
+        rewritten++;
+      }
+    }
+    expect(rewritten).toBe(1);
+
+    const r = await extractText(await zip.generateAsync({ type: 'nodebuffer' }), 'deck.pptx');
+
+    expect(r.text).not.toContain('Backup appendix');
+    expect(r.warnings).toEqual(['Skipped 1 hidden slide: they are not shown to an audience.']);
+  });
+
+  it.each([
+    [
+      'a heading inside a fenced code block',
+      '```sh\n# install deps\n```\n\n# Real title\n\nBody.',
+      'Real title',
+    ],
+    ['a bare # line', '#\n\nSome paragraph.\n\n# Real title', 'Real title'],
+    ['inline markup', '# **Q3** [report](https://x.example)\n\nBody.', 'Q3 report'],
+  ])('takes a Markdown title past %s', async (_, md, title) => {
+    const r = await extractText(Buffer.from(md), 'notes.md');
+    expect(r.title).toBe(title);
+  });
+
+  it.each(['deck.pptx', 'letter.docx', 'report.pdf'])(
+    "does not return the parser's own error for an unreadable %s",
+    async (name) => {
+      const err = await refusal(extractText(Buffer.from('not that kind of file'), name));
+      expect(err.code).toBe(IntakeErrorCodes.UNREADABLE);
+      expect(err.details).toBeUndefined();
+    }
+  );
+});

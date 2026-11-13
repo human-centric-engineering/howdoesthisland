@@ -13,7 +13,7 @@
  * `ppt/_rels/presentation.xml.rels`. A slide's notes are found the same way,
  * through the slide's own relationships, never by matching numbers.
  *
- * **Hidden slides are skipped** (`show="0"`): they are not part of what an
+ * **Hidden slides are skipped** (`show="0"` or `"false"`: an xsd:boolean): they are not part of what an
  * audience sees. The count skipped comes back as a warning.
  *
  * **Expanded size is capped.** A small zip can inflate to gigabytes, so every
@@ -24,6 +24,7 @@
 import JSZip from 'jszip';
 import { JSDOM } from 'jsdom';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
+import { logger } from '@/lib/logging';
 
 export interface PptxLimits {
   /** Most slides read; a deck listing more is refused. */
@@ -203,11 +204,12 @@ function partText(doc: Document): PartText {
   return { paragraphs, title };
 }
 
+/** The reason is logged, not returned: it names our parser and its internals. */
 function unreadable(reason: string): IntakeError {
+  logger.warn('PPTX intake could not read the file', { reason });
   return new IntakeError(
     IntakeErrorCodes.UNREADABLE,
-    'This file could not be read as a PowerPoint presentation.',
-    { reason }
+    'This file could not be read as a PowerPoint presentation.'
   );
 }
 
@@ -256,7 +258,8 @@ export async function extractPptx(buffer: Buffer, limits: PptxLimits): Promise<P
     for (const slidePath of slidePaths) {
       const slide = await read(slidePath);
       if (!slide) continue;
-      if (slide.documentElement.getAttribute('show') === '0') {
+      const show = slide.documentElement.getAttribute('show');
+      if (show === '0' || show === 'false') {
         hidden++;
         continue;
       }
