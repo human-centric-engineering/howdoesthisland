@@ -11,5 +11,6 @@ domain folders beside this one: start at [`../substrate.md`](../substrate.md).
 | [`platform-divergences.md`](./platform-divergences.md) | The divergence ledger: every edit carried to a Sunrise-owned file, why, what to do on conflict, and what deletes it.   |
 | [`dev-environment.md`](./dev-environment.md)           | Setting up the multi-tenant development database: the `.env.local` lines, the order, and `scripts/app/dev-tenancy.ts`. |
 | [`workspaces.md`](./workspaces.md)                     | Workspaces: what each new one gets, the ownership cap, the switcher and settings page, and which core routes they use. |
+| [`frameworks.md`](./frameworks.md)                     | Frameworks: importing and publishing a model version, what the import refuses, how versions are stored.                |
 
 Features add their own page here as they land, and a row to this table.

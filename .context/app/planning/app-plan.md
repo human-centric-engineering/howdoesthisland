@@ -47,13 +47,15 @@ the browser. BRIEF §3–§7 describe it in full. What matters for the plan:
 - **`src/engine.js`** (669 lines, no DOM) holds everything that is not UI: the quick scan,
   craft metrics, culture profiles, scoring, `assemble()`, the judge and rewrite prompts and
   calibration. It is the first thing to port.
-- **The model** (`howdoesthisland_model.json`, v0.5.0, schema 4) has 27 top-level keys,
+- **The model** (`howdoesthisland_model.json`, v0.5.1, schema 4) has 27 top-level keys,
   which hold 4 appeals, 23 core and 20 extra dimensions, 4 lenses, 9 judges, 58 moves, 9 red flags,
   16 content types, 6 archetypes, 14 executive roles, 13 perspectives with 78 levers,
-  5 duties, 37 culture countries on 9 scales, 38 research entries, 229 knowledge refs,
+  5 duties, 37 culture countries on 9 scales, 38 research entries, 265 knowledge refs,
   15 limitations, scoring rules and the brand. Its entities refer to each other by id
-  (`grounded_in`, `research`, `moves`, `dimensions`), and `meta.derived_from` says every
-  reference resolves.
+  (`grounded_in`, `research`, `moves`, `dimensions`). `meta.reference_rules` lists every
+  reference field and its target. 0.5.0 left 38 of them unresolved (an export fault);
+  0.5.1 fixes that and changes nothing else, and `prototype/tools/validate_refs.py`
+  checks it.
 - **The calibration set** is v0.4.0: 18 cases across 11 content types, with expected
   bands per appeal, flags present and absent, recommended dimensions and the primary duty.
   It has no expectations for the craft, audience or culture judges.
@@ -220,8 +222,8 @@ The rule from BRIEF §9 holds for the whole build:
 
 | Prototype                                    | Becomes                                                                                               | Feature                |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------- |
-| `howdoesthisland_model.json`                 | `lib/app/frameworks/howdoesthisland/data/model-0.5.0.json`, imported into the framework tables (§8.1) | `f-framework-store`    |
-| `howdoesthisland_eval_set.json`              | `lib/app/frameworks/howdoesthisland/data/eval-0.5.0.json`, brought up to the model (`k1`)             | `f-calibration`        |
+| `howdoesthisland_model.json`                 | `lib/app/frameworks/howdoesthisland/data/model-0.5.1.json`, imported into the framework tables (§8.1) | `f-framework-store`    |
+| `howdoesthisland_eval_set.json`              | `lib/app/frameworks/howdoesthisland/data/eval-0.5.1.json`, brought up to the model (`k1`)             | `f-calibration`        |
 | `engine.js` — text utilities, `craft()`      | `lib/app/frameworks/howdoesthisland/engine/text.ts`, `craft.ts`                                       | `f-engine`             |
 | `engine.js` — `quickScan`, `extraScan`       | `…/engine/quick-scan.ts`                                                                              | `f-engine`             |
 | `engine.js` — culture profiles and positions | `…/engine/culture.ts`                                                                                 | `f-engine`             |
@@ -435,7 +437,7 @@ done-when.
 - **milestone `m-foundations` — Your own workspace, and the model inside it:**
   - Sign up and land in a workspace of your own, in the chosen design. (`f-workspaces`,
     `f-app-frame`)
-  - Read model 0.5.0 through the API, record for record as delivered. (`f-framework-store`)
+  - Read model 0.5.1 through the API, record for record as delivered. (`f-framework-store`)
   - Run the ported quick scan over the 18 calibration cases and see it match the
     prototype. (`f-engine`)
   - _Stand-in:_ the signed-in home is a placeholder until `f-workbench`.
@@ -538,13 +540,13 @@ done-when.
   - serves frameworks and versions through the API.
 
 - **doneWhen:**
-  - On a deployed build, `GET /api/v1/frameworks/howdoesthisland/versions/0.5.0` returns
+  - On a deployed build, `GET /api/v1/frameworks/howdoesthisland/versions/0.5.1` returns
     the model, and its checksum matches the committed file.
 - **indicative tasks:**
 
 | Ref | Title                                         | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Files in scope                                                                                                 |
 | --- | --------------------------------------------- | ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| s1  | Store frameworks as versioned, linked records | L    | —          | The four framework models are in `app.prisma`, classified as shared config (no `orgId`), with the model steps (§5). `npm run frameworks:import <file>` imports a draft; `frameworks:publish` publishes. Import refuses (tested): a dangling reference, an unknown kind, a node failing its schema, a duplicate key, a version already published. Publishing makes nodes and links unwritable (tested). `materialise(versionId)` returns the typed model; a test proves `materialise(import(file))` deep-equals the file for 0.5.0. Re-importing the same file is a no-op. | `prisma/schema/app.prisma`, `lib/app/frameworks/`, `scripts/app/frameworks/`, `tests/unit/lib/app/frameworks/` |
+| s1  | Store frameworks as versioned, linked records | L    | —          | The four framework models are in `app.prisma`, classified as shared config (no `orgId`), with the model steps (§5). `npm run frameworks:import <file>` imports a draft; `frameworks:publish` publishes. Import refuses (tested): a dangling reference, an unknown kind, a node failing its schema, a duplicate key, a version already published. Publishing makes nodes and links unwritable (tested). `materialise(versionId)` returns the typed model; a test proves `materialise(import(file))` deep-equals the file for 0.5.1. Re-importing the same file is a no-op. | `prisma/schema/app.prisma`, `lib/app/frameworks/`, `scripts/app/frameworks/`, `tests/unit/lib/app/frameworks/` |
 | s2  | Serve frameworks and versions through the API | M    | s1         | The four `frameworks` routes in §4, public, cached per published version with an ETag (`lib/api/etag.ts`). Unknown slug, version or kind are 404 with a code. The culture kinds follow the culture switch (D11). Route tests.                                                                                                                                                                                                                                                                                                                                             | `app/api/v1/frameworks/`, `lib/app/frameworks/api/`                                                            |
 
 #### `f-engine` — The assessment engine
@@ -737,7 +739,7 @@ done-when.
 
 #### `f-calibration` — Calibration
 
-- **summary:** The calibration set brought up to model 0.5.0, a runner for the quick scan
+- **summary:** The calibration set brought up to model 0.5.1, a runner for the quick scan
   and the AI judges, a publish gate, and the judge models chosen by measurement.
 - **dependsOn:** `f-assessments`
 - **references:** D8, D9 · `prototype/howdoesthisland_eval_set.json`
@@ -756,14 +758,14 @@ done-when.
   - measures candidate models and sets the defaults (D8).
 
 - **doneWhen:**
-  - On a deployed build, the admin calibration page shows a run of the 0.5.0 set against the
+  - On a deployed build, the admin calibration page shows a run of the 0.5.1 set against the
     production judge models.
 - **indicative tasks:**
 
 | Ref | Title                                                 | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Files in scope                                                                                              |
 | --- | ----------------------------------------------------- | ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| k1  | Bring the calibration set up to model 0.5.0           | M    | —          | `eval-0.5.0.json` adds expectations for craft, audience and culture (group bands and key dimensions) to the 18 cases and adds cases until each judge has at least six, with a Zod schema the runner reads. The changes from 0.4.0 are listed in its `meta`. Reviewed in the PR (D9).                                                                                                                                                                                                                           | `lib/app/frameworks/howdoesthisland/data/`, `lib/app/calibration/schema.ts`                                 |
-| k2  | Run calibration against the quick scan and the judges | L    | k1         | CalibrationRun model (install-org owned) with the model steps. `npm run calibrate -- --mode quick\|ai` and an admin page at `/admin/frameworks` run the set, show agreement per appeal, flag and duty, and the change from the last run. Calibration runs against a draft version; publishing a draft without an AI run of that draft is refused (tested). 0.5.0, published in `s1` before the gate existed, gets its AI run recorded here. The quick mode matches the prototype's calibration on 0.4.0 cases. | `lib/app/calibration/`, `app/admin/frameworks/`, `app/api/v1/admin/frameworks/`, `scripts/app/calibrate.ts` |
+| k1  | Bring the calibration set up to model 0.5.1           | M    | —          | `eval-0.5.1.json` adds expectations for craft, audience and culture (group bands and key dimensions) to the 18 cases and adds cases until each judge has at least six, with a Zod schema the runner reads. The changes from 0.4.0 are listed in its `meta`. Reviewed in the PR (D9).                                                                                                                                                                                                                           | `lib/app/frameworks/howdoesthisland/data/`, `lib/app/calibration/schema.ts`                                 |
+| k2  | Run calibration against the quick scan and the judges | L    | k1         | CalibrationRun model (install-org owned) with the model steps. `npm run calibrate -- --mode quick\|ai` and an admin page at `/admin/frameworks` run the set, show agreement per appeal, flag and duty, and the change from the last run. Calibration runs against a draft version; publishing a draft without an AI run of that draft is refused (tested). 0.5.1, published in `s1` before the gate existed, gets its AI run recorded here. The quick mode matches the prototype's calibration on 0.4.0 cases. | `lib/app/calibration/`, `app/admin/frameworks/`, `app/api/v1/admin/frameworks/`, `scripts/app/calibrate.ts` |
 | k3  | Choose the judge and editor models by measurement     | M    | k2         | AI runs for at least three candidate OpenAI models, compared on agreement, cost per assessment and time to complete, written to `.context/app/judge-models.md`. The platform-agent defaults are set to the choice, recorded as a decision. Newer model ids, if needed, are added to the provider-models matrix by the documented admin step.                                                                                                                                                                   | `.context/app/judge-models.md`, `lib/app/judges/agents.ts`                                                  |
 
 ---

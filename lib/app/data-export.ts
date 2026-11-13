@@ -115,7 +115,13 @@ export function initAppSubjectSources(): void {
           'Invitations into a workspace that were sent to you, and the ones you sent (without who they went to).',
       },
     ],
-    excluded: [],
+    excluded: [
+      // The framework store (t-10): shared model records, with no link to any person.
+      ...['Framework', 'FrameworkVersion', 'FrameworkNode', 'FrameworkLink'].map((model) => ({
+        model,
+        reason: 'Shared model records (the persuasion framework), with no user column.',
+      })),
+    ],
   });
 }
 

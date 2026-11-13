@@ -217,7 +217,16 @@ describe('reserved fork tiers', () => {
       declarations,
       'prisma/schema/app.prisma is fork-reserved and ships empty; platform ' +
         'app-domain models belong in prisma/schema/platform.prisma.'
-    ).toEqual(['model WorkspaceInvitation {', 'enum WorkspaceInvitationStatus {']);
+    ).toEqual([
+      'model WorkspaceInvitation {',
+      'enum WorkspaceInvitationStatus {',
+      // FORK (HowDoesThisLand): the framework store (t-10).
+      'model Framework {',
+      'model FrameworkVersion {',
+      'enum FrameworkVersionStatus {',
+      'model FrameworkNode {',
+      'model FrameworkLink {',
+    ]);
   });
 
   it('the reservation is documented in both places a fork would look', () => {

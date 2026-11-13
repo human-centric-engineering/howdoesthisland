@@ -2,7 +2,7 @@
   "meta": {
     "id": "howdoesthisland",
     "name": "HowDoesThisLand persuasion model",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "schema_version": "4",
     "description": "A standalone data model for judging persuasive content through Aristotle's modes of persuasion (pisteis) plus kairos, operationalised with modern influence, behavioural and narrative research, and held to a standard of persuasion that builds trust and examined conviction.",
     "derived_from": "Gumption knowledge base (frameworks, concepts, thinkers, studies) plus an evidence register of research checked for this version. All grounded_in ids resolve to knowledge_refs; research ids resolve to research.",
@@ -38,7 +38,27 @@
       "Reader expertise setting and length targets by content type",
       "Ten new evidence-register entries on culture, cohesion and plain language",
       "Renamed HowDoesThisLand"
-    ]
+    ],
+    "changes_from_0_5_0": [
+      "Export fix only: added 31 thinkers named as framework originators, study st_choice_overload, and a knowledge_refs.overlays collection for the 4 overlays referenced by content types. No scoring, heuristic or content changes."
+    ],
+    "reference_rules": {
+      "rule": "Every id in a reference field must resolve within this file. The importer should refuse a model with any unresolved reference.",
+      "fields": {
+        "grounded_in.frameworks|concepts|thinkers|studies (appeals, dimensions, lenses, moves, red_flags, audience_modifiers) and perspectives[].gumption": "knowledge_refs.frameworks|concepts|thinkers|studies",
+        "knowledge_refs.frameworks[].originators": "knowledge_refs.thinkers",
+        "content_types[].frameworks": "knowledge_refs.frameworks",
+        "content_types[].overlay": "knowledge_refs.overlays (nullable)",
+        "perspectives[].levers[].refs": "research (rs_*) or knowledge_refs.studies (st_*)",
+        "*.research": "research",
+        "dimensions|lenses|extra_dimensions[].moves": "moves",
+        "moves[].dimensions, red_flags[].dimension, content_types[].priority_dimensions, scoring.integrity_caps[].dimension": "dimensions, lenses or extra_dimensions",
+        "archetypes[].primary|secondary, exec_roles[].primary|secondary": "duties",
+        "exec_roles[].archetype": "archetypes",
+        "judges[].appeal, judge_catalogue[].judges": "appeals, groups, 'lenses' or 'influence'",
+        "length_targets keys": "content_types"
+      }
+    }
   },
   "appeals": [
     {
@@ -8492,6 +8512,10 @@
         "name": "Jay Abraham"
       },
       {
+        "id": "th_adamson",
+        "name": "Brent Adamson"
+      },
+      {
         "id": "th_ariely",
         "name": "Dan Ariely"
       },
@@ -8508,12 +8532,24 @@
         "name": "Jonah Berger"
       },
       {
+        "id": "th_bernays",
+        "name": "Edward Bernays"
+      },
+      {
+        "id": "th_blank",
+        "name": "Steve Blank"
+      },
+      {
         "id": "th_braun",
         "name": "Josh Braun"
       },
       {
         "id": "th_brunson",
         "name": "Russell Brunson"
+      },
+      {
+        "id": "th_bryar_carr",
+        "name": "Colin Bryar and Bill Carr"
       },
       {
         "id": "th_bush",
@@ -8532,16 +8568,32 @@
         "name": "Robert Cialdini"
       },
       {
+        "id": "th_coombs",
+        "name": "W. Timothy Coombs"
+      },
+      {
         "id": "th_covey_mr",
         "name": "Stephen M. R. Covey"
+      },
+      {
+        "id": "th_cuddy",
+        "name": "Amy Cuddy"
       },
       {
         "id": "th_dib",
         "name": "Allan Dib"
       },
       {
+        "id": "th_dietrich",
+        "name": "Gini Dietrich"
+      },
+      {
         "id": "th_dixon",
         "name": "Matthew Dixon"
+      },
+      {
+        "id": "th_do",
+        "name": "Chris Do"
       },
       {
         "id": "th_duarte",
@@ -8560,12 +8612,20 @@
         "name": "Blair Enns"
       },
       {
+        "id": "th_ferrazzi",
+        "name": "Keith Ferrazzi"
+      },
+      {
         "id": "th_fiske",
         "name": "Susan Fiske"
       },
       {
         "id": "th_fitzpatrick",
         "name": "Rob Fitzpatrick"
+      },
+      {
+        "id": "th_french_raven",
+        "name": "John French and Bertram Raven"
       },
       {
         "id": "th_gartner_research",
@@ -8580,6 +8640,14 @@
         "name": "Daniel Goleman"
       },
       {
+        "id": "th_grant",
+        "name": "Adam Grant"
+      },
+      {
+        "id": "th_grunig",
+        "name": "James Grunig"
+      },
+      {
         "id": "th_hall",
         "name": "Kindra Hall"
       },
@@ -8588,12 +8656,24 @@
         "name": "Chip Heath and Dan Heath"
       },
       {
+        "id": "th_holiday",
+        "name": "Ryan Holiday"
+      },
+      {
         "id": "th_hopkins",
         "name": "Claude Hopkins"
       },
       {
         "id": "th_hormozi",
         "name": "Alex Hormozi"
+      },
+      {
+        "id": "th_housel",
+        "name": "Morgan Housel"
+      },
+      {
+        "id": "th_janis",
+        "name": "Irving Janis"
       },
       {
         "id": "th_kahneman",
@@ -8612,6 +8692,14 @@
         "name": "Oren Klaff"
       },
       {
+        "id": "th_koe",
+        "name": "Dan Koe"
+      },
+      {
+        "id": "th_le_bon",
+        "name": "Gustave Le Bon"
+      },
+      {
         "id": "th_lochhead",
         "name": "Christopher Lochhead"
       },
@@ -8620,8 +8708,20 @@
         "name": "David Maister, Charles H. Green and Robert Galford"
       },
       {
+        "id": "th_marston",
+        "name": "William Moulton Marston"
+      },
+      {
+        "id": "th_meddic_team",
+        "name": "PTC MEDDIC originators (Dick Dunkel, Jack Napoli; popularised by John McMahon)"
+      },
+      {
         "id": "th_meerman_scott",
         "name": "David Meerman Scott"
+      },
+      {
+        "id": "th_mendelow",
+        "name": "Aubrey Mendelow"
       },
       {
         "id": "th_merrill_reid",
@@ -8640,8 +8740,20 @@
         "name": "Bob Moesta"
       },
       {
+        "id": "th_moore",
+        "name": "Geoffrey Moore"
+      },
+      {
+        "id": "th_naval",
+        "name": "Naval Ravikant"
+      },
+      {
         "id": "th_neumeier",
         "name": "Marty Neumeier"
+      },
+      {
+        "id": "th_nlp_founders",
+        "name": "Richard Bandler and John Grinder"
       },
       {
         "id": "th_ogilvy",
@@ -8652,12 +8764,24 @@
         "name": "Richard Petty and John Cacioppo"
       },
       {
+        "id": "th_pfeffer",
+        "name": "Jeffrey Pfeffer"
+      },
+      {
         "id": "th_pink",
         "name": "Daniel Pink"
       },
       {
+        "id": "th_poyar",
+        "name": "Kyle Poyar"
+      },
+      {
         "id": "th_priestley",
         "name": "Daniel Priestley"
+      },
+      {
+        "id": "th_pulizzi",
+        "name": "Joe Pulizzi"
       },
       {
         "id": "th_rackham",
@@ -8674,6 +8798,18 @@
       {
         "id": "th_riesterer",
         "name": "Tim Riesterer"
+      },
+      {
+        "id": "th_ritson",
+        "name": "Mark Ritson"
+      },
+      {
+        "id": "th_romaniuk",
+        "name": "Jenni Romaniuk"
+      },
+      {
+        "id": "th_sandler",
+        "name": "David Sandler"
       },
       {
         "id": "th_schwartz",
@@ -8718,6 +8854,14 @@
       {
         "id": "th_voss",
         "name": "Chris Voss"
+      },
+      {
+        "id": "th_weinberg_mike",
+        "name": "Mike Weinberg"
+      },
+      {
+        "id": "th_welsh",
+        "name": "Justin Welsh"
       }
     ],
     "studies": [
@@ -8736,6 +8880,14 @@
         "finding": "Participants judging line lengths frequently conformed to a unanimous but wrong majority of confederates; a single dissenting ally sharply reduced conformity.",
         "replication_status": "mostly_robust",
         "evidence": "good"
+      },
+      {
+        "id": "st_choice_overload",
+        "name": "Jam study (choice overload)",
+        "year": 2000,
+        "finding": "Shoppers offered 6 jams were more likely to buy than those offered 24.",
+        "replication_status": "mixed",
+        "evidence": "mixed"
       },
       {
         "id": "st_copy_machine_because",
@@ -8872,6 +9024,28 @@
         "finding": "Groups are perceived along warmth and competence, producing distinct emotional reactions.",
         "replication_status": "robust",
         "evidence": "strong"
+      }
+    ],
+    "overlays": [
+      {
+        "id": "ov_career",
+        "name": "Career and job search",
+        "summary": "Individuals selling their skills to employers."
+      },
+      {
+        "id": "ov_ecommerce_dtc",
+        "name": "E-commerce and direct-to-consumer",
+        "summary": "Online retail of physical or digital products."
+      },
+      {
+        "id": "ov_nonprofit",
+        "name": "Nonprofit and fundraising",
+        "summary": "Charities and social enterprises raising donations, grants or sponsorship."
+      },
+      {
+        "id": "ov_professional_services",
+        "name": "Professional services and consulting",
+        "summary": "Consultancies, advisers, coaches and specialist firms selling expertise."
       }
     ]
   },

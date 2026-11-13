@@ -114,6 +114,22 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'The logic it drives lives in lib/app/workspaces/, which stays gated and ' +
       'has its own tests.',
   },
+  {
+    // HowDoesThisLand (t-10), by name like the one above.
+    pattern: 'scripts/app/smoke-framework-store.ts',
+    reason:
+      'a tsx smoke run by hand against the real dev database: real Prisma, ' +
+      'real tenancy, nothing imports it. The store it drives is ' +
+      'lib/app/frameworks/, which stays gated and has its own tests.',
+  },
+  {
+    // HowDoesThisLand (t-10): the import and publish commands' entry points.
+    pattern: 'scripts/app/frameworks/*.ts',
+    reason:
+      'thin entry points that wire lib/app/frameworks/cli.ts to the file ' +
+      'system, the database and process.exit, run by hand. The commands ' +
+      'themselves are in cli.ts, which stays gated and has its own tests.',
+  },
 ];
 
 /** One test that must run regardless of what the module graph says. */

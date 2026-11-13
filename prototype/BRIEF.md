@@ -15,10 +15,15 @@ tasks point at.
 - **The artefact:** a single-page Claude artefact, "HowDoesThisLand: the art of
   changing minds" (claude.ai/artifact/2YvJ6Gfw2hghb4VG8BKpcm). Its source is this
   folder, unchanged except as listed in §9.
-- **The model:** `howdoesthisland_model.json`, version **0.5.0** (schema 4,
-  dated 2026-11-08, en-GB). It was derived from the Gumption knowledge base plus
-  an evidence register checked for this version. The `meta.changes_from_*`
-  entries record how it got here, starting as a three-appeal model.
+- **The model:** `howdoesthisland_model.json`, version **0.5.1** (schema 4,
+  en-GB). It was derived from the Gumption knowledge base plus an evidence
+  register checked for this version. The `meta.changes_from_*` entries record
+  how it got here, starting as a three-appeal model. 0.5.1 replaced the 0.5.0
+  first delivered here on 2026-11-12: an export fix only, adding the 31
+  thinkers, one study and four overlays that 0.5.0 referred to but never
+  copied across (38 unresolved references). Scores, heuristics and content are
+  unchanged. `meta.reference_rules` lists every reference field and its
+  target, and `tools/validate_refs.py` checks them.
 - **The calibration set:** `howdoesthisland_eval_set.json`, version **0.4.0**.
 - **The draft API:** `howdoesthisland_api.yaml`, OpenAPI 3.1, version 0.5.0.
 
@@ -133,7 +138,7 @@ from it:
   `description: { type: string, description: Free-text description of the reader }`
   is indented under `judges` (line 103), so the file does not parse. It belongs
   in `audience`.
-- `model_version` defaults to `0.1.0`; the model is `0.5.0`.
+- `model_version` defaults to `0.1.0`; the model is `0.5.1`.
 - The summary of `/v1/assess/{appeal}` names four judges; its enum has nine.
 - The description lists three lenses; the model has four (dialogue was added).
 - Responses are bare objects. Sunrise's API returns

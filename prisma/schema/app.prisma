@@ -46,3 +46,98 @@ enum WorkspaceInvitationStatus {
   ACCEPTED
   DECLINED
 }
+
+// ─── Frameworks (t-10, f-framework-store) ────────────────────────────────────
+//
+// A framework's records, versioned. Design: .context/app/planning/app-plan.md
+// §8.1. All four are shared config (no orgId; `globalConfig` in
+// lib/app/tenancy-classification.ts), written only by lib/app/frameworks/store
+// through the import and publish scripts. A published version never changes:
+// the store refuses every write that would touch one.
+
+/// A framework the service can judge against (D2), e.g. `howdoesthisland`.
+model Framework {
+  id        String             @id @default(cuid())
+  slug      String             @unique
+  name      String
+  summary   String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  versions  FrameworkVersion[]
+
+  @@map("app_framework")
+}
+
+/// One version of a framework, imported from a reviewed JSON file.
+model FrameworkVersion {
+  id             String                 @id @default(cuid())
+  frameworkId    String
+  framework      Framework              @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
+  /// Semver, from the file's `meta.version`.
+  version        String
+  /// The file's own schema version (`meta.schema_version`).
+  schemaVersion  String
+  status         FrameworkVersionStatus @default(DRAFT)
+  /// The imported file as parsed, kept for export and audit.
+  sourceDocument Json
+  /// sha256 of the imported file's bytes.
+  sourceSha256   String
+  publishedAt    DateTime?
+  /// The calibration run that allowed publishing, copied at publish
+  /// (f-calibration). Null until that gate exists.
+  calibration    Json?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  nodes          FrameworkNode[]
+  links          FrameworkLink[]
+
+  @@unique([frameworkId, version])
+  @@map("app_framework_version")
+}
+
+enum FrameworkVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+/// One record of a version: an entity (an appeal, a move, a thinker) or a
+/// singleton section (`meta`, `scoring`). Its attributes are validated by the
+/// kind's Zod schema in the framework's definition.
+model FrameworkNode {
+  id         String           @id @default(cuid())
+  versionId  String
+  version    FrameworkVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  kind       String
+  /// The model's own id (`eth_goodwill`), or the section name for a singleton.
+  key        String
+  /// The containing record's key, for a nested record (a lever's perspective).
+  parentKey  String?
+  name       String?
+  /// Order within its collection, kept so the model round-trips exactly.
+  position   Int
+  attributes Json
+  linksFrom  FrameworkLink[]  @relation("FrameworkLinkFrom")
+  linksTo    FrameworkLink[]  @relation("FrameworkLinkTo")
+
+  @@unique([versionId, kind, key])
+  @@index([versionId, kind, position])
+  @@map("app_framework_node")
+}
+
+/// A reference from one record to another (`grounded_in`, `research`, …),
+/// written by the import from the reference fields the definition declares.
+model FrameworkLink {
+  id         String           @id @default(cuid())
+  versionId  String
+  version    FrameworkVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  fromNodeId String
+  fromNode   FrameworkNode    @relation("FrameworkLinkFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNodeId   String
+  toNode     FrameworkNode    @relation("FrameworkLinkTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+  relation   String
+
+  @@unique([versionId, fromNodeId, toNodeId, relation])
+  @@index([toNodeId])
+  @@map("app_framework_link")
+}
