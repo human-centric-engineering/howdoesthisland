@@ -64,4 +64,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/workspaces/',
   // The framework store: tables, definitions, import and publish (t-10).
   'lib/app/frameworks/',
+  // Turning uploaded files into text for an assessment (t-15).
+  'lib/app/intake/',
 ];
