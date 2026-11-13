@@ -294,6 +294,23 @@ const references: ReferenceSpec[] = [
   },
 ];
 
+/**
+ * The nine judge slots, in the model's own order. Culture is listed whether or
+ * not the culture switch is on: the switch decides whether the slot runs
+ * (f-assessments), not whether its agent exists.
+ */
+const judgeSlots = [
+  'judge_ethos',
+  'judge_pathos',
+  'judge_logos',
+  'judge_kairos',
+  'judge_lenses',
+  'judge_influence',
+  'judge_craft',
+  'judge_audience',
+  'judge_culture',
+] as const;
+
 export const howDoesThisLand: FrameworkDefinition = {
   slug: HOWDOESTHISLAND_SLUG,
   name: 'HowDoesThisLand',
@@ -303,6 +320,7 @@ export const howDoesThisLand: FrameworkDefinition = {
   sections,
   collections,
   references,
+  judgeSlots,
   versionOf: (document) => {
     // decompose() has already checked meta against its schema.
     const meta = isJsonObject(document.meta) ? document.meta : {};

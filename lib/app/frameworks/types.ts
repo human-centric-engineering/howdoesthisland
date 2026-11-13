@@ -60,6 +60,13 @@ export interface FrameworkDefinition {
   sections: Readonly<Record<string, z.ZodType>>;
   collections: readonly CollectionSpec[];
   references: readonly ReferenceSpec[];
+  /**
+   * The judge slots, by the id each has in the model's `judges[]`. Code, not
+   * data (app-plan §5): each slot is a platform agent every workspace owns
+   * (`lib/app/judges/agents.ts`), so a version that adds a judge needs code to
+   * run it. A test pins this list to the bundled model's.
+   */
+  judgeSlots: readonly string[];
   /** Reads the version and schema version from the file's own metadata. */
   versionOf: (document: JsonObject) => { version: string; schemaVersion: string };
   /**

@@ -66,4 +66,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/frameworks/',
   // Turning uploaded files into text for an assessment (t-15).
   'lib/app/intake/',
+  // The judge and editor platform agents (t-17).
+  'lib/app/judges/',
 ];

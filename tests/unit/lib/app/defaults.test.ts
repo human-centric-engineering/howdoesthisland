@@ -533,10 +533,25 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetPlatformAgentsForTests();
       // The read triggers the lazy init, so this exercises the REAL file:
       // exactly core's definitions, the same objects, in the same order.
-      expect(listPlatformAgents()).toEqual(CORE_PLATFORM_AGENTS);
-      listPlatformAgents().forEach((definition, i) =>
-        expect(definition).toBe(CORE_PLATFORM_AGENTS[i])
-      );
+      // FORK (HowDoesThisLand): pinned to core's followed by our nine judges
+      // and the editor (t-17), none replacing a core slug. Ledger:
+      // .context/app/platform-divergences.md row 2.
+      const listed = listPlatformAgents();
+      listed
+        .slice(0, CORE_PLATFORM_AGENTS.length)
+        .forEach((definition, i) => expect(definition).toBe(CORE_PLATFORM_AGENTS[i]));
+      expect(listed.slice(CORE_PLATFORM_AGENTS.length).map((d) => d.slug)).toEqual([
+        'hdtl-judge-ethos',
+        'hdtl-judge-pathos',
+        'hdtl-judge-logos',
+        'hdtl-judge-kairos',
+        'hdtl-judge-lenses',
+        'hdtl-judge-influence',
+        'hdtl-judge-craft',
+        'hdtl-judge-audience',
+        'hdtl-judge-culture',
+        'hdtl-editor',
+      ]);
     },
   },
   {
