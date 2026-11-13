@@ -86,8 +86,8 @@ export function syllables(word: string): number {
 export type Span = [start: number, end: number];
 
 /**
- * `text` lower-cased one code point at a time, with where each of its code
- * units came from in `text`: `from[k]` is the start of the original character
+ * `text` lower-cased (as a whole, as `toLowerCase()` does), with where each
+ * of its code units came from in `text`: `from[k]` is the start of the original character
  * that produced `lower[k]`, and `to[k]` is that character's end. One extra
  * entry at `lower.length` maps the end of the string.
  *
@@ -96,10 +96,10 @@ export type Span = [start: number, end: number];
  * string is not an index into the original. These maps carry it back.
  */
 function lowerWithMap(text: string): { lower: string; from: number[]; to: number[] } {
-  // The whole string at once, as the prototype did: lower-casing is
-  // context-sensitive (a word-final Σ becomes ς, not σ), so a character on
-  // its own can lower differently. Each character's own lower case is used
-  // only for its length, which context does not change.
+  // The whole string at once, as the prototype did, so a word-final Σ lowers
+  // to ς exactly as it did there (a character on its own lowers to σ). Each
+  // character's own lower case is used only for its length, which context
+  // does not change.
   const lower = text.toLowerCase();
   const from: number[] = [];
   const to: number[] = [];
@@ -113,14 +113,9 @@ function lowerWithMap(text: string): { lower: string; from: number[]; to: number
     i += ch.length;
   }
   if (from.length !== lower.length) {
-    // Not reachable with JavaScript's case mappings; if it ever is, fall back
-    // to the prototype's offsets rather than map through a misaligned table.
-    from.length = 0;
-    to.length = 0;
-    for (let k = 0; k < lower.length; k++) {
-      from.push(Math.min(k, text.length));
-      to.push(Math.min(k + 1, text.length));
-    }
+    // JavaScript's context-sensitive mappings (final sigma) keep lengths, so
+    // this cannot happen; if it ever does, fail rather than mis-map offsets.
+    throw new Error('locate(): lower-casing changed length in context; offsets cannot be mapped');
   }
   from.push(text.length);
   to.push(text.length);

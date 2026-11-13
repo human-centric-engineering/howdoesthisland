@@ -168,10 +168,13 @@ export function assemble(
   const flags: RedFlag[] = [...q.flags];
   const summaries: Record<string, string> = {};
   const lib = libraryRecs(m, sc, q.highlights, ctx, opts);
+  /** Whether any judge reply was merged: what makes a result 'full'. */
+  let used = false;
   const known = (id: string) => knownDimension(m, opts, id);
   for (const g of ['ethos', 'pathos', 'logos', 'kairos', 'lenses', ...ex.groups.map((x) => x.id)]) {
     const out = ai[g];
     if (out) {
+      used = true;
       summaries[g] = out.summary || '';
       for (const d of out.dimension_scores ?? []) {
         if (known(d.id)) {
@@ -251,6 +254,7 @@ export function assemble(
     levers = { ...q.levers };
     pvScores = { ...q.pvScores };
     pvSource = 'ai';
+    used = true;
     for (const p of influence.perspectives) {
       if (!m.PV.has(p.id)) continue;
       pvScores[p.id] = clamp(num(p.score));
@@ -355,13 +359,9 @@ export function assemble(
 
   return {
     model_version: m.data.meta.version,
-    // The prototype counted keys; a key with no reply, or a culture reply with
-    // culture off, contributes nothing and does not make a result 'full'.
-    mode: Object.entries(ai).some(
-      ([g, out]) => out !== undefined && (opts.culture || g !== CULTURE_GROUP)
-    )
-      ? 'full'
-      : 'quick',
+    // The prototype counted keys; a key with no usable reply, a group this
+    // engine does not read, or a culture reply with culture off adds nothing.
+    mode: used ? 'full' : 'quick',
     content_type: ctx.contentType,
     audience: { archetype: ctx.archetype, role: ctx.role || null, ...ctx.audience },
     effective_weights: w,

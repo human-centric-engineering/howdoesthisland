@@ -129,6 +129,12 @@ describe('reaching the engine', () => {
     expect(r.culture?.reader.global).toBe(false);
     expect(Object.isFrozen(r.culture?.reader.lewis)).toBe(false);
     expect(Object.isFrozen(r.culture?.reader.hofstede)).toBe(false);
+    const scan = e.quickScan(c.input.text, c.input.ctx);
+    expect(
+      Object.values(scan.culture?.reader ?? {}).some(
+        (v) => typeof v === 'object' && v !== null && Object.isFrozen(v)
+      )
+    ).toBe(false);
   });
 
   it('indexes a model object once, however many engines are made from it', () => {
@@ -300,6 +306,8 @@ describe('the culture switch', () => {
     expect(mode(off, cultureOnly)).toBe('quick');
     expect(mode(on, cultureOnly)).toBe('full');
     expect(mode(on, { ethos: undefined })).toBe('quick');
+    expect(mode(on, { ethic: c.judgeOutputs.ethos })).toBe('quick'); // a group it does not read
+    expect(mode(on, { influence: c.judgeOutputs.influence })).toBe('full');
     expect(mode(off, c.judgeOutputs)).toBe('full');
   });
 
