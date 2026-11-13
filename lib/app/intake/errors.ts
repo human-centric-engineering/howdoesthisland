@@ -25,6 +25,12 @@ export const IntakeErrorCodes = {
   TEXT_TOO_LONG: 'TEXT_TOO_LONG',
   /** Named as a supported type but could not be read as one. */
   UNREADABLE: 'FILE_UNREADABLE',
+  /** A URL intake will not fetch: not http(s), or not a public address (t-16). */
+  URL_NOT_ALLOWED: 'URL_NOT_ALLOWED',
+  /** A page that could not be fetched: unreachable, refused, too many redirects, or not 2xx. */
+  FETCH_FAILED: 'FETCH_FAILED',
+  /** A page that took longer than the fetch timeout, body included. */
+  FETCH_TIMEOUT: 'FETCH_TIMEOUT',
 } as const;
 
 export type IntakeErrorCode = (typeof IntakeErrorCodes)[keyof typeof IntakeErrorCodes];
@@ -37,6 +43,9 @@ const STATUS: Record<IntakeErrorCode, number> = {
   [IntakeErrorCodes.NO_TEXT]: 422,
   [IntakeErrorCodes.TEXT_TOO_LONG]: 422,
   [IntakeErrorCodes.UNREADABLE]: 422,
+  [IntakeErrorCodes.URL_NOT_ALLOWED]: 422,
+  [IntakeErrorCodes.FETCH_FAILED]: 422,
+  [IntakeErrorCodes.FETCH_TIMEOUT]: 422,
 };
 
 export class IntakeError extends APIError {
