@@ -7,7 +7,8 @@ against a detailed, versioned model of persuasion. Written 2026-11-09 against `m
 
 - **The brief** is [`prototype/BRIEF.md`](../../../prototype/BRIEF.md). Its nine questions
   (§8 there), and the further questions this plan raised, are answered in §10 here as
-  D1–D23.
+  D1–D23. D24–D27 (2026-11-13) add editing a draft in place, revising a selected passage
+  with the AI, the choice of UK or US English, and the copywriting vocabulary of §4.
 - **The model for this document** is Know Your Synth's `.context/app/planning/app-plan.md`.
 - **The source documents** are already in the repo, byte for byte: the model, the
   calibration set and the draft API in `prototype/`, and the artefact's source unpacked
@@ -298,9 +299,11 @@ every result says exactly which model and which judges produced it.
 | `/home`                        | Where a signed-in person lands: recent work, projects              | member         |
 | `/assess`                      | The workbench                                                      | member         |
 | `/assessments/[id]`            | The report                                                         | member         |
+| `/drafts/[id]`                 | The draft editor: edit in place, revise a passage, see changes     | member         |
 | `/compare/[id]`                | A comparison of drafts                                             | member         |
 | `/projects`, `/projects/[id]`  | Projects: brief, defaults, context documents, history              | member         |
 | `/usage`                       | This month's assessments, spend and limit                          | member         |
+| `/profile` (account section)   | Personal preferences: default English (UK or US)                   | member         |
 | `/settings/…`                  | Workspace, members, API keys, retention                            | owner/admin    |
 | `/admin/frameworks`            | Framework versions, imports and calibration runs                   | platform admin |
 
@@ -324,6 +327,9 @@ against core's `/api/v1` tree: `webhooks` is taken by core, so subscriptions use
 | `POST assessments/{id}/shares`, `DELETE shares/{id}`      | Share links                                                  | `reports`           |
 | `GET  shared-reports/{token}`                             | A shared report's data                                       | link holder         |
 | `POST rewrites`                                           | Rewrite from an assessment (JSON or stream)                  | `assess`            |
+| `GET  drafts/{id}`, `POST drafts/{id}/versions`           | A draft and its versions; save the writer's own edits        | `assess`            |
+| `POST revisions`, `POST revisions/{id}/accept\|reject`    | Revise a selected passage with the writer's direction        | `assess`            |
+| `GET  preferences`, `PATCH preferences`                   | The caller's own defaults (English variant)                  | session             |
 | `POST comparisons`, `GET comparisons/{id}`                | Compare 2–5 drafts                                           | `assess`            |
 | `…/projects`, `…/projects/{id}/documents`                 | Projects and their context                                   | `projects`          |
 | `GET  usage`                                              | This month's usage and limits                                | `assess`            |
@@ -335,6 +341,49 @@ against core's `/api/v1` tree: `webhooks` is taken by core, so subscriptions use
 `audience`, `culture`, `lenses`, `influence`), or an explicit `judges` list. The developer
 docs carry recipes for common jobs: scoring a landing page, checking an exec briefing for a
 CFO, comparing subject lines, gating content in CI.
+
+### The words we use
+
+The people who use this are copywriters, editors and the people who brief them, so the
+product speaks their trade's language (D27). This list is the reference for every
+interface label, message, email, report heading, help popover and developer guide. A
+word not listed here is checked against how a copywriter would say it before it ships;
+a new term is added here in the same PR.
+
+**Settled** (the plan already uses these, or they have no rival):
+
+| Say                                               | Means                                                                                       | Not                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **copy**                                          | The words being written or reviewed, as a whole                                             | content, text, input                                 |
+| **draft**, **draft 2**                            | One version of the copy; drafts are numbered in order                                       | version, revision number, iteration                  |
+| **brief**                                         | What the copy must do, for whom, in what voice: a project's brief                           | context, settings, profile                           |
+| **client**                                        | Who the copy is for, when the writer works for someone else                                 | customer, account holder                             |
+| **tone of voice**                                 | How the brand or author sounds (in the brief)                                               | voice settings, style                                |
+| **house style**                                   | A workspace's or client's rules on spelling, punctuation and usage, UK or US English first  | locale, language settings                            |
+| **UK English**, **US English**                    | The two spelling conventions offered (D26)                                                  | en-GB, en-US, British locale                         |
+| **headline**, **subhead**, **body copy**, **CTA** | Parts of a piece, as copywriters name them                                                  | title, heading, paragraph, button                    |
+| **mark-up**, **marked-up copy**                   | The copy with the review's notes marked in place                                            | annotations, highlights, overlay                     |
+| **note**                                          | One point the review makes about a passage                                                  | finding, issue, highlight                            |
+| **edit**                                          | A change the writer makes in their own words (D25)                                          | modification, manual change                          |
+| **revise**, **revision**                          | A passage reworked by the AI, to the writer's **direction** (D24)                           | regenerate, AI rewrite of selection                  |
+| **direction**                                     | What the writer asks of a revision: "warmer", "cut to 20 words", "lead with the saving"     | prompt, instruction, guidance                        |
+| **suggested**, **accept**, **reject**             | A revision waits as suggested until the writer accepts or rejects it, as in tracked changes | apply, approve, discard                              |
+| **changes**, **show changes**                     | The difference between two drafts, shown as tracked changes                                 | diff, delta                                          |
+| **rewrite**                                       | A whole new draft from the review (`f-rewrite`)                                             | regeneration                                         |
+| **word count**, **length**                        | As copywriters count them                                                                   | tokens, characters (unless a limit is in characters) |
+| **placeholder**                                   | A gap for a fact only the writer knows: `[ADD: client name]`                                | variable, slot                                       |
+
+**Proposed, for the owner to settle** (open question 5): what to call an
+_assessment_ (review? copy review? critique?), the _judges_ (reviewers? the panel?), the
+_report_ (it stays "report" unless the first changes), _content type_ (format?), and one
+piece of work in a project (job? assignment?).
+
+**Where this applies.** Everything a person reads: the interface, reports, PDFs, emails,
+errors, help text, the public site and the developer docs' prose. **Code and API names are
+not renamed** for it: `Content`, `Assessment` and the route paths already planned keep their
+names, so the API stays stable and the code matches the plan. A new public name (a route, a
+field, an event) takes the glossary's word where it does not collide, as `drafts` and
+`revisions` do.
 
 ---
 
@@ -368,6 +417,11 @@ CFO, comparing subject lines, gating content in CI.
   task row. Lint and format run on the changed files.
 - **Copy is plain English**: concrete, short, no flourishes. Every non-trivial form field
   has a `<FieldHelp>` popover.
+- **Speak the copywriter's language.** Every word a person reads uses the terms in §4
+  "The words we use" (D27). Reviewing a PR that adds visible words includes checking them
+  against that list; a new term joins the list in the same PR.
+- **Every result says which English it was written in.** An assessment, rewrite or revision
+  records the English variant it ran with (D26), as it records its framework version.
 
 ---
 
@@ -378,29 +432,31 @@ CFO, comparing subject lines, gating content in CI.
 Phases are epics, not an order. **The order comes from the dependencies**
 (`model.dependencies`).
 
-| Feature                | Phase      | Depends on                                                                                               |
-| ---------------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
-| `f-workspaces`         | foundation | `f-app-frame`                                                                                            |
-| `f-app-frame`          | foundation | —                                                                                                        |
-| `f-framework-store`    | foundation | —                                                                                                        |
-| `f-engine`             | foundation | `f-framework-store`                                                                                      |
-| `f-intake`             | assess     | —                                                                                                        |
-| `f-judges`             | assess     | `f-engine`, `f-workspaces`                                                                               |
-| `f-assessments`        | assess     | `f-judges`, `f-intake`                                                                                   |
-| `f-projects`           | assess     | `f-assessments`, `f-app-frame`                                                                           |
-| `f-calibration`        | assess     | `f-assessments`                                                                                          |
-| `f-report`             | report     | `f-assessments`, `f-app-frame`                                                                           |
-| `f-workbench`          | report     | `f-report`, `f-projects`                                                                                 |
-| `f-sharing`            | report     | `f-report`                                                                                               |
-| `f-rewrite`            | report     | `f-report`                                                                                               |
-| `f-compare`            | report     | `f-report`                                                                                               |
-| `f-public-site`        | report     | `f-engine`, `f-app-frame`, `f-assessments`                                                               |
-| `f-developer-platform` | api        | `f-assessments`, `f-app-frame`                                                                           |
-| `f-usage`              | api        | `f-assessments`, `f-app-frame`                                                                           |
-| `f-mcp`                | api        | `f-assessments`, `f-compare`, `f-rewrite`                                                                |
-| `f-launch`             | launch     | `f-workbench`, `f-sharing`, `f-public-site`, `f-developer-platform`, `f-usage`, `f-mcp`, `f-calibration` |
-| `f-batch-webhooks`     | scale      | `f-developer-platform`                                                                                   |
-| `f-audience-panel`     | scale      | `f-compare`                                                                                              |
+| Feature                | Phase      | Depends on                                                                                                            |
+| ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `f-workspaces`         | foundation | `f-app-frame`                                                                                                         |
+| `f-app-frame`          | foundation | —                                                                                                                     |
+| `f-framework-store`    | foundation | —                                                                                                                     |
+| `f-engine`             | foundation | `f-framework-store`                                                                                                   |
+| `f-intake`             | assess     | —                                                                                                                     |
+| `f-judges`             | assess     | `f-engine`, `f-workspaces`                                                                                            |
+| `f-assessments`        | assess     | `f-judges`, `f-intake`                                                                                                |
+| `f-projects`           | assess     | `f-assessments`, `f-app-frame`                                                                                        |
+| `f-calibration`        | assess     | `f-assessments`                                                                                                       |
+| `f-language`           | assess     | `f-projects`                                                                                                          |
+| `f-report`             | report     | `f-assessments`, `f-app-frame`                                                                                        |
+| `f-workbench`          | report     | `f-report`, `f-projects`                                                                                              |
+| `f-sharing`            | report     | `f-report`                                                                                                            |
+| `f-rewrite`            | report     | `f-report`, `f-language`                                                                                              |
+| `f-compare`            | report     | `f-report`                                                                                                            |
+| `f-editing`            | report     | `f-rewrite`, `f-compare`                                                                                              |
+| `f-public-site`        | report     | `f-engine`, `f-app-frame`, `f-assessments`                                                                            |
+| `f-developer-platform` | api        | `f-assessments`, `f-app-frame`                                                                                        |
+| `f-usage`              | api        | `f-assessments`, `f-app-frame`                                                                                        |
+| `f-mcp`                | api        | `f-assessments`, `f-compare`, `f-rewrite`                                                                             |
+| `f-launch`             | launch     | `f-workbench`, `f-sharing`, `f-public-site`, `f-developer-platform`, `f-usage`, `f-mcp`, `f-calibration`, `f-editing` |
+| `f-batch-webhooks`     | scale      | `f-developer-platform`                                                                                                |
+| `f-audience-panel`     | scale      | `f-compare`                                                                                                           |
 
 **Critical path:**
 `f-framework-store → f-engine → f-judges → f-assessments → f-report → f-workbench → f-launch`.
@@ -600,6 +656,8 @@ done-when.
   - Create a project, add your positioning document, and see a judge cite it. (`f-projects`)
   - Open the calibration page and see how the judges agree with the expected results.
     (`f-calibration`)
+  - Set your default to US English, set one project to UK English, and see each
+    assessment record and respect the one it ran with. (`f-language`)
   - _Stand-in:_ results are JSON until `f-report`.
 
 #### `f-intake` — Content intake
@@ -768,6 +826,52 @@ done-when.
 | k2  | Run calibration against the quick scan and the judges | L    | k1         | CalibrationRun model (install-org owned) with the model steps. `npm run calibrate -- --mode quick\|ai` and an admin page at `/admin/frameworks` run the set, show agreement per appeal, flag and duty, and the change from the last run. Calibration runs against a draft version; publishing a draft without an AI run of that draft is refused (tested). 0.5.1, published in `s1` before the gate existed, gets its AI run recorded here. The quick mode matches the prototype's calibration on 0.4.0 cases. | `lib/app/calibration/`, `app/admin/frameworks/`, `app/api/v1/admin/frameworks/`, `scripts/app/calibrate.ts` |
 | k3  | Choose the judge and editor models by measurement     | M    | k2         | AI runs for at least three candidate OpenAI models, compared on agreement, cost per assessment and time to complete, written to `.context/app/judge-models.md`. The platform-agent defaults are set to the choice, recorded as a decision. Newer model ids, if needed, are added to the provider-models matrix by the documented admin step.                                                                                                                                                                   | `.context/app/judge-models.md`, `lib/app/judges/agents.ts`                                                  |
 
+#### `f-language` — UK or US English
+
+- **summary:** A personal default of UK or US English, overridden by a project and by a
+  single piece of copy, which the judges, rewrites and revisions all write and check in.
+- **dependsOn:** `f-projects`
+- **references:** D26 · `prototype/src/engine.js` (judge and rewrite prompts: "the same
+  language and spelling conventions as the content") · model `meta.language` (`en-GB`)
+- **description:**
+
+  A copywriter in London writing for a client in Chicago needs US spelling in that client's
+  work and UK spelling everywhere else. The artefact guessed the convention from the copy
+  itself, which fails on short copy, on copy that mixes the two, and on a draft being
+  converted from one to the other. A review that marks "colour" as a slip, or a revision
+  that hands back "organise" to a US client, costs the tool its credibility with exactly
+  the people it is for.
+
+  This feature:
+  - adds a personal default (UK or US English), set on the person's profile page and asked
+    once on first use;
+  - lets a project override it, and a single piece of copy override the project, in the
+    workbench and in the API (`language` on `POST assessments`);
+  - resolves the variant in one place (`resolveLanguage`: the piece, then the project, then
+    the person's default, then UK English, the model's own language) and records it on the
+    assessment, so every rewrite and revision from it inherits it;
+  - gives it to the judges, the editor, rewrites and revisions as a run setting, not by
+    editing the framework version's prompts;
+  - adds a house-style check beside the quick scan: spellings from the other variant, and
+    for UK English, -ise and -ize mixed in one piece (both are correct UK English; mixing
+    them is not).
+
+  The variant is the copy's spelling, not the interface's language: the app's own words
+  stay as they are. Values are stored as BCP 47 tags (`en-GB`, `en-US`) so more variants
+  (Australian, Canadian) can follow without a migration; the interface says "UK English"
+  and "US English" (§4).
+
+- **doneWhen:**
+  - On a deployed build, a person whose default is US English assesses a piece in a UK
+    English project, and the report, a rewrite and a revision all use UK spelling and say
+    so.
+- **indicative tasks:**
+
+| Ref | Title                                    | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Files in scope                                                                                                                                                                           |
+| --- | ---------------------------------------- | ---- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| lg1 | Choose UK or US English, and override it | M    | —          | `UserPreference` model (per person, not per workspace: `userId` cascade, classified as personal data and registered in the subject export) with `language`; `GET`/`PATCH /api/v1/preferences` for the session's own person. `Project.language` (nullable: inherit) on the project routes and form; `language` accepted on `POST assessments`. `resolveLanguage()` applies the order of D26 and the assessment records the result in its context. Profile-page section through `account-sections.ts` (row re-pinned); project form and workbench control with `<FieldHelp>`; the report's cover shows it. Route, resolver and component tests, including a key-authenticated call resolving to the key owner's default. | `prisma/schema/app.prisma`, `lib/app/language/`, `app/api/v1/preferences/`, `app/api/v1/projects/`, `app/api/v1/assessments/`, `components/app/settings/`, `lib/app/account-sections.ts` |
+| lg2 | Write and check in the chosen English    | M    | lg1        | The judges' and editor's run context carries the variant in place of the artefact's "same conventions as the content" line; the framework version's stored prompts are unchanged, and any difference from the recorded engine baseline is listed (D19). A house-style check, run beside the quick scan and outside the ported engine, reports other-variant spellings and, for UK English, mixed -ise/-ize, from a curated list of paired spellings whose source and licence are recorded. Tests with UK, US and mixed fixtures, and short copy that a guess would get wrong.                                                                                                                                          | `lib/app/language/`, `lib/app/judges/`, `lib/app/assessments/`                                                                                                                           |
+
 ---
 
 ### Phase `report` — The report and the web app
@@ -783,6 +887,8 @@ done-when.
     (`f-report`, `f-sharing`)
   - Rewrite the weakest appeal, then compare the rewrite with the original.
     (`f-rewrite`, `f-compare`)
+  - Select a weak paragraph, ask for a revision with your own direction, accept it, edit a
+    line by hand, then re-assess draft 2 against draft 1. (`f-editing`)
   - Try the free quick scan on the landing page without an account. (`f-public-site`)
 
 #### `f-report` — The report
@@ -864,7 +970,7 @@ done-when.
 
 - **summary:** A draft rewritten from its assessment, streamed, with placeholders for facts
   the author must supply, and re-assessed in one step.
-- **dependsOn:** `f-report`
+- **dependsOn:** `f-report`, `f-language`
 - **references:** BRIEF §3, §5 · `prototype/src/engine.js` `rewritePrompt`
 - **description:**
 
@@ -877,9 +983,9 @@ done-when.
     opens as a comparison.
 - **indicative tasks:**
 
-| Ref | Title                               | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                                              | Files in scope                                                                          |
-| --- | ----------------------------------- | ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| rw1 | Stream a rewrite from an assessment | M    | —          | Rewrite model with the model steps. `POST /api/v1/rewrites` with `focus` and `stream`, through the editor agent, cost logged. The ported prompt uses the highest-weighted duty (test fails on the `=== 40` rule). The drawer streams, offers copy, and "Assess this draft" starts a comparison once `f-compare` exists (until then, a new assessment). | `lib/app/rewrites/`, `app/api/v1/rewrites/`, `components/app/report/rewrite-drawer.tsx` |
+| Ref | Title                               | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                                                                                                 | Files in scope                                                                          |
+| --- | ----------------------------------- | ---- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| rw1 | Stream a rewrite from an assessment | M    | —          | Rewrite model with the model steps. `POST /api/v1/rewrites` with `focus` and `stream`, through the editor agent, cost logged, written in the assessment's English variant (D26). The ported prompt uses the highest-weighted duty (test fails on the `=== 40` rule). The drawer streams, offers copy, and "Assess this draft" starts a comparison once `f-compare` exists (until then, a new assessment). | `lib/app/rewrites/`, `app/api/v1/rewrites/`, `components/app/report/rewrite-drawer.tsx` |
 
 #### `f-compare` — Comparing drafts
 
@@ -900,6 +1006,53 @@ done-when.
 | Ref | Title          | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                              | Files in scope                                                                                                                       |
 | --- | -------------- | ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | cm1 | Compare drafts | L    | —          | AssessmentSet model (kind `comparison`) with the model steps. `POST /api/v1/comparisons` runs each draft with the same context and judges, then the editor's validated verdict; `GET` returns the set with per-appeal deltas. `/compare/[id]` shows them side by side with the verdict. Partial and failed members handled and tested. | `prisma/schema/app.prisma`, `lib/app/comparisons/`, `app/api/v1/comparisons/`, `app/(protected)/compare/`, `components/app/compare/` |
+
+#### `f-editing` — Editing the draft
+
+- **summary:** The copy edited in place in the writer's own words, any passage revised by
+  the AI to the writer's direction and the model, every change shown as tracked changes,
+  and each saved round a numbered draft that can be re-assessed.
+- **dependsOn:** `f-rewrite`, `f-compare`
+- **references:** D24, D25, D26, D27 · plan §8.6 · §4 "The words we use"
+- **description:**
+
+  A review says what to change, and `f-rewrite` hands back a whole new draft. Writers rarely
+  work that way: they keep most of what they wrote, fix a line here and rework a paragraph
+  there, and want to stay the author. Today the only way to act on a note is to copy the
+  copy out, edit it elsewhere and paste it back as a new assessment, losing the link between
+  drafts.
+
+  This feature:
+  - makes each piece of copy a series of numbered drafts: saving the writer's changes
+    creates the next draft, and earlier drafts, with the assessments that point at them,
+    never change (D25);
+  - adds a draft editor where the writer edits the copy in place, with the latest review's
+    notes in the margin, carried over where their passage is unchanged and marked as
+    changed since the review where it is not;
+  - lets the writer select a passage and ask for a revision of just that passage, with
+    their own direction ("warmer", "cut to 20 words", "lead with the saving") and a focus
+    (the notes on that passage, an appeal, or the model as a whole), and get one to three
+    suggestions, each saying which of the model's moves it used (D24);
+  - shows suggestions and edits as tracked changes the writer accepts or rejects, and shows
+    the changes between any two drafts;
+  - re-assesses a new draft as a comparison with the draft last reviewed, so the writer sees
+    what the round of changes did.
+
+  Everything is in the copy's English variant (D26) and is reachable through the API first
+  (`drafts`, `revisions`).
+
+- **doneWhen:**
+  - On a deployed build, a writer selects a paragraph in a reviewed draft, asks for a
+    revision with a direction, accepts one suggestion, edits another line by hand, saves
+    draft 2, and re-assesses it as a comparison with draft 1.
+- **indicative tasks:**
+
+| Ref | Title                           | Size | Depends on | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Files in scope                                                                               |
+| --- | ------------------------------- | ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| ed1 | Save edits as numbered drafts   | M    | —          | `Content` gains `parentContentId?` (set null), `rootContentId` and `draftNumber`, and `changeSource` (`writer`, `revision`, `rewrite`). `GET /api/v1/drafts/{id}` returns the piece's drafts in order, each with its latest assessment, from one query. `POST /api/v1/drafts/{id}/versions` takes the new text, `baseDraftNumber` and the accepted revision ids; it refuses with 409 when the base is not the latest draft, applies intake's size limits, and records word count. A rewrite's "Assess this draft" also saves it as the next draft. `diffDrafts(a, b)` gives word-level changes. Retention purge (`p4`) leaves later drafts intact. Route and unit tests, including two writers saving from the same base.                                                                                                                                     | `prisma/schema/app.prisma`, `lib/app/drafts/`, `app/api/v1/drafts/`, `lib/app/rewrites/`     |
+| ed2 | Build the draft editor          | L    | ed1        | `/drafts/[id]`: the latest draft editable in place, with a live word count; the latest review's notes in the margin, carried over by locating their quote, and the rest listed as changed since the review; unsaved edits kept in the browser with a warning on leaving; "Save as draft N"; show changes between any two drafts as tracked changes; "Re-assess" starts a comparison of the new draft with the one last reviewed, in the same context. The report gains "Edit this draft". Keyboard-only use works throughout. Component tests; checked by eye, screenshots in the PR.                                                                                                                                                                                                                                                                         | `app/(protected)/drafts/`, `components/app/editor/`, `components/app/report/`                |
+| ed3 | Revise a selected passage (API) | M    | ed1        | `Revision` model with the model steps. `POST /api/v1/revisions` takes the working text, a selection (offsets plus the selected text, checked against each other), a direction (at most 500 characters), a focus and 1–3 options; the editor agent sees the selection, the paragraphs around it as read-only context, the brief, the notes that overlap it, the model's moves for the focus and the English variant, with the copy framed as data and the direction as the writer's. Replies are strict JSON, validated: move ids unknown to the version dropped, empty or overlong suggestions refused, placeholders kept. Cost logged against the workspace's budget; a per-flow sub-cap on the route. `accept` and `reject` record the writer's choice (accepting one rejects its siblings). Tests, including copy that tries to change the reply's format. | `prisma/schema/app.prisma`, `lib/app/revisions/`, `app/api/v1/revisions/`, `lib/app/judges/` |
+| ed4 | Revise from the editor          | M    | ed2, ed3   | Selecting text in the editor offers "Revise" and "Check this passage" (the free quick scan and house-style check on the selection alone). "Revise" opens a direction field with example directions, the focus (the notes on the passage ticked by default, an appeal, or the model as a whole) and the number of options, each with `<FieldHelp>`. Suggestions appear in place as tracked changes with their reasons and moves; accept and reject work by keyboard; accepted changes join the working copy and are saved with the next draft. A note in the margin offers "Revise this passage", selecting its quote. Component tests; checked by eye.                                                                                                                                                                                                        | `components/app/editor/`                                                                     |
 
 #### `f-public-site` — Public site and free scan
 
@@ -1019,7 +1172,7 @@ done-when.
 - **summary:** Production configured, the culture question settled, and the public surfaces
   reviewed under load before the site opens.
 - **dependsOn:** `f-workbench`, `f-sharing`, `f-public-site`, `f-developer-platform`,
-  `f-usage`, `f-mcp`, `f-calibration`
+  `f-usage`, `f-mcp`, `f-calibration`, `f-editing`
 - **references:** D11, D13 · open questions 1–3
 - **description:**
 
@@ -1094,7 +1247,7 @@ done-when.
 ### Sweeps
 
 - **`model-steps` · New models:** the standing steps for each new model (§5). Tasks `s1`,
-  `p1`, `c1`, `c2`, `k2`, `x2`, `rw1`, `cm1`, `bw2`, `ap1`.
+  `p1`, `c1`, `c2`, `k2`, `lg1`, `x2`, `rw1`, `cm1`, `ed1`, `ed3`, `bw2`, `ap1`.
 - **`public-surface` · Anonymous routes:** routes anyone can call, each reviewed for rate
   limits and tenant entry. Tasks `s2`, `p2`, `x2`, `pub1`, `pub2`, `dp2`.
 
@@ -1127,7 +1280,8 @@ empty project, and t-1 exists). The plan goes in through the planning verbs:
    and `indicativeTasks`, each written as `"<ref> · <title> (<size>) — done when: …"` and
    shortened to the Hub's 500-character cap. The full done-when is here, and it is the one
    `plan_feature` takes.
-4. **Decisions.** `record_decision` for D1–D23 on the feature each governs:
+4. **Decisions.** `record_decision` for D1–D27 on the feature each governs (D27 is
+   recorded on `f-editing`, the first feature built around it, but binds every feature):
 
    | Decisions         | Feature                |
    | ----------------- | ---------------------- |
@@ -1141,6 +1295,8 @@ empty project, and t-1 exists). The plan goes in through the planning verbs:
    | D9                | `f-calibration`        |
    | D13               | `f-sharing`            |
    | D15, D22, D23     | `f-app-frame`          |
+   | D26               | `f-language`           |
+   | D24, D25, D27     | `f-editing`            |
    | D20               | `f-developer-platform` |
    | D6                | `f-usage`              |
 
@@ -1286,6 +1442,35 @@ Read top to bottom, in this order, omitting what a result does not have:
 The same component renders the web report, the print view the PDF is made from, and the
 shared view (which leaves out workspace and author).
 
+### 8.6 Drafts, edits and revisions
+
+- **A draft never changes.** Assessments point at a `Content` row, so editing one in place
+  would make every earlier report describe text that no longer exists. Saving creates the
+  next draft (`draftNumber` + 1, same `rootContentId`); the editor works on a copy in the
+  browser until then. One save is one round of changes, however many edits and accepted
+  revisions it holds, which is how writers and clients already count rounds.
+- **Two writers, one draft.** A save names the draft it started from; if that is no longer
+  the latest, it is refused (409) and the editor shows the other writer's changes against
+  the working copy, to accept or redo. No merging in the first version.
+- **A revision sees its passage and only rewrites it.** The editor agent gets the
+  selection, the surrounding paragraphs as read-only context, the brief, the notes that
+  overlap the selection, the model's moves for the chosen focus, and the English variant.
+  It returns suggestions for the selection alone, so nothing outside it can change; the
+  server checks that the offsets and the selected text agree before calling, and the
+  editor checks again before showing a suggestion in place.
+- **The direction is the writer's; the copy is data.** The writer's direction is the one
+  instruction in the prompt besides the version's own; the copy, the brief and the notes are
+  framed as material (D21). The reply's format is fixed by its schema whatever either says.
+- **Notes across drafts.** A note on draft 1 is shown on draft 2 when its quote is found
+  unchanged, located as judges' quotes are; otherwise it is listed as changed since the
+  review. Re-assessing is the only way a draft gets new notes.
+- **Tracked changes are a view, not a store.** Changes between drafts are computed by
+  `diffDrafts`; suggested and accepted revisions are `Revision` rows. Nothing stores a
+  change list that could drift from the drafts themselves.
+- **Formatting is out of scope.** Copy is plain text with paragraph breaks, as intake makes
+  it. Bold, links and lists in the editor would need a rich-text model that intake, the
+  judges and the report do not have (§12).
+
 ---
 
 ## 9. Data model changes, in one place
@@ -1295,21 +1480,31 @@ as `JudgeRun` and `ProjectDocument` included, carry their own `orgId` (cascade) 
 isolation policy; user columns are plain strings with hand-written
 FKs (§1).
 
-| Model              | Owner                | Key fields                                                                                                                                                                 | User columns (on delete)     | Task  |
-| ------------------ | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ----- |
-| `Framework`        | shared config        | `slug`, `name`, `status`                                                                                                                                                   | —                            | `s1`  |
-| `FrameworkVersion` | shared config        | `frameworkId`, `version`, `status`, `sourceDocument`, `sourceSha256`, `calibration`                                                                                        | —                            | `s1`  |
-| `FrameworkNode`    | shared config        | `versionId`, `kind`, `key`, `parentKey`, `name`, `position`, `attributes`                                                                                                  | —                            | `s1`  |
-| `FrameworkLink`    | shared config        | `versionId`, `fromNodeId`, `toNodeId`, `relation`                                                                                                                          | —                            | `s1`  |
-| `Content`          | tenant               | `projectId?`, `title`, `sourceKind`, `sourceUrl?`, `fileName?`, `text`, `textSha256`, `wordCount`                                                                          | `createdByUserId` (set null) | `p1`  |
-| `Assessment`       | tenant               | `contentId`, `projectId?`, `frameworkVersionId`, `profile`, `judges[]`, `context`, `status`, `result`, `overall`, `band`, `costUsd`, `lease…`, `requestedVia`, `apiKeyId?` | `createdByUserId` (set null) | `p1`  |
-| `JudgeRun`         | tenant (child)       | `assessmentId`, `judge`, `provider`, `model`, `status`, `attempts`, `costUsd`, `tokens`, `latencyMs`, `rawOutput?`, `dropped`                                              | —                            | `p1`  |
-| `Project`          | tenant               | `slug`, `name`, `brief`, `defaults`, `overlay`, `frameworkId`, `archivedAt`                                                                                                | `createdByUserId` (set null) | `c1`  |
-| `ProjectDocument`  | tenant (child)       | `projectId`, `knowledgeDocumentId`, `title`, `status`                                                                                                                      | `addedByUserId` (set null)   | `c2`  |
-| `CalibrationRun`   | tenant (install org) | `frameworkVersionId`, `mode`, `judgeModels`, `totals`, `rows`, `costUsd`                                                                                                   | `startedByUserId` (set null) | `k2`  |
-| `ReportShare`      | tenant               | `assessmentId`, `tokenHash`, `expiresAt`, `revokedAt`, `viewCount`                                                                                                         | `createdByUserId` (set null) | `x2`  |
-| `Rewrite`          | tenant               | `assessmentId`, `focus`, `draft`, `model`, `costUsd`                                                                                                                       | `createdByUserId` (set null) | `rw1` |
-| `AssessmentSet`    | tenant               | `kind` (`comparison`, `batch`, `panel`), `projectId?`, `members`, `verdict`, `status`                                                                                      | `createdByUserId` (set null) | `cm1` |
+| Model              | Owner                | Key fields                                                                                                                                                                      | User columns (on delete)     | Task  |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ----- |
+| `Framework`        | shared config        | `slug`, `name`, `status`                                                                                                                                                        | —                            | `s1`  |
+| `FrameworkVersion` | shared config        | `frameworkId`, `version`, `status`, `sourceDocument`, `sourceSha256`, `calibration`                                                                                             | —                            | `s1`  |
+| `FrameworkNode`    | shared config        | `versionId`, `kind`, `key`, `parentKey`, `name`, `position`, `attributes`                                                                                                       | —                            | `s1`  |
+| `FrameworkLink`    | shared config        | `versionId`, `fromNodeId`, `toNodeId`, `relation`                                                                                                                               | —                            | `s1`  |
+| `Content`          | tenant               | `projectId?`, `title`, `sourceKind`, `sourceUrl?`, `fileName?`, `text`, `textSha256`, `wordCount`                                                                               | `createdByUserId` (set null) | `p1`  |
+| `Assessment`       | tenant               | `contentId`, `projectId?`, `frameworkVersionId`, `profile`, `judges[]`, `context`, `status`, `result`, `overall`, `band`, `costUsd`, `lease…`, `requestedVia`, `apiKeyId?`      | `createdByUserId` (set null) | `p1`  |
+| `JudgeRun`         | tenant (child)       | `assessmentId`, `judge`, `provider`, `model`, `status`, `attempts`, `costUsd`, `tokens`, `latencyMs`, `rawOutput?`, `dropped`                                                   | —                            | `p1`  |
+| `Project`          | tenant               | `slug`, `name`, `brief`, `defaults`, `overlay`, `frameworkId`, `archivedAt`                                                                                                     | `createdByUserId` (set null) | `c1`  |
+| `ProjectDocument`  | tenant (child)       | `projectId`, `knowledgeDocumentId`, `title`, `status`                                                                                                                           | `addedByUserId` (set null)   | `c2`  |
+| `CalibrationRun`   | tenant (install org) | `frameworkVersionId`, `mode`, `judgeModels`, `totals`, `rows`, `costUsd`                                                                                                        | `startedByUserId` (set null) | `k2`  |
+| `ReportShare`      | tenant               | `assessmentId`, `tokenHash`, `expiresAt`, `revokedAt`, `viewCount`                                                                                                              | `createdByUserId` (set null) | `x2`  |
+| `Rewrite`          | tenant               | `assessmentId`, `focus`, `draft`, `model`, `costUsd`                                                                                                                            | `createdByUserId` (set null) | `rw1` |
+| `AssessmentSet`    | tenant               | `kind` (`comparison`, `batch`, `panel`), `projectId?`, `members`, `verdict`, `status`                                                                                           | `createdByUserId` (set null) | `cm1` |
+| `UserPreference`   | per person           | `userId` (unique), `language` (`en-GB` \| `en-US`)                                                                                                                              | `userId` (cascade)           | `lg1` |
+| `Revision`         | tenant               | `contentId`, `assessmentId?`, `selectionStart`, `selectionEnd`, `selectedText`, `direction`, `focus`, `language`, `suggestions`, `acceptedIndex?`, `status`, `model`, `costUsd` | `createdByUserId` (set null) | `ed3` |
+
+**Columns added to models above:** `Project.language?` (`lg1`; null inherits the person's
+default); `Content.parentContentId?`, `rootContentId`, `draftNumber`, `changeSource` (`ed1`);
+the English variant inside `Assessment.context` (`lg1`) and on `Rewrite` (`rw1`).
+
+**Why `UserPreference` cascades and is not tenant-owned:** a person's default English goes
+with them across workspaces and is their own data, so it is erased with them and given to
+them in the subject export. A team's shared choice belongs on the project.
 
 **Why set null, not cascade**: content, assessments and projects belong to the workspace (the
 tenant is the controller, per Sunrise's tenancy decision), so they survive a member's
@@ -1479,6 +1674,44 @@ must stay in `(public)`, because a second file cannot own a URL, and `/settings`
 needs a layout edit, it carries a ledger row (`a2`). `(print)` stays its own group, because the
 PDF view has no frame.
 
+### Decided — 2026-11-13
+
+From the owner's additions to the plan on 2026-11-13.
+
+**D24 · The AI can revise a selected passage, to the writer's direction** (owner)
+
+A writer selects part of the copy and asks for it to be revised against the model, saying
+what they want ("with some guidance from the user"). Only the selection changes; the writer
+chooses the focus and gets up to three suggestions, each naming the moves it used, which
+they accept or reject. Rejected: revising the whole draft with a direction (that is a
+rewrite, `f-rewrite`), and applying a suggestion without the writer accepting it. §8.6
+gives the rules.
+
+**D25 · Writers edit the copy in their own words, and each saved round is a new draft**
+(owner)
+
+The draft editor lets the writer change the copy directly. Drafts are immutable and
+numbered, because assessments must keep describing the text they read; one save is one
+round of changes. Rejected: editing a draft in place (breaks every earlier report), and
+saving a draft on every keystroke (floods the history with drafts nobody chose to keep).
+
+**D26 · UK or US English: a personal default, overridden per project and per piece**
+(owner)
+
+Each person picks UK or US English as their default; a project can set its own, and a single
+piece of copy can override both. The order is the piece, the project, the person, then UK
+English (the model's language). Judges, the editor, rewrites, revisions and the house-style
+check all use the resolved variant, and every result records it. A workspace-wide default
+was not asked for and is left for later (§12): a team that shares a convention sets it on
+its projects.
+
+**D27 · The product speaks the copywriting profession's language** (owner)
+
+Everything a person reads uses the terms copywriters, editors and their clients use, listed
+in §4 "The words we use", which every PR that adds visible words is checked against. Code
+and already-planned API names are not renamed, so the API stays stable; new public names
+take the profession's word. The terms the owner has not yet chosen are open question 5.
+
 ### Still open
 
 1. **Where it deploys.** Sunrise's Docker production set-up or a serverless host. It decides
@@ -1490,6 +1723,10 @@ PDF view has no frame.
    `l2`.
 4. **CHANGELOG.** This fork publishes no releases. Proposal: no entries, and the CLAUDE.md
    rule is updated to say so. A Housekeeping task if accepted.
+5. **The copywriting names still to choose** (D27): what people see in place of
+   _assessment_, _judges_, _content type_, and one piece of work in a project (job or
+   assignment), listed under "Proposed" in §4. Needed by `r1` and `b1`, the first pages
+   that show them; the API names stay either way.
 
 ---
 
@@ -1509,6 +1746,9 @@ PDF view has no frame.
 | **The generic framework layer is over-built** for one framework.                       | Generic only where storage and interfaces need it; nothing framework-specific is abstracted until a second framework exists (§12).                              |
 | **Culture data cannot be used commercially.**                                          | The switch (D11), tested in `e2`, set at `l2`.                                                                                                                  |
 | **The knowledge base's per-workspace dedupe** deletes a document another project uses. | Reference counting by `ProjectDocument` links (`c2`, tested).                                                                                                   |
+| **A revision changes more than the selection**, or lands on a passage that moved.      | The reply replaces the selection only; offsets and selected text checked on the server and again in the editor; a stale base refused with 409 (`ed1`, `ed3`).   |
+| **The wrong English slips through**: a judge marks a correct UK spelling as an error.  | The variant is a run setting on every call, recorded on the result; fixtures in both variants and mixed copy (`lg2`); calibration cases in each (`k1`).         |
+| **Interface words drift from the trade's language** as features land separately.       | One list (§4), a ground rule (§5), and a check on every PR that adds visible words.                                                                             |
 
 ---
 
@@ -1523,6 +1763,12 @@ PDF view has no frame.
 - **Editing a framework in the app**: draft, calibrate, publish (D5).
 - **White-label reports** with a workspace's logo and colours (D13).
 - **A long-document mode** that assesses by section and summarises (§8.2).
+- **A workspace or client house style**: a default English for the whole workspace, and
+  rules beyond spelling (serial comma, capitalisation of headings, banned words) (D26).
+- **More English variants** (Australian, Canadian), which the stored tags already allow.
+- **Formatting in the draft editor** (bold, links, lists), once intake and the report carry
+  more than plain text (§8.6).
+- **Revisions through MCP**, so an assistant can revise a passage in a writer's own tools.
 
 **Considered and not planned:**
 
