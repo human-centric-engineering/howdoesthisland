@@ -3,8 +3,8 @@
  * canted like a raised brow. Its upper lid is the proofreader's insert caret
  * in the editor's red, and its glint looks up at that mark.
  *
- * The same drawing as `app/icon.svg`, without the paper tile, so it sits on
- * the page itself. Drawn inline rather than loaded as an image so it follows
+ * The same drawing as `app/icon.svg` (and `public/brand/mark.svg` without its
+ * paper tile), so it sits on the page itself. Drawn inline rather than loaded as an image so it follows
  * the theme: the eye is `currentColor` (ink, or the lightbox's light ink in
  * dark mode) and the caret is `--hd-red`. The glint is cut out of the pupil,
  * so it shows whatever is behind the mark.
