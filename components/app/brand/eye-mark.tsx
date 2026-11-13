@@ -1,8 +1,7 @@
 /**
  * The HowDoesThisLand mark: the reader's eye, drawn with a broad nib and
  * canted like a raised brow. Its upper lid is the proofreader's insert caret
- * in the editor's red, the same caret that ends the wordmark, and its glint
- * looks up at that mark.
+ * in the editor's red, and its glint looks up at that mark.
  *
  * The same drawing as `app/icon.svg`, without the paper tile, so it sits on
  * the page itself. Drawn inline rather than loaded as an image so it follows

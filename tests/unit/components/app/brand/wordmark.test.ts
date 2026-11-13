@@ -1,5 +1,5 @@
 /**
- * Tests: components/app/brand/wordmark.ts — how the header writes the name.
+ * Tests: components/app/brand/wordmark.tsx — how the header writes the name.
  *
  * The header asks the product's question; every other surface keeps the brand
  * name as a name, so only the header form changes.

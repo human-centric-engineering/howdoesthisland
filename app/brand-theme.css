@@ -138,15 +138,6 @@
     font-variation-settings: 'SOFT' 100;
   }
 
-  /* `/ ''` is the alternative text: the caret is decoration, not a word. */
-  .hd-wordmark::after {
-    content: '‸' / '';
-    margin-left: 1px;
-    font-family: var(--hd-font-mono), ui-monospace, monospace;
-    font-weight: 400;
-    color: var(--hd-red, currentColor);
-  }
-
   /* Small caps-and-mono label above a block: "Galley 00 · Home". */
   .hd-slug {
     font: 400 0.66rem/1.3 var(--font-mono);
