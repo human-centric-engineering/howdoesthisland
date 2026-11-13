@@ -1399,6 +1399,10 @@ recovery job (per org, each tick): queued/running with an expired lease ─▶ r
   parse and post-validation still run, because the schema is a request, not a guarantee.
 - **Limits per judge**: the influence judge's reply (13 perspectives × 6 levers) is several
   times the others', so `maxTokens` and timeout are set per slot and measured in `k3`.
+  Each agent's own `maxTokens` is the ceiling over those calls, sized for its largest job on a
+  frontier reasoning model with room to think (thinking counts against the cap); the editor's
+  covers a full rewrite of the longest accepted text, so a rewrite call (`rw1`) sizes its cap
+  and timeout from the text's length under it.
 - **Cost**: every call is logged with `{ assessmentId, judge, frameworkVersion }` (no
   `assessmentId` on an ephemeral run, §8.2), so the
   usage page and the per-assessment cost come from the same rows the budget gate counts.

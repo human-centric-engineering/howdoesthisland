@@ -27,6 +27,7 @@ import {
   judgeAgentDefinitions,
   pickInterimBinding,
 } from '@/lib/app/judges/agents';
+import { MAX_TEXT_CHARS } from '@/lib/app/intake/extract-text';
 import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provision';
 import type { TenancyClient } from '@/lib/db/tenancy-extension';
 import {
@@ -120,6 +121,16 @@ describe('judgeAgentDefinitions', () => {
   it('gives the influence judge a larger reply ceiling than the other judges', () => {
     const tokens = (slug: string) => definitions.find((d) => d.slug === slug)!.agent.maxTokens;
     expect(tokens('hdtl-judge-influence')).toBeGreaterThan(tokens('hdtl-judge-ethos'));
+  });
+
+  it('lets the editor rewrite the longest text the app accepts, with as much again to think', () => {
+    const editor = definitions.find((d) => d.slug === EDITOR_AGENT_SLUG)!;
+    // About four characters to a token in English: the rewrite alone, twice.
+    expect(editor.agent.maxTokens).toBeGreaterThanOrEqual(2 * (MAX_TEXT_CHARS / 4));
+  });
+
+  it("keeps every ceiling within gpt-4.1's output limit, since nothing clamps a cap to the model's", () => {
+    for (const d of definitions) expect(d.agent.maxTokens).toBeLessThanOrEqual(32_768);
   });
 
   it.each(definitions.map((d) => [d.slug, d.agent.systemInstructions] as const))(

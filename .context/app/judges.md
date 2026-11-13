@@ -60,3 +60,16 @@ it is asked once per org per catalogue, not once per agent: a reconcile, or a
 maintenance pass over every org, asks the policy, the eligibility rule and a
 fork's credential resolver (which may call a vault) once per org. A failure is
 shared the same way, so a resolver that is down is asked once, not ten times.
+
+## Reply ceilings
+
+Each agent's `maxTokens` is a ceiling sized for its largest job on a frontier
+reasoning model, with room for thinking, which counts against the cap: 16,384
+for a judge, 32,768 for the influence judge (13 perspectives × 6 levers) and
+for the editor, whose rewrite repeats the whole text (up to 40,000 characters,
+about 10,000 tokens). Only tokens produced are billed, so headroom costs
+nothing unless used. 32,768 is the top, because it is `gpt-4.1`'s output limit
+and nothing clamps a cap to the model's. Calls size their own `maxTokens` and
+timeout under the ceiling (j2 per slot, rw1 from the text's length), and k3
+measures them and chooses reasoning effort, left at the provider's default
+until then.
