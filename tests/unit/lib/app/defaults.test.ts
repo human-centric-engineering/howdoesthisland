@@ -716,8 +716,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         // FORK (HowDoesThisLand): and the framework store's smoke and commands (t-10).
         'scripts/app/smoke-framework-store.ts',
         'scripts/app/frameworks/*.ts',
+        // FORK (HowDoesThisLand): and the engine-baseline recorder (t-12).
+        'scripts/app/baseline/record.ts',
       ]);
-      expect(appAlwaysRunTests).toEqual([]);
+      // FORK (HowDoesThisLand): pinned to our one guard, the prototype import
+      // guard (t-12). Ledger: .context/app/platform-divergences.md row 2.
+      expect(appAlwaysRunTests.map((e) => e.path)).toEqual([
+        'tests/unit/lib/app/prototype-guard.test.ts',
+      ]);
       expect(appOwnerlessSurfaceExceptions).toEqual([]);
     },
   },
