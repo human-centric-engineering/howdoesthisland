@@ -23,8 +23,7 @@
 
 import JSZip from 'jszip';
 import { JSDOM } from 'jsdom';
-import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
-import { logger } from '@/lib/logging';
+import { IntakeError, IntakeErrorCodes, unreadableFile } from '@/lib/app/intake/errors';
 
 export interface PptxLimits {
   /** Most slides read; a deck listing more is refused. */
@@ -61,7 +60,7 @@ const RELATIONSHIP_NS = new Set([
   'http://purl.oclc.org/ooxml/officeDocument/relationships',
 ]);
 
-interface ReadBudget {
+export interface ReadBudget {
   used: number;
   readonly max: number;
 }
@@ -69,13 +68,17 @@ interface ReadBudget {
 function tooLarge(max: number): IntakeError {
   return new IntakeError(
     IntakeErrorCodes.TOO_LARGE,
-    `This presentation expands to more than ${Math.round(max / 1_048_576)} MB of slide text, more than we read.`,
+    `This file expands to more than ${Math.round(max / 1_048_576)} MB of XML once unzipped, more than we read.`,
     { maxXmlBytes: max }
   );
 }
 
 /** Reads one part as UTF-8, charging its decompressed size to the budget. */
-async function readPart(zip: JSZip, path: string, budget: ReadBudget): Promise<string | null> {
+export async function readPart(
+  zip: JSZip,
+  path: string,
+  budget: ReadBudget
+): Promise<string | null> {
   const file = zip.file(path);
   if (!file) return null;
   return new Promise((resolve, reject) => {
@@ -204,21 +207,15 @@ function partText(doc: Document): PartText {
   return { paragraphs, title };
 }
 
-/** The reason is logged, not returned: it names our parser and its internals. */
-function unreadable(reason: string): IntakeError {
-  logger.warn('PPTX intake could not read the file', { reason });
-  return new IntakeError(
-    IntakeErrorCodes.UNREADABLE,
-    'This file could not be read as a PowerPoint presentation.'
-  );
-}
+const unreadable = (cause: unknown): IntakeError =>
+  unreadableFile('a PowerPoint presentation', cause);
 
 export async function extractPptx(buffer: Buffer, limits: PptxLimits): Promise<PptxText> {
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(buffer);
   } catch (err) {
-    throw unreadable(err instanceof Error ? err.message : 'not a zip archive');
+    throw unreadable(err);
   }
 
   const budget: ReadBudget = { used: 0, max: limits.maxXmlBytes };
@@ -301,6 +298,6 @@ export async function extractPptx(buffer: Buffer, limits: PptxLimits): Promise<P
     };
   } catch (err) {
     if (err instanceof IntakeError) throw err;
-    throw unreadable(err instanceof Error ? err.message : 'unreadable part');
+    throw unreadable(err);
   }
 }

@@ -56,7 +56,7 @@ describe('extractText — formats', () => {
     expect(r.warnings).toEqual([]);
   });
 
-  it('reads a DOCX: headings kept, Markdown escapes removed', async () => {
+  it('reads a DOCX: headings kept as paragraphs, no escapes', async () => {
     const r = await extractText(fixture('letter.docx'), 'letter.docx');
 
     expect(r.format).toBe('docx');
@@ -243,13 +243,14 @@ describe('extractText — refusals', () => {
   });
 
   it.each(['deck.pptx', 'letter.docx', 'report.pdf'])(
-    'refuses bytes that are not really a %s as unreadable',
+    "refuses bytes that are not really a %s as unreadable, without the parser's own error",
     async (name) => {
-      await expectRefused(
+      const err = await expectRefused(
         extractText(Buffer.from('this is not that kind of file'), name),
         IntakeErrorCodes.UNREADABLE,
         422
       );
+      expect(err.details).toBeUndefined();
     }
   );
 });
@@ -391,17 +392,43 @@ describe('extractText — review regressions', () => {
     ],
     ['a bare # line', '#\n\nSome paragraph.\n\n# Real title', 'Real title'],
     ['inline markup', '# **Q3** [report](https://x.example)\n\nBody.', 'Q3 report'],
+    [
+      'a longer fence holding a shorter one',
+      '````md\n```\n# not this\n```\n# nor this\n````\n# Real title',
+      'Real title',
+    ],
+    [
+      'underscores and asterisks inside words',
+      '# Using my_var_name and 2*3*4',
+      'Using my_var_name and 2*3*4',
+    ],
   ])('takes a Markdown title past %s', async (_, md, title) => {
     const r = await extractText(Buffer.from(md), 'notes.md');
     expect(r.title).toBe(title);
   });
 
-  it.each(['deck.pptx', 'letter.docx', 'report.pdf'])(
-    "does not return the parser's own error for an unreadable %s",
-    async (name) => {
-      const err = await refusal(extractText(Buffer.from('not that kind of file'), name));
-      expect(err.code).toBe(IntakeErrorCodes.UNREADABLE);
-      expect(err.details).toBeUndefined();
-    }
-  );
+  it('keeps words apart across paragraphs in a table cell and line breaks', async () => {
+    const buf = await docx(
+      '<w:tbl><w:tr><w:tc>' +
+        wp(wr('Alpha')) +
+        wp(wr('Beta')) +
+        '</w:tc></w:tr></w:tbl>' +
+        wp(`${wr('line one')}<w:r><w:br/></w:r>${wr('line two')}`)
+    );
+
+    const r = await extractText(buf, 'table.docx');
+
+    expect(r.text).toBe('Alpha Beta\n\nline one line two');
+    expect(r.wordCount).toBe(6);
+  });
+
+  it('refuses a DOCX whose XML expands past maxXmlBytes', async () => {
+    const buf = await docx(wp(wr('x'.repeat(5_000))));
+
+    await expectRefused(
+      extractText(buf, 'bomb.docx', { maxXmlBytes: 2_000 }),
+      IntakeErrorCodes.TOO_LARGE,
+      413
+    );
+  });
 });

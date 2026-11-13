@@ -8,6 +8,7 @@
  */
 
 import { APIError, ErrorCodes } from '@/lib/api/errors';
+import { logger } from '@/lib/logging';
 
 export const IntakeErrorCodes = {
   /** Not one of the formats intake reads. */
@@ -47,4 +48,17 @@ export class IntakeError extends APIError {
     super(message, intakeCode, STATUS[intakeCode], details);
     this.name = 'IntakeError';
   }
+}
+
+/**
+ * A file that could not be read as `kind` (`'a PowerPoint presentation'`,
+ * `'PDF'`). The cause is logged, not returned: it names our parsers and their
+ * internals.
+ */
+export function unreadableFile(kind: string, cause: unknown): IntakeError {
+  logger.warn('Intake could not read the file', {
+    kind,
+    reason: cause instanceof Error ? cause.message : String(cause),
+  });
+  return new IntakeError(IntakeErrorCodes.UNREADABLE, `This file could not be read as ${kind}.`);
 }

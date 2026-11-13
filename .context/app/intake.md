@@ -29,7 +29,8 @@ number a client sees before an assessment matches the one the engine uses.
   `maxChars`), keeps Markdown syntax (`__bold__`, `[text](url)`) and drops a
   heading with no body under it. Here pictures are removed, each paragraph,
   heading, list item and table cell is a paragraph of text, and every heading
-  is kept.
+  is kept. Footnote markers and their back-links are dropped. Its XML is
+  charged to `maxXmlBytes` before mammoth reads it, as a PPTX's is.
 - **PPTX** is read here: core has no PowerPoint parser. Slides come in
   _presented_ order (`ppt/presentation.xml`'s slide list), not `slideN.xml`
   order, because a slide keeps its file number when it is moved. Each slide's
@@ -41,15 +42,15 @@ number a client sees before an assessment matches the one the engine uses.
 Every refusal is an `IntakeError` (an `APIError`), so a route that lets it
 propagate answers with the status and code below.
 
-| Code                | Status | When                                                                             |
-| ------------------- | ------ | -------------------------------------------------------------------------------- |
-| `INVALID_FILE_TYPE` | 415    | not one of the extensions above (CSV and EPUB included)                          |
-| `FILE_TOO_LARGE`    | 413    | over `maxBytes` (checked first), or a PPTX whose XML expands past `maxXmlBytes`  |
-| `TOO_MANY_PAGES`    | 422    | a PDF over `maxPages` pages, or a PPTX over `maxPages` slides (hidden included)  |
-| `PDF_HAS_NO_TEXT`   | 422    | the PDF has no text at all: scanned or blank                                     |
-| `NO_TEXT`           | 422    | any other file with no text                                                      |
-| `TEXT_TOO_LONG`     | 422    | more than `maxChars` characters of extracted text                                |
-| `FILE_UNREADABLE`   | 422    | the bytes are not the format the extension names (the cause is logged, not sent) |
+| Code                | Status | When                                                                                    |
+| ------------------- | ------ | --------------------------------------------------------------------------------------- |
+| `INVALID_FILE_TYPE` | 415    | not one of the extensions above (CSV and EPUB included)                                 |
+| `FILE_TOO_LARGE`    | 413    | over `maxBytes` (checked first), or a PPTX or DOCX whose XML expands past `maxXmlBytes` |
+| `TOO_MANY_PAGES`    | 422    | a PDF over `maxPages` pages, or a PPTX over `maxPages` slides (hidden included)         |
+| `PDF_HAS_NO_TEXT`   | 422    | the PDF has no text at all: scanned or blank                                            |
+| `NO_TEXT`           | 422    | any other file with no text                                                             |
+| `TEXT_TOO_LONG`     | 422    | more than `maxChars` characters of extracted text                                       |
+| `FILE_UNREADABLE`   | 422    | the bytes are not the format the extension names (the cause is logged, not sent)        |
 
 Text over the limit is **refused, never truncated** (plan §8.2): an assessment
 of a document's first part reads as an assessment of all of it.

@@ -4,7 +4,14 @@
  * Sunrise's.
  */
 declare module 'mammoth' {
-  export function convertToHtml(input: {
-    buffer: Buffer;
-  }): Promise<{ value: string; messages: Array<{ type: string; message: string }> }>;
+  interface ImageConverter {
+    readonly __brand: 'mammoth.ImageConverter';
+  }
+  export const images: {
+    imgElement(f: () => Promise<{ src: string }>): ImageConverter;
+  };
+  export function convertToHtml(
+    input: { buffer: Buffer },
+    options?: { convertImage?: ImageConverter }
+  ): Promise<{ value: string; messages: Array<{ type: string; message: string }> }>;
 }

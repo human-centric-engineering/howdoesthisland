@@ -18,10 +18,10 @@
 import { JSDOM } from 'jsdom';
 import mammoth from 'mammoth';
 import { parseDocument, type ParsedDocument } from '@/lib/orchestration/knowledge/parsers';
-import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
-import { extractPptx } from '@/lib/app/intake/pptx';
-import { words } from '@/lib/app/frameworks/howdoesthisland/engine/text';
-import { logger } from '@/lib/logging';
+import JSZip from 'jszip';
+import { IntakeError, IntakeErrorCodes, unreadableFile } from '@/lib/app/intake/errors';
+import { extractPptx, readPart, type ReadBudget } from '@/lib/app/intake/pptx';
+import { wordCount } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 
 /** The pipeline's content limit, in characters (plan §8.2). */
 export const MAX_TEXT_CHARS = 40_000;
@@ -33,7 +33,7 @@ export interface IntakeLimits {
   maxPages: number;
   /** Most characters of extracted text accepted. */
   maxChars: number;
-  /** PPTX only: most bytes of slide XML read once decompressed. */
+  /** PPTX and DOCX: most bytes of XML read once decompressed. */
   maxXmlBytes: number;
 }
 
@@ -78,8 +78,8 @@ export interface ExtractedText {
   warnings: string[];
 }
 
-/** Counted the way the assessment engine counts: its own `words`. */
-export const countWords = (text: string): number => words(text).length;
+/** Counted the way the assessment engine counts: its own `wordCount`. */
+export const countWords = wordCount;
 
 const baseName = (fileName: string): string => fileName.replace(/\.[^.]+$/, '');
 
@@ -104,6 +104,21 @@ function tidy(text: string): string {
 
 /** Mammoth's HTML elements that are a paragraph of their own in the text. */
 const DOCX_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, td, th';
+/** Footnote and endnote markers (`[1]`) and their back-links (`↑`). */
+const DOCX_NOTE_LINKS =
+  'a[id^="footnote-ref-"], a[id^="endnote-ref-"], a[href^="#footnote-ref-"], a[href^="#endnote-ref-"]';
+
+/**
+ * Every XML part of a DOCX, charged to the expanded-size budget before
+ * mammoth reads any of it: a small zip can inflate to gigabytes.
+ */
+async function checkDocxExpansion(buffer: Buffer, maxXmlBytes: number): Promise<void> {
+  const zip = await JSZip.loadAsync(buffer);
+  const budget: ReadBudget = { used: 0, max: maxXmlBytes };
+  for (const file of Object.values(zip.files)) {
+    if (!file.dir && /\.(xml|rels)$/i.test(file.name)) await readPart(zip, file.name, budget);
+  }
+}
 
 /**
  * Word, read here rather than through core. Core converts DOCX to Markdown:
@@ -113,12 +128,22 @@ const DOCX_BLOCKS = 'p, h1, h2, h3, h4, h5, h6, li, td, th';
  * instead: pictures removed, each block its own paragraph, the first heading
  * the title.
  */
-async function readDocx(buffer: Buffer): Promise<Raw> {
-  const result = await mammoth.convertToHtml({ buffer });
+async function readDocx(buffer: Buffer, maxXmlBytes: number): Promise<Raw> {
+  await checkDocxExpansion(buffer, maxXmlBytes);
+  const result = await mammoth.convertToHtml(
+    { buffer },
+    // Never read or encode a picture: it is dropped below anyway.
+    { convertImage: mammoth.images.imgElement(() => Promise.resolve({ src: '' })) }
+  );
   const { document: doc } = new JSDOM('').window;
   const body = doc.createElement('body');
   body.innerHTML = result.value;
-  for (const img of Array.from(body.querySelectorAll('img'))) img.remove();
+  for (const el of Array.from(body.querySelectorAll(`img, ${DOCX_NOTE_LINKS}`))) el.remove();
+  // Words either side of a line break, or of a block inside a block (a
+  // paragraph in a table cell, a nested list), stay apart.
+  for (const el of Array.from(body.querySelectorAll(`br, ${DOCX_BLOCKS}`))) {
+    el.after(doc.createTextNode(' '));
+  }
 
   const paragraphs = Array.from(body.querySelectorAll(DOCX_BLOCKS))
     // A block inside another (a paragraph in a table cell) is read by its outer one.
@@ -138,18 +163,22 @@ async function readDocx(buffer: Buffer): Promise<Raw> {
 function markdownTitle(markdown: string): string | undefined {
   let fence: string | null = null;
   for (const line of markdown.split('\n')) {
-    const f = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-    if (f) {
-      if (!fence) fence = f[0];
-      else if (f[0] === fence) fence = null;
+    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (!fence && f) {
+      fence = f[1];
       continue;
     }
-    if (fence) continue;
+    if (fence) {
+      // Closed only by the same character, at least as long, with nothing after it.
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = null;
+      continue;
+    }
     const h1 = /^ {0,3}#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line)?.[1];
     if (!h1) continue;
     const plain = h1
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/(\*\*|__|\*|_|`)(.+?)\1/g, '$2')
+      // Only at word edges, as CommonMark does: `my_var_name` and `2*3*4` stay.
+      .replace(/(^|[^\p{L}\p{N}])(\*\*|__|\*|_|`)(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}])/gu, '$1$3')
       .trim();
     if (plain) return plain;
   }
@@ -163,17 +192,8 @@ interface Raw {
   warnings: string[];
 }
 
-/** The reason is logged, not returned: it names our parser and its internals. */
-function unreadable(format: IntakeFormat, err: unknown): IntakeError {
-  logger.warn('Intake could not read the file', {
-    format,
-    reason: err instanceof Error ? err.message : String(err),
-  });
-  return new IntakeError(
-    IntakeErrorCodes.UNREADABLE,
-    `This file could not be read as ${format.toUpperCase()}.`
-  );
-}
+const unreadable = (format: IntakeFormat, err: unknown): IntakeError =>
+  unreadableFile(format.toUpperCase(), err);
 
 async function readWithCore(
   buffer: Buffer,
@@ -265,8 +285,8 @@ export async function extractText(
     const r = await extractPptx(buffer, { maxSlides: lim.maxPages, maxXmlBytes: lim.maxXmlBytes });
     raw = { text: r.text, title: r.title, pageCount: r.slideCount, warnings: r.warnings };
   } else if (format === 'docx') {
-    raw = await readDocx(buffer).catch((err: unknown) => {
-      throw unreadable(format, err);
+    raw = await readDocx(buffer, lim.maxXmlBytes).catch((err: unknown) => {
+      throw err instanceof IntakeError ? err : unreadable(format, err);
     });
   } else {
     raw = await readWithCore(buffer, fileName, format, lim);
