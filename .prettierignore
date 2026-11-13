@@ -61,3 +61,7 @@ lib/app/frameworks/*/data
 # HowDoesThisLand: the engine baseline, canonical JSON the recorder writes and
 # must reproduce byte for byte (t-12). Ledger: .context/app/platform-divergences.md row 3.
 tests/fixtures/app/engine-baseline
+
+# HowDoesThisLand: a real web page, saved exactly as served, so the main-content
+# rule is tested against real markup (t-16). Ledger: .context/app/platform-divergences.md row 3.
+tests/fixtures/app/intake/gov-uk-register-to-vote.html
