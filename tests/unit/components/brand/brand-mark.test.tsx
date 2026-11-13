@@ -44,8 +44,10 @@ describe('BrandMark default', () => {
     const mark = container.querySelector('.hd-wordmark');
     expect(mark).not.toBeNull();
     expect(container.children).toHaveLength(1);
-    // The proof caret is CSS decoration, so it never reaches the text or the
-    // link's accessible name.
     expect(mark?.textContent).toBe('Sunrise');
+    // The eye beside it is decorative: hidden from assistive tech, and it adds
+    // nothing to the text or the link's accessible name.
+    expect(container.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.textContent).toBe('Sunrise');
   });
 });

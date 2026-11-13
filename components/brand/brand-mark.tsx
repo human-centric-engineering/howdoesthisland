@@ -1,5 +1,6 @@
 import { BRAND } from '@/lib/brand';
-import { Wordmark } from '@/components/app/brand/wordmark';
+import { EyeMark } from '@/components/app/brand/eye-mark';
+import { Wordmark, headerForm } from '@/components/app/brand/wordmark';
 
 /**
  * BrandMark — the header/footer brand slot.
@@ -8,11 +9,18 @@ import { Wordmark } from '@/components/app/brand/wordmark';
  * and does NOT change it after release; its header asks a fork to replace the
  * body, so this is not a divergence.
  *
- * HowDoesThisLand renders the Galley Proof wordmark (D15). `BRAND.name` stays
- * the identity and accessible name; the surrounding `<Link>` supplies the link.
+ * HowDoesThisLand renders its mark, the reader's eye, beside the Galley Proof
+ * wordmark (D15), with the name set as the question it asks ("How does this
+ * land?", `headerForm`). The eye is decorative, so that text is the accessible
+ * name; the surrounding `<Link>` supplies the link.
  *
  * Full guide: CUSTOMIZATION.md §2.
  */
 export function BrandMark(): React.ReactNode {
-  return <Wordmark name={BRAND.name} />;
+  return (
+    <span className="inline-flex items-center gap-2 align-middle">
+      <EyeMark className="h-[1.4em] w-auto shrink-0" />
+      <Wordmark name={headerForm(BRAND.name)} />
+    </span>
+  );
 }
