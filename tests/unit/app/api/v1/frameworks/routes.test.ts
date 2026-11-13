@@ -320,6 +320,19 @@ describe('GET /api/v1/frameworks/{slug}/versions/{version}/{kind}', () => {
 });
 
 describe('an unexpected failure', () => {
+  it('on the list is a 500 in the standard envelope', async () => {
+    const spy = vi.spyOn(repo().frameworks, 'keys').mockImplementationOnce(() => {
+      throw new Error('db down');
+    });
+    try {
+      const res = await listRoute(get(''));
+      expect(res.status).toBe(500);
+      expect((await body(res)).success).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('is a 500 in the standard envelope, not a 404', async () => {
     const spy = vi.spyOn(repo(), 'findVersionById').mockRejectedValueOnce(new Error('db down'));
     // A version not yet materialised, so the read reaches the repo.
