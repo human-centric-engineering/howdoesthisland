@@ -355,7 +355,13 @@ export function assemble(
 
   return {
     model_version: m.data.meta.version,
-    mode: Object.keys(ai).length ? 'full' : 'quick',
+    // The prototype counted keys; a key with no reply, or a culture reply with
+    // culture off, contributes nothing and does not make a result 'full'.
+    mode: Object.entries(ai).some(
+      ([g, out]) => out !== undefined && (opts.culture || g !== CULTURE_GROUP)
+    )
+      ? 'full'
+      : 'quick',
     content_type: ctx.contentType,
     audience: { archetype: ctx.archetype, role: ctx.role || null, ...ctx.audience },
     effective_weights: w,

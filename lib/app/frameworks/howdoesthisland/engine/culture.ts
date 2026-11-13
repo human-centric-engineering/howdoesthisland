@@ -50,7 +50,15 @@ export function cultureProfile(m: EngineModel, id: string | undefined): CultureP
     uncertainty: cl01(h('uai')),
     expressiveness: cl01(0.12 + 0.75 * Mu - 0.05 * R + 0.15 * (h('ivr') - 0.5)),
   };
-  return { ...c, global: false, targets: t, tolerance: 0.14 };
+  // Copies, not the model's own (frozen) objects, so a caller may change a result.
+  return {
+    ...c,
+    lewis: { ...c.lewis },
+    hofstede: { ...c.hofstede },
+    global: false,
+    targets: t,
+    tolerance: 0.14,
+  };
 }
 
 const LEWIS_POLES = ['linear', 'multi', 'reactive'] as const;

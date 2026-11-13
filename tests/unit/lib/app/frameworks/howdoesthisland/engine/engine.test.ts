@@ -112,6 +112,25 @@ describe('reaching the engine', () => {
     expect(q.notes.craft_length).toContain('typical range for this content type is 80 to 900');
   });
 
+  it('scores craft tone on a model with no culture section and culture off', () => {
+    const { culture: _c, ...core } = model;
+    const e = createHowDoesThisLandEngine(core, { culture: false });
+    const c = cases[0];
+    const q = e.quickScan(c.input.text, c.input.ctx);
+    expect(Number.isFinite(q.scores.craft_tone)).toBe(true);
+    expect(Number.isFinite(e.assemble(c.input.text, c.input.ctx, q).group_scores.craft)).toBe(true);
+  });
+
+  it('hands back results a caller may change: no frozen model objects inside', () => {
+    const e = createHowDoesThisLandEngine(model, { culture: true });
+    const c = cases.find((x) => x.input.ctx.culture?.reader === 'jp');
+    if (!c) throw new Error('the baseline no longer has a Japanese reader');
+    const r = e.assemble(c.input.text, c.input.ctx, e.quickScan(c.input.text, c.input.ctx));
+    expect(r.culture?.reader.global).toBe(false);
+    expect(Object.isFrozen(r.culture?.reader.lewis)).toBe(false);
+    expect(Object.isFrozen(r.culture?.reader.hofstede)).toBe(false);
+  });
+
   it('indexes a model object once, however many engines are made from it', () => {
     expect(indexModel(model)).toBe(indexModel(model));
   });
@@ -270,6 +289,18 @@ describe('the culture switch', () => {
     });
     expect(b.full).toEqual(strip(a.full));
     expect(b.quick).toEqual(strip(a.quick));
+  });
+
+  it('counts a result as full only when a judge reply was used', () => {
+    const c = cases[0];
+    const { text, ctx } = c.input;
+    const mode = (e: HowDoesThisLandEngine, ai: JudgeOutputs) =>
+      e.assemble(text, ctx, e.quickScan(text, ctx), ai).mode;
+    const cultureOnly: JudgeOutputs = { culture: c.judgeOutputs.culture };
+    expect(mode(off, cultureOnly)).toBe('quick');
+    expect(mode(on, cultureOnly)).toBe('full');
+    expect(mode(on, { ethos: undefined })).toBe('quick');
+    expect(mode(off, c.judgeOutputs)).toBe('full');
   });
 
   it('is read from the environment when the definition makes an engine', () => {

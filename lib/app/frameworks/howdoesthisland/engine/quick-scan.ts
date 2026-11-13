@@ -203,7 +203,9 @@ function extraScan(
   notes.craft_cohesion = `${Math.round(conn * 100)}% of sentences use a linking word; ${Math.round(ovr * 100)}% pick up a word from the sentence before.`;
 
   // tone
-  const want = 0.5 * (FORMAL_CT[ctx.contentType] ?? 0.5) + 0.5 * prof.targets.formality;
+  // A model without culture scales has no formality target: the middle, as
+  // for a global reader, rather than NaN.
+  const want = 0.5 * (FORMAL_CT[ctx.contentType] ?? 0.5) + 0.5 * (prof.targets.formality ?? 0.5);
   const pf = paras.map((p) => share(countIn(p, CUE.formal) * 1.5, countIn(p, CUE.informal) * 0.6));
   const spread = pf.length > 1 ? Math.max(...pf) - Math.min(...pf) : 0;
   const ts =

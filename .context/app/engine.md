@@ -65,6 +65,9 @@ fails on any difference not listed there, and on any listed difference that has 
   (`scoring.red_flags`: flags "do not reduce scores"). So the port keeps every score as
   it was and drops the stray score and note. Whether flags should lower scores is a
   model question, and changing it would change scores.
+- **`mode`.** The prototype called a result `full` when its judge outputs had any key. The
+  port counts only replies it used: a key with no reply, or a culture reply with culture
+  off, leaves the result `quick`. Nothing in the baseline shows this change.
 - **Judge output validation** (BRIEF §5) is j2's, in f-judges.
 
 ## The culture switch (D11)

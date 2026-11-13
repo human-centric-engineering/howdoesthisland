@@ -96,18 +96,31 @@ export type Span = [start: number, end: number];
  * string is not an index into the original. These maps carry it back.
  */
 function lowerWithMap(text: string): { lower: string; from: number[]; to: number[] } {
-  let lower = '';
+  // The whole string at once, as the prototype did: lower-casing is
+  // context-sensitive (a word-final Σ becomes ς, not σ), so a character on
+  // its own can lower differently. Each character's own lower case is used
+  // only for its length, which context does not change.
+  const lower = text.toLowerCase();
   const from: number[] = [];
   const to: number[] = [];
   let i = 0;
   for (const ch of text) {
-    const lc = ch.toLowerCase();
-    for (let k = 0; k < lc.length; k++) {
+    const n = ch.toLowerCase().length;
+    for (let k = 0; k < n; k++) {
       from.push(i);
       to.push(i + ch.length);
     }
-    lower += lc;
     i += ch.length;
+  }
+  if (from.length !== lower.length) {
+    // Not reachable with JavaScript's case mappings; if it ever is, fall back
+    // to the prototype's offsets rather than map through a misaligned table.
+    from.length = 0;
+    to.length = 0;
+    for (let k = 0; k < lower.length; k++) {
+      from.push(Math.min(k, text.length));
+      to.push(Math.min(k + 1, text.length));
+    }
   }
   from.push(text.length);
   to.push(text.length);

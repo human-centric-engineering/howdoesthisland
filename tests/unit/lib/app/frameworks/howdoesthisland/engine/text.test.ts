@@ -95,6 +95,15 @@ describe('locate()', () => {
     expect(slice(text, locate(text, 'izmir in may'))).toBeNull();
   });
 
+  it('lower-cases the text as a whole, so a word-final Σ still matches ς', () => {
+    const text = 'ΟΔΟΣ ΚΑΛΗ, and more.';
+    expect(locate(text, 'οδος καλη')).toEqual([0, 9]);
+    expect(locate(text, 'οδος καλη')).toEqual(prototypeLocate(text, 'οδος καλη'));
+    // …and still maps back after an İ.
+    const mixed = 'İ ΟΔΟΣ ΚΑΛΗ';
+    expect(slice(mixed, locate(mixed, 'οδος καλη'))).toBe('ΟΔΟΣ ΚΑΛΗ');
+  });
+
   it('finds an exact quote where it is', () => {
     expect(locate('Say it plainly. Then stop.', 'Then stop.')).toEqual([16, 26]);
   });
