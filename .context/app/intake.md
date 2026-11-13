@@ -63,11 +63,13 @@ The type comes from `Content-Type`, never the URL's extension, so
 `/pricing.php` served as HTML is read as HTML. HTML, XHTML, PDF, plain text,
 Markdown, DOCX and PPTX are read. HTML goes through `mainContent()`
 (`main-content.ts`): it reads `<main>`, else `[role=main]`, else `<article>`,
-else `<body>`, after removing `nav`, `aside`, `form`, scripts, hidden elements
-and the site's banner and footer. A `header` or `footer` is removed only when
-it is not inside `article`, `aside`, `main`, `nav` or `section` (the ARIA
-rule), so a hero headline in `<main><header>` stays, and so do buttons. Core's
-`parseHtml()` removes both, which is why an uploaded `.html` and a fetched page
+else `<body>`, after removing `nav`, `aside`, search forms, scripts, hidden
+elements and the site's banner and footer. A `header` or `footer` is removed
+only when it is not inside `article`, `aside`, `main`, `nav`, `section` or
+`[role=main]` (the ARIA rule), so a hero headline in `<main><header>` stays.
+Buttons and other forms stay too: a sign-up form is often the call to action,
+and ASP.NET WebForms wraps the whole page in one `<form>`. Core's
+`parseHtml()` removes all of these, which is why an uploaded `.html` and a fetched page
 are read differently. The title is `<title>`, else `og:title`, else the first
 `<h1>`, else the host.
 

@@ -38,7 +38,12 @@ import {
   type IntakeLimits,
 } from '@/lib/app/intake/extract-text';
 import { IntakeError, IntakeErrorCodes, unreadableFile } from '@/lib/app/intake/errors';
-import { charsetOf, mainContent, type MainContent } from '@/lib/app/intake/main-content';
+import {
+  charsetOf,
+  knownCharset,
+  mainContent,
+  type MainContent,
+} from '@/lib/app/intake/main-content';
 import { logger } from '@/lib/logging';
 import { loggableUrl } from '@/lib/logging/redact-path';
 import { createSafeDispatcher, isUnsafeAddressRefusal } from '@/lib/security/safe-dispatcher';
@@ -129,7 +134,20 @@ export async function fetchPage(url: string, options: FetchPageOptions = {}): Pr
 /** Refuses a URL that is not http(s), or whose host is not a public address as written. */
 function assertFetchable(url: string, hop: number): void {
   const check = checkSafeProviderUrl(url);
-  if (check.ok) return;
+  if (check.ok) {
+    // `fetch` refuses to build a request from one, which would otherwise
+    // read as "couldn't reach that page".
+    const { username, password } = new URL(url);
+    if (!username && !password) return;
+    logger.warn('Intake refused a URL', { url: loggableUrl(url), hop, reason: 'credentials' });
+    throw new IntakeError(
+      IntakeErrorCodes.URL_NOT_ALLOWED,
+      hop > 0
+        ? 'That page redirects to an address with a user name or password in it.'
+        : 'That address has a user name or password in it. Remove them and try again.',
+      { reason: 'credentials' }
+    );
+  }
   const problem =
     check.reason === 'invalid_url'
       ? 'not a valid web address'
@@ -276,15 +294,9 @@ async function discard(body: { cancel(): Promise<void> } | null | undefined): Pr
  * leaves the bytes as they are.
  */
 function asUtf8(bytes: Buffer, contentType: string): Buffer {
-  const charset = charsetOf(contentType);
+  const charset = knownCharset(charsetOf(contentType));
   if (!charset || /^utf-?8$/i.test(charset)) return bytes;
-  let decoder: TextDecoder;
-  try {
-    decoder = new TextDecoder(charset);
-  } catch {
-    return bytes;
-  }
-  return Buffer.from(decoder.decode(bytes), 'utf8');
+  return Buffer.from(new TextDecoder(charset).decode(bytes), 'utf8');
 }
 
 function duration(ms: number): string {

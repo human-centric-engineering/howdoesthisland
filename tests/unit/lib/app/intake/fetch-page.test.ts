@@ -402,6 +402,15 @@ describe('fetchPage — refusals', () => {
     expect(err.details).toEqual({ contentType });
   });
 
+  it('refuses an address with a user name or password in it', async () => {
+    const err = await expectRefused(
+      fetchPage(`http://user:secret@site.t16.test:${port}/notes`, viaTest),
+      IntakeErrorCodes.URL_NOT_ALLOWED
+    );
+    expect(err.details).toEqual({ reason: 'credentials' });
+    expect(hits).toHaveLength(0);
+  });
+
   it('refuses a page that answers with an error status', async () => {
     const err = await expectRefused(
       fetchPage(site('/missing'), viaTest),

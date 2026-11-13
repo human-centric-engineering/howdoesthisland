@@ -74,7 +74,10 @@ export function mainContent(html: Buffer | string, contentType = 'text/html'): M
   const root = main ?? article ?? doc.body;
   const source = main ? 'main' : article ? 'article' : 'body';
 
-  return { text: root ? extractText(root, dom.window) : '', title, source };
+  const text = root ? extractText(root, dom.window) : '';
+  // Free the document now rather than at the next GC: pages can be large.
+  dom.window.close();
+  return { text, title, source };
 }
 
 /**
@@ -89,16 +92,28 @@ export function mainContent(html: Buffer | string, contentType = 'text/html'): M
  * declares nothing. So a page that declares nothing is read as UTF-8.
  */
 function htmlContentType(contentType: string, html: Buffer | string): string {
-  const charset = charsetOf(contentType);
+  // A label no decoder knows (`charset=utf8x`) is treated as no label.
+  const charset = knownCharset(charsetOf(contentType));
   if (charset) return `text/html; charset=${charset}`;
   if (typeof html === 'string') return 'text/html';
   // Latin-1 maps each byte to one character, so the prescan cannot fail to decode.
   const head = html.subarray(0, 1024).toString('latin1');
   // A BOM needs no check: it outranks the charset given here.
-  return /<meta[^>]+charset/i.test(head) ? 'text/html' : 'text/html; charset=utf-8';
+  return /<meta[^>]+charset\s*=/i.test(head) ? 'text/html' : 'text/html; charset=utf-8';
 }
 
 /** The `charset` parameter of a `Content-Type`, if it has one. */
 export function charsetOf(contentType: string): string | undefined {
   return /;\s*charset\s*=\s*"?([\w.:-]+)"?/i.exec(contentType)?.[1];
+}
+
+/** `charset` if a decoder knows it, else undefined. */
+export function knownCharset(charset: string | undefined): string | undefined {
+  if (!charset) return undefined;
+  try {
+    new TextDecoder(charset);
+    return charset;
+  } catch {
+    return undefined;
+  }
 }

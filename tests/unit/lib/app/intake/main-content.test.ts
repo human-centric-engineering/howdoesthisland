@@ -175,6 +175,19 @@ describe('mainContent — encoding', () => {
     expect(mainContent(declared, 'text/html').text).toBe('Café');
   });
 
+  it('reads UTF-8 when the declared charset is one no decoder knows', () => {
+    const utf8 = Buffer.from(page('<main><p>Café</p></main>'), 'utf8');
+    expect(mainContent(utf8, 'text/html; charset=utf8x').text).toBe('Café');
+  });
+
+  it('reads UTF-8 when a meta tag only mentions "charset" in its content', () => {
+    const utf8 = Buffer.from(
+      page('<main><p>Café</p></main>', '<meta name="description" content="Fix charset errors">'),
+      'utf8'
+    );
+    expect(mainContent(utf8).text).toBe('Café');
+  });
+
   it('reads UTF-8 bytes when no charset is declared', () => {
     const utf8 = Buffer.from(page('<main><p>Café</p></main>'), 'utf8');
     expect(mainContent(utf8).text).toBe('Café');
