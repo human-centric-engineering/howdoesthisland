@@ -1,0 +1,4760 @@
+{
+  "assemble": {
+    "full": {
+      "appeal_share": {
+        "ethos": 100,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 0,
+        "pathos": 0
+      },
+      "audience": {
+        "archetype": "connector",
+        "awareness": "problem_aware",
+        "decision_unit": "group",
+        "expertise": "expert",
+        "focus": "unknown",
+        "involvement": "medium",
+        "relationship": "cold",
+        "role": null
+      },
+      "balance_findings": [
+        {
+          "id": "br_all_about_me",
+          "message": "The text talks mostly about the author. Flip it to the reader's world.",
+          "name": "All about the author"
+        }
+      ],
+      "content_type": "general",
+      "craft": {
+        "avg_sentence": 6,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 0,
+        "fk_grade": 2.5,
+        "gunning_fog": 9.1,
+        "i": 0,
+        "passive_pct": 0,
+        "positivity": 0,
+        "sentences": 1,
+        "speaking_sec": 3,
+        "we": 0,
+        "words": 6,
+        "you": 1
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.07,
+          "context": 0.5,
+          "directness": 1,
+          "expressiveness": 0.38,
+          "formality": 0.53,
+          "persuading": 0.67,
+          "time": 0.02,
+          "trust": 0.31,
+          "uncertainty": 0.07
+        },
+        "reader": {
+          "global": false,
+          "hofstede": {
+            "idv": 25,
+            "ivr": 52,
+            "lto": 36,
+            "mas": 60,
+            "pdi": 95,
+            "uai": 80
+          },
+          "id": "sa",
+          "lewis": {
+            "linear": 0.05,
+            "multi": 0.75,
+            "reactive": 0.2
+          },
+          "lewis_label": "Mostly multi-active, with reactive traits",
+          "name": "Saudi Arabia",
+          "targets": {
+            "collective": 0.75,
+            "context": 0.6060000000000001,
+            "directness": 0.52125,
+            "expressiveness": 0.6755,
+            "formality": 0.7531249999999999,
+            "persuading": 0.55,
+            "time": 0.54,
+            "trust": 0.804,
+            "uncertainty": 0.8
+          },
+          "tolerance": 0.14
+        },
+        "source": "ai",
+        "writer": {
+          "id": "sa",
+          "lewis": {
+            "linear": 0.05,
+            "multi": 0.75,
+            "reactive": 0.2
+          },
+          "name": "Saudi Arabia",
+          "targets": {
+            "collective": 0.75,
+            "context": 0.6060000000000001,
+            "directness": 0.52125,
+            "expressiveness": 0.6755,
+            "formality": 0.7531249999999999,
+            "persuading": 0.55,
+            "time": 0.54,
+            "trust": 0.804,
+            "uncertainty": 0.8
+          }
+        }
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 2,
+          "source": "ai"
+        }
+      ],
+      "duties": {
+        "fit": 76,
+        "primary": "teach",
+        "profile": {
+          "delight": 22,
+          "move": 19,
+          "steer": 19,
+          "teach": 27,
+          "unsettle": 15
+        },
+        "source": "ai",
+        "target": {
+          "delight": 25,
+          "move": 40,
+          "steer": 12,
+          "teach": 12,
+          "unsettle": 12
+        }
+      },
+      "effective_weights": {
+        "ethos": 0.407,
+        "kairos": 0.119,
+        "logos": 0.124,
+        "pathos": 0.351
+      },
+      "group_scores": {
+        "audience": 31,
+        "craft": 54,
+        "culture": 55
+      },
+      "highlights": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_comparison",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "end": 33,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_directness",
+          "end": 33,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 33,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Thanks   so much, see you tomorrow!",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "end": 33,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says",
+          "source": "ai",
+          "start": 0
+        }
+      ],
+      "judges": {
+        "audience": "Synthetic audience summary for one-liner-1.",
+        "craft": "Synthetic craft summary for one-liner-1.",
+        "culture": "Synthetic culture summary for one-liner-1.",
+        "ethos": "Synthetic ethos summary for one-liner-1.",
+        "kairos": "",
+        "lenses": "Synthetic lenses summary for one-liner-1.",
+        "logos": "Synthetic logos summary for one-liner-1.",
+        "pathos": "Synthetic pathos summary for one-liner-1."
+      },
+      "lenses": {
+        "lens_dialogue": 75,
+        "lens_mythos": 100,
+        "lens_prepon": 100,
+        "lens_telos": 50
+      },
+      "mode": "full",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_critical."
+        }
+      ],
+      "perspectives_source": "ai",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_real_reason_now",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_polish",
+          "impact": "medium",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_what_if_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "impact": "medium",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_preserve_freedom",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_clarity",
+          "impact": "medium",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_clear_cta",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_cut_superlatives",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "impact": "medium",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_one_big_idea",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "impact": "medium",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_preserve_freedom",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "impact": "medium",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_signpost",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_idiom",
+          "impact": "medium",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_duty_to_achievement",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 33,
+          "id": "rf_hype",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "medium",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "end": 33,
+          "id": "rf_weasel",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "medium",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "end": 33,
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "high",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "end": 33,
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "high",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "end": 33,
+          "id": "rf_status_threat",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "low",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "end": 33,
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "high",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "end": 33,
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!",
+          "severity": "low",
+          "source": "ai",
+          "start": 0
+        }
+      ],
+      "scores": {
+        "balance_index": 66,
+        "band": "Developing",
+        "ethos": 59,
+        "kairos": 71,
+        "logos": 78,
+        "overall": 59,
+        "pathos": 48
+      },
+      "source": null
+    },
+    "quick": {
+      "appeal_share": {
+        "ethos": 0,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 0,
+        "pathos": 100
+      },
+      "audience": {
+        "archetype": "connector",
+        "awareness": "problem_aware",
+        "decision_unit": "group",
+        "expertise": "expert",
+        "focus": "unknown",
+        "involvement": "medium",
+        "relationship": "cold",
+        "role": null
+      },
+      "balance_findings": [
+        {
+          "id": "br_no_ask",
+          "message": "Persuasive, but towards what? Add one specific next step.",
+          "name": "No clear ask"
+        },
+        {
+          "id": "br_timeless",
+          "message": "Nothing says why this matters now. Anchor it in a current shift or decision point.",
+          "name": "Why now?"
+        }
+      ],
+      "content_type": "general",
+      "craft": {
+        "avg_sentence": 6,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 0,
+        "fk_grade": 2.5,
+        "gunning_fog": 9.1,
+        "i": 0,
+        "passive_pct": 0,
+        "positivity": 0,
+        "sentences": 1,
+        "speaking_sec": 3,
+        "we": 0,
+        "words": 6,
+        "you": 1
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.37037037037037035,
+          "context": 0.5,
+          "directness": 0.5,
+          "expressiveness": 1,
+          "formality": 0.3125,
+          "persuading": 0.5,
+          "time": 0.5,
+          "trust": 0.5,
+          "uncertainty": 0
+        },
+        "reader": {
+          "global": false,
+          "hofstede": {
+            "idv": 25,
+            "ivr": 52,
+            "lto": 36,
+            "mas": 60,
+            "pdi": 95,
+            "uai": 80
+          },
+          "id": "sa",
+          "lewis": {
+            "linear": 0.05,
+            "multi": 0.75,
+            "reactive": 0.2
+          },
+          "lewis_label": "Mostly multi-active, with reactive traits",
+          "name": "Saudi Arabia",
+          "targets": {
+            "collective": 0.75,
+            "context": 0.6060000000000001,
+            "directness": 0.52125,
+            "expressiveness": 0.6755,
+            "formality": 0.7531249999999999,
+            "persuading": 0.55,
+            "time": 0.54,
+            "trust": 0.804,
+            "uncertainty": 0.8
+          },
+          "tolerance": 0.14
+        },
+        "source": "quick",
+        "writer": {
+          "id": "sa",
+          "lewis": {
+            "linear": 0.05,
+            "multi": 0.75,
+            "reactive": 0.2
+          },
+          "name": "Saudi Arabia",
+          "targets": {
+            "collective": 0.75,
+            "context": 0.6060000000000001,
+            "directness": 0.52125,
+            "expressiveness": 0.6755,
+            "formality": 0.7531249999999999,
+            "persuading": 0.55,
+            "time": 0.54,
+            "trust": 0.804,
+            "uncertainty": 0.8
+          }
+        }
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "About the reader 1 times, about the author 0 times.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "0 supporting signals, 1 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "0 supporting signals.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Average sentence 6 words; 0 over 30 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "No clear call to action found.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Gunning Fog 9.1; average sentence 6 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "1 paragraphs, about 1.0 sentences each.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "6 words; typical range for this content type is 80 to 900.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Fog 9.1 (aim under 14), 0% passive, 0 long sentences.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "100% of sentences use a linking word; 0% pick up a word from the sentence before.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Formality 31 of 100; this reader and form expect about 63.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "No obviously unsupported claims found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Reading level Fog 9.1 for a expert reader (aim 14 or under).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Opening line: 6 words.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "No undefined acronyms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "No exclusionary terms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Text 50, reader expects about 61 (0 = explicit, 100 = implicit).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Text 50, reader expects about 52 (0 = direct, 100 = indirect).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Text 50, reader expects about 55 (0 = applications-first, 100 = principles-first).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Text 31, reader expects about 75 (0 = informal, 100 = formal).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Text 50, reader expects about 80 (0 = task, 100 = relationship).",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Text 37, reader expects about 75 (0 = individual, 100 = group).",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Text 50, reader expects about 54 (0 = deadline, 100 = long-term).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Text 0, reader expects about 80 (0 = brief, 100 = detailed).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Text 100, reader expects about 68 (0 = restrained, 100 = expressive).",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "No culture-bound idioms found.",
+          "score": 4,
+          "source": "quick"
+        }
+      ],
+      "duties": {
+        "fit": 76,
+        "primary": "teach",
+        "profile": {
+          "delight": 20,
+          "move": 20,
+          "steer": 20,
+          "teach": 20,
+          "unsettle": 20
+        },
+        "source": "quick",
+        "target": {
+          "delight": 25,
+          "move": 40,
+          "steer": 12,
+          "teach": 12,
+          "unsettle": 12
+        }
+      },
+      "effective_weights": {
+        "ethos": 0.407,
+        "kairos": 0.119,
+        "logos": 0.124,
+        "pathos": 0.351
+      },
+      "group_scores": {
+        "audience": 94,
+        "craft": 71,
+        "culture": 63
+      },
+      "highlights": [
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 33,
+          "note": "Concreteness and vividness",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "quick",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_empathy",
+          "end": 33,
+          "note": "Exclamation-heavy enthusiasm",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow!",
+          "source": "quick",
+          "start": 0
+        }
+      ],
+      "judges": {},
+      "lenses": {
+        "lens_dialogue": 25,
+        "lens_mythos": 0,
+        "lens_prepon": 100,
+        "lens_telos": 25
+      },
+      "mode": "quick",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "status": "absent"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_antithesis",
+              "status": "absent"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "absent"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_levity",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authority",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "status": "absent"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "status": "absent"
+            },
+            {
+              "id": "lv_plu",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_tension",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_status",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_permission",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "absent"
+            },
+            {
+              "id": "lv_framing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "status": "absent"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_timely",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_fluency",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_attention",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_character",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_shape",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_turn",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_transformation",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_ingroup",
+              "status": "absent"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "absent"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_uncertainty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_credibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_intimacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_positive_balance",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_authentic",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_respect",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_equity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "status": "absent"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_courage",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        }
+      ],
+      "perspectives_source": "quick",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "example": true,
+          "impact": "medium",
+          "issue": "Borrowed credibility scores 0 of 4. Replace vague praise with a named source, their role and the outcome they got.",
+          "move": "mv_specific_testimonial",
+          "original": "\"Great service, highly recommend!\"",
+          "rewrite": "\"We cut month-end close from 9 days to 3.\" Priya Shah, Finance Director, Northwind Logistics",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "example": true,
+          "impact": "medium",
+          "issue": "Competence and judgement scores 1 of 4. Replace what you were responsible for with what changed because of you: action verb, what you did, measurable result.",
+          "move": "mv_duty_to_achievement",
+          "original": "Responsible for managing the engineering team.",
+          "rewrite": "Grew the engineering team from 6 to 25 and cut release time from monthly to daily.",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_identification",
+          "example": true,
+          "impact": "medium",
+          "issue": "Identification and shared identity scores 1 of 4. Briefly share an experience that puts the author in the reader's shoes.",
+          "move": "mv_shared_struggle",
+          "original": "We help founders raise capital.",
+          "rewrite": "I pitched 41 investors before my first yes. Here is what I wish I had known.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "example": true,
+          "impact": "high",
+          "issue": "Stakes: pain and desire scores 0 of 4. Describe the specific moment the reader realises the current way is not working, in their words.",
+          "move": "mv_name_struggling_moment",
+          "original": "Accounting software for small businesses.",
+          "rewrite": "It is 11pm on the last day of the quarter and you are still matching receipts to bank lines.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "example": true,
+          "impact": "medium",
+          "issue": "Story and narrative scores 0 of 4. Insert a three-sentence story: who, what went wrong, what changed. Put it where the claim needs most belief.",
+          "move": "mv_add_micro_story",
+          "original": "Our method improves retention.",
+          "rewrite": "Sam ran a gym losing 30 members a month. We changed one thing: a call on day 7. Churn halved by spring.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_empathy",
+          "example": false,
+          "impact": "medium",
+          "issue": "Empathy and emotional resonance scores 0 of 4. Name what the reader is probably feeling, tentatively ('It can feel like...').",
+          "move": "mv_label_feeling",
+          "original": "Thanks so much, see you tomorrow!",
+          "rewrite": "It can feel like every audit is a fresh scramble. It does not have to be.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_objections",
+          "example": true,
+          "impact": "medium",
+          "issue": "Objection handling scores 0 of 4. Name the sceptic's strongest objection and answer it with evidence. Two-sided beats one-sided for sceptical readers.",
+          "move": "mv_raise_and_answer",
+          "original": "(Price not mentioned)",
+          "rewrite": "Yes, we cost more than a freelancer. You are paying for a team that does not disappear in August.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "example": true,
+          "impact": "medium",
+          "issue": "Specific claims and evidence scores 1 of 4. Replace every 'improved', 'faster', 'more' with a number, a time frame and a baseline.",
+          "move": "mv_quantify_claim",
+          "original": "Significantly improved performance.",
+          "rewrite": "Cut page load from 4.1s to 1.3s in six weeks.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mechanism and reasoning scores 1 of 4. After each claim, add 'because...' or 'which means...'.",
+          "move": "mv_add_reason_why",
+          "original": "Our coffee tastes better.",
+          "rewrite": "Our coffee tastes better because we roast to order and ship within 48 hours.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cost of delay scores 0 of 4. Show what staying put costs per week, month or year, using the reader's numbers where possible.",
+          "move": "mv_cost_of_inaction",
+          "original": "Don't wait to fix your hiring process.",
+          "rewrite": "Each month a senior role stays open costs roughly [£X] in delayed delivery.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "example": true,
+          "impact": "medium",
+          "issue": "The call to act scores 0 of 4. End with a single, specific, low-friction action and say what happens when the reader takes it.",
+          "move": "mv_clear_cta",
+          "original": "Let us know if you have any questions.",
+          "rewrite": "Reply 'yes' and I will send two times for a 20-minute call next week.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "example": true,
+          "impact": "medium",
+          "issue": "Fit to the moment scores 1 of 4. Connect the message to a current shift, event or season the reader recognises.",
+          "move": "mv_why_now_hook",
+          "original": "AI can help your team.",
+          "rewrite": "Since your competitors started shipping AI features this year, buyers now expect them in every demo.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mythos scores 0 of 4. Frame the message inside a bigger narrative: an old world, a shift, winners and losers, a promised land.",
+          "move": "mv_name_the_shift",
+          "original": "We sell sales software.",
+          "rewrite": "Buyers now do 70% of their research before talking to sales. The teams winning have stopped pitching and started teaching.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Telos scores 1 of 4. Write the single sentence you want the reader to remember. Put it near the start, repeat it at the end, and cut anything that doesn't serve it.",
+          "move": "mv_one_big_idea",
+          "original": "(Five equal points about features, pricing, history, team and roadmap)",
+          "rewrite": "One idea: we halve your onboarding time. Everything else is evidence for that.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "example": true,
+          "impact": "medium",
+          "issue": "Length scores 0 of 4. Cut anything that doesn't serve the one big idea; aim for the usual range for this content type.",
+          "move": null,
+          "original": "(A 600-word cold email)",
+          "rewrite": "(The same email at 120 words, with one ask)",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "example": true,
+          "impact": "medium",
+          "issue": "Informal or formal scores 0 of 4. Informal: first names, contractions and a level tone are fine. Formal: titles, courteous openings and closings, respect for seniority.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_uncertainty",
+          "example": true,
+          "impact": "medium",
+          "issue": "Brief or detailed scores 0 of 4. Brief: headline and essentials; detail on request. Detailed: process, specifics, guarantees and risk mitigation up front.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_collective",
+          "example": true,
+          "impact": "medium",
+          "issue": "Individual or group scores 1 of 4. Individual: personal benefit, choice and achievement. Group: team benefit, harmony, shared success and what peers do.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        }
+      ],
+      "red_flags": [],
+      "scores": {
+        "balance_index": 74,
+        "band": "Weak",
+        "ethos": 43,
+        "kairos": 20,
+        "logos": 43,
+        "overall": 32,
+        "pathos": 19
+      },
+      "source": null
+    }
+  },
+  "id": "one-liner-1",
+  "input": {
+    "ctx": {
+      "archetype": "connector",
+      "audience": {
+        "awareness": "problem_aware",
+        "decision_unit": "group",
+        "expertise": "expert",
+        "focus": "unknown",
+        "involvement": "medium",
+        "relationship": "cold"
+      },
+      "contentType": "general",
+      "culture": {
+        "reader": "sa",
+        "writer": "sa"
+      },
+      "role": ""
+    },
+    "text": "Thanks so much, see you tomorrow!"
+  },
+  "judgeOutputs": {
+    "audience": {
+      "appeal": "audience",
+      "dimension_scores": [
+        {
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": "0"
+        },
+        {
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 7
+        },
+        {
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 0
+        },
+        {
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "aud_hook",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "aud_knowledge",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_preserve_freedom",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_preserve_freedom",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic audience summary for one-liner-1."
+    },
+    "craft": {
+      "appeal": "craft",
+      "dimension_scores": [
+        {
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": "0"
+        },
+        {
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 7
+        },
+        {
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3
+        },
+        {
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 1
+        },
+        {
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 4
+        },
+        {
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "craft_structure",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "craft_length",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "craft_clarity",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "craft_cohesion",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "craft_tone",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_one_big_idea",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure."
+        },
+        {
+          "dimension": "craft_claims",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_one_big_idea",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_status_threat",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic craft summary for one-liner-1."
+    },
+    "culture": {
+      "appeal": "culture",
+      "dimension_scores": [
+        {
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": "3"
+        },
+        {
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 7
+        },
+        {
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 1
+        },
+        {
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 2
+        },
+        {
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 2
+        },
+        {
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 4
+        },
+        {
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 1
+        },
+        {
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 3
+        },
+        {
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 0
+        },
+        {
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "cul_context",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "cul_directness",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "cul_persuading",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "cul_formality",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "cul_trust",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_signpost",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context."
+        },
+        {
+          "dimension": "cul_idiom",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_signpost",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic culture summary for one-liner-1.",
+      "text_positions": {
+        "collective": 0.07,
+        "context": "0.5",
+        "directness": 1.4,
+        "expressiveness": 0.38,
+        "formality": 0.53,
+        "persuading": 0.67,
+        "time": 0.02,
+        "trust": 0.31,
+        "uncertainty": 0.07
+      }
+    },
+    "ethos": {
+      "appeal": "ethos",
+      "dimension_scores": [
+        {
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": "3"
+        },
+        {
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 7
+        },
+        {
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 0
+        },
+        {
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 4
+        },
+        {
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 4
+        },
+        {
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "eth_competence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "eth_integrity",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "eth_goodwill",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "eth_borrowed",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "eth_identification",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_real_reason_now",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "eth_polish",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_real_reason_now",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_hype",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic ethos summary for one-liner-1."
+    },
+    "influence": {
+      "appeal": "influence",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 2
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Thanks so much, see you tomorrow!",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_critical."
+        },
+        {
+          "id": "pv_zz_missing",
+          "levers": [],
+          "score": 4,
+          "summary": "Dropped."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_duty_to_achievement",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_duty_to_achievement",
+          "rewrite": "Dropped."
+        }
+      ],
+      "summary": "Synthetic influence summary for one-liner-1."
+    },
+    "kairos": {
+      "appeal": "kairos",
+      "dimension_scores": [
+        {
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": "3"
+        },
+        {
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 7
+        },
+        {
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 2
+        },
+        {
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 2
+        },
+        {
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 3
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "kai_moment",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "kai_stakes",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "kai_efficacy",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "kai_integrity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "kai_call",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_clear_cta",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_clear_cta",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ]
+    },
+    "lenses": {
+      "appeal": "lenses",
+      "dimension_scores": [
+        {
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": "2"
+        },
+        {
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 7
+        },
+        {
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 4
+        },
+        {
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 3
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "duties": {
+        "delight": 27,
+        "move": 23,
+        "steer": 23,
+        "teach": "33",
+        "unsettle": 18
+      },
+      "highlights": [
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "lens_mythos",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "lens_prepon",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "lens_dialogue",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_cut_superlatives",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_cut_superlatives",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic lenses summary for one-liner-1."
+    },
+    "logos": {
+      "appeal": "logos",
+      "dimension_scores": [
+        {
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": "4"
+        },
+        {
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 7
+        },
+        {
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 3
+        },
+        {
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 4
+        },
+        {
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2
+        },
+        {
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "log_evidence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "log_mechanism",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "log_structure",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "log_comparison",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "log_objections",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_preserve_freedom",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence."
+        },
+        {
+          "dimension": "log_clarity",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_preserve_freedom",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic logos summary for one-liner-1."
+    },
+    "pathos": {
+      "appeal": "pathos",
+      "dimension_scores": [
+        {
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": "1"
+        },
+        {
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 7
+        },
+        {
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 1
+        },
+        {
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 1
+        },
+        {
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 3
+        },
+        {
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "pat_stakes",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "dimension": "pat_vividness",
+          "polarity": "weakness",
+          "quote": "THANKS SO MUCH, SEE YOU TOMORROW!"
+        },
+        {
+          "dimension": "pat_story",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Thanks   so much, see you tomorrow!"
+        },
+        {
+          "dimension": "pat_identity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Thanks so much, see you tomorrow! and then something the text never says"
+        },
+        {
+          "dimension": "pat_empathy",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_what_if_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes."
+        },
+        {
+          "dimension": "pat_surprise",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_what_if_open",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_weasel",
+          "note": "Synthetic red flag.",
+          "quote": "Thanks so much, see you tomorrow!"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Thanks so much, see you tomorrow!"
+        }
+      ],
+      "summary": "Synthetic pathos summary for one-liner-1."
+    }
+  },
+  "quickScan": {
+    "craft": {
+      "avg_sentence": 6,
+      "devices": {
+        "alliteration": 0,
+        "anaphora": 0,
+        "antithesis": 0,
+        "questions": 0,
+        "tricolon": 0
+      },
+      "emotional_pct": 0,
+      "fk_grade": 2.5,
+      "gunning_fog": 9.1,
+      "i": 0,
+      "passive_pct": 0,
+      "positivity": 0,
+      "sentences": 1,
+      "speaking_sec": 3,
+      "we": 0,
+      "words": 6,
+      "you": 1
+    },
+    "culture": {
+      "positions": {
+        "collective": 0.37037037037037035,
+        "context": 0.5,
+        "directness": 0.5,
+        "expressiveness": 1,
+        "formality": 0.3125,
+        "persuading": 0.5,
+        "time": 0.5,
+        "trust": 0.5,
+        "uncertainty": 0
+      },
+      "reader": {
+        "global": false,
+        "hofstede": {
+          "idv": 25,
+          "ivr": 52,
+          "lto": 36,
+          "mas": 60,
+          "pdi": 95,
+          "uai": 80
+        },
+        "id": "sa",
+        "lewis": {
+          "linear": 0.05,
+          "multi": 0.75,
+          "reactive": 0.2
+        },
+        "name": "Saudi Arabia",
+        "persuading": 0.55,
+        "region": "Middle East",
+        "targets": {
+          "collective": 0.75,
+          "context": 0.6060000000000001,
+          "directness": 0.52125,
+          "expressiveness": 0.6755,
+          "formality": 0.7531249999999999,
+          "persuading": 0.55,
+          "time": 0.54,
+          "trust": 0.804,
+          "uncertainty": 0.8
+        },
+        "tolerance": 0.14
+      },
+      "writer": {
+        "global": false,
+        "hofstede": {
+          "idv": 25,
+          "ivr": 52,
+          "lto": 36,
+          "mas": 60,
+          "pdi": 95,
+          "uai": 80
+        },
+        "id": "sa",
+        "lewis": {
+          "linear": 0.05,
+          "multi": 0.75,
+          "reactive": 0.2
+        },
+        "name": "Saudi Arabia",
+        "persuading": 0.55,
+        "region": "Middle East",
+        "targets": {
+          "collective": 0.75,
+          "context": 0.6060000000000001,
+          "directness": 0.52125,
+          "expressiveness": 0.6755,
+          "formality": 0.7531249999999999,
+          "persuading": 0.55,
+          "time": 0.54,
+          "trust": 0.804,
+          "uncertainty": 0.8
+        },
+        "tolerance": 0.14
+      }
+    },
+    "flags": [],
+    "fns": {
+      "delight": 20,
+      "move": 20,
+      "steer": 20,
+      "teach": 20,
+      "unsettle": 20
+    },
+    "highlights": [
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 33,
+        "note": "Concreteness and vividness",
+        "polarity": "strength",
+        "quote": "Thanks so much, see you tomorrow!",
+        "source": "quick",
+        "start": 0
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_empathy",
+        "end": 33,
+        "note": "Exclamation-heavy enthusiasm",
+        "polarity": "weakness",
+        "quote": "Thanks so much, see you tomorrow!",
+        "source": "quick",
+        "start": 0
+      }
+    ],
+    "levers": {
+      "lv_acceptance_latitude": {
+        "status": "unknown"
+      },
+      "lv_affirmation": {
+        "status": "unknown"
+      },
+      "lv_anaphora": {
+        "status": "unknown"
+      },
+      "lv_anchor": {
+        "status": "absent"
+      },
+      "lv_antithesis": {
+        "status": "absent"
+      },
+      "lv_argument_quality": {
+        "status": "unknown"
+      },
+      "lv_attention": {
+        "status": "unknown"
+      },
+      "lv_attractive": {
+        "status": "unknown"
+      },
+      "lv_authentic": {
+        "status": "unknown"
+      },
+      "lv_authority": {
+        "status": "absent"
+      },
+      "lv_autonomy": {
+        "status": "unknown"
+      },
+      "lv_brevity": {
+        "status": "unknown"
+      },
+      "lv_character": {
+        "status": "unknown"
+      },
+      "lv_choice": {
+        "status": "absent"
+      },
+      "lv_cognitive_load": {
+        "status": "unknown"
+      },
+      "lv_commitment": {
+        "status": "absent"
+      },
+      "lv_confirmation": {
+        "status": "unknown"
+      },
+      "lv_costly_signal": {
+        "status": "unknown"
+      },
+      "lv_counter_evidence": {
+        "status": "absent"
+      },
+      "lv_courage": {
+        "status": "unknown"
+      },
+      "lv_credibility": {
+        "status": "unknown"
+      },
+      "lv_easy": {
+        "status": "absent"
+      },
+      "lv_efficacy": {
+        "status": "unknown"
+      },
+      "lv_emotion_range": {
+        "status": "unknown"
+      },
+      "lv_endowment": {
+        "status": "unknown"
+      },
+      "lv_equity": {
+        "status": "unknown"
+      },
+      "lv_flourishing": {
+        "status": "unknown"
+      },
+      "lv_fluency": {
+        "status": "unknown"
+      },
+      "lv_framing": {
+        "status": "absent"
+      },
+      "lv_free": {
+        "status": "absent"
+      },
+      "lv_freedom": {
+        "status": "absent"
+      },
+      "lv_identity_consistent": {
+        "status": "unknown"
+      },
+      "lv_imagery": {
+        "status": "unknown"
+      },
+      "lv_ingroup": {
+        "status": "absent"
+      },
+      "lv_intention_obstacle": {
+        "status": "unknown"
+      },
+      "lv_intimacy": {
+        "status": "unknown"
+      },
+      "lv_labelling": {
+        "status": "absent"
+      },
+      "lv_levity": {
+        "status": "unknown"
+      },
+      "lv_liking": {
+        "status": "absent"
+      },
+      "lv_low_self_orientation": {
+        "quote": "Thanks so much, see you tomorrow!",
+        "status": "present"
+      },
+      "lv_motivation": {
+        "status": "unknown"
+      },
+      "lv_motive_honesty": {
+        "status": "unknown"
+      },
+      "lv_no_status_threat": {
+        "status": "unknown"
+      },
+      "lv_peripheral_cues": {
+        "status": "unknown"
+      },
+      "lv_permission": {
+        "status": "unknown"
+      },
+      "lv_plu": {
+        "status": "unknown"
+      },
+      "lv_positive_balance": {
+        "status": "unknown"
+      },
+      "lv_presuasion": {
+        "status": "unknown"
+      },
+      "lv_promise_clock": {
+        "status": "unknown"
+      },
+      "lv_prompt": {
+        "status": "absent"
+      },
+      "lv_reciprocity": {
+        "status": "absent"
+      },
+      "lv_reframe": {
+        "status": "unknown"
+      },
+      "lv_refutation": {
+        "status": "absent"
+      },
+      "lv_reg_fit": {
+        "status": "unknown"
+      },
+      "lv_reliability": {
+        "status": "unknown"
+      },
+      "lv_remarkable": {
+        "status": "unknown"
+      },
+      "lv_respect": {
+        "status": "unknown"
+      },
+      "lv_revisable": {
+        "status": "absent"
+      },
+      "lv_rhetorical_q": {
+        "status": "absent"
+      },
+      "lv_scarcity": {
+        "status": "absent"
+      },
+      "lv_shape": {
+        "status": "unknown"
+      },
+      "lv_social": {
+        "status": "unknown"
+      },
+      "lv_social_proof": {
+        "status": "absent"
+      },
+      "lv_social_responsibility": {
+        "status": "unknown"
+      },
+      "lv_status": {
+        "status": "unknown"
+      },
+      "lv_svm": {
+        "status": "absent"
+      },
+      "lv_tactic_visibility": {
+        "status": "unknown"
+      },
+      "lv_tension": {
+        "status": "unknown"
+      },
+      "lv_timely": {
+        "status": "unknown"
+      },
+      "lv_transformation": {
+        "status": "unknown"
+      },
+      "lv_tricolon": {
+        "status": "absent"
+      },
+      "lv_truthful": {
+        "status": "unknown"
+      },
+      "lv_turn": {
+        "status": "unknown"
+      },
+      "lv_uncertainty": {
+        "status": "unknown"
+      },
+      "lv_unity": {
+        "status": "absent"
+      },
+      "lv_values_match": {
+        "status": "unknown"
+      },
+      "lv_warmth": {
+        "status": "unknown"
+      },
+      "lv_who_benefits": {
+        "status": "absent"
+      }
+    },
+    "notes": {
+      "aud_hook": "Opening line: 6 words.",
+      "aud_inclusivity": "No exclusionary terms found.",
+      "aud_knowledge": "No undefined acronyms found.",
+      "aud_suitability": "Reading level Fog 9.1 for a expert reader (aim 14 or under).",
+      "craft_claims": "No obviously unsupported claims found.",
+      "craft_clarity": "Fog 9.1 (aim under 14), 0% passive, 0 long sentences.",
+      "craft_cohesion": "100% of sentences use a linking word; 0% pick up a word from the sentence before.",
+      "craft_length": "6 words; typical range for this content type is 80 to 900.",
+      "craft_structure": "1 paragraphs, about 1.0 sentences each.",
+      "craft_tone": "Formality 31 of 100; this reader and form expect about 63.",
+      "cul_collective": "Text 37, reader expects about 75 (0 = individual, 100 = group).",
+      "cul_context": "Text 50, reader expects about 61 (0 = explicit, 100 = implicit).",
+      "cul_directness": "Text 50, reader expects about 52 (0 = direct, 100 = indirect).",
+      "cul_expressiveness": "Text 100, reader expects about 68 (0 = restrained, 100 = expressive).",
+      "cul_formality": "Text 31, reader expects about 75 (0 = informal, 100 = formal).",
+      "cul_idiom": "No culture-bound idioms found.",
+      "cul_persuading": "Text 50, reader expects about 55 (0 = applications-first, 100 = principles-first).",
+      "cul_time": "Text 50, reader expects about 54 (0 = deadline, 100 = long-term).",
+      "cul_trust": "Text 50, reader expects about 80 (0 = task, 100 = relationship).",
+      "cul_uncertainty": "Text 0, reader expects about 80 (0 = brief, 100 = detailed).",
+      "eth_borrowed": "0 supporting signals, 0 weakening.",
+      "eth_competence": "0 supporting signals, 0 weakening.",
+      "eth_goodwill": "About the reader 1 times, about the author 0 times.",
+      "eth_identification": "0 supporting signals.",
+      "eth_integrity": "0 supporting signals, 0 weakening.",
+      "eth_polish": "0 supporting signals, 0 weakening.",
+      "kai_call": "No clear call to action found.",
+      "kai_efficacy": "0 supporting signals, 0 weakening.",
+      "kai_integrity": "0 supporting signals, 0 weakening.",
+      "kai_moment": "0 supporting signals, 0 weakening.",
+      "kai_stakes": "0 supporting signals.",
+      "lens_dialogue": "0 supporting signals, 0 weakening.",
+      "lens_mythos": "0 supporting signals.",
+      "lens_prepon": "Gunning Fog 9.1; average sentence 6 words.",
+      "lens_telos": "0 supporting signals.",
+      "log_clarity": "Average sentence 6 words; 0 over 30 words.",
+      "log_comparison": "0 supporting signals.",
+      "log_evidence": "0 supporting signals, 0 weakening.",
+      "log_mechanism": "0 supporting signals.",
+      "log_objections": "0 supporting signals.",
+      "log_structure": "0 supporting signals.",
+      "pat_empathy": "0 supporting signals, 1 weakening.",
+      "pat_identity": "0 supporting signals.",
+      "pat_stakes": "0 supporting signals.",
+      "pat_story": "0 supporting signals.",
+      "pat_surprise": "0 supporting signals, 0 weakening.",
+      "pat_vividness": "1 supporting signal, 0 weakening."
+    },
+    "pvScores": {
+      "pv_behaviour_design": 0,
+      "pv_behavioural_econ": 0,
+      "pv_cialdini": 0,
+      "pv_critical": 0,
+      "pv_dual_process": null,
+      "pv_ethics": null,
+      "pv_godin": 0,
+      "pv_identity_values": 0,
+      "pv_motivation": null,
+      "pv_narrative": null,
+      "pv_resistance": 0,
+      "pv_rhetoric": 0,
+      "pv_trust": 2
+    },
+    "scores": {
+      "aud_hook": 3,
+      "aud_inclusivity": 4,
+      "aud_knowledge": 4,
+      "aud_suitability": 4,
+      "craft_claims": 4,
+      "craft_clarity": 4,
+      "craft_cohesion": 3,
+      "craft_length": 0,
+      "craft_structure": 3,
+      "craft_tone": 3,
+      "cul_collective": 1,
+      "cul_context": 4,
+      "cul_directness": 4,
+      "cul_expressiveness": 2,
+      "cul_formality": 0,
+      "cul_idiom": 4,
+      "cul_persuading": 4,
+      "cul_time": 4,
+      "cul_trust": 2,
+      "cul_uncertainty": 0,
+      "eth_borrowed": 0,
+      "eth_competence": 1,
+      "eth_goodwill": 3,
+      "eth_identification": 1,
+      "eth_integrity": 2,
+      "eth_polish": 3,
+      "kai_call": 0,
+      "kai_efficacy": 1,
+      "kai_integrity": 2,
+      "kai_moment": 1,
+      "kai_stakes": 0,
+      "lens_dialogue": 1,
+      "lens_mythos": 0,
+      "lens_prepon": 4,
+      "lens_telos": 1,
+      "log_clarity": 4,
+      "log_comparison": 1,
+      "log_evidence": 1,
+      "log_mechanism": 1,
+      "log_objections": 0,
+      "log_structure": 2,
+      "pat_empathy": 0,
+      "pat_identity": 1,
+      "pat_stakes": 0,
+      "pat_story": 0,
+      "pat_surprise": 1,
+      "pat_vividness": 3
+    },
+    "sentences": [
+      {
+        "end": 33,
+        "start": 0,
+        "text": "Thanks so much, see you tomorrow!",
+        "words": 6
+      }
+    ],
+    "words": 6
+  },
+  "source": "corpus"
+}

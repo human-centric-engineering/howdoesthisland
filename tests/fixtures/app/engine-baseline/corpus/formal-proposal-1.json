@@ -1,0 +1,4809 @@
+{
+  "assemble": {
+    "full": {
+      "appeal_share": {
+        "ethos": 3,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 97,
+        "pathos": 0
+      },
+      "audience": {
+        "archetype": "builder",
+        "awareness": "solution_aware",
+        "decision_unit": "group",
+        "expertise": "informed",
+        "focus": "promotion",
+        "involvement": "low",
+        "relationship": "cold",
+        "role": null
+      },
+      "balance_findings": [
+        {
+          "id": "br_doom",
+          "message": "The stakes are clear but the path isn't. Urgency plus optimism moves people; urgency alone overwhelms them.",
+          "name": "Urgency without hope"
+        }
+      ],
+      "content_type": "sales_proposal",
+      "craft": {
+        "avg_sentence": 9.6,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 5.8,
+        "fk_grade": 7.6,
+        "gunning_fog": 12.2,
+        "i": 0,
+        "passive_pct": 11,
+        "positivity": 100,
+        "sentences": 9,
+        "speaking_sec": 40,
+        "we": 5,
+        "words": 86,
+        "you": 4
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.52,
+          "context": 0.8,
+          "directness": 1,
+          "expressiveness": 0.68,
+          "formality": 0.21,
+          "persuading": 0.14,
+          "time": 0.69,
+          "trust": 0.33,
+          "uncertainty": 0.86
+        },
+        "reader": {
+          "global": false,
+          "hofstede": {
+            "idv": 91,
+            "ivr": 68,
+            "lto": 26,
+            "mas": 62,
+            "pdi": 40,
+            "uai": 46
+          },
+          "id": "us",
+          "lewis": {
+            "linear": 0.65,
+            "multi": 0.25,
+            "reactive": 0.1
+          },
+          "lewis_label": "Mostly linear-active, with multi-active traits",
+          "name": "United States",
+          "targets": {
+            "collective": 0.08999999999999997,
+            "context": 0.174,
+            "directness": 0.18,
+            "expressiveness": 0.3295,
+            "formality": 0.334375,
+            "persuading": 0.15,
+            "time": 0.26,
+            "trust": 0.258,
+            "uncertainty": 0.46
+          },
+          "tolerance": 0.14
+        },
+        "source": "ai",
+        "writer": {
+          "id": "gb",
+          "lewis": {
+            "linear": 0.55,
+            "multi": 0.2,
+            "reactive": 0.25
+          },
+          "name": "United Kingdom",
+          "targets": {
+            "collective": 0.10999999999999999,
+            "context": 0.242,
+            "directness": 0.26937500000000003,
+            "expressiveness": 0.286,
+            "formality": 0.32375,
+            "persuading": 0.3,
+            "time": 0.41000000000000003,
+            "trust": 0.305,
+            "uncertainty": 0.35
+          }
+        }
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 0,
+          "source": "ai"
+        }
+      ],
+      "duties": {
+        "fit": 69,
+        "primary": "teach",
+        "profile": {
+          "delight": 21,
+          "move": 16,
+          "steer": 9,
+          "teach": 33,
+          "unsettle": 22
+        },
+        "source": "ai",
+        "target": {
+          "delight": 12,
+          "move": 12,
+          "steer": 40,
+          "teach": 25,
+          "unsettle": 12
+        }
+      },
+      "effective_weights": {
+        "ethos": 0.452,
+        "kairos": 0.157,
+        "logos": 0.336,
+        "pathos": 0.055
+      },
+      "group_scores": {
+        "audience": 63,
+        "craft": 54,
+        "culture": 55
+      },
+      "highlights": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "end": 15,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 15,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Dear   Mr Tanaka,",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_directness",
+          "end": 533,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS",
+          "source": "ai",
+          "start": 511
+        }
+      ],
+      "judges": {
+        "audience": "Synthetic audience summary for formal-proposal-1.",
+        "craft": "Synthetic craft summary for formal-proposal-1.",
+        "culture": "Synthetic culture summary for formal-proposal-1.",
+        "ethos": "Synthetic ethos summary for formal-proposal-1.",
+        "kairos": "",
+        "lenses": "Synthetic lenses summary for formal-proposal-1.",
+        "logos": "Synthetic logos summary for formal-proposal-1.",
+        "pathos": "Synthetic pathos summary for formal-proposal-1."
+      },
+      "lenses": {
+        "lens_dialogue": 50,
+        "lens_mythos": 100,
+        "lens_prepon": 50,
+        "lens_telos": 25
+      },
+      "mode": "full",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Director, Partnerships",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "Director, Partnerships",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Kenji Mori",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "misused"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "Director, Partnerships",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Kenji Mori",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Director, Partnerships",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "Kenji Mori",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "misused"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "Respectfully,",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "Dear Mr Tanaka,",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Dear Mr Tanaka,",
+              "status": "misused"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_critical."
+        }
+      ],
+      "perspectives_source": "ai",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_contrast_not_conflict",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_polish",
+          "impact": "medium",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_add_micro_story",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "impact": "medium",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_what_if_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_clarity",
+          "impact": "medium",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_paint_dream_outcome",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_admit_a_limit",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "impact": "medium",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_number_with_context",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "impact": "medium",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_clear_cta",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "impact": "medium",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_cite_source",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_idiom",
+          "impact": "medium",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_specific_testimonial",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 533,
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships",
+          "severity": "low",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "end": 533,
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships",
+          "severity": "high",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "end": 533,
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships",
+          "severity": "low",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "end": 533,
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships",
+          "severity": "high",
+          "source": "ai",
+          "start": 511
+        },
+        {
+          "end": 533,
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships",
+          "severity": "high",
+          "source": "ai",
+          "start": 511
+        }
+      ],
+      "scores": {
+        "balance_index": 63,
+        "band": "Developing",
+        "ethos": 46,
+        "kairos": 74,
+        "logos": 58,
+        "overall": 56,
+        "pathos": 71
+      },
+      "source": null
+    },
+    "quick": {
+      "appeal_share": {
+        "ethos": 2,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 57,
+        "pathos": 41
+      },
+      "audience": {
+        "archetype": "builder",
+        "awareness": "solution_aware",
+        "decision_unit": "group",
+        "expertise": "informed",
+        "focus": "promotion",
+        "involvement": "low",
+        "relationship": "cold",
+        "role": null
+      },
+      "balance_findings": [
+        {
+          "id": "br_timeless",
+          "message": "Nothing says why this matters now. Anchor it in a current shift or decision point.",
+          "name": "Why now?"
+        }
+      ],
+      "content_type": "sales_proposal",
+      "craft": {
+        "avg_sentence": 9.6,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 5.8,
+        "fk_grade": 7.6,
+        "gunning_fog": 12.2,
+        "i": 0,
+        "passive_pct": 11,
+        "positivity": 100,
+        "sentences": 9,
+        "speaking_sec": 40,
+        "we": 5,
+        "words": 86,
+        "you": 4
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.6779661016949152,
+          "context": 0.8,
+          "directness": 0.8,
+          "expressiveness": 0.5813953488372092,
+          "formality": 0.875,
+          "persuading": 0.5,
+          "time": 0.5,
+          "trust": 0.6666666666666666,
+          "uncertainty": 0
+        },
+        "reader": {
+          "global": false,
+          "hofstede": {
+            "idv": 91,
+            "ivr": 68,
+            "lto": 26,
+            "mas": 62,
+            "pdi": 40,
+            "uai": 46
+          },
+          "id": "us",
+          "lewis": {
+            "linear": 0.65,
+            "multi": 0.25,
+            "reactive": 0.1
+          },
+          "lewis_label": "Mostly linear-active, with multi-active traits",
+          "name": "United States",
+          "targets": {
+            "collective": 0.08999999999999997,
+            "context": 0.174,
+            "directness": 0.18,
+            "expressiveness": 0.3295,
+            "formality": 0.334375,
+            "persuading": 0.15,
+            "time": 0.26,
+            "trust": 0.258,
+            "uncertainty": 0.46
+          },
+          "tolerance": 0.14
+        },
+        "source": "quick",
+        "writer": {
+          "id": "gb",
+          "lewis": {
+            "linear": 0.55,
+            "multi": 0.2,
+            "reactive": 0.25
+          },
+          "name": "United Kingdom",
+          "targets": {
+            "collective": 0.10999999999999999,
+            "context": 0.242,
+            "directness": 0.26937500000000003,
+            "expressiveness": 0.286,
+            "formality": 0.32375,
+            "persuading": 0.3,
+            "time": 0.41000000000000003,
+            "trust": 0.305,
+            "uncertainty": 0.35
+          }
+        }
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "About the reader 4 times, about the author 5 times.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "1 supporting signal.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "0 supporting signals.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Average sentence 10 words; 0 over 30 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "1 call to action found.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Gunning Fog 12.2 (aim under 12 for executives); average sentence 10 words.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "5 paragraphs, about 1.8 sentences each.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "86 words; typical range for this content type is 500 to 3000.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Fog 12.2 (aim under 12), 11% passive, 0 long sentences.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "0% of sentences use a linking word; 0% pick up a word from the sentence before.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Formality 88 of 100; this reader and form expect about 52.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "No obviously unsupported claims found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Reading level Fog 12.2 for a informed reader (aim 12 or under).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Opening line: 13 words.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "No undefined acronyms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "No exclusionary terms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Text 80, reader expects about 17 (0 = explicit, 100 = implicit).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Text 80, reader expects about 18 (0 = direct, 100 = indirect).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Text 50, reader expects about 15 (0 = applications-first, 100 = principles-first).",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Text 88, reader expects about 33 (0 = informal, 100 = formal).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Text 67, reader expects about 26 (0 = task, 100 = relationship).",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Text 68, reader expects about 9 (0 = individual, 100 = group).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Text 50, reader expects about 26 (0 = deadline, 100 = long-term).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Text 0, reader expects about 46 (0 = brief, 100 = detailed).",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Text 58, reader expects about 33 (0 = restrained, 100 = expressive).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "No culture-bound idioms found.",
+          "score": 4,
+          "source": "quick"
+        }
+      ],
+      "duties": {
+        "fit": 37,
+        "primary": "teach",
+        "profile": {
+          "delight": 0,
+          "move": 49,
+          "steer": 0,
+          "teach": 51,
+          "unsettle": 0
+        },
+        "source": "quick",
+        "target": {
+          "delight": 12,
+          "move": 12,
+          "steer": 40,
+          "teach": 25,
+          "unsettle": 12
+        }
+      },
+      "effective_weights": {
+        "ethos": 0.452,
+        "kairos": 0.157,
+        "logos": 0.336,
+        "pathos": 0.055
+      },
+      "group_scores": {
+        "audience": 88,
+        "craft": 54,
+        "culture": 30
+      },
+      "highlights": [
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 89,
+          "note": "Story and narrative",
+          "polarity": "strength",
+          "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+          "source": "quick",
+          "start": 17
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 159,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "We would be grateful for the opportunity to continue our partnership.",
+          "source": "quick",
+          "start": 90
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 484,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+          "source": "quick",
+          "start": 350
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_empathy",
+          "end": 484,
+          "note": "Empathy and emotional resonance",
+          "polarity": "strength",
+          "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+          "source": "quick",
+          "start": 350
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "end": 484,
+          "note": "The call to act",
+          "polarity": "strength",
+          "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+          "source": "quick",
+          "start": 350
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 533,
+          "note": "Competence and judgement",
+          "polarity": "strength",
+          "quote": "Director, Partnerships",
+          "source": "quick",
+          "start": 511
+        }
+      ],
+      "judges": {},
+      "lenses": {
+        "lens_dialogue": 25,
+        "lens_mythos": 0,
+        "lens_prepon": 75,
+        "lens_telos": 25
+      },
+      "mode": "quick",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "status": "absent"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_antithesis",
+              "status": "absent"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "absent"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_levity",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authority",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "status": "absent"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "status": "absent"
+            },
+            {
+              "id": "lv_plu",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_tension",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_status",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_permission",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "absent"
+            },
+            {
+              "id": "lv_framing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "status": "absent"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_timely",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_fluency",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_attention",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_character",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_shape",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_turn",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_transformation",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_ingroup",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "absent"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_uncertainty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_credibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_intimacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_positive_balance",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_authentic",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_respect",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_equity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "status": "absent"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_courage",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        }
+      ],
+      "perspectives_source": "quick",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "example": true,
+          "impact": "medium",
+          "issue": "Borrowed credibility scores 0 of 4. Replace vague praise with a named source, their role and the outcome they got.",
+          "move": "mv_specific_testimonial",
+          "original": "\"Great service, highly recommend!\"",
+          "rewrite": "\"We cut month-end close from 9 days to 3.\" Priya Shah, Finance Director, Northwind Logistics",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "example": true,
+          "impact": "high",
+          "issue": "Competence and judgement scores 2 of 4. Replace what you were responsible for with what changed because of you: action verb, what you did, measurable result.",
+          "move": "mv_duty_to_achievement",
+          "original": "Responsible for managing the engineering team.",
+          "rewrite": "Grew the engineering team from 6 to 25 and cut release time from monthly to daily.",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_identification",
+          "example": true,
+          "impact": "medium",
+          "issue": "Identification and shared identity scores 1 of 4. Briefly share an experience that puts the author in the reader's shoes.",
+          "move": "mv_shared_struggle",
+          "original": "We help founders raise capital.",
+          "rewrite": "I pitched 41 investors before my first yes. Here is what I wish I had known.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "example": true,
+          "impact": "medium",
+          "issue": "Stakes: pain and desire scores 0 of 4. Describe the specific moment the reader realises the current way is not working, in their words.",
+          "move": "mv_name_struggling_moment",
+          "original": "Accounting software for small businesses.",
+          "rewrite": "It is 11pm on the last day of the quarter and you are still matching receipts to bank lines.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "example": true,
+          "impact": "medium",
+          "issue": "Identity, status and belonging scores 1 of 4. Connect acting with who the reader is or aspires to be.",
+          "move": "mv_identity_frame",
+          "original": "Sign up for our newsletter.",
+          "rewrite": "Join 4,000 engineering leaders who get one practical idea every Tuesday.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "example": true,
+          "impact": "medium",
+          "issue": "Surprise, humour and delight scores 1 of 4. Include one thing the reader would not predict: a counter-intuitive fact, a reversal, a reframe. Then pay it off.",
+          "move": "mv_surprise_turn",
+          "original": "Most teams want to ship faster.",
+          "rewrite": "The fastest teams we studied ship less code, not more. Here's why.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_objections",
+          "example": true,
+          "impact": "high",
+          "issue": "Objection handling scores 0 of 4. Name the sceptic's strongest objection and answer it with evidence. Two-sided beats one-sided for sceptical readers.",
+          "move": "mv_raise_and_answer",
+          "original": "(Price not mentioned)",
+          "rewrite": "Yes, we cost more than a freelancer. You are paying for a team that does not disappear in August.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "example": true,
+          "impact": "high",
+          "issue": "Specific claims and evidence scores 1 of 4. Replace every 'improved', 'faster', 'more' with a number, a time frame and a baseline.",
+          "move": "mv_quantify_claim",
+          "original": "Significantly improved performance.",
+          "rewrite": "Cut page load from 4.1s to 1.3s in six weeks.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mechanism and reasoning scores 1 of 4. After each claim, add 'because...' or 'which means...'.",
+          "move": "mv_add_reason_why",
+          "original": "Our coffee tastes better.",
+          "rewrite": "Our coffee tastes better because we roast to order and ship within 48 hours.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "example": true,
+          "impact": "high",
+          "issue": "Cost of delay scores 0 of 4. Show what staying put costs per week, month or year, using the reader's numbers where possible.",
+          "move": "mv_cost_of_inaction",
+          "original": "Don't wait to fix your hiring process.",
+          "rewrite": "Each month a senior role stays open costs roughly [£X] in delayed delivery.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "example": true,
+          "impact": "medium",
+          "issue": "Fit to the moment scores 1 of 4. Connect the message to a current shift, event or season the reader recognises.",
+          "move": "mv_why_now_hook",
+          "original": "AI can help your team.",
+          "rewrite": "Since your competitors started shipping AI features this year, buyers now expect them in every demo.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "example": true,
+          "impact": "medium",
+          "issue": "Hope and agency scores 1 of 4. After stating the stakes, show it can be done: a proof point, a first step, a reason for optimism. Urgency plus optimism moves people; urgency alone overwhelms them.",
+          "move": "mv_pair_urgency_hope",
+          "original": "Cyber attacks on firms like yours rose sharply last year. You are exposed.",
+          "rewrite": "Attacks on firms like yours are rising. The good news: three changes block most of them, and you can make the first one this week.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mythos scores 0 of 4. Frame the message inside a bigger narrative: an old world, a shift, winners and losers, a promised land.",
+          "move": "mv_name_the_shift",
+          "original": "We sell sales software.",
+          "rewrite": "Buyers now do 70% of their research before talking to sales. The teams winning have stopped pitching and started teaching.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Telos scores 1 of 4. Write the single sentence you want the reader to remember. Put it near the start, repeat it at the end, and cut anything that doesn't serve it.",
+          "move": "mv_one_big_idea",
+          "original": "(Five equal points about features, pricing, history, team and roadmap)",
+          "rewrite": "One idea: we halve your onboarding time. Everything else is evidence for that.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "example": true,
+          "impact": "medium",
+          "issue": "Length scores 0 of 4. Cut anything that doesn't serve the one big idea; aim for the usual range for this content type.",
+          "move": null,
+          "original": "(A 600-word cold email)",
+          "rewrite": "(The same email at 120 words, with one ask)",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cohesion scores 1 of 4. Link ideas explicitly with connectives, repeat key terms instead of synonyms, and start paragraphs by picking up the last thread.",
+          "move": null,
+          "original": "Costs rose. Our team is experienced. Clients like us.",
+          "rewrite": "Costs rose, so clients need a partner who can deliver for less. That's where our experience helps.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "example": true,
+          "impact": "low",
+          "issue": "Structure scores 2 of 4. Put the main point or ask in the first two sentences, then order the rest as reasons, proof, next step.",
+          "move": null,
+          "original": "We have been operating since 2010 and offer many services... (ask in the final paragraph)",
+          "rewrite": "We can halve your onboarding time. Here's how, and what it would take.",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "example": true,
+          "impact": "medium",
+          "issue": "Explicit or implicit scores 0 of 4. Explicit: say it plainly, summarise, repeat the point. Implicit: suggest more than you state; trust shared understanding.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_directness",
+          "example": true,
+          "impact": "medium",
+          "issue": "Direct or indirect scores 0 of 4. Direct: state the ask and any problem plainly. Indirect: soften asks and criticism; use questions, conditionals and context.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "example": true,
+          "impact": "medium",
+          "issue": "Informal or formal scores 0 of 4. Informal: first names, contractions and a level tone are fine. Formal: titles, courteous openings and closings, respect for seniority.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        }
+      ],
+      "red_flags": [],
+      "scores": {
+        "balance_index": 76,
+        "band": "Weak",
+        "ethos": 41,
+        "kairos": 27,
+        "logos": 34,
+        "overall": 36,
+        "pathos": 36
+      },
+      "source": null
+    }
+  },
+  "id": "formal-proposal-1",
+  "input": {
+    "ctx": {
+      "archetype": "builder",
+      "audience": {
+        "awareness": "solution_aware",
+        "decision_unit": "group",
+        "expertise": "informed",
+        "focus": "promotion",
+        "involvement": "low",
+        "relationship": "cold"
+      },
+      "contentType": "sales_proposal",
+      "culture": {
+        "reader": "us",
+        "writer": "gb"
+      },
+      "role": ""
+    },
+    "text": "Dear Mr Tanaka,\n\nThank you for the honour of meeting your colleagues in Osaka last month. We would be grateful for the opportunity to continue our partnership.\n\nPerhaps it may be helpful to share our thinking. It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.\n\nWe would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.\n\nRespectfully,\nKenji Mori\nDirector, Partnerships"
+  },
+  "judgeOutputs": {
+    "audience": {
+      "appeal": "audience",
+      "dimension_scores": [
+        {
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": "3"
+        },
+        {
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 7
+        },
+        {
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 3
+        },
+        {
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "aud_hook",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "aud_knowledge",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_clear_cta",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_clear_cta",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic audience summary for formal-proposal-1."
+    },
+    "craft": {
+      "appeal": "craft",
+      "dimension_scores": [
+        {
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": "3"
+        },
+        {
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 7
+        },
+        {
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 4
+        },
+        {
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 1
+        },
+        {
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 0
+        },
+        {
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "craft_structure",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "craft_length",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "craft_clarity",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "craft_cohesion",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "craft_tone",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_number_with_context",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure."
+        },
+        {
+          "dimension": "craft_claims",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_number_with_context",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic craft summary for formal-proposal-1."
+    },
+    "culture": {
+      "appeal": "culture",
+      "dimension_scores": [
+        {
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": "3"
+        },
+        {
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 7
+        },
+        {
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 0
+        },
+        {
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 4
+        },
+        {
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 0
+        },
+        {
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 3
+        },
+        {
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 0
+        },
+        {
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 4
+        },
+        {
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 4
+        },
+        {
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "cul_context",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "cul_directness",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "cul_persuading",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "cul_formality",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "cul_trust",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_cite_source",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context."
+        },
+        {
+          "dimension": "cul_idiom",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_cite_source",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic culture summary for formal-proposal-1.",
+      "text_positions": {
+        "collective": 0.52,
+        "context": "0.5",
+        "directness": 1.4,
+        "expressiveness": 0.68,
+        "formality": 0.21,
+        "persuading": 0.14,
+        "time": 0.69,
+        "trust": 0.33,
+        "uncertainty": 0.86
+      }
+    },
+    "ethos": {
+      "appeal": "ethos",
+      "dimension_scores": [
+        {
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": "1"
+        },
+        {
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 7
+        },
+        {
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 3
+        },
+        {
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 0
+        },
+        {
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 3
+        },
+        {
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "eth_competence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "eth_integrity",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "eth_goodwill",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "eth_borrowed",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "eth_identification",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_contrast_not_conflict",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "eth_polish",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_contrast_not_conflict",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic ethos summary for formal-proposal-1."
+    },
+    "influence": {
+      "appeal": "influence",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Director, Partnerships",
+              "status": "present"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 3
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "Director, Partnerships",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Kenji Mori",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "Director, Partnerships",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Kenji Mori",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Director, Partnerships",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "Kenji Mori",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "Perhaps it may be helpful to share our thinking.",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "Respectfully,",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "Dear Mr Tanaka,",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "We would be grateful for the opportunity to continue our partnership.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Dear Mr Tanaka,",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Dear Mr Tanaka,",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_critical."
+        },
+        {
+          "id": "pv_zz_missing",
+          "levers": [],
+          "score": 4,
+          "summary": "Dropped."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_specific_testimonial",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_specific_testimonial",
+          "rewrite": "Dropped."
+        }
+      ],
+      "summary": "Synthetic influence summary for formal-proposal-1."
+    },
+    "kairos": {
+      "appeal": "kairos",
+      "dimension_scores": [
+        {
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": "4"
+        },
+        {
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 7
+        },
+        {
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 1
+        },
+        {
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 1
+        },
+        {
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 4
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "kai_moment",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "kai_stakes",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "kai_efficacy",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "kai_integrity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "kai_call",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_paint_dream_outcome",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_paint_dream_outcome",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ]
+    },
+    "lenses": {
+      "appeal": "lenses",
+      "dimension_scores": [
+        {
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": "1"
+        },
+        {
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 7
+        },
+        {
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 2
+        },
+        {
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "duties": {
+        "delight": 24,
+        "move": 18,
+        "steer": 10,
+        "teach": "38",
+        "unsettle": 25
+      },
+      "highlights": [
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "lens_mythos",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "lens_prepon",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "lens_dialogue",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_admit_a_limit",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_admit_a_limit",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic lenses summary for formal-proposal-1."
+    },
+    "logos": {
+      "appeal": "logos",
+      "dimension_scores": [
+        {
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": "1"
+        },
+        {
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 7
+        },
+        {
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 1
+        },
+        {
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 3
+        },
+        {
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2
+        },
+        {
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 4
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "log_evidence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "log_mechanism",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "log_structure",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "log_comparison",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "log_objections",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_what_if_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence."
+        },
+        {
+          "dimension": "log_clarity",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_what_if_open",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic logos summary for formal-proposal-1."
+    },
+    "pathos": {
+      "appeal": "pathos",
+      "dimension_scores": [
+        {
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": "4"
+        },
+        {
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 7
+        },
+        {
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 2
+        },
+        {
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 1
+        },
+        {
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 4
+        },
+        {
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "pat_stakes",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        },
+        {
+          "dimension": "pat_vividness",
+          "polarity": "weakness",
+          "quote": "DIRECTOR, PARTNERSHIPS"
+        },
+        {
+          "dimension": "pat_story",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Dear   Mr Tanaka,"
+        },
+        {
+          "dimension": "pat_identity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Dear Mr Tanaka, and then something the text never says"
+        },
+        {
+          "dimension": "pat_empathy",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_add_micro_story",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes."
+        },
+        {
+          "dimension": "pat_surprise",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_add_micro_story",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Director, Partnerships"
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Dear Mr Tanaka,"
+        }
+      ],
+      "summary": "Synthetic pathos summary for formal-proposal-1."
+    }
+  },
+  "quickScan": {
+    "craft": {
+      "avg_sentence": 9.6,
+      "devices": {
+        "alliteration": 0,
+        "anaphora": 0,
+        "antithesis": 0,
+        "questions": 0,
+        "tricolon": 0
+      },
+      "emotional_pct": 5.8,
+      "fk_grade": 7.6,
+      "gunning_fog": 12.2,
+      "i": 0,
+      "passive_pct": 11,
+      "positivity": 100,
+      "sentences": 9,
+      "speaking_sec": 40,
+      "we": 5,
+      "words": 86,
+      "you": 4
+    },
+    "culture": {
+      "positions": {
+        "collective": 0.6779661016949152,
+        "context": 0.8,
+        "directness": 0.8,
+        "expressiveness": 0.5813953488372092,
+        "formality": 0.875,
+        "persuading": 0.5,
+        "time": 0.5,
+        "trust": 0.6666666666666666,
+        "uncertainty": 0
+      },
+      "reader": {
+        "global": false,
+        "hofstede": {
+          "idv": 91,
+          "ivr": 68,
+          "lto": 26,
+          "mas": 62,
+          "pdi": 40,
+          "uai": 46
+        },
+        "id": "us",
+        "lewis": {
+          "linear": 0.65,
+          "multi": 0.25,
+          "reactive": 0.1
+        },
+        "name": "United States",
+        "persuading": 0.15,
+        "region": "Americas",
+        "targets": {
+          "collective": 0.08999999999999997,
+          "context": 0.174,
+          "directness": 0.18,
+          "expressiveness": 0.3295,
+          "formality": 0.334375,
+          "persuading": 0.15,
+          "time": 0.26,
+          "trust": 0.258,
+          "uncertainty": 0.46
+        },
+        "tolerance": 0.14
+      },
+      "writer": {
+        "global": false,
+        "hofstede": {
+          "idv": 89,
+          "ivr": 69,
+          "lto": 51,
+          "mas": 66,
+          "pdi": 35,
+          "uai": 35
+        },
+        "id": "gb",
+        "lewis": {
+          "linear": 0.55,
+          "multi": 0.2,
+          "reactive": 0.25
+        },
+        "name": "United Kingdom",
+        "persuading": 0.3,
+        "region": "Europe",
+        "targets": {
+          "collective": 0.10999999999999999,
+          "context": 0.242,
+          "directness": 0.26937500000000003,
+          "expressiveness": 0.286,
+          "formality": 0.32375,
+          "persuading": 0.3,
+          "time": 0.41000000000000003,
+          "trust": 0.305,
+          "uncertainty": 0.35
+        },
+        "tolerance": 0.14
+      }
+    },
+    "flags": [],
+    "fns": {
+      "delight": 0,
+      "move": 49,
+      "steer": 0,
+      "teach": 51,
+      "unsettle": 0
+    },
+    "highlights": [
+      {
+        "appeal": "ethos",
+        "dimension": "eth_competence",
+        "end": 533,
+        "note": "Competence and judgement",
+        "polarity": "strength",
+        "quote": "Director, Partnerships",
+        "source": "quick",
+        "start": 511
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 159,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "We would be grateful for the opportunity to continue our partnership.",
+        "source": "quick",
+        "start": 90
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 484,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+        "source": "quick",
+        "start": 350
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_story",
+        "end": 89,
+        "note": "Story and narrative",
+        "polarity": "strength",
+        "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+        "source": "quick",
+        "start": 17
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_empathy",
+        "end": 484,
+        "note": "Empathy and emotional resonance",
+        "polarity": "strength",
+        "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+        "source": "quick",
+        "start": 350
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_call",
+        "end": 484,
+        "note": "The call to act",
+        "polarity": "strength",
+        "quote": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+        "source": "quick",
+        "start": 350
+      }
+    ],
+    "levers": {
+      "lv_acceptance_latitude": {
+        "status": "unknown"
+      },
+      "lv_affirmation": {
+        "status": "unknown"
+      },
+      "lv_anaphora": {
+        "status": "unknown"
+      },
+      "lv_anchor": {
+        "status": "absent"
+      },
+      "lv_antithesis": {
+        "status": "absent"
+      },
+      "lv_argument_quality": {
+        "status": "unknown"
+      },
+      "lv_attention": {
+        "status": "unknown"
+      },
+      "lv_attractive": {
+        "status": "unknown"
+      },
+      "lv_authentic": {
+        "status": "unknown"
+      },
+      "lv_authority": {
+        "status": "absent"
+      },
+      "lv_autonomy": {
+        "status": "unknown"
+      },
+      "lv_brevity": {
+        "status": "unknown"
+      },
+      "lv_character": {
+        "status": "unknown"
+      },
+      "lv_choice": {
+        "status": "absent"
+      },
+      "lv_cognitive_load": {
+        "status": "unknown"
+      },
+      "lv_commitment": {
+        "status": "absent"
+      },
+      "lv_confirmation": {
+        "status": "unknown"
+      },
+      "lv_costly_signal": {
+        "status": "unknown"
+      },
+      "lv_counter_evidence": {
+        "status": "absent"
+      },
+      "lv_courage": {
+        "status": "unknown"
+      },
+      "lv_credibility": {
+        "status": "unknown"
+      },
+      "lv_easy": {
+        "status": "absent"
+      },
+      "lv_efficacy": {
+        "status": "unknown"
+      },
+      "lv_emotion_range": {
+        "status": "unknown"
+      },
+      "lv_endowment": {
+        "status": "unknown"
+      },
+      "lv_equity": {
+        "status": "unknown"
+      },
+      "lv_flourishing": {
+        "status": "unknown"
+      },
+      "lv_fluency": {
+        "status": "unknown"
+      },
+      "lv_framing": {
+        "status": "absent"
+      },
+      "lv_free": {
+        "status": "absent"
+      },
+      "lv_freedom": {
+        "status": "absent"
+      },
+      "lv_identity_consistent": {
+        "status": "unknown"
+      },
+      "lv_imagery": {
+        "status": "unknown"
+      },
+      "lv_ingroup": {
+        "quote": "We would be grateful for the opportunity to continue our partnership.",
+        "status": "present"
+      },
+      "lv_intention_obstacle": {
+        "status": "unknown"
+      },
+      "lv_intimacy": {
+        "status": "unknown"
+      },
+      "lv_labelling": {
+        "status": "absent"
+      },
+      "lv_levity": {
+        "status": "unknown"
+      },
+      "lv_liking": {
+        "status": "absent"
+      },
+      "lv_low_self_orientation": {
+        "quote": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+        "status": "present"
+      },
+      "lv_motivation": {
+        "status": "unknown"
+      },
+      "lv_motive_honesty": {
+        "status": "unknown"
+      },
+      "lv_no_status_threat": {
+        "status": "unknown"
+      },
+      "lv_peripheral_cues": {
+        "status": "unknown"
+      },
+      "lv_permission": {
+        "status": "unknown"
+      },
+      "lv_plu": {
+        "status": "unknown"
+      },
+      "lv_positive_balance": {
+        "status": "unknown"
+      },
+      "lv_presuasion": {
+        "status": "unknown"
+      },
+      "lv_promise_clock": {
+        "status": "unknown"
+      },
+      "lv_prompt": {
+        "status": "absent"
+      },
+      "lv_reciprocity": {
+        "status": "absent"
+      },
+      "lv_reframe": {
+        "status": "unknown"
+      },
+      "lv_refutation": {
+        "status": "absent"
+      },
+      "lv_reg_fit": {
+        "status": "unknown"
+      },
+      "lv_reliability": {
+        "status": "unknown"
+      },
+      "lv_remarkable": {
+        "status": "unknown"
+      },
+      "lv_respect": {
+        "status": "unknown"
+      },
+      "lv_revisable": {
+        "status": "absent"
+      },
+      "lv_rhetorical_q": {
+        "status": "absent"
+      },
+      "lv_scarcity": {
+        "status": "absent"
+      },
+      "lv_shape": {
+        "status": "unknown"
+      },
+      "lv_social": {
+        "status": "unknown"
+      },
+      "lv_social_proof": {
+        "status": "absent"
+      },
+      "lv_social_responsibility": {
+        "status": "unknown"
+      },
+      "lv_status": {
+        "status": "unknown"
+      },
+      "lv_svm": {
+        "status": "absent"
+      },
+      "lv_tactic_visibility": {
+        "status": "unknown"
+      },
+      "lv_tension": {
+        "status": "unknown"
+      },
+      "lv_timely": {
+        "status": "unknown"
+      },
+      "lv_transformation": {
+        "status": "unknown"
+      },
+      "lv_tricolon": {
+        "status": "absent"
+      },
+      "lv_truthful": {
+        "status": "unknown"
+      },
+      "lv_turn": {
+        "status": "unknown"
+      },
+      "lv_uncertainty": {
+        "status": "unknown"
+      },
+      "lv_unity": {
+        "status": "absent"
+      },
+      "lv_values_match": {
+        "status": "unknown"
+      },
+      "lv_warmth": {
+        "status": "unknown"
+      },
+      "lv_who_benefits": {
+        "status": "absent"
+      }
+    },
+    "notes": {
+      "aud_hook": "Opening line: 13 words.",
+      "aud_inclusivity": "No exclusionary terms found.",
+      "aud_knowledge": "No undefined acronyms found.",
+      "aud_suitability": "Reading level Fog 12.2 for a informed reader (aim 12 or under).",
+      "craft_claims": "No obviously unsupported claims found.",
+      "craft_clarity": "Fog 12.2 (aim under 12), 11% passive, 0 long sentences.",
+      "craft_cohesion": "0% of sentences use a linking word; 0% pick up a word from the sentence before.",
+      "craft_length": "86 words; typical range for this content type is 500 to 3000.",
+      "craft_structure": "5 paragraphs, about 1.8 sentences each.",
+      "craft_tone": "Formality 88 of 100; this reader and form expect about 52.",
+      "cul_collective": "Text 68, reader expects about 9 (0 = individual, 100 = group).",
+      "cul_context": "Text 80, reader expects about 17 (0 = explicit, 100 = implicit).",
+      "cul_directness": "Text 80, reader expects about 18 (0 = direct, 100 = indirect).",
+      "cul_expressiveness": "Text 58, reader expects about 33 (0 = restrained, 100 = expressive).",
+      "cul_formality": "Text 88, reader expects about 33 (0 = informal, 100 = formal).",
+      "cul_idiom": "No culture-bound idioms found.",
+      "cul_persuading": "Text 50, reader expects about 15 (0 = applications-first, 100 = principles-first).",
+      "cul_time": "Text 50, reader expects about 26 (0 = deadline, 100 = long-term).",
+      "cul_trust": "Text 67, reader expects about 26 (0 = task, 100 = relationship).",
+      "cul_uncertainty": "Text 0, reader expects about 46 (0 = brief, 100 = detailed).",
+      "eth_borrowed": "0 supporting signals, 0 weakening.",
+      "eth_competence": "1 supporting signal, 0 weakening.",
+      "eth_goodwill": "About the reader 4 times, about the author 5 times.",
+      "eth_identification": "0 supporting signals.",
+      "eth_integrity": "0 supporting signals, 0 weakening.",
+      "eth_polish": "0 supporting signals, 0 weakening.",
+      "kai_call": "1 call to action found.",
+      "kai_efficacy": "0 supporting signals, 0 weakening.",
+      "kai_integrity": "0 supporting signals, 0 weakening.",
+      "kai_moment": "0 supporting signals, 0 weakening.",
+      "kai_stakes": "0 supporting signals.",
+      "lens_dialogue": "0 supporting signals, 0 weakening.",
+      "lens_mythos": "0 supporting signals.",
+      "lens_prepon": "Gunning Fog 12.2 (aim under 12 for executives); average sentence 10 words.",
+      "lens_telos": "0 supporting signals.",
+      "log_clarity": "Average sentence 10 words; 0 over 30 words.",
+      "log_comparison": "0 supporting signals.",
+      "log_evidence": "0 supporting signals, 0 weakening.",
+      "log_mechanism": "0 supporting signals.",
+      "log_objections": "0 supporting signals.",
+      "log_structure": "0 supporting signals.",
+      "pat_empathy": "1 supporting signal, 0 weakening.",
+      "pat_identity": "0 supporting signals.",
+      "pat_stakes": "0 supporting signals.",
+      "pat_story": "1 supporting signal.",
+      "pat_surprise": "0 supporting signals, 0 weakening.",
+      "pat_vividness": "0 supporting signals, 0 weakening."
+    },
+    "pvScores": {
+      "pv_behaviour_design": 0,
+      "pv_behavioural_econ": 0,
+      "pv_cialdini": 0,
+      "pv_critical": 0,
+      "pv_dual_process": null,
+      "pv_ethics": null,
+      "pv_godin": 0,
+      "pv_identity_values": 2,
+      "pv_motivation": null,
+      "pv_narrative": null,
+      "pv_resistance": 0,
+      "pv_rhetoric": 0,
+      "pv_trust": 2
+    },
+    "scores": {
+      "aud_hook": 3,
+      "aud_inclusivity": 4,
+      "aud_knowledge": 4,
+      "aud_suitability": 3,
+      "craft_claims": 4,
+      "craft_clarity": 4,
+      "craft_cohesion": 1,
+      "craft_length": 0,
+      "craft_structure": 2,
+      "craft_tone": 2,
+      "cul_collective": 0,
+      "cul_context": 0,
+      "cul_directness": 0,
+      "cul_expressiveness": 3,
+      "cul_formality": 0,
+      "cul_idiom": 4,
+      "cul_persuading": 1,
+      "cul_time": 3,
+      "cul_trust": 1,
+      "cul_uncertainty": 0,
+      "eth_borrowed": 0,
+      "eth_competence": 2,
+      "eth_goodwill": 2,
+      "eth_identification": 1,
+      "eth_integrity": 2,
+      "eth_polish": 3,
+      "kai_call": 2,
+      "kai_efficacy": 1,
+      "kai_integrity": 2,
+      "kai_moment": 1,
+      "kai_stakes": 0,
+      "lens_dialogue": 1,
+      "lens_mythos": 0,
+      "lens_prepon": 3,
+      "lens_telos": 1,
+      "log_clarity": 4,
+      "log_comparison": 1,
+      "log_evidence": 1,
+      "log_mechanism": 1,
+      "log_objections": 0,
+      "log_structure": 2,
+      "pat_empathy": 3,
+      "pat_identity": 1,
+      "pat_stakes": 0,
+      "pat_story": 2,
+      "pat_surprise": 1,
+      "pat_vividness": 2
+    },
+    "sentences": [
+      {
+        "end": 15,
+        "start": 0,
+        "text": "Dear Mr Tanaka,",
+        "words": 3
+      },
+      {
+        "end": 89,
+        "start": 17,
+        "text": "Thank you for the honour of meeting your colleagues in Osaka last month.",
+        "words": 13
+      },
+      {
+        "end": 159,
+        "start": 90,
+        "text": "We would be grateful for the opportunity to continue our partnership.",
+        "words": 11
+      },
+      {
+        "end": 209,
+        "start": 161,
+        "text": "Perhaps it may be helpful to share our thinking.",
+        "words": 9
+      },
+      {
+        "end": 348,
+        "start": 210,
+        "text": "It seems that a phased approach could suit your organisation, beginning with one plant and extending to others once the results are clear.",
+        "words": 23
+      },
+      {
+        "end": 484,
+        "start": 350,
+        "text": "We would be pleased to visit again at your convenience, if possible in the coming weeks, to introduce our engineering team personally.",
+        "words": 22
+      },
+      {
+        "end": 499,
+        "start": 486,
+        "text": "Respectfully,",
+        "words": 1
+      },
+      {
+        "end": 510,
+        "start": 500,
+        "text": "Kenji Mori",
+        "words": 2
+      },
+      {
+        "end": 533,
+        "start": 511,
+        "text": "Director, Partnerships",
+        "words": 2
+      }
+    ],
+    "words": 86
+  },
+  "source": "corpus"
+}

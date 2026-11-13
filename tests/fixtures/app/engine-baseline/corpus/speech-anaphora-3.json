@@ -1,0 +1,4734 @@
+{
+  "assemble": {
+    "full": {
+      "appeal_share": {
+        "ethos": 12,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 88,
+        "pathos": 0
+      },
+      "audience": {
+        "archetype": "general",
+        "awareness": "problem_aware",
+        "decision_unit": "individual",
+        "expertise": "informed",
+        "focus": "promotion",
+        "involvement": "high",
+        "relationship": "cold",
+        "role": null
+      },
+      "balance_findings": [],
+      "content_type": "sales_email",
+      "craft": {
+        "avg_sentence": 9.9,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 2,
+          "antithesis": 1,
+          "questions": 1,
+          "tricolon": 1
+        },
+        "emotional_pct": 1.1,
+        "fk_grade": 2.2,
+        "gunning_fog": 4.9,
+        "i": 1,
+        "passive_pct": 0,
+        "positivity": 100,
+        "sentences": 9,
+        "speaking_sec": 41,
+        "we": 8,
+        "words": 89,
+        "you": 2
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.96,
+          "context": 0.5,
+          "directness": 1,
+          "expressiveness": 0.26,
+          "formality": 0.63,
+          "persuading": 0.63,
+          "time": 0.09,
+          "trust": 0.61,
+          "uncertainty": 0.66
+        },
+        "reader": {
+          "global": true,
+          "hofstede": null,
+          "id": "global",
+          "lewis": {
+            "linear": 0.3333333333333333,
+            "multi": 0.3333333333333333,
+            "reactive": 0.3333333333333333
+          },
+          "lewis_label": "A balanced blend of all three",
+          "name": "Global or mixed audience",
+          "targets": {
+            "collective": 0.5,
+            "context": 0.5,
+            "directness": 0.5,
+            "expressiveness": 0.5,
+            "formality": 0.5,
+            "persuading": 0.5,
+            "time": 0.5,
+            "trust": 0.5,
+            "uncertainty": 0.5
+          },
+          "tolerance": 0.3
+        },
+        "source": "ai",
+        "writer": null
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 2,
+          "source": "ai"
+        }
+      ],
+      "duties": {
+        "fit": null,
+        "primary": "unsettle",
+        "profile": {
+          "delight": 3,
+          "move": 38,
+          "steer": 3,
+          "teach": 10,
+          "unsettle": 46
+        },
+        "source": "ai",
+        "target": null
+      },
+      "effective_weights": {
+        "ethos": 0.35,
+        "kairos": 0.19,
+        "logos": 0.2,
+        "pathos": 0.26
+      },
+      "group_scores": {
+        "audience": 81,
+        "craft": 71,
+        "culture": 55
+      },
+      "highlights": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_comparison",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "end": 56,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 56,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Friends,   we did not come here to complain, but to build.",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "end": 29,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_directness",
+          "end": 454,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR.",
+          "source": "ai",
+          "start": 394
+        }
+      ],
+      "judges": {
+        "audience": "Synthetic audience summary for speech-anaphora-3.",
+        "craft": "Synthetic craft summary for speech-anaphora-3.",
+        "culture": "Synthetic culture summary for speech-anaphora-3.",
+        "ethos": "Synthetic ethos summary for speech-anaphora-3.",
+        "kairos": "",
+        "lenses": "Synthetic lenses summary for speech-anaphora-3.",
+        "logos": "Synthetic logos summary for speech-anaphora-3.",
+        "pathos": "Synthetic pathos summary for speech-anaphora-3."
+      },
+      "lenses": {
+        "lens_dialogue": 0,
+        "lens_mythos": 100,
+        "lens_prepon": 0,
+        "lens_telos": 25
+      },
+      "mode": "full",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "It will not be quick.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "It will not be easy.",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "So I ask you: will you build it with us?",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "It will not be quick.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "It will not be quick.",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "We will build clinics that treat the sick without asking what they can pay.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "It will not be easy.",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "misused"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "It will not be easy.",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "It will not be quick.",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "It will not be quick.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "We will build clinics that treat the sick without asking what they can pay.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "So I ask you: will you build it with us?",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "It will not be quick.",
+              "status": "misused"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_critical."
+        }
+      ],
+      "perspectives_source": "ai",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_avoid_status_threat",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_polish",
+          "impact": "medium",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_shorten_sentences",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "impact": "medium",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_identity_frame",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_clarity",
+          "impact": "medium",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_real_reason_now",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_invite_response",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "impact": "medium",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_cost_of_inaction",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "impact": "medium",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_shared_struggle",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "impact": "medium",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_paint_dream_outcome",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_idiom",
+          "impact": "medium",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_values_reframe",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 454,
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+          "severity": "high",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "end": 454,
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+          "severity": "high",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "end": 454,
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+          "severity": "medium",
+          "source": "ai",
+          "start": 394
+        },
+        {
+          "end": 454,
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+          "severity": "low",
+          "source": "ai",
+          "start": 394
+        }
+      ],
+      "scores": {
+        "balance_index": 85,
+        "band": "Developing",
+        "ethos": 48,
+        "kairos": 58,
+        "logos": 64,
+        "overall": 58,
+        "pathos": 66
+      },
+      "source": null
+    },
+    "quick": {
+      "appeal_share": {
+        "ethos": 0,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 87,
+        "pathos": 13
+      },
+      "audience": {
+        "archetype": "general",
+        "awareness": "problem_aware",
+        "decision_unit": "individual",
+        "expertise": "informed",
+        "focus": "promotion",
+        "involvement": "high",
+        "relationship": "cold",
+        "role": null
+      },
+      "balance_findings": [
+        {
+          "id": "br_all_about_me",
+          "message": "The text talks mostly about the author. Flip it to the reader's world.",
+          "name": "All about the author"
+        }
+      ],
+      "content_type": "sales_email",
+      "craft": {
+        "avg_sentence": 9.9,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 2,
+          "antithesis": 1,
+          "questions": 1,
+          "tricolon": 1
+        },
+        "emotional_pct": 1.1,
+        "fk_grade": 2.2,
+        "gunning_fog": 4.9,
+        "i": 1,
+        "passive_pct": 0,
+        "positivity": 100,
+        "sentences": 9,
+        "speaking_sec": 41,
+        "we": 8,
+        "words": 89,
+        "you": 2
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.7438016528925621,
+          "context": 0.5,
+          "directness": 0.5,
+          "expressiveness": 0.22471910112359553,
+          "formality": 0.5,
+          "persuading": 0.3333333333333333,
+          "time": 0.3333333333333333,
+          "trust": 0.5,
+          "uncertainty": 0
+        },
+        "reader": {
+          "global": true,
+          "hofstede": null,
+          "id": "global",
+          "lewis": {
+            "linear": 0.3333333333333333,
+            "multi": 0.3333333333333333,
+            "reactive": 0.3333333333333333
+          },
+          "lewis_label": "A balanced blend of all three",
+          "name": "Global or mixed audience",
+          "targets": {
+            "collective": 0.5,
+            "context": 0.5,
+            "directness": 0.5,
+            "expressiveness": 0.5,
+            "formality": 0.5,
+            "persuading": 0.5,
+            "time": 0.5,
+            "trust": 0.5,
+            "uncertainty": 0.5
+          },
+          "tolerance": 0.3
+        },
+        "source": "quick",
+        "writer": null
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "About the reader 2 times, about the author 9 times.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "1 supporting signal.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "0 supporting signals.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Average sentence 10 words; 0 over 30 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "1 call to action found.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Gunning Fog 4.9; average sentence 10 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "4 paragraphs, about 2.3 sentences each.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "89 words; typical range for this content type is 50 to 160.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Fog 4.9 (aim under 11), 0% passive, 0 long sentences.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "22% of sentences use a linking word; 38% pick up a word from the sentence before.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Formality 50 of 100; this reader and form expect about 48.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "No obviously unsupported claims found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Reading level Fog 4.9 for a informed reader (aim 12 or under).",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Opening line: 11 words.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "No undefined acronyms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "No exclusionary terms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Text 50, reader expects about 50 (0 = explicit, 100 = implicit).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Text 50, reader expects about 50 (0 = direct, 100 = indirect).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Text 33, reader expects about 50 (0 = applications-first, 100 = principles-first).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Text 50, reader expects about 50 (0 = informal, 100 = formal).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Text 50, reader expects about 50 (0 = task, 100 = relationship).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Text 74, reader expects about 50 (0 = individual, 100 = group).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Text 33, reader expects about 50 (0 = deadline, 100 = long-term).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Text 0, reader expects about 50 (0 = brief, 100 = detailed).",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Text 22, reader expects about 50 (0 = restrained, 100 = expressive).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "No culture-bound idioms found.",
+          "score": 4,
+          "source": "quick"
+        }
+      ],
+      "duties": {
+        "fit": null,
+        "primary": "steer",
+        "profile": {
+          "delight": 18,
+          "move": 0,
+          "steer": 64,
+          "teach": 0,
+          "unsettle": 18
+        },
+        "source": "quick",
+        "target": null
+      },
+      "effective_weights": {
+        "ethos": 0.35,
+        "kairos": 0.19,
+        "logos": 0.2,
+        "pathos": 0.26
+      },
+      "group_scores": {
+        "audience": 81,
+        "craft": 92,
+        "culture": 93
+      },
+      "highlights": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 117,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "We will build schools that open their doors to every child.",
+          "source": "quick",
+          "start": 58
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 193,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "We will build clinics that treat the sick without asking what they can pay.",
+          "source": "quick",
+          "start": 118
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 286,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+          "source": "quick",
+          "start": 194
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 393,
+          "note": "Dialogue",
+          "polarity": "strength",
+          "quote": "So I ask you: will you build it with us?",
+          "source": "quick",
+          "start": 353
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 454,
+          "note": "Identity, status and belonging",
+          "polarity": "strength",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+          "source": "quick",
+          "start": 394
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "end": 454,
+          "note": "The call to act",
+          "polarity": "strength",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+          "source": "quick",
+          "start": 394
+        }
+      ],
+      "judges": {},
+      "lenses": {
+        "lens_dialogue": 75,
+        "lens_mythos": 0,
+        "lens_prepon": 100,
+        "lens_telos": 25
+      },
+      "mode": "quick",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_antithesis",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "quote": "So I ask you: will you build it with us?",
+              "status": "present"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_levity",
+              "status": "unknown"
+            }
+          ],
+          "score": 4,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authority",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "status": "absent"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "status": "absent"
+            },
+            {
+              "id": "lv_plu",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_tension",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_status",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_permission",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "quote": "It will be worth it.",
+              "status": "present"
+            },
+            {
+              "id": "lv_framing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "status": "absent"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "unknown"
+            }
+          ],
+          "score": 1,
+          "summary": ""
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_timely",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_fluency",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_attention",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_character",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_shape",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_turn",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_transformation",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_ingroup",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "absent"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_uncertainty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_credibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_intimacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "quote": "So I ask you: will you build it with us?",
+              "status": "present"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_positive_balance",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_authentic",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_respect",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_equity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "status": "absent"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_courage",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        }
+      ],
+      "perspectives_source": "quick",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "example": false,
+          "impact": "high",
+          "issue": "Goodwill and reader focus scores 1 of 4. Rewrite sentences that start with the author so they start with the reader and what they get.",
+          "move": "mv_flip_we_to_you",
+          "original": "We will build schools that open their doors to every child.",
+          "rewrite": "You will be up and running in your first week, with a guide on call.",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "example": true,
+          "impact": "medium",
+          "issue": "Borrowed credibility scores 0 of 4. Replace vague praise with a named source, their role and the outcome they got.",
+          "move": "mv_specific_testimonial",
+          "original": "\"Great service, highly recommend!\"",
+          "rewrite": "\"We cut month-end close from 9 days to 3.\" Priya Shah, Finance Director, Northwind Logistics",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "example": true,
+          "impact": "medium",
+          "issue": "Competence and judgement scores 1 of 4. Replace what you were responsible for with what changed because of you: action verb, what you did, measurable result.",
+          "move": "mv_duty_to_achievement",
+          "original": "Responsible for managing the engineering team.",
+          "rewrite": "Grew the engineering team from 6 to 25 and cut release time from monthly to daily.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "example": true,
+          "impact": "high",
+          "issue": "Stakes: pain and desire scores 0 of 4. Describe the specific moment the reader realises the current way is not working, in their words.",
+          "move": "mv_name_struggling_moment",
+          "original": "Accounting software for small businesses.",
+          "rewrite": "It is 11pm on the last day of the quarter and you are still matching receipts to bank lines.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "example": true,
+          "impact": "medium",
+          "issue": "Story and narrative scores 0 of 4. Insert a three-sentence story: who, what went wrong, what changed. Put it where the claim needs most belief.",
+          "move": "mv_add_micro_story",
+          "original": "Our method improves retention.",
+          "rewrite": "Sam ran a gym losing 30 members a month. We changed one thing: a call on day 7. Churn halved by spring.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_empathy",
+          "example": true,
+          "impact": "medium",
+          "issue": "Empathy and emotional resonance scores 1 of 4. Name what the reader is probably feeling, tentatively ('It can feel like...').",
+          "move": "mv_label_feeling",
+          "original": "Our software handles compliance.",
+          "rewrite": "It can feel like every audit is a fresh scramble. It does not have to be.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_objections",
+          "example": true,
+          "impact": "medium",
+          "issue": "Objection handling scores 0 of 4. Name the sceptic's strongest objection and answer it with evidence. Two-sided beats one-sided for sceptical readers.",
+          "move": "mv_raise_and_answer",
+          "original": "(Price not mentioned)",
+          "rewrite": "Yes, we cost more than a freelancer. You are paying for a team that does not disappear in August.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "example": true,
+          "impact": "medium",
+          "issue": "Specific claims and evidence scores 1 of 4. Replace every 'improved', 'faster', 'more' with a number, a time frame and a baseline.",
+          "move": "mv_quantify_claim",
+          "original": "Significantly improved performance.",
+          "rewrite": "Cut page load from 4.1s to 1.3s in six weeks.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mechanism and reasoning scores 1 of 4. After each claim, add 'because...' or 'which means...'.",
+          "move": "mv_add_reason_why",
+          "original": "Our coffee tastes better.",
+          "rewrite": "Our coffee tastes better because we roast to order and ship within 48 hours.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cost of delay scores 0 of 4. Show what staying put costs per week, month or year, using the reader's numbers where possible.",
+          "move": "mv_cost_of_inaction",
+          "original": "Don't wait to fix your hiring process.",
+          "rewrite": "Each month a senior role stays open costs roughly [£X] in delayed delivery.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "example": true,
+          "impact": "medium",
+          "issue": "Fit to the moment scores 1 of 4. Connect the message to a current shift, event or season the reader recognises.",
+          "move": "mv_why_now_hook",
+          "original": "AI can help your team.",
+          "rewrite": "Since your competitors started shipping AI features this year, buyers now expect them in every demo.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "example": true,
+          "impact": "medium",
+          "issue": "Hope and agency scores 1 of 4. After stating the stakes, show it can be done: a proof point, a first step, a reason for optimism. Urgency plus optimism moves people; urgency alone overwhelms them.",
+          "move": "mv_pair_urgency_hope",
+          "original": "Cyber attacks on firms like yours rose sharply last year. You are exposed.",
+          "rewrite": "Attacks on firms like yours are rising. The good news: three changes block most of them, and you can make the first one this week.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mythos scores 0 of 4. Frame the message inside a bigger narrative: an old world, a shift, winners and losers, a promised land.",
+          "move": "mv_name_the_shift",
+          "original": "We sell sales software.",
+          "rewrite": "Buyers now do 70% of their research before talking to sales. The teams winning have stopped pitching and started teaching.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Telos scores 1 of 4. Write the single sentence you want the reader to remember. Put it near the start, repeat it at the end, and cut anything that doesn't serve it.",
+          "move": "mv_one_big_idea",
+          "original": "(Five equal points about features, pricing, history, team and roadmap)",
+          "rewrite": "One idea: we halve your onboarding time. Everything else is evidence for that.",
+          "source": "library"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "example": true,
+          "impact": "low",
+          "issue": "First impression scores 2 of 4. Open with the reader's situation, a specific fact or the big idea; cut greetings-as-content and background.",
+          "move": null,
+          "original": "I hope this email finds you well. My name is Tom and I work at BrightPath.",
+          "rewrite": "Your Q3 update mentioned the cloud migration twice.",
+          "source": "library"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_uncertainty",
+          "example": true,
+          "impact": "medium",
+          "issue": "Brief or detailed scores 1 of 4. Brief: headline and essentials; detail on request. Detailed: process, specifics, guarantees and risk mitigation up front.",
+          "move": null,
+          "original": "",
+          "rewrite": "",
+          "source": "library"
+        }
+      ],
+      "red_flags": [],
+      "scores": {
+        "balance_index": 79,
+        "band": "Weak",
+        "ethos": 30,
+        "kairos": 38,
+        "logos": 43,
+        "overall": 33,
+        "pathos": 25
+      },
+      "source": null
+    }
+  },
+  "id": "speech-anaphora-3",
+  "input": {
+    "ctx": {
+      "archetype": "general",
+      "audience": {
+        "awareness": "problem_aware",
+        "decision_unit": "individual",
+        "expertise": "informed",
+        "focus": "promotion",
+        "involvement": "high",
+        "relationship": "cold"
+      },
+      "contentType": "sales_email",
+      "culture": {
+        "reader": "global",
+        "writer": ""
+      },
+      "role": ""
+    },
+    "text": "Friends, we did not come here to complain, but to build.\n\nWe will build schools that open their doors to every child. We will build clinics that treat the sick without asking what they can pay. We will build roads, bridges and railways that carry our children further than we ever went.\n\nIt will not be quick. It will not be easy. It will be worth it.\n\nSo I ask you: will you build it with us? Join us on Saturday at the town hall, and bring a neighbour."
+  },
+  "judgeOutputs": {
+    "audience": {
+      "appeal": "audience",
+      "dimension_scores": [
+        {
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": "1"
+        },
+        {
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 7
+        },
+        {
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 4
+        },
+        {
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 4
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "aud_hook",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "aud_knowledge",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_shared_struggle",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_shared_struggle",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic audience summary for speech-anaphora-3."
+    },
+    "craft": {
+      "appeal": "craft",
+      "dimension_scores": [
+        {
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": "3"
+        },
+        {
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 7
+        },
+        {
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3
+        },
+        {
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 4
+        },
+        {
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 1
+        },
+        {
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "craft_structure",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "craft_length",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "craft_clarity",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "craft_cohesion",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "craft_tone",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_cost_of_inaction",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure."
+        },
+        {
+          "dimension": "craft_claims",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_cost_of_inaction",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic craft summary for speech-anaphora-3."
+    },
+    "culture": {
+      "appeal": "culture",
+      "dimension_scores": [
+        {
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": "2"
+        },
+        {
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 7
+        },
+        {
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 3
+        },
+        {
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 0
+        },
+        {
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 1
+        },
+        {
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 1
+        },
+        {
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 3
+        },
+        {
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 2
+        },
+        {
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 4
+        },
+        {
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "cul_context",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "cul_directness",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "cul_persuading",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "cul_formality",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "cul_trust",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_paint_dream_outcome",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context."
+        },
+        {
+          "dimension": "cul_idiom",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_paint_dream_outcome",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic culture summary for speech-anaphora-3.",
+      "text_positions": {
+        "collective": 0.96,
+        "context": "0.5",
+        "directness": 1.4,
+        "expressiveness": 0.26,
+        "formality": 0.63,
+        "persuading": 0.63,
+        "time": 0.09,
+        "trust": 0.61,
+        "uncertainty": 0.66
+      }
+    },
+    "ethos": {
+      "appeal": "ethos",
+      "dimension_scores": [
+        {
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": "1"
+        },
+        {
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 7
+        },
+        {
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 2
+        },
+        {
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 2
+        },
+        {
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 1
+        },
+        {
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "eth_competence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "eth_integrity",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "eth_goodwill",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "eth_borrowed",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "eth_identification",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_avoid_status_threat",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "eth_polish",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_avoid_status_threat",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_absolute_promise",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic ethos summary for speech-anaphora-3."
+    },
+    "influence": {
+      "appeal": "influence",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "It will not be quick.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "It will not be easy.",
+              "status": "present"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 4
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "So I ask you: will you build it with us?",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "It will not be quick.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "It will not be quick.",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "We will build clinics that treat the sick without asking what they can pay.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "It will not be easy.",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "It will not be easy.",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "It will not be quick.",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "It will not be quick.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "We will build clinics that treat the sick without asking what they can pay.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "We will build schools that open their doors to every child.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "So I ask you: will you build it with us?",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "It will be worth it.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "It will not be quick.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Friends, we did not come here to complain, but to build.",
+              "status": "present"
+            }
+          ],
+          "score": 0,
+          "summary": "Synthetic pv_critical."
+        },
+        {
+          "id": "pv_zz_missing",
+          "levers": [],
+          "score": 4,
+          "summary": "Dropped."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_values_reframe",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_values_reframe",
+          "rewrite": "Dropped."
+        }
+      ],
+      "summary": "Synthetic influence summary for speech-anaphora-3."
+    },
+    "kairos": {
+      "appeal": "kairos",
+      "dimension_scores": [
+        {
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": "0"
+        },
+        {
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 7
+        },
+        {
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 3
+        },
+        {
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 3
+        },
+        {
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "kai_moment",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "kai_stakes",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "kai_efficacy",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "kai_integrity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "kai_call",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_real_reason_now",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_real_reason_now",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ]
+    },
+    "lenses": {
+      "appeal": "lenses",
+      "dimension_scores": [
+        {
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": "1"
+        },
+        {
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 7
+        },
+        {
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 0
+        },
+        {
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "duties": {
+        "delight": 3,
+        "move": 35,
+        "steer": 3,
+        "teach": "9",
+        "unsettle": 42
+      },
+      "highlights": [
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "lens_mythos",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "lens_prepon",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_invite_response",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_invite_response",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic lenses summary for speech-anaphora-3."
+    },
+    "logos": {
+      "appeal": "logos",
+      "dimension_scores": [
+        {
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": "4"
+        },
+        {
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 7
+        },
+        {
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 2
+        },
+        {
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 1
+        },
+        {
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2
+        },
+        {
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "log_evidence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "log_mechanism",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "log_structure",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "log_comparison",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "log_objections",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_identity_frame",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence."
+        },
+        {
+          "dimension": "log_clarity",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_identity_frame",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic logos summary for speech-anaphora-3."
+    },
+    "pathos": {
+      "appeal": "pathos",
+      "dimension_scores": [
+        {
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": "2"
+        },
+        {
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 7
+        },
+        {
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 3
+        },
+        {
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 1
+        },
+        {
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 4
+        },
+        {
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "pat_stakes",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "pat_vividness",
+          "polarity": "weakness",
+          "quote": "JOIN US ON SATURDAY AT THE TOWN HALL, AND BRING A NEIGHBOUR."
+        },
+        {
+          "dimension": "pat_story",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Friends,   we did not come here to complain, but to build."
+        },
+        {
+          "dimension": "pat_identity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Friends, we did not come here and then something the text never says"
+        },
+        {
+          "dimension": "pat_empathy",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_shorten_sentences",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes."
+        },
+        {
+          "dimension": "pat_surprise",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_shorten_sentences",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Join us on Saturday at the town hall, and bring a neighbour."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Friends, we did not come here to complain, but to build."
+        }
+      ],
+      "summary": "Synthetic pathos summary for speech-anaphora-3."
+    }
+  },
+  "quickScan": {
+    "craft": {
+      "avg_sentence": 9.9,
+      "devices": {
+        "alliteration": 0,
+        "anaphora": 2,
+        "antithesis": 1,
+        "questions": 1,
+        "tricolon": 1
+      },
+      "emotional_pct": 1.1,
+      "fk_grade": 2.2,
+      "gunning_fog": 4.9,
+      "i": 1,
+      "passive_pct": 0,
+      "positivity": 100,
+      "sentences": 9,
+      "speaking_sec": 41,
+      "we": 8,
+      "words": 89,
+      "you": 2
+    },
+    "culture": {
+      "positions": {
+        "collective": 0.7438016528925621,
+        "context": 0.5,
+        "directness": 0.5,
+        "expressiveness": 0.22471910112359553,
+        "formality": 0.5,
+        "persuading": 0.3333333333333333,
+        "time": 0.3333333333333333,
+        "trust": 0.5,
+        "uncertainty": 0
+      },
+      "reader": {
+        "global": true,
+        "hofstede": null,
+        "id": "global",
+        "lewis": {
+          "linear": 0.3333333333333333,
+          "multi": 0.3333333333333333,
+          "reactive": 0.3333333333333333
+        },
+        "name": "Global or mixed audience",
+        "targets": {
+          "collective": 0.5,
+          "context": 0.5,
+          "directness": 0.5,
+          "expressiveness": 0.5,
+          "formality": 0.5,
+          "persuading": 0.5,
+          "time": 0.5,
+          "trust": 0.5,
+          "uncertainty": 0.5
+        },
+        "tolerance": 0.3
+      },
+      "writer": null
+    },
+    "flags": [],
+    "fns": {
+      "delight": 18,
+      "move": 0,
+      "steer": 64,
+      "teach": 0,
+      "unsettle": 18
+    },
+    "highlights": [
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 117,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "We will build schools that open their doors to every child.",
+        "source": "quick",
+        "start": 58
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 193,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "We will build clinics that treat the sick without asking what they can pay.",
+        "source": "quick",
+        "start": 118
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 286,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+        "source": "quick",
+        "start": 194
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_identity",
+        "end": 454,
+        "note": "Identity, status and belonging",
+        "polarity": "strength",
+        "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+        "source": "quick",
+        "start": 394
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_call",
+        "end": 454,
+        "note": "The call to act",
+        "polarity": "strength",
+        "quote": "Join us on Saturday at the town hall, and bring a neighbour.",
+        "source": "quick",
+        "start": 394
+      },
+      {
+        "appeal": "lenses",
+        "dimension": "lens_dialogue",
+        "end": 393,
+        "note": "Dialogue",
+        "polarity": "strength",
+        "quote": "So I ask you: will you build it with us?",
+        "source": "quick",
+        "start": 353
+      }
+    ],
+    "levers": {
+      "lv_acceptance_latitude": {
+        "status": "unknown"
+      },
+      "lv_affirmation": {
+        "status": "unknown"
+      },
+      "lv_anaphora": {
+        "status": "unknown"
+      },
+      "lv_anchor": {
+        "quote": "It will be worth it.",
+        "status": "present"
+      },
+      "lv_antithesis": {
+        "quote": "Friends, we did not come here to complain, but to build.",
+        "status": "present"
+      },
+      "lv_argument_quality": {
+        "status": "unknown"
+      },
+      "lv_attention": {
+        "status": "unknown"
+      },
+      "lv_attractive": {
+        "status": "unknown"
+      },
+      "lv_authentic": {
+        "status": "unknown"
+      },
+      "lv_authority": {
+        "status": "absent"
+      },
+      "lv_autonomy": {
+        "status": "unknown"
+      },
+      "lv_brevity": {
+        "status": "unknown"
+      },
+      "lv_character": {
+        "status": "unknown"
+      },
+      "lv_choice": {
+        "status": "absent"
+      },
+      "lv_cognitive_load": {
+        "status": "unknown"
+      },
+      "lv_commitment": {
+        "status": "absent"
+      },
+      "lv_confirmation": {
+        "status": "unknown"
+      },
+      "lv_costly_signal": {
+        "status": "unknown"
+      },
+      "lv_counter_evidence": {
+        "status": "absent"
+      },
+      "lv_courage": {
+        "status": "unknown"
+      },
+      "lv_credibility": {
+        "status": "unknown"
+      },
+      "lv_easy": {
+        "status": "absent"
+      },
+      "lv_efficacy": {
+        "status": "unknown"
+      },
+      "lv_emotion_range": {
+        "status": "unknown"
+      },
+      "lv_endowment": {
+        "status": "unknown"
+      },
+      "lv_equity": {
+        "status": "unknown"
+      },
+      "lv_flourishing": {
+        "status": "unknown"
+      },
+      "lv_fluency": {
+        "status": "unknown"
+      },
+      "lv_framing": {
+        "status": "absent"
+      },
+      "lv_free": {
+        "status": "absent"
+      },
+      "lv_freedom": {
+        "status": "absent"
+      },
+      "lv_identity_consistent": {
+        "status": "unknown"
+      },
+      "lv_imagery": {
+        "status": "unknown"
+      },
+      "lv_ingroup": {
+        "quote": "Friends, we did not come here to complain, but to build.",
+        "status": "present"
+      },
+      "lv_intention_obstacle": {
+        "status": "unknown"
+      },
+      "lv_intimacy": {
+        "status": "unknown"
+      },
+      "lv_labelling": {
+        "status": "absent"
+      },
+      "lv_levity": {
+        "status": "unknown"
+      },
+      "lv_liking": {
+        "status": "absent"
+      },
+      "lv_low_self_orientation": {
+        "quote": "So I ask you: will you build it with us?",
+        "status": "present"
+      },
+      "lv_motivation": {
+        "status": "unknown"
+      },
+      "lv_motive_honesty": {
+        "status": "unknown"
+      },
+      "lv_no_status_threat": {
+        "status": "unknown"
+      },
+      "lv_peripheral_cues": {
+        "status": "unknown"
+      },
+      "lv_permission": {
+        "status": "unknown"
+      },
+      "lv_plu": {
+        "status": "unknown"
+      },
+      "lv_positive_balance": {
+        "status": "unknown"
+      },
+      "lv_presuasion": {
+        "status": "unknown"
+      },
+      "lv_promise_clock": {
+        "status": "unknown"
+      },
+      "lv_prompt": {
+        "status": "absent"
+      },
+      "lv_reciprocity": {
+        "status": "absent"
+      },
+      "lv_reframe": {
+        "status": "unknown"
+      },
+      "lv_refutation": {
+        "status": "absent"
+      },
+      "lv_reg_fit": {
+        "status": "unknown"
+      },
+      "lv_reliability": {
+        "status": "unknown"
+      },
+      "lv_remarkable": {
+        "status": "unknown"
+      },
+      "lv_respect": {
+        "status": "unknown"
+      },
+      "lv_revisable": {
+        "status": "absent"
+      },
+      "lv_rhetorical_q": {
+        "quote": "So I ask you: will you build it with us?",
+        "status": "present"
+      },
+      "lv_scarcity": {
+        "status": "absent"
+      },
+      "lv_shape": {
+        "status": "unknown"
+      },
+      "lv_social": {
+        "status": "unknown"
+      },
+      "lv_social_proof": {
+        "status": "absent"
+      },
+      "lv_social_responsibility": {
+        "status": "unknown"
+      },
+      "lv_status": {
+        "status": "unknown"
+      },
+      "lv_svm": {
+        "status": "absent"
+      },
+      "lv_tactic_visibility": {
+        "status": "unknown"
+      },
+      "lv_tension": {
+        "status": "unknown"
+      },
+      "lv_timely": {
+        "status": "unknown"
+      },
+      "lv_transformation": {
+        "status": "unknown"
+      },
+      "lv_tricolon": {
+        "quote": "We will build roads, bridges and railways that carry our children further than we ever went.",
+        "status": "present"
+      },
+      "lv_truthful": {
+        "status": "unknown"
+      },
+      "lv_turn": {
+        "status": "unknown"
+      },
+      "lv_uncertainty": {
+        "status": "unknown"
+      },
+      "lv_unity": {
+        "status": "absent"
+      },
+      "lv_values_match": {
+        "status": "unknown"
+      },
+      "lv_warmth": {
+        "status": "unknown"
+      },
+      "lv_who_benefits": {
+        "status": "absent"
+      }
+    },
+    "notes": {
+      "aud_hook": "Opening line: 11 words.",
+      "aud_inclusivity": "No exclusionary terms found.",
+      "aud_knowledge": "No undefined acronyms found.",
+      "aud_suitability": "Reading level Fog 4.9 for a informed reader (aim 12 or under).",
+      "craft_claims": "No obviously unsupported claims found.",
+      "craft_clarity": "Fog 4.9 (aim under 11), 0% passive, 0 long sentences.",
+      "craft_cohesion": "22% of sentences use a linking word; 38% pick up a word from the sentence before.",
+      "craft_length": "89 words; typical range for this content type is 50 to 160.",
+      "craft_structure": "4 paragraphs, about 2.3 sentences each.",
+      "craft_tone": "Formality 50 of 100; this reader and form expect about 48.",
+      "cul_collective": "Text 74, reader expects about 50 (0 = individual, 100 = group).",
+      "cul_context": "Text 50, reader expects about 50 (0 = explicit, 100 = implicit).",
+      "cul_directness": "Text 50, reader expects about 50 (0 = direct, 100 = indirect).",
+      "cul_expressiveness": "Text 22, reader expects about 50 (0 = restrained, 100 = expressive).",
+      "cul_formality": "Text 50, reader expects about 50 (0 = informal, 100 = formal).",
+      "cul_idiom": "No culture-bound idioms found.",
+      "cul_persuading": "Text 33, reader expects about 50 (0 = applications-first, 100 = principles-first).",
+      "cul_time": "Text 33, reader expects about 50 (0 = deadline, 100 = long-term).",
+      "cul_trust": "Text 50, reader expects about 50 (0 = task, 100 = relationship).",
+      "cul_uncertainty": "Text 0, reader expects about 50 (0 = brief, 100 = detailed).",
+      "eth_borrowed": "0 supporting signals, 0 weakening.",
+      "eth_competence": "0 supporting signals, 0 weakening.",
+      "eth_goodwill": "About the reader 2 times, about the author 9 times.",
+      "eth_identification": "0 supporting signals.",
+      "eth_integrity": "0 supporting signals, 0 weakening.",
+      "eth_polish": "0 supporting signals, 0 weakening.",
+      "kai_call": "1 call to action found.",
+      "kai_efficacy": "0 supporting signals, 0 weakening.",
+      "kai_integrity": "0 supporting signals, 0 weakening.",
+      "kai_moment": "0 supporting signals, 0 weakening.",
+      "kai_stakes": "0 supporting signals.",
+      "lens_dialogue": "1 supporting signal, 0 weakening.",
+      "lens_mythos": "0 supporting signals.",
+      "lens_prepon": "Gunning Fog 4.9; average sentence 10 words.",
+      "lens_telos": "0 supporting signals.",
+      "log_clarity": "Average sentence 10 words; 0 over 30 words.",
+      "log_comparison": "0 supporting signals.",
+      "log_evidence": "0 supporting signals, 0 weakening.",
+      "log_mechanism": "0 supporting signals.",
+      "log_objections": "0 supporting signals.",
+      "log_structure": "0 supporting signals.",
+      "pat_empathy": "0 supporting signals, 0 weakening.",
+      "pat_identity": "1 supporting signal.",
+      "pat_stakes": "0 supporting signals.",
+      "pat_story": "0 supporting signals.",
+      "pat_surprise": "0 supporting signals, 0 weakening.",
+      "pat_vividness": "0 supporting signals, 0 weakening."
+    },
+    "pvScores": {
+      "pv_behaviour_design": 0,
+      "pv_behavioural_econ": 1,
+      "pv_cialdini": 0,
+      "pv_critical": 0,
+      "pv_dual_process": null,
+      "pv_ethics": null,
+      "pv_godin": 0,
+      "pv_identity_values": 2,
+      "pv_motivation": null,
+      "pv_narrative": null,
+      "pv_resistance": 0,
+      "pv_rhetoric": 4,
+      "pv_trust": 2
+    },
+    "scores": {
+      "aud_hook": 2,
+      "aud_inclusivity": 4,
+      "aud_knowledge": 4,
+      "aud_suitability": 3,
+      "craft_claims": 4,
+      "craft_clarity": 4,
+      "craft_cohesion": 3,
+      "craft_length": 4,
+      "craft_structure": 3,
+      "craft_tone": 4,
+      "cul_collective": 4,
+      "cul_context": 4,
+      "cul_directness": 4,
+      "cul_expressiveness": 4,
+      "cul_formality": 4,
+      "cul_idiom": 4,
+      "cul_persuading": 4,
+      "cul_time": 4,
+      "cul_trust": 4,
+      "cul_uncertainty": 1,
+      "eth_borrowed": 0,
+      "eth_competence": 1,
+      "eth_goodwill": 1,
+      "eth_identification": 1,
+      "eth_integrity": 2,
+      "eth_polish": 3,
+      "kai_call": 3,
+      "kai_efficacy": 1,
+      "kai_integrity": 2,
+      "kai_moment": 1,
+      "kai_stakes": 0,
+      "lens_dialogue": 3,
+      "lens_mythos": 0,
+      "lens_prepon": 4,
+      "lens_telos": 1,
+      "log_clarity": 4,
+      "log_comparison": 1,
+      "log_evidence": 1,
+      "log_mechanism": 1,
+      "log_objections": 0,
+      "log_structure": 2,
+      "pat_empathy": 1,
+      "pat_identity": 3,
+      "pat_stakes": 0,
+      "pat_story": 0,
+      "pat_surprise": 1,
+      "pat_vividness": 2
+    },
+    "sentences": [
+      {
+        "end": 56,
+        "start": 0,
+        "text": "Friends, we did not come here to complain, but to build.",
+        "words": 11
+      },
+      {
+        "end": 117,
+        "start": 58,
+        "text": "We will build schools that open their doors to every child.",
+        "words": 11
+      },
+      {
+        "end": 193,
+        "start": 118,
+        "text": "We will build clinics that treat the sick without asking what they can pay.",
+        "words": 14
+      },
+      {
+        "end": 286,
+        "start": 194,
+        "text": "We will build roads, bridges and railways that carry our children further than we ever went.",
+        "words": 16
+      },
+      {
+        "end": 309,
+        "start": 288,
+        "text": "It will not be quick.",
+        "words": 5
+      },
+      {
+        "end": 330,
+        "start": 310,
+        "text": "It will not be easy.",
+        "words": 5
+      },
+      {
+        "end": 351,
+        "start": 331,
+        "text": "It will be worth it.",
+        "words": 5
+      },
+      {
+        "end": 393,
+        "start": 353,
+        "text": "So I ask you: will you build it with us?",
+        "words": 10
+      },
+      {
+        "end": 454,
+        "start": 394,
+        "text": "Join us on Saturday at the town hall, and bring a neighbour.",
+        "words": 12
+      }
+    ],
+    "words": 89
+  },
+  "source": "corpus"
+}

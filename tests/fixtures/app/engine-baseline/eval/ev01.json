@@ -1,0 +1,6178 @@
+{
+  "assemble": {
+    "full": {
+      "appeal_share": {
+        "ethos": 4,
+        "kairos": 0,
+        "logos": 0,
+        "neutral": 96,
+        "pathos": 0
+      },
+      "audience": {
+        "archetype": "general",
+        "awareness": "problem_aware",
+        "decision_unit": "individual",
+        "expertise": "informed",
+        "focus": "unknown",
+        "involvement": "medium",
+        "relationship": "warm",
+        "role": null
+      },
+      "balance_findings": [],
+      "content_type": "landing_page",
+      "craft": {
+        "avg_sentence": 7.4,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 2.9,
+        "fk_grade": 9,
+        "gunning_fog": 13.7,
+        "i": 0,
+        "passive_pct": 0,
+        "positivity": 100,
+        "sentences": 14,
+        "speaking_sec": 48,
+        "we": 6,
+        "words": 104,
+        "you": 2
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.26,
+          "context": 0.2857142857142857,
+          "directness": 1,
+          "expressiveness": 0.98,
+          "formality": 0.86,
+          "persuading": 0.16,
+          "time": 0.7,
+          "trust": 0.07,
+          "uncertainty": 0.87
+        },
+        "reader": {
+          "global": true,
+          "hofstede": null,
+          "id": "global",
+          "lewis": {
+            "linear": 0.3333333333333333,
+            "multi": 0.3333333333333333,
+            "reactive": 0.3333333333333333
+          },
+          "lewis_label": "A balanced blend of all three",
+          "name": "Global or mixed audience",
+          "targets": {
+            "collective": 0.5,
+            "context": 0.5,
+            "directness": 0.5,
+            "expressiveness": 0.5,
+            "formality": 0.5,
+            "persuading": 0.5,
+            "time": 0.5,
+            "trust": 0.5,
+            "uncertainty": 0.5
+          },
+          "tolerance": 0.3
+        },
+        "source": "ai",
+        "writer": null
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 1,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 3,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 2,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 4,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 0,
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 0,
+          "source": "ai"
+        }
+      ],
+      "duties": {
+        "fit": null,
+        "primary": "teach",
+        "profile": {
+          "delight": 6,
+          "move": 10,
+          "steer": 20,
+          "teach": 46,
+          "unsettle": 19
+        },
+        "source": "ai",
+        "target": null
+      },
+      "effective_weights": {
+        "ethos": 0.26,
+        "kairos": 0.15,
+        "logos": 0.22,
+        "pathos": 0.37
+      },
+      "group_scores": {
+        "audience": 69,
+        "craft": 46,
+        "culture": 43
+      },
+      "highlights": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "end": 27,
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 27,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Welcome   to Nexora Solutions",
+          "source": "ai",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 54,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "revolutionary",
+          "source": "quick",
+          "start": 41
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 67,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "world-class",
+          "source": "quick",
+          "start": 56
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 90,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "empowers",
+          "source": "quick",
+          "start": 82
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 113,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "leverage",
+          "source": "quick",
+          "start": 105
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 129,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "seamlessly",
+          "source": "quick",
+          "start": 119
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 191,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "industry-leading",
+          "source": "quick",
+          "start": 175
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 212,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "holistic",
+          "source": "quick",
+          "start": 204
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 282,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "cutting-edge",
+          "source": "quick",
+          "start": 270
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 315,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "unparalleled",
+          "source": "quick",
+          "start": 303
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 373,
+          "flag": "rf_weasel",
+          "note": "Weasel claims: Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "polarity": "weakness",
+          "quote": "Studies show",
+          "source": "quick",
+          "start": 361
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 504,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "Seamless",
+          "source": "quick",
+          "start": 496
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 532,
+          "flag": "rf_weasel",
+          "note": "Weasel claims: Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "polarity": "weakness",
+          "quote": "up to 200",
+          "source": "quick",
+          "start": 523
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 632,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "second to none",
+          "source": "quick",
+          "start": 618
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 642,
+          "flag": "rf_false_urgency",
+          "note": "Manufactured urgency: Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "polarity": "weakness",
+          "quote": "Act now",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 661,
+          "flag": "rf_false_urgency",
+          "note": "Manufactured urgency: Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "polarity": "weakness",
+          "quote": "Limited time only",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_directness",
+          "end": 718,
+          "note": "",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE.",
+          "source": "ai",
+          "start": 693
+        }
+      ],
+      "judges": {
+        "audience": "Synthetic audience summary for ev01.",
+        "craft": "Synthetic craft summary for ev01.",
+        "culture": "Synthetic culture summary for ev01.",
+        "ethos": "Synthetic ethos summary for ev01.",
+        "kairos": "",
+        "lenses": "Synthetic lenses summary for ev01.",
+        "logos": "Synthetic logos summary for ev01.",
+        "pathos": "Synthetic pathos summary for ev01."
+      },
+      "lenses": {
+        "lens_dialogue": 100,
+        "lens_mythos": 100,
+        "lens_prepon": 100,
+        "lens_telos": 25
+      },
+      "mode": "full",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Features",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "present"
+            }
+          ],
+          "score": 4,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "- Real-time dashboards",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "- AI-powered forecasting",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "- Real-time dashboards",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Act now!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Act now!",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "Our team of experts is second to none.",
+              "status": "misused"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Studies show that data-driven companies are significantly more profitable.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "- Real-time dashboards",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "- AI-powered forecasting",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "- Real-time dashboards",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Studies show that data-driven companies are significantly more profitable.",
+              "status": "misused"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "We are passionate about helping our customers succeed.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "- Real-time dashboards",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "Act now!",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "Contact us to learn more.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Features",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "Features",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "Our team of experts is second to none.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Act now!",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "- Seamless integrations with up to 200 tools",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "note": "",
+              "quote": "",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "Studies show that data-driven companies are significantly more profitable.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "note": "",
+              "quote": "",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Act now!",
+              "status": "misused"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_critical."
+        }
+      ],
+      "perspectives_source": "ai",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_pair_urgency_hope",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_polish",
+          "impact": "medium",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_reduce_uncertainty",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes.",
+          "source": "ai"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_surprise",
+          "impact": "medium",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_real_reason_now",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_clarity",
+          "impact": "medium",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_hero_guide",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment.",
+          "source": "ai"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_similar_others",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos.",
+          "source": "ai"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "impact": "medium",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_name_struggling_moment",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure.",
+          "source": "ai"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "impact": "medium",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_credential_relevance",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability.",
+          "source": "ai"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "impact": "medium",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_what_if_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context.",
+          "source": "ai"
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_idiom",
+          "impact": "medium",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_cold_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence.",
+          "source": "ai"
+        },
+        {
+          "appeal": "influence",
+          "dimension": "kai_call",
+          "impact": "medium",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": null,
+          "original": "",
+          "rewrite": "Synthetic rewrite.",
+          "source": "ai"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 642,
+          "id": "rf_false_urgency",
+          "note": "Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "quote": "Act now",
+          "severity": "high",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "end": 661,
+          "id": "rf_false_urgency",
+          "note": "Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "quote": "Limited time only",
+          "severity": "high",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "end": 54,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "revolutionary",
+          "severity": "medium",
+          "source": "quick",
+          "start": 41
+        },
+        {
+          "end": 67,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "world-class",
+          "severity": "medium",
+          "source": "quick",
+          "start": 56
+        },
+        {
+          "end": 191,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "industry-leading",
+          "severity": "medium",
+          "source": "quick",
+          "start": 175
+        },
+        {
+          "end": 282,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "cutting-edge",
+          "severity": "medium",
+          "source": "quick",
+          "start": 270
+        },
+        {
+          "end": 315,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "unparalleled",
+          "severity": "medium",
+          "source": "quick",
+          "start": 303
+        },
+        {
+          "end": 632,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "second to none",
+          "severity": "medium",
+          "source": "quick",
+          "start": 618
+        },
+        {
+          "end": 373,
+          "id": "rf_weasel",
+          "note": "Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "quote": "Studies show",
+          "severity": "medium",
+          "source": "quick",
+          "start": 361
+        },
+        {
+          "end": 532,
+          "id": "rf_weasel",
+          "note": "Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "quote": "up to 200",
+          "severity": "medium",
+          "source": "quick",
+          "start": 523
+        },
+        {
+          "end": 90,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "empowers",
+          "severity": "low",
+          "source": "quick",
+          "start": 82
+        },
+        {
+          "end": 113,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "leverage",
+          "severity": "low",
+          "source": "quick",
+          "start": 105
+        },
+        {
+          "end": 129,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "seamlessly",
+          "severity": "low",
+          "source": "quick",
+          "start": 119
+        },
+        {
+          "end": 212,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "holistic",
+          "severity": "low",
+          "source": "quick",
+          "start": 204
+        },
+        {
+          "end": 504,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "Seamless",
+          "severity": "low",
+          "source": "quick",
+          "start": 496
+        },
+        {
+          "end": 718,
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more.",
+          "severity": "high",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "end": 718,
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more.",
+          "severity": "low",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "end": 718,
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more.",
+          "severity": "high",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "end": 718,
+          "id": "rf_hype",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more.",
+          "severity": "medium",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "end": 718,
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more.",
+          "severity": "low",
+          "source": "ai",
+          "start": 693
+        },
+        {
+          "end": 718,
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more.",
+          "severity": "medium",
+          "source": "ai",
+          "start": 693
+        }
+      ],
+      "scores": {
+        "balance_index": 83,
+        "band": "Developing",
+        "ethos": 86,
+        "kairos": 40,
+        "logos": 60,
+        "overall": 59,
+        "pathos": 47
+      },
+      "source": null
+    },
+    "quick": {
+      "appeal_share": {
+        "ethos": 19,
+        "kairos": 7,
+        "logos": 30,
+        "neutral": 32,
+        "pathos": 13
+      },
+      "audience": {
+        "archetype": "general",
+        "awareness": "problem_aware",
+        "decision_unit": "individual",
+        "expertise": "informed",
+        "focus": "unknown",
+        "involvement": "medium",
+        "relationship": "warm",
+        "role": null
+      },
+      "balance_findings": [
+        {
+          "id": "br_all_about_me",
+          "message": "The text talks mostly about the author. Flip it to the reader's world.",
+          "name": "All about the author"
+        }
+      ],
+      "content_type": "landing_page",
+      "craft": {
+        "avg_sentence": 7.4,
+        "devices": {
+          "alliteration": 0,
+          "anaphora": 0,
+          "antithesis": 0,
+          "questions": 0,
+          "tricolon": 0
+        },
+        "emotional_pct": 2.9,
+        "fk_grade": 9,
+        "gunning_fog": 13.7,
+        "i": 0,
+        "passive_pct": 0,
+        "positivity": 100,
+        "sentences": 14,
+        "speaking_sec": 48,
+        "we": 6,
+        "words": 104,
+        "you": 2
+      },
+      "culture": {
+        "gaps": [],
+        "positions": {
+          "collective": 0.7692307692307692,
+          "context": 0.2857142857142857,
+          "directness": 0.5,
+          "expressiveness": 0.5769230769230769,
+          "formality": 0.3846153846153846,
+          "persuading": 0.5,
+          "time": 0.25,
+          "trust": 0.2,
+          "uncertainty": 0.3245192307692307
+        },
+        "reader": {
+          "global": true,
+          "hofstede": null,
+          "id": "global",
+          "lewis": {
+            "linear": 0.3333333333333333,
+            "multi": 0.3333333333333333,
+            "reactive": 0.3333333333333333
+          },
+          "lewis_label": "A balanced blend of all three",
+          "name": "Global or mixed audience",
+          "targets": {
+            "collective": 0.5,
+            "context": 0.5,
+            "directness": 0.5,
+            "expressiveness": 0.5,
+            "formality": 0.5,
+            "persuading": 0.5,
+            "time": 0.5,
+            "trust": 0.5,
+            "uncertainty": 0.5
+          },
+          "tolerance": 0.3
+        },
+        "source": "quick",
+        "writer": null
+      },
+      "dimensions": [
+        {
+          "appeal": "ethos",
+          "id": "eth_competence",
+          "rationale": "1 supporting signal, 1 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_integrity",
+          "rationale": "0 supporting signals, 6 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_goodwill",
+          "rationale": "About the reader 2 times, about the author 6 times.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_borrowed",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_identification",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "ethos",
+          "id": "eth_polish",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_vividness",
+          "rationale": "1 supporting signal, 7 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_story",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_identity",
+          "rationale": "1 supporting signal.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_empathy",
+          "rationale": "0 supporting signals, 1 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "pathos",
+          "id": "pat_surprise",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_evidence",
+          "rationale": "1 supporting signal, 3 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_mechanism",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_structure",
+          "rationale": "5 supporting signals.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_comparison",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_objections",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "logos",
+          "id": "log_clarity",
+          "rationale": "Average sentence 7 words; 0 over 30 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_moment",
+          "rationale": "1 supporting signal, 0 weakening.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_stakes",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_efficacy",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_integrity",
+          "rationale": "0 supporting signals, 2 weakening.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "kairos",
+          "id": "kai_call",
+          "rationale": "1 call to action found.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_telos",
+          "rationale": "0 supporting signals.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_mythos",
+          "rationale": "0 supporting signals.",
+          "score": 0,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_prepon",
+          "rationale": "Gunning Fog 13.7; average sentence 7 words.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "lenses",
+          "id": "lens_dialogue",
+          "rationale": "0 supporting signals, 0 weakening.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_structure",
+          "rationale": "7 paragraphs, about 2.0 sentences each.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_length",
+          "rationale": "104 words; typical range for this content type is 300 to 1000.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_clarity",
+          "rationale": "Fog 13.7 (aim under 11), 0% passive, 0 long sentences.",
+          "score": 3,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_cohesion",
+          "rationale": "7% of sentences use a linking word; 8% pick up a word from the sentence before.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_tone",
+          "rationale": "Formality 38 of 100; this reader and form expect about 50.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "craft",
+          "id": "craft_claims",
+          "rationale": "Some claims would need support if challenged.",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_suitability",
+          "rationale": "Reading level Fog 13.7 for a informed reader (aim 12 or under).",
+          "score": 2,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_hook",
+          "rationale": "Opening line: 4 words.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_knowledge",
+          "rationale": "No undefined acronyms found.",
+          "score": 1,
+          "source": "quick"
+        },
+        {
+          "appeal": "audience",
+          "id": "aud_inclusivity",
+          "rationale": "No exclusionary terms found.",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_context",
+          "rationale": "Text 29, reader expects about 50 (0 = explicit, 100 = implicit).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_directness",
+          "rationale": "Text 50, reader expects about 50 (0 = direct, 100 = indirect).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_persuading",
+          "rationale": "Text 50, reader expects about 50 (0 = applications-first, 100 = principles-first).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_formality",
+          "rationale": "Text 38, reader expects about 50 (0 = informal, 100 = formal).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_trust",
+          "rationale": "Text 20, reader expects about 50 (0 = task, 100 = relationship).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_collective",
+          "rationale": "Text 77, reader expects about 50 (0 = individual, 100 = group).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_time",
+          "rationale": "Text 25, reader expects about 50 (0 = deadline, 100 = long-term).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_uncertainty",
+          "rationale": "Text 32, reader expects about 50 (0 = brief, 100 = detailed).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_expressiveness",
+          "rationale": "Text 58, reader expects about 50 (0 = restrained, 100 = expressive).",
+          "score": 4,
+          "source": "quick"
+        },
+        {
+          "appeal": "culture",
+          "id": "cul_idiom",
+          "rationale": "No culture-bound idioms found.",
+          "score": 4,
+          "source": "quick"
+        }
+      ],
+      "duties": {
+        "fit": null,
+        "primary": "teach",
+        "profile": {
+          "delight": 0,
+          "move": 0,
+          "steer": 0,
+          "teach": 100,
+          "unsettle": 0
+        },
+        "source": "quick",
+        "target": null
+      },
+      "effective_weights": {
+        "ethos": 0.26,
+        "kairos": 0.15,
+        "logos": 0.22,
+        "pathos": 0.37
+      },
+      "group_scores": {
+        "audience": 50,
+        "craft": 58,
+        "culture": 100
+      },
+      "highlights": [
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 27,
+          "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "quick",
+          "start": 0
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "end": 27,
+          "note": "Throat-clearing. Open with the reader's situation instead.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions",
+          "source": "quick",
+          "start": 0
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 130,
+          "note": "Superlatives (world-class, revolutionary)",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "quick",
+          "start": 29
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 130,
+          "note": "Concreteness and vividness",
+          "polarity": "strength",
+          "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "quick",
+          "start": 29
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 130,
+          "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "quick",
+          "start": 29
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "end": 130,
+          "note": "A claim you may be asked to prove.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "quick",
+          "start": 29
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 54,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "revolutionary",
+          "source": "quick",
+          "start": 41
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 67,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "world-class",
+          "source": "quick",
+          "start": 56
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 90,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "empowers",
+          "source": "quick",
+          "start": 82
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 113,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "leverage",
+          "source": "quick",
+          "start": 105
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 129,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "seamlessly",
+          "source": "quick",
+          "start": 119
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 264,
+          "note": "Competence and judgement",
+          "polarity": "strength",
+          "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+          "source": "quick",
+          "start": 131
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 264,
+          "note": "Superlatives (world-class, revolutionary)",
+          "polarity": "weakness",
+          "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+          "source": "quick",
+          "start": 131
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 264,
+          "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+          "polarity": "weakness",
+          "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+          "source": "quick",
+          "start": 131
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 264,
+          "note": "Identity, status and belonging",
+          "polarity": "strength",
+          "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+          "source": "quick",
+          "start": 131
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "end": 264,
+          "note": "A claim you may be asked to prove.",
+          "polarity": "weakness",
+          "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+          "source": "quick",
+          "start": 131
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 191,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "industry-leading",
+          "source": "quick",
+          "start": 175
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 212,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "holistic",
+          "source": "quick",
+          "start": 204
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 360,
+          "note": "Superlatives (world-class, revolutionary)",
+          "polarity": "weakness",
+          "quote": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+          "source": "quick",
+          "start": 266
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 360,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+          "source": "quick",
+          "start": 266
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 282,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "cutting-edge",
+          "source": "quick",
+          "start": 270
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 315,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "unparalleled",
+          "source": "quick",
+          "start": 303
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 435,
+          "note": "Weasel words (up to, many, significant)",
+          "polarity": "weakness",
+          "quote": "Studies show that data-driven companies are significantly more profitable.",
+          "source": "quick",
+          "start": 361
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 373,
+          "flag": "rf_weasel",
+          "note": "Weasel claims: Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "polarity": "weakness",
+          "quote": "Studies show",
+          "source": "quick",
+          "start": 361
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 468,
+          "note": "Structure and flow",
+          "polarity": "strength",
+          "quote": "- Real-time dashboards",
+          "source": "quick",
+          "start": 446
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 493,
+          "note": "Structure and flow",
+          "polarity": "strength",
+          "quote": "- AI-powered forecasting",
+          "source": "quick",
+          "start": 469
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 538,
+          "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+          "polarity": "weakness",
+          "quote": "- Seamless integrations with up to 200 tools",
+          "source": "quick",
+          "start": 494
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 538,
+          "note": "Weasel words (up to, many, significant)",
+          "polarity": "weakness",
+          "quote": "- Seamless integrations with up to 200 tools",
+          "source": "quick",
+          "start": 494
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 538,
+          "note": "Structure and flow",
+          "polarity": "strength",
+          "quote": "- Seamless integrations with up to 200 tools",
+          "source": "quick",
+          "start": 494
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "end": 504,
+          "flag": "rf_buzzword_cluster",
+          "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "polarity": "weakness",
+          "quote": "Seamless",
+          "source": "quick",
+          "start": 496
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 532,
+          "flag": "rf_weasel",
+          "note": "Weasel claims: Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "polarity": "weakness",
+          "quote": "up to 200",
+          "source": "quick",
+          "start": 523
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "end": 594,
+          "note": "Self-awarded adjectives (expert, passionate, results-driven)",
+          "polarity": "weakness",
+          "quote": "We are passionate about helping our customers succeed.",
+          "source": "quick",
+          "start": 540
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 594,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "We are passionate about helping our customers succeed.",
+          "source": "quick",
+          "start": 540
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 633,
+          "note": "Superlatives (world-class, revolutionary)",
+          "polarity": "weakness",
+          "quote": "Our team of experts is second to none.",
+          "source": "quick",
+          "start": 595
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 633,
+          "note": "Starts with the author, not the reader.",
+          "polarity": "weakness",
+          "quote": "Our team of experts is second to none.",
+          "source": "quick",
+          "start": 595
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 633,
+          "note": "Structure and flow",
+          "polarity": "strength",
+          "quote": "Our team of experts is second to none.",
+          "source": "quick",
+          "start": 595
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "end": 632,
+          "flag": "rf_hype",
+          "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+          "polarity": "weakness",
+          "quote": "second to none",
+          "source": "quick",
+          "start": 618
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_empathy",
+          "end": 643,
+          "note": "Exclamation-heavy enthusiasm",
+          "polarity": "weakness",
+          "quote": "Act now!",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_moment",
+          "end": 643,
+          "note": "Fit to the moment",
+          "polarity": "strength",
+          "quote": "Act now!",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 643,
+          "note": "'Act now!', 'last chance' with no reason",
+          "polarity": "weakness",
+          "quote": "Act now!",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 642,
+          "flag": "rf_false_urgency",
+          "note": "Manufactured urgency: Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "polarity": "weakness",
+          "quote": "Act now",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "end": 691,
+          "note": "Specific claims and evidence",
+          "polarity": "strength",
+          "quote": "Limited time only: get 20% off your first year.",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 691,
+          "note": "Structure and flow",
+          "polarity": "strength",
+          "quote": "Limited time only: get 20% off your first year.",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 691,
+          "note": "'Act now!', 'last chance' with no reason",
+          "polarity": "weakness",
+          "quote": "Limited time only: get 20% off your first year.",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "end": 691,
+          "note": "A figure with no source. Say where it comes from.",
+          "polarity": "weakness",
+          "quote": "Limited time only: get 20% off your first year.",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 661,
+          "flag": "rf_false_urgency",
+          "note": "Manufactured urgency: Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "polarity": "weakness",
+          "quote": "Limited time only",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_call",
+          "end": 718,
+          "note": "The call to act",
+          "polarity": "strength",
+          "quote": "Contact us to learn more.",
+          "source": "quick",
+          "start": 693
+        }
+      ],
+      "judges": {},
+      "lenses": {
+        "lens_dialogue": 25,
+        "lens_mythos": 0,
+        "lens_prepon": 100,
+        "lens_telos": 25
+      },
+      "mode": "quick",
+      "model_version": "0.5.1",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "status": "absent"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_antithesis",
+              "status": "absent"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "absent"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_levity",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "status": "absent"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authority",
+              "status": "absent"
+            },
+            {
+              "id": "lv_liking",
+              "status": "absent"
+            },
+            {
+              "id": "lv_scarcity",
+              "note": "Manufactured urgency",
+              "quote": "Limited time only",
+              "status": "misused"
+            },
+            {
+              "id": "lv_unity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "status": "absent"
+            },
+            {
+              "id": "lv_plu",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_tension",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_status",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_permission",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "absent"
+            },
+            {
+              "id": "lv_framing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_choice",
+              "status": "absent"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_attractive",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_timely",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Buzzword cluster",
+              "quote": "Seamless",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_character",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_shape",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_turn",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_transformation",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_ingroup",
+              "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "absent"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "absent"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Hype and superlatives",
+              "quote": "second to none",
+              "status": "misused"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_uncertainty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_credibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_intimacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "quote": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+              "status": "present"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "absent"
+            }
+          ],
+          "score": 2,
+          "summary": ""
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_positive_balance",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "unknown"
+            }
+          ],
+          "score": null,
+          "summary": ""
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "note": "Weasel claims",
+              "quote": "up to 200",
+              "status": "misused"
+            },
+            {
+              "id": "lv_authentic",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_respect",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_equity",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "status": "absent"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "absent"
+            },
+            {
+              "id": "lv_revisable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "unknown"
+            },
+            {
+              "id": "lv_courage",
+              "status": "unknown"
+            }
+          ],
+          "score": 0,
+          "summary": ""
+        }
+      ],
+      "perspectives_source": "quick",
+      "recommendations": [
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "example": true,
+          "impact": "high",
+          "issue": "Borrowed credibility scores 0 of 4. Replace vague praise with a named source, their role and the outcome they got.",
+          "move": "mv_specific_testimonial",
+          "original": "\"Great service, highly recommend!\"",
+          "rewrite": "\"We cut month-end close from 9 days to 3.\" Priya Shah, Finance Director, Northwind Logistics",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_competence",
+          "example": false,
+          "impact": "medium",
+          "issue": "Competence and judgement scores 0 of 4. Replace what you were responsible for with what changed because of you: action verb, what you did, measurable result.",
+          "move": "mv_duty_to_achievement",
+          "original": "We are passionate about helping our customers succeed.",
+          "rewrite": "Grew the engineering team from 6 to 25 and cut release time from monthly to daily.",
+          "source": "library"
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_integrity",
+          "example": false,
+          "impact": "medium",
+          "issue": "Integrity and candour scores 0 of 4. Delete self-awarded praise (world-class, revolutionary) and replace it with the fact that would have earned it.",
+          "move": "mv_cut_superlatives",
+          "original": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "rewrite": "A named engineer answers within 2 hours, 24/7.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_stakes",
+          "example": true,
+          "impact": "high",
+          "issue": "Stakes: pain and desire scores 0 of 4. Describe the specific moment the reader realises the current way is not working, in their words.",
+          "move": "mv_name_struggling_moment",
+          "original": "Accounting software for small businesses.",
+          "rewrite": "It is 11pm on the last day of the quarter and you are still matching receipts to bank lines.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_vividness",
+          "example": false,
+          "impact": "medium",
+          "issue": "Concreteness and vividness scores 0 of 4. Swap each abstract noun for something the reader can picture: a person, a moment, an object, a number.",
+          "move": "mv_abstract_to_concrete",
+          "original": "Welcome to Nexora Solutions",
+          "rewrite": "Your team sees every open ticket on one screen, so nobody chases updates in Slack.",
+          "source": "library"
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "example": true,
+          "impact": "medium",
+          "issue": "Story and narrative scores 0 of 4. Insert a three-sentence story: who, what went wrong, what changed. Put it where the claim needs most belief.",
+          "move": "mv_add_micro_story",
+          "original": "Our method improves retention.",
+          "rewrite": "Sam ran a gym losing 30 members a month. We changed one thing: a call on day 7. Churn halved by spring.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_evidence",
+          "example": false,
+          "impact": "medium",
+          "issue": "Specific claims and evidence scores 0 of 4. Replace every 'improved', 'faster', 'more' with a number, a time frame and a baseline.",
+          "move": "mv_quantify_claim",
+          "original": "Studies show that data-driven companies are significantly more profitable.",
+          "rewrite": "Cut page load from 4.1s to 1.3s in six weeks.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_mechanism",
+          "example": true,
+          "impact": "high",
+          "issue": "Mechanism and reasoning scores 1 of 4. After each claim, add 'because...' or 'which means...'.",
+          "move": "mv_add_reason_why",
+          "original": "Our coffee tastes better.",
+          "rewrite": "Our coffee tastes better because we roast to order and ship within 48 hours.",
+          "source": "library"
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_objections",
+          "example": true,
+          "impact": "medium",
+          "issue": "Objection handling scores 0 of 4. Name the sceptic's strongest objection and answer it with evidence. Two-sided beats one-sided for sceptical readers.",
+          "move": "mv_raise_and_answer",
+          "original": "(Price not mentioned)",
+          "rewrite": "Yes, we cost more than a freelancer. You are paying for a team that does not disappear in August.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_stakes",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cost of delay scores 0 of 4. Show what staying put costs per week, month or year, using the reader's numbers where possible.",
+          "move": "mv_cost_of_inaction",
+          "original": "Don't wait to fix your hiring process.",
+          "rewrite": "Each month a senior role stays open costs roughly [£X] in delayed delivery.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "example": false,
+          "impact": "medium",
+          "issue": "Genuine, shared urgency scores 0 of 4. Tie timing to something true: a deadline, a capacity limit, a season, a market shift. Delete fake urgency.",
+          "move": "mv_real_reason_now",
+          "original": "Act now!",
+          "rewrite": "We take four new clients per quarter. Two Q1 places remain.",
+          "source": "library"
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "example": true,
+          "impact": "medium",
+          "issue": "Hope and agency scores 1 of 4. After stating the stakes, show it can be done: a proof point, a first step, a reason for optimism. Urgency plus optimism moves people; urgency alone overwhelms them.",
+          "move": "mv_pair_urgency_hope",
+          "original": "Cyber attacks on firms like yours rose sharply last year. You are exposed.",
+          "rewrite": "Attacks on firms like yours are rising. The good news: three changes block most of them, and you can make the first one this week.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_mythos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Mythos scores 0 of 4. Frame the message inside a bigger narrative: an old world, a shift, winners and losers, a promised land.",
+          "move": "mv_name_the_shift",
+          "original": "We sell sales software.",
+          "rewrite": "Buyers now do 70% of their research before talking to sales. The teams winning have stopped pitching and started teaching.",
+          "source": "library"
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_telos",
+          "example": true,
+          "impact": "medium",
+          "issue": "Telos scores 1 of 4. Write the single sentence you want the reader to remember. Put it near the start, repeat it at the end, and cut anything that doesn't serve it.",
+          "move": "mv_one_big_idea",
+          "original": "(Five equal points about features, pricing, history, team and roadmap)",
+          "rewrite": "One idea: we halve your onboarding time. Everything else is evidence for that.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_length",
+          "example": true,
+          "impact": "medium",
+          "issue": "Length scores 1 of 4. Cut anything that doesn't serve the one big idea; aim for the usual range for this content type.",
+          "move": null,
+          "original": "(A 600-word cold email)",
+          "rewrite": "(The same email at 120 words, with one ask)",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "example": true,
+          "impact": "medium",
+          "issue": "Cohesion scores 1 of 4. Link ideas explicitly with connectives, repeat key terms instead of synonyms, and start paragraphs by picking up the last thread.",
+          "move": null,
+          "original": "Costs rose. Our team is experienced. Clients like us.",
+          "rewrite": "Costs rose, so clients need a partner who can deliver for less. That's where our experience helps.",
+          "source": "library"
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_claims",
+          "example": false,
+          "impact": "low",
+          "issue": "Claims you can stand behind scores 2 of 4. Source each statistic, soften or cut claims you can't prove, and make comparisons specific and fair.",
+          "move": null,
+          "original": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "rewrite": "Our 140 clients grew sales by a median of 18% in year one (2025 client survey).",
+          "source": "library"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_hook",
+          "example": false,
+          "impact": "medium",
+          "issue": "First impression scores 1 of 4. Open with the reader's situation, a specific fact or the big idea; cut greetings-as-content and background.",
+          "move": null,
+          "original": "Welcome to Nexora Solutions",
+          "rewrite": "Your Q3 update mentioned the cloud migration twice.",
+          "source": "library"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "example": true,
+          "impact": "medium",
+          "issue": "Assumed knowledge scores 1 of 4. Spell out acronyms at first use, swap jargon for plain terms, and add one line of context where the reader might be lost.",
+          "move": null,
+          "original": "Our MLOps CoE will uplift your TCO via KPIs.",
+          "rewrite": "Our machine-learning team will cut the total cost of running your models.",
+          "source": "library"
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_suitability",
+          "example": true,
+          "impact": "low",
+          "issue": "Fit to this reader scores 2 of 4. Write to the reader's level and lead with what they care about; cut background they already know.",
+          "move": null,
+          "original": "(A technical deep-dive sent to a board member)",
+          "rewrite": "(One page on cost, risk and the decision needed)",
+          "source": "library"
+        }
+      ],
+      "red_flags": [
+        {
+          "end": 642,
+          "id": "rf_false_urgency",
+          "note": "Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "quote": "Act now",
+          "severity": "high",
+          "source": "quick",
+          "start": 635
+        },
+        {
+          "end": 661,
+          "id": "rf_false_urgency",
+          "note": "Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+          "quote": "Limited time only",
+          "severity": "high",
+          "source": "quick",
+          "start": 644
+        },
+        {
+          "end": 54,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "revolutionary",
+          "severity": "medium",
+          "source": "quick",
+          "start": 41
+        },
+        {
+          "end": 67,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "world-class",
+          "severity": "medium",
+          "source": "quick",
+          "start": 56
+        },
+        {
+          "end": 191,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "industry-leading",
+          "severity": "medium",
+          "source": "quick",
+          "start": 175
+        },
+        {
+          "end": 282,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "cutting-edge",
+          "severity": "medium",
+          "source": "quick",
+          "start": 270
+        },
+        {
+          "end": 315,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "unparalleled",
+          "severity": "medium",
+          "source": "quick",
+          "start": 303
+        },
+        {
+          "end": 632,
+          "id": "rf_hype",
+          "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+          "quote": "second to none",
+          "severity": "medium",
+          "source": "quick",
+          "start": 618
+        },
+        {
+          "end": 373,
+          "id": "rf_weasel",
+          "note": "Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "quote": "Studies show",
+          "severity": "medium",
+          "source": "quick",
+          "start": 361
+        },
+        {
+          "end": 532,
+          "id": "rf_weasel",
+          "note": "Claims that sound specific but commit to nothing ('up to', 'studies show').",
+          "quote": "up to 200",
+          "severity": "medium",
+          "source": "quick",
+          "start": 523
+        },
+        {
+          "end": 90,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "empowers",
+          "severity": "low",
+          "source": "quick",
+          "start": 82
+        },
+        {
+          "end": 113,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "leverage",
+          "severity": "low",
+          "source": "quick",
+          "start": 105
+        },
+        {
+          "end": 129,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "seamlessly",
+          "severity": "low",
+          "source": "quick",
+          "start": 119
+        },
+        {
+          "end": 212,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "holistic",
+          "severity": "low",
+          "source": "quick",
+          "start": 204
+        },
+        {
+          "end": 504,
+          "id": "rf_buzzword_cluster",
+          "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+          "quote": "Seamless",
+          "severity": "low",
+          "source": "quick",
+          "start": 496
+        }
+      ],
+      "scores": {
+        "balance_index": 63,
+        "band": "Weak",
+        "ethos": 15,
+        "kairos": 40,
+        "logos": 39,
+        "overall": 23,
+        "pathos": 13
+      },
+      "source": null
+    }
+  },
+  "id": "ev01",
+  "input": {
+    "ctx": {
+      "archetype": "general",
+      "audience": {
+        "awareness": "problem_aware",
+        "decision_unit": "individual",
+        "expertise": "informed",
+        "focus": "unknown",
+        "involvement": "medium",
+        "relationship": "warm"
+      },
+      "contentType": "landing_page",
+      "culture": {
+        "reader": "global",
+        "writer": ""
+      },
+      "role": ""
+    },
+    "text": "Welcome to Nexora Solutions\n\nNexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly. Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.\n\nOur cutting-edge technology delivers unparalleled insights, helping you make better decisions. Studies show that data-driven companies are significantly more profitable.\n\nFeatures\n- Real-time dashboards\n- AI-powered forecasting\n- Seamless integrations with up to 200 tools\n\nWe are passionate about helping our customers succeed. Our team of experts is second to none.\n\nAct now! Limited time only: get 20% off your first year.\n\nContact us to learn more."
+  },
+  "judgeOutputs": {
+    "audience": {
+      "appeal": "audience",
+      "dimension_scores": [
+        {
+          "id": "aud_suitability",
+          "rationale": "Synthetic audience rationale for aud_suitability.",
+          "score": "4"
+        },
+        {
+          "id": "aud_hook",
+          "rationale": "Synthetic audience rationale for aud_hook.",
+          "score": 7
+        },
+        {
+          "id": "aud_knowledge",
+          "rationale": "Synthetic audience rationale for aud_knowledge.",
+          "score": 3
+        },
+        {
+          "id": "aud_inclusivity",
+          "rationale": "Synthetic audience rationale for aud_inclusivity.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "aud_hook",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "aud_knowledge",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "aud_suitability",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "aud_suitability",
+          "impact": "high",
+          "issue": "Synthetic issue for aud_suitability.",
+          "move": "mv_credential_relevance",
+          "original": "",
+          "rewrite": "Synthetic rewrite for aud_suitability."
+        },
+        {
+          "dimension": "aud_inclusivity",
+          "issue": "Synthetic issue for aud_inclusivity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_credential_relevance",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_fear",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic audience summary for ev01."
+    },
+    "craft": {
+      "appeal": "craft",
+      "dimension_scores": [
+        {
+          "id": "craft_structure",
+          "rationale": "Synthetic craft rationale for craft_structure.",
+          "score": "4"
+        },
+        {
+          "id": "craft_length",
+          "rationale": "Synthetic craft rationale for craft_length.",
+          "score": 7
+        },
+        {
+          "id": "craft_clarity",
+          "rationale": "Synthetic craft rationale for craft_clarity.",
+          "score": 3
+        },
+        {
+          "id": "craft_cohesion",
+          "rationale": "Synthetic craft rationale for craft_cohesion.",
+          "score": 0
+        },
+        {
+          "id": "craft_tone",
+          "rationale": "Synthetic craft rationale for craft_tone.",
+          "score": 0
+        },
+        {
+          "id": "craft_claims",
+          "rationale": "Synthetic craft rationale for craft_claims.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "craft_structure",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "craft_length",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "craft_clarity",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "craft_cohesion",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "craft_tone",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "craft_structure",
+          "impact": "high",
+          "issue": "Synthetic issue for craft_structure.",
+          "move": "mv_name_struggling_moment",
+          "original": "",
+          "rewrite": "Synthetic rewrite for craft_structure."
+        },
+        {
+          "dimension": "craft_claims",
+          "issue": "Synthetic issue for craft_claims, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_name_struggling_moment",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_buzzword_cluster",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic craft summary for ev01."
+    },
+    "culture": {
+      "appeal": "culture",
+      "dimension_scores": [
+        {
+          "id": "cul_context",
+          "rationale": "Synthetic culture rationale for cul_context.",
+          "score": "1"
+        },
+        {
+          "id": "cul_directness",
+          "rationale": "Synthetic culture rationale for cul_directness.",
+          "score": 7
+        },
+        {
+          "id": "cul_persuading",
+          "rationale": "Synthetic culture rationale for cul_persuading.",
+          "score": 1
+        },
+        {
+          "id": "cul_formality",
+          "rationale": "Synthetic culture rationale for cul_formality.",
+          "score": 3
+        },
+        {
+          "id": "cul_trust",
+          "rationale": "Synthetic culture rationale for cul_trust.",
+          "score": 2
+        },
+        {
+          "id": "cul_collective",
+          "rationale": "Synthetic culture rationale for cul_collective.",
+          "score": 0
+        },
+        {
+          "id": "cul_time",
+          "rationale": "Synthetic culture rationale for cul_time.",
+          "score": 2
+        },
+        {
+          "id": "cul_uncertainty",
+          "rationale": "Synthetic culture rationale for cul_uncertainty.",
+          "score": 4
+        },
+        {
+          "id": "cul_expressiveness",
+          "rationale": "Synthetic culture rationale for cul_expressiveness.",
+          "score": 0
+        },
+        {
+          "id": "cul_idiom",
+          "rationale": "Synthetic culture rationale for cul_idiom.",
+          "score": 0
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "cul_context",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "cul_directness",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "cul_persuading",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "cul_formality",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "cul_trust",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "cul_context",
+          "impact": "high",
+          "issue": "Synthetic issue for cul_context.",
+          "move": "mv_what_if_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for cul_context."
+        },
+        {
+          "dimension": "cul_idiom",
+          "issue": "Synthetic issue for cul_idiom, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_what_if_open",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic culture summary for ev01.",
+      "text_positions": {
+        "collective": 0.26,
+        "context": "0.5",
+        "directness": 1.4,
+        "expressiveness": 0.98,
+        "formality": 0.86,
+        "persuading": 0.16,
+        "time": 0.7,
+        "trust": 0.07,
+        "uncertainty": 0.87
+      }
+    },
+    "ethos": {
+      "appeal": "ethos",
+      "dimension_scores": [
+        {
+          "id": "eth_competence",
+          "rationale": "Synthetic ethos rationale for eth_competence.",
+          "score": "3"
+        },
+        {
+          "id": "eth_integrity",
+          "rationale": "Synthetic ethos rationale for eth_integrity.",
+          "score": 7
+        },
+        {
+          "id": "eth_goodwill",
+          "rationale": "Synthetic ethos rationale for eth_goodwill.",
+          "score": 3
+        },
+        {
+          "id": "eth_borrowed",
+          "rationale": "Synthetic ethos rationale for eth_borrowed.",
+          "score": 4
+        },
+        {
+          "id": "eth_identification",
+          "rationale": "Synthetic ethos rationale for eth_identification.",
+          "score": 4
+        },
+        {
+          "id": "eth_polish",
+          "rationale": "Synthetic ethos rationale for eth_polish.",
+          "score": 2
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "eth_competence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "eth_integrity",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "eth_goodwill",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "eth_borrowed",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "eth_identification",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_pair_urgency_hope",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "eth_polish",
+          "issue": "Synthetic issue for eth_polish, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_pair_urgency_hope",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_confirmshaming",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic ethos summary for ev01."
+    },
+    "influence": {
+      "appeal": "influence",
+      "perspectives": [
+        {
+          "id": "pv_rhetoric",
+          "levers": [
+            {
+              "id": "lv_tricolon",
+              "note": "Synthetic lv_tricolon.",
+              "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+              "status": "present"
+            },
+            {
+              "id": "lv_anaphora",
+              "status": "absent"
+            },
+            {
+              "id": "lv_antithesis",
+              "note": "Synthetic lv_antithesis.",
+              "quote": "Features",
+              "status": "misused"
+            },
+            {
+              "id": "lv_rhetorical_q",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_brevity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_levity",
+              "note": "Synthetic lv_levity.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "present"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 4
+        },
+        {
+          "id": "pv_cialdini",
+          "levers": [
+            {
+              "id": "lv_reciprocity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_commitment",
+              "note": "Synthetic lv_commitment.",
+              "quote": "- Real-time dashboards",
+              "status": "misused"
+            },
+            {
+              "id": "lv_social_proof",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_authority",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_liking",
+              "note": "Synthetic lv_liking.",
+              "quote": "- AI-powered forecasting",
+              "status": "present"
+            },
+            {
+              "id": "lv_scarcity",
+              "status": "absent"
+            },
+            {
+              "id": "lv_unity",
+              "note": "Synthetic lv_unity.",
+              "quote": "- Real-time dashboards",
+              "status": "misused"
+            },
+            {
+              "id": "lv_presuasion",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_cialdini."
+        },
+        {
+          "id": "pv_godin",
+          "levers": [
+            {
+              "id": "lv_svm",
+              "note": "Synthetic lv_svm.",
+              "quote": "Act now!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_plu",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_tension",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_status",
+              "note": "Synthetic lv_status.",
+              "quote": "Act now!",
+              "status": "present"
+            },
+            {
+              "id": "lv_remarkable",
+              "status": "absent"
+            },
+            {
+              "id": "lv_permission",
+              "note": "Synthetic lv_permission.",
+              "quote": "Our team of experts is second to none.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_godin."
+        },
+        {
+          "id": "pv_behavioural_econ",
+          "levers": [
+            {
+              "id": "lv_anchor",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_framing",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_choice",
+              "note": "Synthetic lv_choice.",
+              "quote": "Studies show that data-driven companies are significantly more profitable.",
+              "status": "present"
+            },
+            {
+              "id": "lv_free",
+              "status": "absent"
+            },
+            {
+              "id": "lv_costly_signal",
+              "note": "Synthetic lv_costly_signal.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_reframe",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_behavioural_econ."
+        },
+        {
+          "id": "pv_behaviour_design",
+          "levers": [
+            {
+              "id": "lv_easy",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_attractive",
+              "note": "Synthetic lv_attractive.",
+              "quote": "- Real-time dashboards",
+              "status": "present"
+            },
+            {
+              "id": "lv_social",
+              "status": "absent"
+            },
+            {
+              "id": "lv_timely",
+              "note": "Synthetic lv_timely.",
+              "quote": "- AI-powered forecasting",
+              "status": "misused"
+            },
+            {
+              "id": "lv_prompt",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_motivation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 2,
+          "summary": "Synthetic pv_behaviour_design."
+        },
+        {
+          "id": "pv_dual_process",
+          "levers": [
+            {
+              "id": "lv_argument_quality",
+              "note": "Synthetic lv_argument_quality.",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            },
+            {
+              "id": "lv_peripheral_cues",
+              "status": "absent"
+            },
+            {
+              "id": "lv_fluency",
+              "note": "Synthetic lv_fluency.",
+              "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_attention",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_cognitive_load",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_dual_process."
+        },
+        {
+          "id": "pv_narrative",
+          "levers": [
+            {
+              "id": "lv_intention_obstacle",
+              "status": "absent"
+            },
+            {
+              "id": "lv_character",
+              "note": "Synthetic lv_character.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_imagery",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_shape",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_turn",
+              "note": "Synthetic lv_turn.",
+              "quote": "- Real-time dashboards",
+              "status": "present"
+            },
+            {
+              "id": "lv_promise_clock",
+              "status": "absent"
+            },
+            {
+              "id": "lv_transformation",
+              "note": "Synthetic lv_transformation.",
+              "quote": "Studies show that data-driven companies are significantly more profitable.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_narrative."
+        },
+        {
+          "id": "pv_identity_values",
+          "levers": [
+            {
+              "id": "lv_values_match",
+              "note": "Synthetic lv_values_match.",
+              "quote": "We are passionate about helping our customers succeed.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_identity_consistent",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_affirmation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_no_status_threat",
+              "note": "Synthetic lv_no_status_threat.",
+              "quote": "- Real-time dashboards",
+              "status": "present"
+            },
+            {
+              "id": "lv_ingroup",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_identity_values."
+        },
+        {
+          "id": "pv_resistance",
+          "levers": [
+            {
+              "id": "lv_freedom",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_refutation",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_tactic_visibility",
+              "note": "Synthetic lv_tactic_visibility.",
+              "quote": "Limited time only: get 20% off your first year.",
+              "status": "present"
+            },
+            {
+              "id": "lv_acceptance_latitude",
+              "status": "absent"
+            },
+            {
+              "id": "lv_uncertainty",
+              "note": "Synthetic lv_uncertainty.",
+              "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_endowment",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_resistance."
+        },
+        {
+          "id": "pv_trust",
+          "levers": [
+            {
+              "id": "lv_warmth",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_credibility",
+              "note": "Synthetic lv_credibility.",
+              "quote": "Act now!",
+              "status": "present"
+            },
+            {
+              "id": "lv_reliability",
+              "status": "absent"
+            },
+            {
+              "id": "lv_intimacy",
+              "note": "Synthetic lv_intimacy.",
+              "quote": "Contact us to learn more.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_low_self_orientation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_labelling",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_trust."
+        },
+        {
+          "id": "pv_motivation",
+          "levers": [
+            {
+              "id": "lv_reg_fit",
+              "note": "Synthetic lv_reg_fit.",
+              "quote": "Features",
+              "status": "present"
+            },
+            {
+              "id": "lv_efficacy",
+              "status": "absent"
+            },
+            {
+              "id": "lv_positive_balance",
+              "note": "Synthetic lv_positive_balance.",
+              "quote": "Features",
+              "status": "misused"
+            },
+            {
+              "id": "lv_autonomy",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_emotion_range",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_motivation."
+        },
+        {
+          "id": "pv_ethics",
+          "levers": [
+            {
+              "id": "lv_truthful",
+              "status": "absent"
+            },
+            {
+              "id": "lv_authentic",
+              "note": "Synthetic lv_authentic.",
+              "quote": "Our team of experts is second to none.",
+              "status": "misused"
+            },
+            {
+              "id": "lv_respect",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_equity",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_social_responsibility",
+              "note": "Synthetic lv_social_responsibility.",
+              "quote": "Act now!",
+              "status": "present"
+            },
+            {
+              "id": "lv_flourishing",
+              "status": "absent"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 3,
+          "summary": "Synthetic pv_ethics."
+        },
+        {
+          "id": "pv_critical",
+          "levers": [
+            {
+              "id": "lv_who_benefits",
+              "note": "Synthetic lv_who_benefits.",
+              "quote": "- Seamless integrations with up to 200 tools",
+              "status": "misused"
+            },
+            {
+              "id": "lv_confirmation",
+              "status": "not_applicable"
+            },
+            {
+              "id": "lv_counter_evidence",
+              "status": "bogus_status"
+            },
+            {
+              "id": "lv_revisable",
+              "note": "Synthetic lv_revisable.",
+              "quote": "Studies show that data-driven companies are significantly more profitable.",
+              "status": "present"
+            },
+            {
+              "id": "lv_motive_honesty",
+              "status": "absent"
+            },
+            {
+              "id": "lv_courage",
+              "note": "Synthetic lv_courage.",
+              "quote": "Act now!",
+              "status": "misused"
+            },
+            {
+              "id": "lv_zz_missing",
+              "quote": "Welcome to Nexora Solutions",
+              "status": "present"
+            }
+          ],
+          "score": 1,
+          "summary": "Synthetic pv_critical."
+        },
+        {
+          "id": "pv_zz_missing",
+          "levers": [],
+          "score": 4,
+          "summary": "Dropped."
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "eth_competence",
+          "impact": "high",
+          "issue": "Synthetic issue for eth_competence.",
+          "move": "mv_cold_open",
+          "original": "",
+          "rewrite": "Synthetic rewrite for eth_competence."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_cold_open",
+          "rewrite": "Dropped."
+        }
+      ],
+      "summary": "Synthetic influence summary for ev01."
+    },
+    "kairos": {
+      "appeal": "kairos",
+      "dimension_scores": [
+        {
+          "id": "kai_moment",
+          "rationale": "Synthetic kairos rationale for kai_moment.",
+          "score": "1"
+        },
+        {
+          "id": "kai_stakes",
+          "rationale": "Synthetic kairos rationale for kai_stakes.",
+          "score": 7
+        },
+        {
+          "id": "kai_efficacy",
+          "rationale": "Synthetic kairos rationale for kai_efficacy.",
+          "score": 4
+        },
+        {
+          "id": "kai_integrity",
+          "rationale": "Synthetic kairos rationale for kai_integrity.",
+          "score": 0
+        },
+        {
+          "id": "kai_call",
+          "rationale": "Synthetic kairos rationale for kai_call.",
+          "score": 4
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "kai_moment",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "kai_stakes",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "kai_efficacy",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "kai_integrity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "kai_call",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "kai_moment",
+          "impact": "high",
+          "issue": "Synthetic issue for kai_moment.",
+          "move": "mv_hero_guide",
+          "original": "",
+          "rewrite": "Synthetic rewrite for kai_moment."
+        },
+        {
+          "dimension": "kai_call",
+          "issue": "Synthetic issue for kai_call, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_hero_guide",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ]
+    },
+    "lenses": {
+      "appeal": "lenses",
+      "dimension_scores": [
+        {
+          "id": "lens_telos",
+          "rationale": "Synthetic lenses rationale for lens_telos.",
+          "score": "1"
+        },
+        {
+          "id": "lens_mythos",
+          "rationale": "Synthetic lenses rationale for lens_mythos.",
+          "score": 7
+        },
+        {
+          "id": "lens_prepon",
+          "rationale": "Synthetic lenses rationale for lens_prepon.",
+          "score": 4
+        },
+        {
+          "id": "lens_dialogue",
+          "rationale": "Synthetic lenses rationale for lens_dialogue.",
+          "score": 4
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "duties": {
+        "delight": 6,
+        "move": 10,
+        "steer": 20,
+        "teach": "46",
+        "unsettle": 19
+      },
+      "highlights": [
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "lens_mythos",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "lens_prepon",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "lens_dialogue",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "lens_telos",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "lens_telos",
+          "impact": "high",
+          "issue": "Synthetic issue for lens_telos.",
+          "move": "mv_similar_others",
+          "original": "",
+          "rewrite": "Synthetic rewrite for lens_telos."
+        },
+        {
+          "dimension": "lens_dialogue",
+          "issue": "Synthetic issue for lens_dialogue, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_similar_others",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_hype",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic lenses summary for ev01."
+    },
+    "logos": {
+      "appeal": "logos",
+      "dimension_scores": [
+        {
+          "id": "log_evidence",
+          "rationale": "Synthetic logos rationale for log_evidence.",
+          "score": "3"
+        },
+        {
+          "id": "log_mechanism",
+          "rationale": "Synthetic logos rationale for log_mechanism.",
+          "score": 7
+        },
+        {
+          "id": "log_structure",
+          "rationale": "Synthetic logos rationale for log_structure.",
+          "score": 0
+        },
+        {
+          "id": "log_comparison",
+          "rationale": "Synthetic logos rationale for log_comparison.",
+          "score": 1
+        },
+        {
+          "id": "log_objections",
+          "rationale": "Synthetic logos rationale for log_objections.",
+          "score": 2
+        },
+        {
+          "id": "log_clarity",
+          "rationale": "Synthetic logos rationale for log_clarity.",
+          "score": 3
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "log_evidence",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "log_mechanism",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "log_structure",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "log_comparison",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "log_objections",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "log_evidence",
+          "impact": "high",
+          "issue": "Synthetic issue for log_evidence.",
+          "move": "mv_real_reason_now",
+          "original": "",
+          "rewrite": "Synthetic rewrite for log_evidence."
+        },
+        {
+          "dimension": "log_clarity",
+          "issue": "Synthetic issue for log_clarity, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_real_reason_now",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_false_urgency",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic logos summary for ev01."
+    },
+    "pathos": {
+      "appeal": "pathos",
+      "dimension_scores": [
+        {
+          "id": "pat_stakes",
+          "rationale": "Synthetic pathos rationale for pat_stakes.",
+          "score": "0"
+        },
+        {
+          "id": "pat_vividness",
+          "rationale": "Synthetic pathos rationale for pat_vividness.",
+          "score": 7
+        },
+        {
+          "id": "pat_story",
+          "rationale": "Synthetic pathos rationale for pat_story.",
+          "score": 0
+        },
+        {
+          "id": "pat_identity",
+          "rationale": "Synthetic pathos rationale for pat_identity.",
+          "score": 4
+        },
+        {
+          "id": "pat_empathy",
+          "rationale": "Synthetic pathos rationale for pat_empathy.",
+          "score": 4
+        },
+        {
+          "id": "pat_surprise",
+          "rationale": "Synthetic pathos rationale for pat_surprise.",
+          "score": 1
+        },
+        {
+          "id": "zz_missing_dimension",
+          "rationale": "Dropped.",
+          "score": 3
+        }
+      ],
+      "highlights": [
+        {
+          "dimension": "pat_stakes",
+          "note": "Synthetic highlight 0.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        },
+        {
+          "dimension": "pat_vividness",
+          "polarity": "weakness",
+          "quote": "CONTACT US TO LEARN MORE."
+        },
+        {
+          "dimension": "pat_story",
+          "note": "Synthetic highlight 2.",
+          "polarity": "neutral",
+          "quote": "Welcome   to Nexora Solutions"
+        },
+        {
+          "dimension": "pat_identity",
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Welcome to Nexora Solutions and then something the text never says"
+        },
+        {
+          "dimension": "pat_empathy",
+          "note": "Synthetic highlight 4.",
+          "polarity": "strength",
+          "quote": "A quote that appears nowhere in the text at all."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "note": "Dropped.",
+          "polarity": "strength",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "recommendations": [
+        {
+          "dimension": "pat_stakes",
+          "impact": "high",
+          "issue": "Synthetic issue for pat_stakes.",
+          "move": "mv_reduce_uncertainty",
+          "original": "",
+          "rewrite": "Synthetic rewrite for pat_stakes."
+        },
+        {
+          "dimension": "pat_surprise",
+          "issue": "Synthetic issue for pat_surprise, with a move that does not exist.",
+          "move": "mv_zz_missing",
+          "rewrite": "Synthetic rewrite."
+        },
+        {
+          "dimension": "zz_missing_dimension",
+          "impact": "low",
+          "issue": "A recommendation on a dimension that does not exist.",
+          "move": "mv_reduce_uncertainty",
+          "rewrite": "Dropped."
+        }
+      ],
+      "red_flags": [
+        {
+          "id": "rf_controlling",
+          "note": "Synthetic red flag.",
+          "quote": "Contact us to learn more."
+        },
+        {
+          "id": "rf_zz_missing",
+          "note": "Dropped.",
+          "quote": "Welcome to Nexora Solutions"
+        }
+      ],
+      "summary": "Synthetic pathos summary for ev01."
+    }
+  },
+  "quickScan": {
+    "craft": {
+      "avg_sentence": 7.4,
+      "devices": {
+        "alliteration": 0,
+        "anaphora": 0,
+        "antithesis": 0,
+        "questions": 0,
+        "tricolon": 0
+      },
+      "emotional_pct": 2.9,
+      "fk_grade": 9,
+      "gunning_fog": 13.7,
+      "i": 0,
+      "passive_pct": 0,
+      "positivity": 100,
+      "sentences": 14,
+      "speaking_sec": 48,
+      "we": 6,
+      "words": 104,
+      "you": 2
+    },
+    "culture": {
+      "positions": {
+        "collective": 0.7692307692307692,
+        "context": 0.2857142857142857,
+        "directness": 0.5,
+        "expressiveness": 0.5769230769230769,
+        "formality": 0.3846153846153846,
+        "persuading": 0.5,
+        "time": 0.25,
+        "trust": 0.2,
+        "uncertainty": 0.3245192307692307
+      },
+      "reader": {
+        "global": true,
+        "hofstede": null,
+        "id": "global",
+        "lewis": {
+          "linear": 0.3333333333333333,
+          "multi": 0.3333333333333333,
+          "reactive": 0.3333333333333333
+        },
+        "name": "Global or mixed audience",
+        "targets": {
+          "collective": 0.5,
+          "context": 0.5,
+          "directness": 0.5,
+          "expressiveness": 0.5,
+          "formality": 0.5,
+          "persuading": 0.5,
+          "time": 0.5,
+          "trust": 0.5,
+          "uncertainty": 0.5
+        },
+        "tolerance": 0.3
+      },
+      "writer": null
+    },
+    "flags": [
+      {
+        "end": 642,
+        "id": "rf_false_urgency",
+        "note": "Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+        "quote": "Act now",
+        "severity": "high",
+        "source": "quick",
+        "start": 635
+      },
+      {
+        "end": 661,
+        "id": "rf_false_urgency",
+        "note": "Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+        "quote": "Limited time only",
+        "severity": "high",
+        "source": "quick",
+        "start": 644
+      },
+      {
+        "end": 54,
+        "id": "rf_hype",
+        "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+        "quote": "revolutionary",
+        "severity": "medium",
+        "source": "quick",
+        "start": 41
+      },
+      {
+        "end": 67,
+        "id": "rf_hype",
+        "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+        "quote": "world-class",
+        "severity": "medium",
+        "source": "quick",
+        "start": 56
+      },
+      {
+        "end": 191,
+        "id": "rf_hype",
+        "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+        "quote": "industry-leading",
+        "severity": "medium",
+        "source": "quick",
+        "start": 175
+      },
+      {
+        "end": 282,
+        "id": "rf_hype",
+        "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+        "quote": "cutting-edge",
+        "severity": "medium",
+        "source": "quick",
+        "start": 270
+      },
+      {
+        "end": 315,
+        "id": "rf_hype",
+        "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+        "quote": "unparalleled",
+        "severity": "medium",
+        "source": "quick",
+        "start": 303
+      },
+      {
+        "end": 632,
+        "id": "rf_hype",
+        "note": "Self-awarded superlatives that cost credibility with sceptical readers.",
+        "quote": "second to none",
+        "severity": "medium",
+        "source": "quick",
+        "start": 618
+      },
+      {
+        "end": 373,
+        "id": "rf_weasel",
+        "note": "Claims that sound specific but commit to nothing ('up to', 'studies show').",
+        "quote": "Studies show",
+        "severity": "medium",
+        "source": "quick",
+        "start": 361
+      },
+      {
+        "end": 532,
+        "id": "rf_weasel",
+        "note": "Claims that sound specific but commit to nothing ('up to', 'studies show').",
+        "quote": "up to 200",
+        "severity": "medium",
+        "source": "quick",
+        "start": 523
+      },
+      {
+        "end": 90,
+        "id": "rf_buzzword_cluster",
+        "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "quote": "empowers",
+        "severity": "low",
+        "source": "quick",
+        "start": 82
+      },
+      {
+        "end": 113,
+        "id": "rf_buzzword_cluster",
+        "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "quote": "leverage",
+        "severity": "low",
+        "source": "quick",
+        "start": 105
+      },
+      {
+        "end": 129,
+        "id": "rf_buzzword_cluster",
+        "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "quote": "seamlessly",
+        "severity": "low",
+        "source": "quick",
+        "start": 119
+      },
+      {
+        "end": 212,
+        "id": "rf_buzzword_cluster",
+        "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "quote": "holistic",
+        "severity": "low",
+        "source": "quick",
+        "start": 204
+      },
+      {
+        "end": 504,
+        "id": "rf_buzzword_cluster",
+        "note": "Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "quote": "Seamless",
+        "severity": "low",
+        "source": "quick",
+        "start": 496
+      }
+    ],
+    "fns": {
+      "delight": 0,
+      "move": 0,
+      "steer": 0,
+      "teach": 100,
+      "unsettle": 0
+    },
+    "highlights": [
+      {
+        "appeal": "ethos",
+        "dimension": "eth_competence",
+        "end": 264,
+        "note": "Competence and judgement",
+        "polarity": "strength",
+        "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "source": "quick",
+        "start": 131
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_competence",
+        "end": 594,
+        "note": "Self-awarded adjectives (expert, passionate, results-driven)",
+        "polarity": "weakness",
+        "quote": "We are passionate about helping our customers succeed.",
+        "source": "quick",
+        "start": 540
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 130,
+        "note": "Superlatives (world-class, revolutionary)",
+        "polarity": "weakness",
+        "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+        "source": "quick",
+        "start": 29
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 264,
+        "note": "Superlatives (world-class, revolutionary)",
+        "polarity": "weakness",
+        "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "source": "quick",
+        "start": 131
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 360,
+        "note": "Superlatives (world-class, revolutionary)",
+        "polarity": "weakness",
+        "quote": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+        "source": "quick",
+        "start": 266
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 633,
+        "note": "Superlatives (world-class, revolutionary)",
+        "polarity": "weakness",
+        "quote": "Our team of experts is second to none.",
+        "source": "quick",
+        "start": 595
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 360,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+        "source": "quick",
+        "start": 266
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 594,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "We are passionate about helping our customers succeed.",
+        "source": "quick",
+        "start": 540
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_goodwill",
+        "end": 633,
+        "note": "Starts with the author, not the reader.",
+        "polarity": "weakness",
+        "quote": "Our team of experts is second to none.",
+        "source": "quick",
+        "start": 595
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 130,
+        "note": "Concreteness and vividness",
+        "polarity": "strength",
+        "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+        "source": "quick",
+        "start": 29
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 27,
+        "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+        "polarity": "weakness",
+        "quote": "Welcome to Nexora Solutions",
+        "source": "quick",
+        "start": 0
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 130,
+        "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+        "polarity": "weakness",
+        "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+        "source": "quick",
+        "start": 29
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 264,
+        "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+        "polarity": "weakness",
+        "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "source": "quick",
+        "start": 131
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 538,
+        "note": "Buzzwords (solutions, synergy, leverage, seamless)",
+        "polarity": "weakness",
+        "quote": "- Seamless integrations with up to 200 tools",
+        "source": "quick",
+        "start": 494
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_identity",
+        "end": 264,
+        "note": "Identity, status and belonging",
+        "polarity": "strength",
+        "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "source": "quick",
+        "start": 131
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_empathy",
+        "end": 643,
+        "note": "Exclamation-heavy enthusiasm",
+        "polarity": "weakness",
+        "quote": "Act now!",
+        "source": "quick",
+        "start": 635
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_evidence",
+        "end": 691,
+        "note": "Specific claims and evidence",
+        "polarity": "strength",
+        "quote": "Limited time only: get 20% off your first year.",
+        "source": "quick",
+        "start": 644
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_evidence",
+        "end": 435,
+        "note": "Weasel words (up to, many, significant)",
+        "polarity": "weakness",
+        "quote": "Studies show that data-driven companies are significantly more profitable.",
+        "source": "quick",
+        "start": 361
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_evidence",
+        "end": 538,
+        "note": "Weasel words (up to, many, significant)",
+        "polarity": "weakness",
+        "quote": "- Seamless integrations with up to 200 tools",
+        "source": "quick",
+        "start": 494
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_structure",
+        "end": 468,
+        "note": "Structure and flow",
+        "polarity": "strength",
+        "quote": "- Real-time dashboards",
+        "source": "quick",
+        "start": 446
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_structure",
+        "end": 493,
+        "note": "Structure and flow",
+        "polarity": "strength",
+        "quote": "- AI-powered forecasting",
+        "source": "quick",
+        "start": 469
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_structure",
+        "end": 538,
+        "note": "Structure and flow",
+        "polarity": "strength",
+        "quote": "- Seamless integrations with up to 200 tools",
+        "source": "quick",
+        "start": 494
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_structure",
+        "end": 633,
+        "note": "Structure and flow",
+        "polarity": "strength",
+        "quote": "Our team of experts is second to none.",
+        "source": "quick",
+        "start": 595
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_structure",
+        "end": 691,
+        "note": "Structure and flow",
+        "polarity": "strength",
+        "quote": "Limited time only: get 20% off your first year.",
+        "source": "quick",
+        "start": 644
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_moment",
+        "end": 643,
+        "note": "Fit to the moment",
+        "polarity": "strength",
+        "quote": "Act now!",
+        "source": "quick",
+        "start": 635
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_integrity",
+        "end": 643,
+        "note": "'Act now!', 'last chance' with no reason",
+        "polarity": "weakness",
+        "quote": "Act now!",
+        "source": "quick",
+        "start": 635
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_integrity",
+        "end": 691,
+        "note": "'Act now!', 'last chance' with no reason",
+        "polarity": "weakness",
+        "quote": "Limited time only: get 20% off your first year.",
+        "source": "quick",
+        "start": 644
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_call",
+        "end": 718,
+        "note": "The call to act",
+        "polarity": "strength",
+        "quote": "Contact us to learn more.",
+        "source": "quick",
+        "start": 693
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_integrity",
+        "end": 642,
+        "flag": "rf_false_urgency",
+        "note": "Manufactured urgency: Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+        "polarity": "weakness",
+        "quote": "Act now",
+        "source": "quick",
+        "start": 635
+      },
+      {
+        "appeal": "kairos",
+        "dimension": "kai_integrity",
+        "end": 661,
+        "flag": "rf_false_urgency",
+        "note": "Manufactured urgency: Deadlines or scarcity with no specifics, which readers increasingly read as manipulation.",
+        "polarity": "weakness",
+        "quote": "Limited time only",
+        "source": "quick",
+        "start": 644
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 54,
+        "flag": "rf_hype",
+        "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+        "polarity": "weakness",
+        "quote": "revolutionary",
+        "source": "quick",
+        "start": 41
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 67,
+        "flag": "rf_hype",
+        "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+        "polarity": "weakness",
+        "quote": "world-class",
+        "source": "quick",
+        "start": 56
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 191,
+        "flag": "rf_hype",
+        "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+        "polarity": "weakness",
+        "quote": "industry-leading",
+        "source": "quick",
+        "start": 175
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 282,
+        "flag": "rf_hype",
+        "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+        "polarity": "weakness",
+        "quote": "cutting-edge",
+        "source": "quick",
+        "start": 270
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 315,
+        "flag": "rf_hype",
+        "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+        "polarity": "weakness",
+        "quote": "unparalleled",
+        "source": "quick",
+        "start": 303
+      },
+      {
+        "appeal": "ethos",
+        "dimension": "eth_integrity",
+        "end": 632,
+        "flag": "rf_hype",
+        "note": "Hype and superlatives: Self-awarded superlatives that cost credibility with sceptical readers.",
+        "polarity": "weakness",
+        "quote": "second to none",
+        "source": "quick",
+        "start": 618
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_evidence",
+        "end": 373,
+        "flag": "rf_weasel",
+        "note": "Weasel claims: Claims that sound specific but commit to nothing ('up to', 'studies show').",
+        "polarity": "weakness",
+        "quote": "Studies show",
+        "source": "quick",
+        "start": 361
+      },
+      {
+        "appeal": "logos",
+        "dimension": "log_evidence",
+        "end": 532,
+        "flag": "rf_weasel",
+        "note": "Weasel claims: Claims that sound specific but commit to nothing ('up to', 'studies show').",
+        "polarity": "weakness",
+        "quote": "up to 200",
+        "source": "quick",
+        "start": 523
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 90,
+        "flag": "rf_buzzword_cluster",
+        "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "polarity": "weakness",
+        "quote": "empowers",
+        "source": "quick",
+        "start": 82
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 113,
+        "flag": "rf_buzzword_cluster",
+        "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "polarity": "weakness",
+        "quote": "leverage",
+        "source": "quick",
+        "start": 105
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 129,
+        "flag": "rf_buzzword_cluster",
+        "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "polarity": "weakness",
+        "quote": "seamlessly",
+        "source": "quick",
+        "start": 119
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 212,
+        "flag": "rf_buzzword_cluster",
+        "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "polarity": "weakness",
+        "quote": "holistic",
+        "source": "quick",
+        "start": 204
+      },
+      {
+        "appeal": "pathos",
+        "dimension": "pat_vividness",
+        "end": 504,
+        "flag": "rf_buzzword_cluster",
+        "note": "Buzzword cluster: Several abstract buzzwords together; the reader cannot tell what is actually being offered.",
+        "polarity": "weakness",
+        "quote": "Seamless",
+        "source": "quick",
+        "start": 496
+      },
+      {
+        "appeal": "craft",
+        "dimension": "craft_claims",
+        "end": 130,
+        "note": "A claim you may be asked to prove.",
+        "polarity": "weakness",
+        "quote": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+        "source": "quick",
+        "start": 29
+      },
+      {
+        "appeal": "craft",
+        "dimension": "craft_claims",
+        "end": 264,
+        "note": "A claim you may be asked to prove.",
+        "polarity": "weakness",
+        "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "source": "quick",
+        "start": 131
+      },
+      {
+        "appeal": "craft",
+        "dimension": "craft_claims",
+        "end": 691,
+        "note": "A figure with no source. Say where it comes from.",
+        "polarity": "weakness",
+        "quote": "Limited time only: get 20% off your first year.",
+        "source": "quick",
+        "start": 644
+      },
+      {
+        "appeal": "audience",
+        "dimension": "aud_hook",
+        "end": 27,
+        "note": "Throat-clearing. Open with the reader's situation instead.",
+        "polarity": "weakness",
+        "quote": "Welcome to Nexora Solutions",
+        "source": "quick",
+        "start": 0
+      }
+    ],
+    "levers": {
+      "lv_acceptance_latitude": {
+        "status": "unknown"
+      },
+      "lv_affirmation": {
+        "status": "unknown"
+      },
+      "lv_anaphora": {
+        "status": "unknown"
+      },
+      "lv_anchor": {
+        "status": "absent"
+      },
+      "lv_antithesis": {
+        "status": "absent"
+      },
+      "lv_argument_quality": {
+        "status": "unknown"
+      },
+      "lv_attention": {
+        "status": "unknown"
+      },
+      "lv_attractive": {
+        "status": "unknown"
+      },
+      "lv_authentic": {
+        "status": "unknown"
+      },
+      "lv_authority": {
+        "status": "absent"
+      },
+      "lv_autonomy": {
+        "status": "unknown"
+      },
+      "lv_brevity": {
+        "status": "unknown"
+      },
+      "lv_character": {
+        "status": "unknown"
+      },
+      "lv_choice": {
+        "status": "absent"
+      },
+      "lv_cognitive_load": {
+        "status": "unknown"
+      },
+      "lv_commitment": {
+        "status": "absent"
+      },
+      "lv_confirmation": {
+        "status": "unknown"
+      },
+      "lv_costly_signal": {
+        "status": "unknown"
+      },
+      "lv_counter_evidence": {
+        "status": "absent"
+      },
+      "lv_courage": {
+        "status": "unknown"
+      },
+      "lv_credibility": {
+        "status": "unknown"
+      },
+      "lv_easy": {
+        "status": "absent"
+      },
+      "lv_efficacy": {
+        "status": "unknown"
+      },
+      "lv_emotion_range": {
+        "status": "unknown"
+      },
+      "lv_endowment": {
+        "status": "unknown"
+      },
+      "lv_equity": {
+        "status": "unknown"
+      },
+      "lv_flourishing": {
+        "status": "unknown"
+      },
+      "lv_fluency": {
+        "note": "Buzzword cluster",
+        "quote": "Seamless",
+        "status": "misused"
+      },
+      "lv_framing": {
+        "status": "absent"
+      },
+      "lv_free": {
+        "status": "absent"
+      },
+      "lv_freedom": {
+        "status": "absent"
+      },
+      "lv_identity_consistent": {
+        "status": "unknown"
+      },
+      "lv_imagery": {
+        "status": "unknown"
+      },
+      "lv_ingroup": {
+        "quote": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "status": "present"
+      },
+      "lv_intention_obstacle": {
+        "status": "unknown"
+      },
+      "lv_intimacy": {
+        "status": "unknown"
+      },
+      "lv_labelling": {
+        "status": "absent"
+      },
+      "lv_levity": {
+        "status": "unknown"
+      },
+      "lv_liking": {
+        "status": "absent"
+      },
+      "lv_low_self_orientation": {
+        "quote": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+        "status": "present"
+      },
+      "lv_motivation": {
+        "status": "unknown"
+      },
+      "lv_motive_honesty": {
+        "status": "unknown"
+      },
+      "lv_no_status_threat": {
+        "status": "unknown"
+      },
+      "lv_peripheral_cues": {
+        "status": "unknown"
+      },
+      "lv_permission": {
+        "status": "unknown"
+      },
+      "lv_plu": {
+        "status": "unknown"
+      },
+      "lv_positive_balance": {
+        "status": "unknown"
+      },
+      "lv_presuasion": {
+        "status": "unknown"
+      },
+      "lv_promise_clock": {
+        "status": "unknown"
+      },
+      "lv_prompt": {
+        "status": "absent"
+      },
+      "lv_reciprocity": {
+        "status": "absent"
+      },
+      "lv_reframe": {
+        "status": "unknown"
+      },
+      "lv_refutation": {
+        "status": "absent"
+      },
+      "lv_reg_fit": {
+        "status": "unknown"
+      },
+      "lv_reliability": {
+        "status": "unknown"
+      },
+      "lv_remarkable": {
+        "status": "unknown"
+      },
+      "lv_respect": {
+        "status": "unknown"
+      },
+      "lv_revisable": {
+        "status": "absent"
+      },
+      "lv_rhetorical_q": {
+        "status": "absent"
+      },
+      "lv_scarcity": {
+        "note": "Manufactured urgency",
+        "quote": "Limited time only",
+        "status": "misused"
+      },
+      "lv_shape": {
+        "status": "unknown"
+      },
+      "lv_social": {
+        "status": "unknown"
+      },
+      "lv_social_proof": {
+        "status": "absent"
+      },
+      "lv_social_responsibility": {
+        "status": "unknown"
+      },
+      "lv_status": {
+        "status": "unknown"
+      },
+      "lv_svm": {
+        "status": "absent"
+      },
+      "lv_tactic_visibility": {
+        "note": "Hype and superlatives",
+        "quote": "second to none",
+        "status": "misused"
+      },
+      "lv_tension": {
+        "status": "unknown"
+      },
+      "lv_timely": {
+        "status": "unknown"
+      },
+      "lv_transformation": {
+        "status": "unknown"
+      },
+      "lv_tricolon": {
+        "status": "absent"
+      },
+      "lv_truthful": {
+        "note": "Weasel claims",
+        "quote": "up to 200",
+        "status": "misused"
+      },
+      "lv_turn": {
+        "status": "unknown"
+      },
+      "lv_uncertainty": {
+        "status": "unknown"
+      },
+      "lv_unity": {
+        "status": "absent"
+      },
+      "lv_values_match": {
+        "status": "unknown"
+      },
+      "lv_warmth": {
+        "status": "unknown"
+      },
+      "lv_who_benefits": {
+        "status": "absent"
+      }
+    },
+    "notes": {
+      "aud_hook": "Opening line: 4 words.",
+      "aud_inclusivity": "No exclusionary terms found.",
+      "aud_knowledge": "No undefined acronyms found.",
+      "aud_suitability": "Reading level Fog 13.7 for a informed reader (aim 12 or under).",
+      "craft_claims": "Some claims would need support if challenged.",
+      "craft_clarity": "Fog 13.7 (aim under 11), 0% passive, 0 long sentences.",
+      "craft_cohesion": "7% of sentences use a linking word; 8% pick up a word from the sentence before.",
+      "craft_length": "104 words; typical range for this content type is 300 to 1000.",
+      "craft_structure": "7 paragraphs, about 2.0 sentences each.",
+      "craft_tone": "Formality 38 of 100; this reader and form expect about 50.",
+      "cul_collective": "Text 77, reader expects about 50 (0 = individual, 100 = group).",
+      "cul_context": "Text 29, reader expects about 50 (0 = explicit, 100 = implicit).",
+      "cul_directness": "Text 50, reader expects about 50 (0 = direct, 100 = indirect).",
+      "cul_expressiveness": "Text 58, reader expects about 50 (0 = restrained, 100 = expressive).",
+      "cul_formality": "Text 38, reader expects about 50 (0 = informal, 100 = formal).",
+      "cul_idiom": "No culture-bound idioms found.",
+      "cul_persuading": "Text 50, reader expects about 50 (0 = applications-first, 100 = principles-first).",
+      "cul_time": "Text 25, reader expects about 50 (0 = deadline, 100 = long-term).",
+      "cul_trust": "Text 20, reader expects about 50 (0 = task, 100 = relationship).",
+      "cul_uncertainty": "Text 32, reader expects about 50 (0 = brief, 100 = detailed).",
+      "eth_borrowed": "0 supporting signals, 0 weakening.",
+      "eth_competence": "1 supporting signal, 1 weakening.",
+      "eth_goodwill": "About the reader 2 times, about the author 6 times.",
+      "eth_identification": "0 supporting signals.",
+      "eth_integrity": "0 supporting signals, 6 weakening.",
+      "eth_polish": "0 supporting signals, 0 weakening.",
+      "kai_call": "1 call to action found.",
+      "kai_efficacy": "0 supporting signals, 0 weakening.",
+      "kai_integrity": "0 supporting signals, 2 weakening.",
+      "kai_moment": "1 supporting signal, 0 weakening.",
+      "kai_stakes": "0 supporting signals.",
+      "lens_dialogue": "0 supporting signals, 0 weakening.",
+      "lens_mythos": "0 supporting signals.",
+      "lens_prepon": "Gunning Fog 13.7; average sentence 7 words.",
+      "lens_telos": "0 supporting signals.",
+      "log_clarity": "Average sentence 7 words; 0 over 30 words.",
+      "log_comparison": "0 supporting signals.",
+      "log_evidence": "1 supporting signal, 3 weakening.",
+      "log_mechanism": "0 supporting signals.",
+      "log_objections": "0 supporting signals.",
+      "log_structure": "5 supporting signals.",
+      "pat_empathy": "0 supporting signals, 1 weakening.",
+      "pat_identity": "1 supporting signal.",
+      "pat_stakes": "0 supporting signals.",
+      "pat_story": "0 supporting signals.",
+      "pat_surprise": "0 supporting signals, 0 weakening.",
+      "pat_vividness": "1 supporting signal, 7 weakening.",
+      "undefined": " Lowered by red flags."
+    },
+    "pvScores": {
+      "pv_behaviour_design": 0,
+      "pv_behavioural_econ": 0,
+      "pv_cialdini": 0,
+      "pv_critical": 0,
+      "pv_dual_process": 0,
+      "pv_ethics": 0,
+      "pv_godin": 0,
+      "pv_identity_values": 2,
+      "pv_motivation": null,
+      "pv_narrative": null,
+      "pv_resistance": 0,
+      "pv_rhetoric": 0,
+      "pv_trust": 2
+    },
+    "scores": {
+      "aud_hook": 1,
+      "aud_inclusivity": 4,
+      "aud_knowledge": 1,
+      "aud_suitability": 2,
+      "craft_claims": 2,
+      "craft_clarity": 3,
+      "craft_cohesion": 1,
+      "craft_length": 1,
+      "craft_structure": 3,
+      "craft_tone": 4,
+      "cul_collective": 4,
+      "cul_context": 4,
+      "cul_directness": 4,
+      "cul_expressiveness": 4,
+      "cul_formality": 4,
+      "cul_idiom": 4,
+      "cul_persuading": 4,
+      "cul_time": 4,
+      "cul_trust": 4,
+      "cul_uncertainty": 4,
+      "eth_borrowed": 0,
+      "eth_competence": 0,
+      "eth_goodwill": 1,
+      "eth_identification": 1,
+      "eth_integrity": 0,
+      "eth_polish": 3,
+      "kai_call": 3,
+      "kai_efficacy": 1,
+      "kai_integrity": 0,
+      "kai_moment": 3,
+      "kai_stakes": 0,
+      "lens_dialogue": 1,
+      "lens_mythos": 0,
+      "lens_prepon": 4,
+      "lens_telos": 1,
+      "log_clarity": 4,
+      "log_comparison": 1,
+      "log_evidence": 0,
+      "log_mechanism": 1,
+      "log_objections": 0,
+      "log_structure": 4,
+      "pat_empathy": 0,
+      "pat_identity": 3,
+      "pat_stakes": 0,
+      "pat_story": 0,
+      "pat_surprise": 1,
+      "pat_vividness": 0,
+      "undefined": null
+    },
+    "sentences": [
+      {
+        "end": 27,
+        "start": 0,
+        "text": "Welcome to Nexora Solutions",
+        "words": 4
+      },
+      {
+        "end": 130,
+        "start": 29,
+        "text": "Nexora is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+        "words": 13
+      },
+      {
+        "end": 264,
+        "start": 131,
+        "text": "Founded in 2015, we have grown to become an industry-leading provider of holistic analytics solutions for organisations of all sizes.",
+        "words": 20
+      },
+      {
+        "end": 360,
+        "start": 266,
+        "text": "Our cutting-edge technology delivers unparalleled insights, helping you make better decisions.",
+        "words": 11
+      },
+      {
+        "end": 435,
+        "start": 361,
+        "text": "Studies show that data-driven companies are significantly more profitable.",
+        "words": 9
+      },
+      {
+        "end": 445,
+        "start": 437,
+        "text": "Features",
+        "words": 1
+      },
+      {
+        "end": 468,
+        "start": 446,
+        "text": "- Real-time dashboards",
+        "words": 3
+      },
+      {
+        "end": 493,
+        "start": 469,
+        "text": "- AI-powered forecasting",
+        "words": 3
+      },
+      {
+        "end": 538,
+        "start": 494,
+        "text": "- Seamless integrations with up to 200 tools",
+        "words": 8
+      },
+      {
+        "end": 594,
+        "start": 540,
+        "text": "We are passionate about helping our customers succeed.",
+        "words": 8
+      },
+      {
+        "end": 633,
+        "start": 595,
+        "text": "Our team of experts is second to none.",
+        "words": 8
+      },
+      {
+        "end": 643,
+        "start": 635,
+        "text": "Act now!",
+        "words": 2
+      },
+      {
+        "end": 691,
+        "start": 644,
+        "text": "Limited time only: get 20% off your first year.",
+        "words": 9
+      },
+      {
+        "end": 718,
+        "start": 693,
+        "text": "Contact us to learn more.",
+        "words": 5
+      }
+    ],
+    "words": 104
+  },
+  "source": "eval"
+}
