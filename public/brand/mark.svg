@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="HowDoesThisLand">
+  <!-- The reader's eye: its upper lid is the proofreader's insert caret, in the
+       editor's red. How the copy lands, seen as an editor marks it. -->
+  <rect width="64" height="64" rx="6" fill="#141414"/>
+  <path d="M4 37 L32 12 L60 37 L50.5 37 L32 20.5 L13.5 37 Z" fill="#ff5c6c"/>
+  <path d="M4 37 Q32 63 60 37 L50.5 37 Q32 53 13.5 37 Z" fill="#fdfdfb"/>
+  <circle cx="32" cy="36.5" r="8" fill="#fdfdfb"/>
+</svg>
