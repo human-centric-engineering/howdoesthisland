@@ -72,9 +72,9 @@
   "modelVersion": "0.5.1",
   "recorder": {
     "scripts/app/baseline/canonical.ts": "79a08064c8f81b0495bd6a10d6fc65f048bf0563f2c3e788df276c4993ba0a63",
-    "scripts/app/baseline/corpus.ts": "d12260ddcf306aeb0cd404a146685921203e1ed90d569b9bdc5786fe745152d2",
+    "scripts/app/baseline/corpus.ts": "7ac81438451b2f79a27adf2e4ecbff7c6098cff11ded13619be733692bac6285",
     "scripts/app/baseline/record.ts": "d74b48db2416651837cb82f46d7fd7d89679d8c773bd1add2686cb86cc71460d",
-    "scripts/app/baseline/synthetic.ts": "5d467df6254164b7cd2367a8f66778040f1217b20aa7631f3a79c8514471efa0"
+    "scripts/app/baseline/synthetic.ts": "42a3cf793bce9b18f296bdf70e08443a57299baca5d467c8c795a4f85519a90f"
   },
   "sources": {
     "engine": {

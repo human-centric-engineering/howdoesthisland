@@ -17,6 +17,7 @@ import {
   buildCorpus,
   checkCoverage,
   corpusInputs,
+  corpusModelSchema,
 } from '@/scripts/app/baseline/corpus';
 import {
   MISSING,
@@ -195,6 +196,9 @@ describe('syntheticJudgeOutputs', () => {
       'present',
     ]);
     expect(pvs[0].levers.at(-1)?.id).toBe(MISSING.lever);
+    // Absent, not present-but-undefined: the fixture drops undefined keys, so
+    // only an absent one is recorded exactly as the engine received it.
+    expect('summary' in pvs[0]).toBe(false);
   });
 
   it('gives lenses duties and culture text positions, each with an awkward value', () => {
@@ -220,6 +224,15 @@ describe('syntheticJudgeOutputs', () => {
     };
     expect(() => dimensionsOf(thin, 'audience')).toThrow(/'audience' group/);
     expect(syntheticModelSchema.safeParse({ ...model, moves: [] }).success).toBe(false);
+  });
+
+  it('refuses a model with an audience modifier that has no options', () => {
+    const m = corpusModelSchema.parse(MODEL);
+    const thin = {
+      ...m,
+      audience_modifiers: m.audience_modifiers.map((x, i) => (i === 1 ? { ...x, options: [] } : x)),
+    };
+    expect(() => corpusInputs(thin)).toThrow();
   });
 
   it('copes with a text that has no sentences', () => {

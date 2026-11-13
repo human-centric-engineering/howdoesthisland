@@ -241,13 +241,14 @@ export type LewisById = Readonly<
 >;
 
 /** Only the parts of the model the corpus reads. */
+/** A list the rotation indexes into (`% length`), so it cannot be empty. */
+const rotation = z.array(z.object({ id: z.string() })).min(1);
+
 export const corpusModelSchema = z.object({
-  content_types: z.array(z.object({ id: z.string() })),
-  archetypes: z.array(z.object({ id: z.string() })),
-  exec_roles: z.array(z.object({ id: z.string() })),
-  audience_modifiers: z.array(
-    z.object({ id: z.string(), options: z.array(z.object({ id: z.string() })) })
-  ),
+  content_types: rotation,
+  archetypes: rotation,
+  exec_roles: rotation,
+  audience_modifiers: z.array(z.object({ id: z.string(), options: rotation })),
   culture: z.object({
     countries: z.array(
       z.object({

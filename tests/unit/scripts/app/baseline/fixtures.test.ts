@@ -36,6 +36,8 @@ const manifest = manifestSchema.parse(
   JSON.parse(readFileSync(path.join(DIR, 'manifest.json'), 'utf8'))
 );
 
+/** Not a dotfile: Finder's `.DS_Store` and the like are not the baseline's. */
+const visible = (name: string) => !name.startsWith('.');
 const sha = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
 describe('the engine baseline', () => {
@@ -47,7 +49,9 @@ describe('the engine baseline', () => {
   });
 
   it('was recorded by the recorder now in scripts/app/baseline/', () => {
-    const files = readdirSync('scripts/app/baseline').map((f) => `scripts/app/baseline/${f}`);
+    const files = readdirSync('scripts/app/baseline')
+      .filter(visible)
+      .map((f) => `scripts/app/baseline/${f}`);
     expect(Object.keys(manifest.recorder).sort()).toEqual(files.sort());
     for (const [file, sha256] of Object.entries(manifest.recorder)) {
       expect(sha(file), `${file}: ${RERUN}`).toBe(sha256);
@@ -56,7 +60,7 @@ describe('the engine baseline', () => {
 
   it('holds exactly the manifest and the case files it lists', () => {
     const onDisk = readdirSync(DIR, { recursive: true, withFileTypes: true })
-      .filter((e) => e.isFile())
+      .filter((e) => e.isFile() && visible(e.name))
       .map((e) => path.relative(DIR, path.join(e.parentPath, e.name)).split(path.sep).join('/'));
     expect(onDisk.sort()).toEqual([...manifest.cases, 'manifest.json'].sort());
   });

@@ -189,7 +189,9 @@ export function syntheticJudgeOutputs(
           ...model.perspectives.map((p, pi) => ({
             id: p.id,
             score: hash(`${key}|${p.id}`) % 5,
-            summary: pi === 0 ? undefined : `Synthetic ${p.id}.`,
+            // The first has no summary key at all, so what the engine is given
+            // is exactly what the fixture records.
+            ...(pi === 0 ? {} : { summary: `Synthetic ${p.id}.` }),
             levers: [
               ...p.levers.map((l, li) => {
                 const status = LEVER_STATUSES[(pi + li) % LEVER_STATUSES.length];
