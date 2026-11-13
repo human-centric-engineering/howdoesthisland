@@ -91,6 +91,27 @@ describe('reaching the engine', () => {
     );
   });
 
+  it('exposes primaryDuty for f-rewrite', () => {
+    const e = createHowDoesThisLandEngine(model, { culture: true });
+    expect(e.primaryDuty({ contentType: 'general', archetype: 'auditor', audience: {} })).toBe(
+      'teach'
+    );
+    expect(
+      e.primaryDuty({ contentType: 'general', archetype: 'general', audience: {} })
+    ).toBeNull();
+  });
+
+  it('scores a model without culture or length targets, as the prototype’s defaults do', () => {
+    const { culture: _c, length_targets: _l, ...core } = model;
+    const e = createHowDoesThisLandEngine(core, { culture: true });
+    const c = cases[0];
+    const q = e.quickScan(c.input.text, c.input.ctx);
+    const r = e.assemble(c.input.text, c.input.ctx, q);
+    expect(r.culture?.reader.global).toBe(true);
+    expect(r.dimensions.some((d) => d.id.startsWith('cul_') && d.score === undefined)).toBe(true);
+    expect(q.notes.craft_length).toContain('typical range for this content type is 80 to 900');
+  });
+
   it('indexes a model object once, however many engines are made from it', () => {
     expect(indexModel(model)).toBe(indexModel(model));
   });

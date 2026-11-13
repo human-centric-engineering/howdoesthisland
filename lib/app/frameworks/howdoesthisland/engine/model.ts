@@ -129,8 +129,10 @@ export const engineModelSchema = z.object({
   meta: z.object({ version: z.string() }),
   dimensions: z.array(coreDimensionSchema),
   lenses: z.array(dimensionSchema),
-  extra_dimensions: z.array(extraDimensionSchema).optional(),
-  groups: z.array(z.object({ id: z.string() })).optional(),
+  // Required, though the prototype defaulted them: its quick scan scores the
+  // craft and audience dimensions unconditionally, so it fails without them.
+  extra_dimensions: z.array(extraDimensionSchema),
+  groups: z.array(z.object({ id: z.string() })),
   moves: z.array(moveSchema),
   red_flags: z.array(redFlagSchema),
   duties: z.array(dutySchema).min(1),
@@ -231,7 +233,7 @@ export function indexModel(model: object): EngineModel {
   if (cached) return cached;
 
   const data = deepFreeze(engineModelSchema.parse(model));
-  const EXTRA = data.extra_dimensions ?? [];
+  const EXTRA = data.extra_dimensions;
   const DIM = new Map<string, Dimension>(
     [...data.dimensions, ...data.lenses].map((d) => [d.id, d])
   );
@@ -247,7 +249,7 @@ export function indexModel(model: object): EngineModel {
     DIMS: data.dimensions,
     LENSES: data.lenses,
     EXTRA,
-    GROUPS: data.groups ?? [],
+    GROUPS: data.groups,
     DIM,
     MOVE: byId(data.moves),
     CT: byId(data.content_types),
