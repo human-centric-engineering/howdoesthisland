@@ -90,6 +90,37 @@ describe('extractPptx', () => {
     expect(r.title).toBe('Opening');
   });
 
+  it('resolves absolute targets, ignores external links, and skips a slide whose part is missing', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'ppt/presentation.xml',
+      `<p:presentation ${NS}><p:sldIdLst>` +
+        '<p:sldId id="256" r:id="rIdMissing"/><p:sldId id="257" r:id="rIdAbs"/>' +
+        '<p:sldId id="258" r:id="rIdLink"/></p:sldIdLst></p:presentation>'
+    );
+    zip.file(
+      'ppt/_rels/presentation.xml.rels',
+      `<Relationships xmlns="${REL_NS}">` +
+        `<Relationship Id="rIdMissing" Type="${SLIDE_REL}" Target="slides/gone.xml"/>` +
+        `<Relationship Id="rIdAbs" Type="${SLIDE_REL}" Target="/ppt/slides/./slide9.xml"/>` +
+        `<Relationship Id="rIdLink" Type="${SLIDE_REL}" Target="https://example.com/x" TargetMode="External"/>` +
+        '</Relationships>'
+    );
+    zip.file(
+      'ppt/slides/slide9.xml',
+      `<p:sld ${NS}><p:cSld><p:spTree>${shape(para(run('Only slide')))}</p:spTree></p:cSld></p:sld>`
+    );
+    const buf = await zip.generateAsync({ type: 'nodebuffer' });
+
+    const r = await extractPptx(buf, LIMITS);
+
+    // The external link is not a slide; the missing part lists but reads nothing.
+    expect(r.slideCount).toBe(2);
+    expect(r.text).toBe('Only slide');
+    expect(r.title).toBe('');
+    expect(r.warnings).toEqual([]);
+  });
+
   it('stops reading once the expanded XML passes the cap', async () => {
     // Compresses to almost nothing, expands well past the cap.
     const buf = await deck([shape(para(run('x'.repeat(200_000))))]);
