@@ -2,10 +2,10 @@
   "assemble": {
     "full": {
       "appeal_share": {
-        "ethos": 6,
+        "ethos": 35,
         "kairos": 0,
         "logos": 0,
-        "neutral": 94,
+        "neutral": 65,
         "pathos": 0
       },
       "audience": {
@@ -486,32 +486,12 @@
           "start": 0
         },
         {
-          "appeal": "ethos",
-          "dimension": "eth_goodwill",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "pathos",
           "dimension": "pat_stakes",
           "end": 11,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "BIG NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "pathos",
-          "dimension": "pat_story",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
           "source": "ai",
           "start": 0
         },
@@ -526,32 +506,12 @@
           "start": 0
         },
         {
-          "appeal": "logos",
-          "dimension": "log_structure",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "kairos",
           "dimension": "kai_moment",
           "end": 11,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "BIG NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "kairos",
-          "dimension": "kai_efficacy",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
           "source": "ai",
           "start": 0
         },
@@ -566,32 +526,12 @@
           "start": 0
         },
         {
-          "appeal": "lenses",
-          "dimension": "lens_prepon",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "craft",
           "dimension": "craft_structure",
           "end": 11,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "BIG NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "craft",
-          "dimension": "craft_clarity",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
           "source": "ai",
           "start": 0
         },
@@ -606,16 +546,6 @@
           "start": 0
         },
         {
-          "appeal": "audience",
-          "dimension": "aud_knowledge",
-          "end": 11,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "culture",
           "dimension": "cul_context",
           "end": 11,
@@ -626,14 +556,164 @@
           "start": 0
         },
         {
-          "appeal": "culture",
-          "dimension": "cul_persuading",
-          "end": 11,
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 61,
           "note": "Synthetic highlight 2.",
           "polarity": "strength",
-          "quote": "BIG   NEWS!!!",
+          "quote": "Our   new app is here and it is absolutely amazing!",
           "source": "ai",
-          "start": 0
+          "start": 12
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_comparison",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 61,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Our   new app is here and it is absolutely amazing!",
+          "source": "ai",
+          "start": 12
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "end": 35,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Our new app is here and and then something the text never says",
+          "source": "ai",
+          "start": 12
         },
         {
           "appeal": "ethos",
@@ -2951,13 +3031,13 @@
           "dimension": "aud_knowledge",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "aud_inclusivity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "aud_suitability",
@@ -3064,13 +3144,13 @@
           "dimension": "craft_clarity",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "craft_cohesion",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "craft_tone",
@@ -3197,13 +3277,13 @@
           "dimension": "cul_persuading",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "cul_formality",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "cul_trust",
@@ -3321,13 +3401,13 @@
           "dimension": "eth_goodwill",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "eth_borrowed",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "eth_identification",
@@ -3993,13 +4073,13 @@
           "dimension": "kai_efficacy",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "kai_integrity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "kai_call",
@@ -4102,13 +4182,13 @@
           "dimension": "lens_prepon",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "lens_dialogue",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "lens_telos",
@@ -4215,13 +4295,13 @@
           "dimension": "log_structure",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "log_comparison",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "log_objections",
@@ -4328,13 +4408,13 @@
           "dimension": "pat_story",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "BIG   NEWS!!!"
+          "quote": "Our   new app is here and it is absolutely amazing!"
         },
         {
           "dimension": "pat_identity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "BIG NEWS!!! and then something the text never says"
+          "quote": "Our new app is here and and then something the text never says"
         },
         {
           "dimension": "pat_empathy",

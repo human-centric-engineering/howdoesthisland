@@ -51,14 +51,16 @@ export const MISSING = {
 } as const;
 
 const idList = z.array(z.object({ id: z.string() }));
+/** A list the generator indexes into (`% length`), so it cannot be empty. */
+const pickList = idList.min(1);
 
 /** Only the parts of the model the generator reads. */
 export const syntheticModelSchema = z.object({
-  dimensions: z.array(z.object({ id: z.string(), appeal: z.string() })),
-  lenses: idList,
+  dimensions: z.array(z.object({ id: z.string(), appeal: z.string() })).min(1),
+  lenses: pickList,
   extra_dimensions: z.array(z.object({ id: z.string(), group: z.string() })),
-  moves: idList,
-  red_flags: idList,
+  moves: pickList,
+  red_flags: pickList,
   duties: idList,
   perspectives: z.array(z.object({ id: z.string(), levers: idList })),
   culture: z.object({ scales: idList }),
@@ -83,18 +85,30 @@ const LEVER_STATUSES = ['present', 'absent', 'misused', 'not_applicable', 'bogus
  *
  * The case-varied quote is the LAST sentence upper-cased, so a text with `İ`
  * earlier on puts the shift in front of it.
+ *
+ * The whitespace and first-six-words quotes are built from the first sentence
+ * long enough to reach those paths: more than six words, whose first six come
+ * to more than 15 characters (`locate()`'s `head.length > 15`). Many texts open
+ * on `Team,` or `Dear Mr Tanaka,`, which has no space to widen and no six-word
+ * head. Only a text with no such sentence falls back to the first one, and then
+ * those two quotes take an earlier or later path instead.
  */
 export function highlightQuotes(sentences: readonly string[]): string[] {
   const first = sentences[0];
   const last = sentences[sentences.length - 1];
-  const words = first.split(/\s+/);
+  const long =
+    sentences.find((s) => {
+      const w = s.split(/\s+/);
+      return w.length > 6 && w.slice(0, 6).join(' ').length > 15;
+    }) ?? first;
+  const words = long.split(/\s+/);
   return [
     first,
     last.toUpperCase(),
-    first.replace(' ', '   '),
+    long.replace(' ', '   '),
     words.length > 6
       ? `${words.slice(0, 6).join(' ')} and then something the text never says`
-      : `${first} and then something the text never says`,
+      : `${long} and then something the text never says`,
     'A quote that appears nowhere in the text at all.',
   ];
 }
@@ -103,12 +117,20 @@ interface DimensionLike {
   id: string;
 }
 
-function dimensionsOf(model: SyntheticModel, group: SyntheticGroup): DimensionLike[] {
-  if (group === 'lenses') return model.lenses;
-  if (group === 'craft' || group === 'audience' || group === 'culture') {
-    return model.extra_dimensions.filter((d) => d.group === group);
+/** The dimensions a group scores. Throws, naming the group, when it has none. */
+export function dimensionsOf(model: SyntheticModel, group: SyntheticGroup): DimensionLike[] {
+  const dims =
+    group === 'lenses'
+      ? model.lenses
+      : group === 'craft' || group === 'audience' || group === 'culture'
+        ? model.extra_dimensions.filter((d) => d.group === group)
+        : model.dimensions.filter((d) => d.appeal === group);
+  if (!dims.length) {
+    throw new Error(
+      `The model has no dimensions for the '${group}' group, so no synthetic judge output can score one`
+    );
   }
-  return model.dimensions.filter((d) => d.appeal === group);
+  return dims;
 }
 
 function recommendations(

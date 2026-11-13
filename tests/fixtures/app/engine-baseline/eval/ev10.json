@@ -2,10 +2,10 @@
   "assemble": {
     "full": {
       "appeal_share": {
-        "ethos": 3,
+        "ethos": 22,
         "kairos": 0,
         "logos": 0,
-        "neutral": 97,
+        "neutral": 78,
         "pathos": 0
       },
       "audience": {
@@ -448,32 +448,12 @@
           "start": 0
         },
         {
-          "appeal": "ethos",
-          "dimension": "eth_goodwill",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "pathos",
           "dimension": "pat_stakes",
           "end": 14,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "Amara is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "pathos",
-          "dimension": "pat_story",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
           "source": "ai",
           "start": 0
         },
@@ -488,32 +468,12 @@
           "start": 0
         },
         {
-          "appeal": "logos",
-          "dimension": "log_structure",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "kairos",
           "dimension": "kai_moment",
           "end": 14,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "Amara is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "kairos",
-          "dimension": "kai_efficacy",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
           "source": "ai",
           "start": 0
         },
@@ -528,32 +488,12 @@
           "start": 0
         },
         {
-          "appeal": "lenses",
-          "dimension": "lens_prepon",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "craft",
           "dimension": "craft_structure",
           "end": 14,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "Amara is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "craft",
-          "dimension": "craft_clarity",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
           "source": "ai",
           "start": 0
         },
@@ -568,16 +508,6 @@
           "start": 0
         },
         {
-          "appeal": "audience",
-          "dimension": "aud_knowledge",
-          "end": 14,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Amara   is nine.",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "culture",
           "dimension": "cul_context",
           "end": 14,
@@ -588,14 +518,164 @@
           "start": 0
         },
         {
-          "appeal": "culture",
-          "dimension": "cul_persuading",
-          "end": 14,
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 132,
           "note": "Synthetic highlight 2.",
           "polarity": "strength",
-          "quote": "Amara   is nine.",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
           "source": "ai",
-          "start": 0
+          "start": 15
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_comparison",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 132,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all.",
+          "source": "ai",
+          "start": 15
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "end": 54,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Every morning she walks four kilometres and then something the text never says",
+          "source": "ai",
+          "start": 15
         },
         {
           "appeal": "ethos",
@@ -2839,13 +2919,13 @@
           "dimension": "aud_knowledge",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "aud_inclusivity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "aud_suitability",
@@ -2952,13 +3032,13 @@
           "dimension": "craft_clarity",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "craft_cohesion",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "craft_tone",
@@ -3085,13 +3165,13 @@
           "dimension": "cul_persuading",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "cul_formality",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "cul_trust",
@@ -3209,13 +3289,13 @@
           "dimension": "eth_goodwill",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "eth_borrowed",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "eth_identification",
@@ -3881,13 +3961,13 @@
           "dimension": "kai_efficacy",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "kai_integrity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "kai_call",
@@ -3990,13 +4070,13 @@
           "dimension": "lens_prepon",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "lens_dialogue",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "lens_telos",
@@ -4103,13 +4183,13 @@
           "dimension": "log_structure",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "log_comparison",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "log_objections",
@@ -4216,13 +4296,13 @@
           "dimension": "pat_story",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Amara   is nine."
+          "quote": "Every   morning she walks four kilometres to collect water before school, and most days she arrives late or not at all."
         },
         {
           "dimension": "pat_identity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Amara is nine. and then something the text never says"
+          "quote": "Every morning she walks four kilometres and then something the text never says"
         },
         {
           "dimension": "pat_empathy",

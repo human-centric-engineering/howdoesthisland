@@ -17,8 +17,10 @@
  *
  * Deterministic: the engine has no `Math.random` and no `Date`, and nothing
  * here adds either. Running it twice gives identical bytes — that is the check
- * that the fixtures are a baseline rather than a sample. The fixture directory
- * is emptied first, so a case that is no longer recorded does not linger.
+ * that the fixtures are a baseline rather than a sample. Every case is run and
+ * serialised before anything is written; only then is the fixture directory
+ * emptied (so a case no longer recorded does not linger) and rewritten. A run
+ * that throws partway therefore leaves the committed baseline as it was.
  *
  * Exit 0 written, 1 the corpus failed its coverage check or the engine did not
  * load.
@@ -125,9 +127,7 @@ async function main(): Promise<number> {
       ...corpus.map((p) => ({ id: p.id, source: 'corpus' as const, text: p.text, ctx: p.ctx })),
     ];
 
-    rmSync(path.join(ROOT, OUT), { recursive: true, force: true });
-    for (const dir of ['eval', 'corpus']) mkdirSync(path.join(ROOT, OUT, dir), { recursive: true });
-
+    const files = new Map<string, string>();
     for (const c of cases) {
       const q = engine.quickScan(c.text, c.ctx);
       const judgeOutputs = syntheticJudgeOutputs(synthModel, sentenceTexts(split, c.text), c.id);
@@ -140,8 +140,8 @@ async function main(): Promise<number> {
         structuredClone(q),
         structuredClone(judgeOutputs)
       );
-      writeFileSync(
-        path.join(ROOT, OUT, c.source, `${c.id}.json`),
+      files.set(
+        `${c.source}/${c.id}.json`,
         canonicalJson({
           id: c.id,
           source: c.source,
@@ -153,8 +153,8 @@ async function main(): Promise<number> {
       );
     }
 
-    writeFileSync(
-      path.join(ROOT, OUT, 'manifest.json'),
+    files.set(
+      'manifest.json',
       canonicalJson({
         about:
           'The prototype engine’s outputs, recorded by scripts/app/baseline/record.ts (t-12). ' +
@@ -171,6 +171,10 @@ async function main(): Promise<number> {
         cases: cases.map((c) => `${c.source}/${c.id}.json`),
       })
     );
+
+    rmSync(path.join(ROOT, OUT), { recursive: true, force: true });
+    for (const dir of ['eval', 'corpus']) mkdirSync(path.join(ROOT, OUT, dir), { recursive: true });
+    for (const [rel, body] of files) writeFileSync(path.join(ROOT, OUT, rel), body);
 
     console.log(`Wrote ${cases.length} cases and manifest.json to ${OUT}/`);
     return 0;

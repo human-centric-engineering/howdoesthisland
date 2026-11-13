@@ -21,6 +21,7 @@ import {
 import {
   MISSING,
   SYNTHETIC_GROUPS,
+  dimensionsOf,
   hash,
   highlightQuotes,
   syntheticJudgeOutputs,
@@ -50,6 +51,16 @@ describe('canonicalJson', () => {
     expect(canonicalJson({ gone: undefined, n: NaN, list: [undefined] })).toBe(
       '{\n  "list": [\n    null\n  ],\n  "n": null\n}\n'
     );
+  });
+
+  it('refuses what it cannot write in sorted order, naming where', () => {
+    expect(() => canonicalJson({ a: { '10': 1, '9': 2 } })).toThrow(
+      /\$\.a has the integer-like key "10"/
+    );
+    expect(() => canonicalJson({ when: new Date(0) })).toThrow(/\$\.when is not a plain object/);
+    // "1a" and "01" are not array indices, so JSON keeps them where we put them.
+    expect(canonicalJson({ '1a': 1, '01': 2 })).toBe('{\n  "01": 2,\n  "1a": 1\n}\n');
+    expect(canonicalJson(JSON.parse('{"__proto__": 1}'))).toBe('{\n  "__proto__": 1\n}\n');
   });
 });
 
@@ -143,10 +154,23 @@ describe('syntheticJudgeOutputs', () => {
     expect(q[2]).toBe('İstanbul   is where we start, with a long opening sentence of many words.');
     expect(q[3]).toBe('İstanbul is where we start, with and then something the text never says');
     expect(q[4]).toMatch(/nowhere in the text/);
-    // A first sentence of six words or fewer still gets a quote nobody wrote.
+    // A text with no sentence long enough still gets a quote nobody wrote.
     expect(highlightQuotes(['Short one.'])[3]).toBe(
       'Short one. and then something the text never says'
     );
+  });
+
+  it('widens and truncates the first sentence long enough to reach those paths', () => {
+    // A salutation has no space to widen and no six-word head longer than 15
+    // characters, so the quotes come from the sentence after it.
+    const q = highlightQuotes(['Team,', 'Over the next two years we are going to change.']);
+    expect(q[0]).toBe('Team,');
+    expect(q[2]).toBe('Over   the next two years we are going to change.');
+    expect(q[3]).toBe('Over the next two years we and then something the text never says');
+    // Six short words come to 15 characters or fewer, which locate() will not try.
+    expect(
+      highlightQuotes(['A b c d e f g h.', 'Then the next sentence is the long one.'])[3]
+    ).toBe('Then the next sentence is the and then something the text never says');
   });
 
   it('carries unknown ids through recommendations, flags, perspectives and levers', () => {
@@ -187,6 +211,15 @@ describe('syntheticJudgeOutputs', () => {
   it('leaves the summary off one group only', () => {
     const without = SYNTHETIC_GROUPS.filter((g) => !('summary' in out[g]));
     expect(without).toEqual(['kairos']);
+  });
+
+  it('names the group when the model gives it no dimensions', () => {
+    const thin = {
+      ...model,
+      extra_dimensions: model.extra_dimensions.filter((d) => d.group !== 'audience'),
+    };
+    expect(() => dimensionsOf(thin, 'audience')).toThrow(/'audience' group/);
+    expect(syntheticModelSchema.safeParse({ ...model, moves: [] }).success).toBe(false);
   });
 
   it('copes with a text that has no sentences', () => {

@@ -2,10 +2,10 @@
   "assemble": {
     "full": {
       "appeal_share": {
-        "ethos": 4,
+        "ethos": 16,
         "kairos": 0,
         "logos": 0,
-        "neutral": 96,
+        "neutral": 84,
         "pathos": 0
       },
       "audience": {
@@ -448,32 +448,12 @@
           "start": 0
         },
         {
-          "appeal": "ethos",
-          "dimension": "eth_goodwill",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "pathos",
           "dimension": "pat_stakes",
           "end": 27,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "Welcome to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "pathos",
-          "dimension": "pat_story",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
           "source": "ai",
           "start": 0
         },
@@ -488,32 +468,12 @@
           "start": 0
         },
         {
-          "appeal": "logos",
-          "dimension": "log_structure",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "kairos",
           "dimension": "kai_moment",
           "end": 27,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "Welcome to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "kairos",
-          "dimension": "kai_efficacy",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
           "source": "ai",
           "start": 0
         },
@@ -528,32 +488,12 @@
           "start": 0
         },
         {
-          "appeal": "lenses",
-          "dimension": "lens_prepon",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "craft",
           "dimension": "craft_structure",
           "end": 27,
           "note": "Synthetic highlight 0.",
           "polarity": "strength",
           "quote": "Welcome to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
-          "appeal": "craft",
-          "dimension": "craft_clarity",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
           "source": "ai",
           "start": 0
         },
@@ -568,16 +508,6 @@
           "start": 0
         },
         {
-          "appeal": "audience",
-          "dimension": "aud_knowledge",
-          "end": 27,
-          "note": "Synthetic highlight 2.",
-          "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
-          "source": "ai",
-          "start": 0
-        },
-        {
           "appeal": "culture",
           "dimension": "cul_context",
           "end": 27,
@@ -588,14 +518,164 @@
           "start": 0
         },
         {
-          "appeal": "culture",
-          "dimension": "cul_persuading",
-          "end": 27,
+          "appeal": "ethos",
+          "dimension": "eth_goodwill",
+          "end": 130,
           "note": "Synthetic highlight 2.",
           "polarity": "strength",
-          "quote": "Welcome   to Nexora Solutions",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
           "source": "ai",
-          "start": 0
+          "start": 29
+        },
+        {
+          "appeal": "ethos",
+          "dimension": "eth_borrowed",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_story",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "pathos",
+          "dimension": "pat_identity",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_structure",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "logos",
+          "dimension": "log_comparison",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_efficacy",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "kairos",
+          "dimension": "kai_integrity",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_prepon",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "lenses",
+          "dimension": "lens_dialogue",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_clarity",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "craft",
+          "dimension": "craft_cohesion",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_knowledge",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "audience",
+          "dimension": "aud_inclusivity",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_persuading",
+          "end": 130,
+          "note": "Synthetic highlight 2.",
+          "polarity": "strength",
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly.",
+          "source": "ai",
+          "start": 29
+        },
+        {
+          "appeal": "culture",
+          "dimension": "cul_formality",
+          "end": 76,
+          "note": "Synthetic highlight 3.",
+          "polarity": "weakness",
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says",
+          "source": "ai",
+          "start": 29
         },
         {
           "appeal": "ethos",
@@ -3599,13 +3679,13 @@
           "dimension": "aud_knowledge",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "aud_inclusivity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "aud_suitability",
@@ -3712,13 +3792,13 @@
           "dimension": "craft_clarity",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "craft_cohesion",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "craft_tone",
@@ -3845,13 +3925,13 @@
           "dimension": "cul_persuading",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "cul_formality",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "cul_trust",
@@ -3969,13 +4049,13 @@
           "dimension": "eth_goodwill",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "eth_borrowed",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "eth_identification",
@@ -4641,13 +4721,13 @@
           "dimension": "kai_efficacy",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "kai_integrity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "kai_call",
@@ -4750,13 +4830,13 @@
           "dimension": "lens_prepon",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "lens_dialogue",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "lens_telos",
@@ -4863,13 +4943,13 @@
           "dimension": "log_structure",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "log_comparison",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "log_objections",
@@ -4976,13 +5056,13 @@
           "dimension": "pat_story",
           "note": "Synthetic highlight 2.",
           "polarity": "neutral",
-          "quote": "Welcome   to Nexora Solutions"
+          "quote": "Nexora   is a revolutionary, world-class platform that empowers businesses to leverage data seamlessly."
         },
         {
           "dimension": "pat_identity",
           "note": "Synthetic highlight 3.",
           "polarity": "weakness",
-          "quote": "Welcome to Nexora Solutions and then something the text never says"
+          "quote": "Nexora is a revolutionary, world-class platform and then something the text never says"
         },
         {
           "dimension": "pat_empathy",
