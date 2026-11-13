@@ -125,7 +125,7 @@ describe('the specifier matcher', () => {
     // Reading the file is how the recorder and data-files.test.ts are meant to do it.
     ["readFileSync('prototype/howdoesthisland_model.json');", 'tests/unit/x.test.ts'],
     ["import { z } from 'zod';", 'lib/app/x.ts'],
-    ["import { x } from '@/lib/app/prototype-notes';", 'lib/app/x.ts'],
+    ["import { x } from '@/lib/utils/prototype-notes';", 'lib/app/x.ts'],
     ["import { x } from './prototypes/thing';", 'lib/app/x.ts'],
     // A path that goes into prototype/ and back out again does not reach it.
     ["import { x } from '../prototype/../lib/app/x';", 'scripts/x.ts'],
