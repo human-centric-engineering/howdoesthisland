@@ -8,6 +8,7 @@
  * the first definition (`lib/app/frameworks/howdoesthisland/definition.ts`).
  */
 import type { z } from 'zod';
+import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 
 /** A JSON object, as parsed from a framework file. */
 export type JsonObject = { [key: string]: unknown };
@@ -61,6 +62,12 @@ export interface FrameworkDefinition {
   references: readonly ReferenceSpec[];
   /** Reads the version and schema version from the file's own metadata. */
   versionOf: (document: JsonObject) => { version: string; schemaVersion: string };
+  /**
+   * The engine that scores a text against a version of this framework, given
+   * that version's materialised model (`materialise()`). Throws when the model
+   * lacks something the engine reads.
+   */
+  createEngine: (model: JsonObject) => FrameworkEngine;
 }
 
 /** One record as it is stored: a row of `app_framework_node`, without ids. */

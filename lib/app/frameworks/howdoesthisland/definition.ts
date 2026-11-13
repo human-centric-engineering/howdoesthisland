@@ -8,6 +8,9 @@
  * also checks. A model with any reference that does not resolve is refused.
  */
 import { isJsonObject } from '@/lib/app/frameworks/codec';
+import { isCultureEnabled } from '@/lib/app/frameworks/culture';
+import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
+import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import {
   SECTION_KIND,
   type CollectionSpec,
@@ -17,7 +20,7 @@ import {
 } from '@/lib/app/frameworks/types';
 import * as s from '@/lib/app/frameworks/howdoesthisland/schemas';
 
-export const HOWDOESTHISLAND_SLUG = 'howdoesthisland';
+export { HOWDOESTHISLAND_SLUG };
 
 const collections: CollectionSpec[] = [
   { kind: 'appeal', path: ['appeals'], schema: s.appealSchema },
@@ -305,4 +308,7 @@ export const howDoesThisLand: FrameworkDefinition = {
     const meta = isJsonObject(document.meta) ? document.meta : {};
     return { version: String(meta.version), schemaVersion: String(meta.schema_version) };
   },
+  // The culture switch is read here, when the engine is made, so one engine
+  // answers the same way for its whole life.
+  createEngine: (model) => createHowDoesThisLandEngine(model, { culture: isCultureEnabled() }),
 };

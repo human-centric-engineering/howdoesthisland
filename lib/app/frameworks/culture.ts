@@ -8,7 +8,7 @@
  *
  * Read per call, not at module load, so a test can flip it.
  */
-import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/definition';
+import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import type { FrameworkDefinition } from '@/lib/app/frameworks/types';
 import { env } from '@/lib/env';
 
