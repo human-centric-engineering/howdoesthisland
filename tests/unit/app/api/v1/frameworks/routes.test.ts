@@ -219,6 +219,14 @@ describe('GET /api/v1/frameworks/{slug}/versions/{version}', () => {
     expect((await body(await version('0.5.1'))).meta).not.toHaveProperty('omitted');
   });
 
+  it('changes its ETag when the response shape constant moves', async () => {
+    const service = await import('@/lib/app/frameworks/api/service');
+    const resolved = await service.resolveVersion(SLUG, '0.5.1');
+    expect(service.versionETagSource(resolved)).toMatchObject({
+      shape: service.VERSION_RESPONSE_SHAPE,
+    });
+  });
+
   it('304s on a matching If-None-Match, and the switch changes the ETag', async () => {
     const etag = (await version('0.5.1')).headers.get('ETag') ?? '';
     expect((await version('0.5.1', { 'If-None-Match': etag })).status).toBe(304);
@@ -246,13 +254,15 @@ describe('GET /api/v1/frameworks/{slug}/versions/{version}', () => {
     expect((await body(res)).error?.code).toBe('FRAMEWORK_NOT_FOUND');
   });
 
-  it('keeps serving a retired version, marked retired', async () => {
+  it('keeps serving a retired version, marked retired, but never as the latest', async () => {
     const stored = [...repo().versions.values()].find((v) => v.version === '0.5.1');
     if (!stored) throw new Error('0.5.1 not imported');
     stored.status = 'RETIRED';
     try {
       const { meta } = await body(await version('0.5.1'));
       expect(meta?.status).toBe('retired');
+      const fw = await body(await frameworkRoute(get(`/${SLUG}`), ctx({ slug: SLUG })));
+      expect(fw.data).toMatchObject({ latestVersion: null });
     } finally {
       stored.status = 'PUBLISHED';
     }

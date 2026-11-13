@@ -76,8 +76,11 @@ export interface FrameworkSummary {
   slug: string;
   name: string;
   summary: string;
-  /** The newest published version. */
-  latestVersion: string;
+  /**
+   * The most recently published version that is not retired: the one to use
+   * for new work. Null when every version has been retired.
+   */
+  latestVersion: string | null;
   versions: VersionSummary[];
 }
 
@@ -101,7 +104,7 @@ function summarise(fw: ServedFramework): FrameworkSummary {
     slug: fw.slug,
     name: fw.name,
     summary: fw.summary,
-    latestVersion: fw.versions[0].version,
+    latestVersion: fw.versions.find((v) => v.status === 'PUBLISHED')?.version ?? null,
     versions: fw.versions.map(summariseVersion),
   };
 }
@@ -164,14 +167,27 @@ export async function resolveVersion(
   return { def, framework, version: found, omitted: withheldSections(def) };
 }
 
+/** The shape of a version response, for its ETag. See {@link versionETagSource}. */
+export const VERSION_RESPONSE_SHAPE = 1;
+
 /**
  * What a version response's ETag is computed from. A published version's
  * records never change, so its id and checksum stand for them; the status
- * and the withheld sections are the parts of the response that can.
+ * and the withheld sections are the parts of the response that can, and so
+ * is the code that shapes it: bump {@link VERSION_RESPONSE_SHAPE} whenever a
+ * change here, in `compose()` or in a definition alters what a version's
+ * response contains, or callers holding an old ETag keep their old body.
  */
 export function versionETagSource(resolved: ResolvedVersion, kind?: string): unknown {
   const { id, status, sourceSha256 } = resolved.version;
-  return { id, status, sourceSha256, omitted: resolved.omitted, kind: kind ?? null };
+  return {
+    shape: VERSION_RESPONSE_SHAPE,
+    id,
+    status,
+    sourceSha256,
+    omitted: resolved.omitted,
+    kind: kind ?? null,
+  };
 }
 
 function versionMeta(resolved: ResolvedVersion): Record<string, unknown> {

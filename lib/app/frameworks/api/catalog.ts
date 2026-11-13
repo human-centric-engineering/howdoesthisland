@@ -27,7 +27,7 @@ export interface ServedFramework {
   slug: string;
   name: string;
   summary: string;
-  /** Newest first. Never empty. */
+  /** Most recently published first. Never empty. */
   versions: ServedVersion[];
 }
 
@@ -46,7 +46,10 @@ const frameworkSelect = {
   summary: true,
   versions: {
     where: SERVED,
-    orderBy: [{ publishedAt: 'desc' as const }, { createdAt: 'desc' as const }],
+    orderBy: [
+      { publishedAt: { sort: 'desc' as const, nulls: 'last' as const } },
+      { createdAt: 'desc' as const },
+    ],
     select: {
       id: true,
       version: true,

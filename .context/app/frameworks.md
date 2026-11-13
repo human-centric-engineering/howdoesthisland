@@ -79,22 +79,25 @@ Four shared-config tables (no `orgId`), registered as `globalConfig`:
 
 ## Reading it through the API
 
-Public: no sign-in, in Sunrise's envelope, under the `/api/v1` section rate cap (keyed
-on IP when anonymous).
+Public: no sign-in, in Sunrise's envelope. Rate limited by the `/api/v1` catch-all rule,
+which keys on the session user and, for an anonymous caller, falls back to the IP.
 
 | Route                                                     | Serves                                                                                                    |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/frameworks`                                  | Every framework with a published version, and those versions, newest first.                               |
+| `GET /api/v1/frameworks`                                  | Every framework with a published version, and those versions, most recently published first.              |
 | `GET /api/v1/frameworks/{slug}`                           | One framework, its versions, and `kinds`: what the route below serves.                                    |
 | `GET /api/v1/frameworks/{slug}/versions/{version}`        | The whole model, materialised from the records. `meta.sourceSha256` is the imported file's checksum.      |
 | `GET /api/v1/frameworks/{slug}/versions/{version}/{kind}` | One kind's records (`red_flag`, `lever`, …), in model order. A nested kind's `meta.parents` maps parents. |
 
 - **A draft is not found.** A retired version is still served, marked `retired`, since
-  assessments made with it cite it.
+  assessments made with it cite it. `latestVersion` is the most recently published
+  version that is not retired (by publish time, not version number), or `null`.
 - **404s carry their own code**: `FRAMEWORK_NOT_FOUND`, `FRAMEWORK_VERSION_NOT_FOUND`,
   `FRAMEWORK_KIND_NOT_FOUND`.
 - **Every response has an ETag**, and a matching `If-None-Match` gets a 304. A version's
-  ETag comes from its id, checksum and status, so a 304 never materialises the model.
+  ETag comes from its id, checksum, status and `VERSION_RESPONSE_SHAPE`, so a 304 never
+  materialises the model. Bump that constant when a change alters what a version's
+  response contains.
 - **The checksum is of the file, not the response.** The response is the materialised
   model, so compare canonically: with sorted keys, its hash equals the committed file's
   (a route test proves it). This holds only with the culture switch on.
