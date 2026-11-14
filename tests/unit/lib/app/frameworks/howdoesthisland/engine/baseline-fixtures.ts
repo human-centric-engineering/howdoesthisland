@@ -13,6 +13,7 @@ import type {
   JudgeOutputs,
 } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 import { sortKeys } from '@/scripts/app/baseline/canonical';
+import { decodePrompt } from '@/scripts/app/baseline/prompts';
 
 export const BASELINE_DIR = 'tests/fixtures/app/engine-baseline';
 export const MODEL_FILE = 'lib/app/frameworks/howdoesthisland/data/model-0.5.1.json';
@@ -111,6 +112,27 @@ export function loadCases(): BaselineCase[] {
     file,
     ...caseSchema.parse(JSON.parse(readFileSync(path.join(BASELINE_DIR, file), 'utf8'))),
   }));
+}
+
+const promptTableSchema = z.object({
+  lines: z.array(z.string()),
+  prompts: z.record(z.string(), z.record(z.string(), z.string())),
+});
+
+/**
+ * The prototype's judge prompts (t-18): case file → slot → prompt. Every case
+ * in the manifest has one per slot of the model's `judges`.
+ */
+export function loadPrompts(): Map<string, Map<string, string>> {
+  const table = promptTableSchema.parse(
+    JSON.parse(readFileSync(path.join(BASELINE_DIR, 'prompts.json'), 'utf8'))
+  );
+  return new Map(
+    Object.entries(table.prompts).map(([file, slots]) => [
+      file,
+      new Map(Object.entries(slots).map(([slot, ix]) => [slot, decodePrompt(table, ix)])),
+    ])
+  );
 }
 
 /** A value as the fixtures hold it: the canonical JSON rebuild (t-12's terms). */

@@ -9,8 +9,8 @@
  * would still pass. The same goes for the recorder's own files, which decide
  * the corpus, the synthetic judge outputs and the bytes. So this compares the
  * manifest's sha256 values with all of those files as they are now, and holds
- * the fixture directory to exactly the manifest's case list, with every file
- * in canonical form.
+ * the fixture directory to exactly the manifest's case list and its prompts
+ * file (t-18), with every file in canonical form.
  *
  * Reads `prototype/` off disk (allowed; see prototype-guard.test.ts), never
  * imports it. Registered in `appAlwaysRunTests` (`lib/app/ci.ts`): nothing
@@ -31,6 +31,7 @@ const manifestSchema = z.object({
   sources: z.record(z.string(), z.object({ path: z.string(), sha256: z.string() })),
   recorder: z.record(z.string(), z.string()),
   cases: z.array(z.string()).min(1),
+  prompts: z.literal('prompts.json'),
 });
 const manifest = manifestSchema.parse(
   JSON.parse(readFileSync(path.join(DIR, 'manifest.json'), 'utf8'))
@@ -58,15 +59,15 @@ describe('the engine baseline', () => {
     }
   });
 
-  it('holds exactly the manifest and the case files it lists', () => {
+  it('holds exactly the manifest, the case files it lists and the prompts file', () => {
     const onDisk = readdirSync(DIR, { recursive: true, withFileTypes: true })
       .filter((e) => e.isFile() && visible(e.name))
       .map((e) => path.relative(DIR, path.join(e.parentPath, e.name)).split(path.sep).join('/'));
-    expect(onDisk.sort()).toEqual([...manifest.cases, 'manifest.json'].sort());
+    expect(onDisk.sort()).toEqual([...manifest.cases, manifest.prompts, 'manifest.json'].sort());
   });
 
   it('keeps every file in canonical form', () => {
-    for (const rel of [...manifest.cases, 'manifest.json']) {
+    for (const rel of [...manifest.cases, manifest.prompts, 'manifest.json']) {
       const text = readFileSync(path.join(DIR, rel), 'utf8');
       expect(canonicalJson(JSON.parse(text)), `${rel} is not canonical JSON`).toBe(text);
     }
