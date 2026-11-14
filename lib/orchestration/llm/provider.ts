@@ -255,6 +255,23 @@ export class ProviderError extends Error {
 export const PROVIDER_NOT_PERMITTED = 'provider_not_permitted';
 
 /**
+ * The code a refusal by the LLM privacy stage carries (§127,
+ * `PrivacyRefusedError` in `privacy-stage.ts`). A request fault: the same
+ * policy refuses on a retry and at every other provider, and it says nothing
+ * about the provider's health.
+ */
+export const PRIVACY_REFUSED = 'privacy_refused';
+
+/**
+ * The code a `block`-mode refusal carries (§127): the call contained personal
+ * data and the policy says to send none. Apart from {@link PRIVACY_REFUSED}
+ * because the remedy differs: the user can remove the details and try again,
+ * where every other refusal needs an administrator. A request fault for the
+ * same reasons.
+ */
+export const PRIVACY_BLOCKED = 'privacy_blocked';
+
+/**
  * The codes a monthly spend-cap refusal carries (§110 t-788): the call-time
  * gate's `SpendCapExceededError` (`spend-caps.ts`), and the chat handler's own
  * refusal before a turn starts, which uses the same words for the same cap.
@@ -297,6 +314,10 @@ export const SPEND_CAP_CODES = {
 // about the provider's health, so it must never reach a circuit breaker — at
 // `multi`, one org's refusal would otherwise open the circuit for every org.
 //
+// `privacy_refused` and `privacy_blocked` are the privacy stage's refusals
+// (§127): its policy gives the same answer on a retry and at every provider,
+// and it is not about the provider's health either.
+//
 // The spend-cap codes are the same kind of answer (§110 t-788): a cap that has
 // been reached stays reached on a retry, and every other paid provider is held
 // to the same cap. Nor is a reached cap anything to do with the provider's
@@ -308,6 +329,8 @@ export const SPEND_CAP_CODES = {
 const REQUEST_FAULT_CODES = new Set<string>([
   'truncated_no_output',
   PROVIDER_NOT_PERMITTED,
+  PRIVACY_REFUSED,
+  PRIVACY_BLOCKED,
   ...Object.values(SPEND_CAP_CODES),
 ]);
 

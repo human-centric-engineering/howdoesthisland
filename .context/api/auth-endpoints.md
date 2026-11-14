@@ -242,7 +242,8 @@ POST /api/v1/users/invite
   install org). Must exist and be `ACTIVE`; the authorization policy is asked
   whether the caller may administer it (§106)
 - `orgRole`: Optional, one of `OWNER`, `ADMIN`, `MEMBER` (default: `MEMBER`,
-  or `OWNER` for the first member of a new org)
+  or `OWNER` when the invitee is the org's first member who isn't platform
+  staff)
 
 **Response** (201 Created):
 
@@ -292,6 +293,16 @@ POST /api/v1/users/invite
 unless the body sends either `orgId` or `orgRole`, in which case the body's
 pair replaces both; the platform `role` is always the body's.
 
+**An address that already has an account** (#1199, t-1008) may be invited
+into an org other than the install org at the default `USER` role, which is
+how the admin invitations table re-sends an invitation the org route wrote
+(`POST /api/v1/orgs/[id]/invitations`). It is stored and sent as for a new
+address, and the email asks them to sign in and accept
+(`POST /api/v1/invitations/accept`). The answer is the same whether or not the
+account exists. Any other invitation to such an address is a platform one (a
+platform role, or the install org), which an existing account cannot redeem,
+and is refused with `409 EMAIL_TAKEN`.
+
 **Error Responses**:
 
 - **401 Unauthorized**: No valid session
@@ -299,14 +310,28 @@ pair replaces both; the platform `role` is always the body's.
   named org
 - **400 Validation Error**: Invalid request body, or the named (or pending)
   org does not exist / is not active
-- **409 Conflict**: User already exists with this email
+- **409 Conflict** (`EMAIL_TAKEN`): The address has an account and this is a
+  platform invitation (a platform role, or the install org)
+- **409 Conflict** (`ALREADY_MEMBER`): The address's account is already a
+  member of the named org
+- **403 Forbidden** (`OWNER_STANDING`): An `OWNER` org invitation, or a
+  resend of one, from a caller who is not a platform admin (owner standing in
+  the body's org cannot be read here; the org route checks it in its URL's)
+- **409 Conflict** (`CONFLICT`): The other kind of invitation (platform or
+  org) is pending for the address, or, for an org invitation, a pending one
+  cannot be read
 
 **Flow**:
 
-1. Check if user already exists (409 if exists)
-2. Check if invitation already sent (return existing if valid, unless resending)
-3. Resolve the org — the body's, else the pending invitation's — and check it
-   exists, is active, and the policy allows this caller to invite into it
+1. Find the pending invitation in the named org, and resolve the target org —
+   the body's, else the pending invitation's
+2. Check the org exists, is active, and the policy allows this caller to
+   invite into it — before anything answers about the address's membership
+   of it
+3. If the address has an account: a platform invitation is a 409
+   `EMAIL_TAKEN`, a member of the target org a 409 `ALREADY_MEMBER`; an org
+   invitation goes on, its email asking them to sign in. Then check if an
+   invitation was already sent (return existing if valid, unless resending)
 4. Generate secure token (SHA-256 hashed)
 5. Store invitation in `Verification` table with metadata
 6. Send invitation email
@@ -338,15 +363,31 @@ GET /api/v1/invitations/metadata?token={token}&email={email}
   "success": true,
   "data": {
     "name": "Jane Doe",
-    "role": "USER"
+    "role": "USER",
+    "orgName": "Acme",
+    "accountExists": false,
+    "accountVerified": false,
+    "newAccountOnly": false
   }
 }
 ```
 
+`orgName` is the org the invitation joins (`null` for none). `accountExists`
+tells the accept page which way the invitation is taken: `false`, set a
+password here; `true`, sign in and accept through
+`POST /api/v1/invitations/accept` (#1199, see
+[org endpoints](./org-endpoints.md#accept-or-decline-an-invitation)).
+`newAccountOnly` marks a platform invitation (a platform role, or the install
+org), which only creates an account; with `accountExists` the page says it
+cannot be used. `accountVerified` is whether that account's address is
+verified; accepting needs it, so an unverified one is told to verify on sign-in
+first. The `email` is trimmed and lowercased, as stored.
+
 **Error Responses**:
 
-- **400 Validation Error**: Invalid or expired token
+- **400 Validation Error**: Invalid token
 - **404 Not Found**: Invitation not found
+- **410 Gone** (`INVITATION_EXPIRED`): The invitation has expired
 
 **Usage**: Pre-fill user details in acceptance form before user sets password.
 
@@ -390,6 +431,8 @@ POST /api/auth/accept-invite
 
 - **400 Validation Error**: Invalid token, passwords don't match, etc.
 - **404 Not Found**: Invitation not found
+- **409 Conflict** (`EMAIL_TAKEN`): The address already has an account; sign in
+  and accept through `POST /api/v1/invitations/accept` (#1199)
 - **500 Internal Error**: User creation failed
 
 **Flow**:
@@ -399,7 +442,8 @@ POST /api/auth/accept-invite
 3. Create user via better-auth signup (stable User ID)
 4. Update role if non-default
 5. Mark email as verified
-6. Delete invitation token
+6. Delete the redeemed invitation (only this token's; the address's
+   invitations into other orgs stay pending)
 7. Send welcome email (non-blocking)
 8. Return success (user must log in)
 

@@ -97,6 +97,42 @@ describe('getUserFacingError', () => {
     expect(result.action?.toLowerCase()).toContain('new conversation');
   });
 
+  it('tells the reader a privacy_blocked turn can be asked again in the same conversation (§127 t-1014)', () => {
+    // The refused turn is left out of later history, so a new conversation is
+    // no longer the remedy.
+    const blocked = getUserFacingError('privacy_blocked');
+    expect(blocked.action).toContain('this conversation');
+    expect(blocked.action).not.toMatch(/new conversation/i);
+    expect(blocked.message).not.toMatch(/conversation contains/i);
+  });
+
+  it('tells the reader an earlier part of the conversation was left out, and that asking again works (t-1017)', () => {
+    const earlier = getUserFacingError('privacy_blocked_earlier');
+    expect(earlier.message).toMatch(/earlier messages in this conversation/i);
+    expect(earlier.action).toMatch(/^Ask again/);
+    // The assistant has forgotten that part (owner ruling 2026-11-12), and says so.
+    expect(earlier.action).toMatch(/may not remember/);
+    expect(earlier.action).not.toMatch(/administrator|new conversation/i);
+  });
+
+  it('sends the reader to an administrator when the details are in the setup (t-1017)', () => {
+    const setup = getUserFacingError('privacy_blocked_setup');
+    expect(setup.message).toMatch(/assistant's setup/);
+    expect(setup.action).toMatch(/administrator/);
+    expect(setup.action).toMatch(/Rephrasing won't help/);
+    // A memory is its own case now (t-1018), with a remedy the reader has.
+    expect(setup.message).not.toMatch(/remembers/i);
+  });
+
+  it('tells the reader a memory holding details was forgotten, and that asking again works (t-1018)', () => {
+    const memory = getUserFacingError('privacy_blocked_memory');
+    expect(memory.message).toMatch(/remembered about you/);
+    expect(memory.message).toMatch(/has now forgotten it/);
+    expect(memory.action).toMatch(/^Ask again/);
+    // Nobody can delete a memory by hand, so an administrator is no remedy.
+    expect(memory.action).not.toMatch(/administrator|new conversation/i);
+  });
+
   it('returns distinct messages for input_blocked vs output_blocked', () => {
     const input = getUserFacingError('input_blocked');
     const output = getUserFacingError('output_blocked');

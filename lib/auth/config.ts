@@ -27,7 +27,7 @@ import {
   type SignupRecord,
 } from '@/lib/tenancy/membership';
 import { ORG_ROLES } from '@/lib/tenancy/roles';
-import { uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
+import { resolvedSignupMemberships, uninvitedSignupAdmission } from '@/lib/tenancy/signup-org'; // FORK (t-6)
 import { isMultiTenant } from '@/lib/tenancy/context';
 import {
   getPendingSignup,
@@ -38,8 +38,8 @@ import {
 } from '@/lib/auth/pending-signup';
 import {
   validateInvitationToken,
-  deleteInvitationToken,
-  getValidInvitation,
+  findInvitationByToken,
+  consumeInvitation,
 } from '@/lib/utils/invitation-token';
 import { DEFAULT_USER_PREFERENCES } from '@/lib/validations/user';
 import {
@@ -193,7 +193,12 @@ async function recordPendingMembership(
 
   let memberships;
   try {
-    memberships = await membershipsForNewUser(user, admission);
+    // FORK (t-6, 0.19.0): a resolved signup's grantor is the resolver, so it
+    // can still take first ownership of its workspace (#1235).
+    memberships =
+      admission && !invitation
+        ? await resolvedSignupMemberships(user, admission)
+        : await membershipsForNewUser(user, admission);
   } catch (error) {
     logger.error('Failed to decide the org membership for a new user', error, {
       email: user.email,
@@ -318,18 +323,27 @@ export async function userCreateBeforeHook(
         const isValidToken = await validateInvitationToken(invitationEmail, invitationToken);
 
         if (isValidToken) {
-          // Record the authorisation itself, not just its side effects. A valid
-          // token with no parseable invitation record falls through to the
-          // bootstrap below, and the invite_only gate must still treat that
-          // account as invited.
-          oauthInvitationAccepted = true;
-
-          const invitation = await getValidInvitation(invitationEmail);
+          // This token's own row: the address may hold invitations into
+          // several orgs (#1199), so neither the newest row nor all of them.
+          const found = await findInvitationByToken(invitationEmail, invitationToken);
 
           // Delete token NOW to prevent race: token must be consumed before user
           // creation, so a concurrent OAuth signup cannot reuse the same single-use token.
-          await deleteInvitationToken(invitationEmail);
-          logger.info('OAuth invitation token consumed', { email: invitationEmail });
+          // Only the call that deleted the row is authorised by it: a signup
+          // that lost the race is not invited, and the invite_only gate below
+          // treats it as such.
+          const consumed = found ? await consumeInvitation(found.id) : false;
+
+          // Record the authorisation itself, not just its side effects. A
+          // consumed token with no parseable invitation record falls through
+          // to the bootstrap below, and the invite_only gate must still treat
+          // that account as invited.
+          oauthInvitationAccepted = consumed;
+          const invitation = consumed && found?.metadata ? { metadata: found.metadata } : null;
+          logger.info('OAuth invitation token consumed', {
+            email: invitationEmail,
+            consumed,
+          });
 
           // When a valid invitation record exists, honour its explicit role
           // (defaulting to USER) and return immediately. This is an invited

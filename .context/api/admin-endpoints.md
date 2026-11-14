@@ -59,6 +59,43 @@ GET /api/v1/admin/stats
 - **401 Unauthorized**: No valid session
 - **403 Forbidden**: User does not have ADMIN role
 
+## Get Config Health
+
+✅ **Implemented in:** `app/api/v1/admin/config-health/route.ts`
+
+**Purpose**: Say which optional settings that quietly switch a feature off are missing. Presence only: no value is ever returned. See [`.context/admin/config-health.md`](../admin/config-health.md).
+
+```
+GET /api/v1/admin/config-health
+```
+
+**Authentication**: Required (platform admin; no org tier)
+
+**Response** (200 OK):
+
+```json
+{
+  "success": true,
+  "data": {
+    "environment": "production",
+    "platform": "vercel",
+    "checks": [
+      {
+        "key": "email",
+        "label": "Transactional email",
+        "severity": "warning",
+        "description": "Email is not configured, so invitations, email verification, and report-ready notifications will not be sent.",
+        "remediation": "Set RESEND_API_KEY and EMAIL_FROM.",
+        "docsPath": ".context/email/overview.md",
+        "present": false,
+        "applicable": true
+      }
+    ],
+    "summary": { "critical": 0, "warning": 1, "info": 0, "ok": 2 }
+  }
+}
+```
+
 ## Get Application Logs
 
 ✅ **Implemented in:** `app/api/v1/admin/logs/route.ts`
@@ -316,6 +353,8 @@ GET /api/v1/admin/invitations?page=1&limit=20&search=john&sortBy=invitedAt&sortO
   "data": [
     {
       "email": "jane@example.com",
+      "orgId": "cmorg000000000000000acme1",
+      "orgRole": null,
       "name": "Jane Doe",
       "role": "USER",
       "invitedAt": "2026-01-10T14:30:00.000Z",
@@ -334,6 +373,9 @@ GET /api/v1/admin/invitations?page=1&limit=20&search=john&sortBy=invitedAt&sortO
 **Invitation Fields**:
 
 - `email`: Invitee's email address
+- `orgId`: The org it joins, `null` for the install org. An address can hold
+  one pending invitation per org (#1199), so a row is `(email, orgId)`
+- `orgRole`: The org role it grants, when it names one
 - `name`: Invitee's name
 - `role`: Role assigned to the invitation (`USER`, `ADMIN`)
 - `invitedAt`: When the invitation was created
@@ -352,6 +394,11 @@ DELETE /api/v1/admin/invitations/:email
 **Authentication**: Required (ADMIN role)
 
 **URL Parameter**: `email` - URL-encoded email address of the invitation to cancel
+
+**Query Parameter** (optional): `orgId` - an org id, or `install` for the
+install org. Cancels only that org's invitation for the address (#1199); the
+admin table sends it, so revoking one row leaves the address's other orgs'
+invitations. Without it, every invitation for the address is cancelled.
 
 **Example**:
 

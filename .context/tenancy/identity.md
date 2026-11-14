@@ -18,22 +18,24 @@ anti-pattern below.
 
 ## Quick Reference
 
-| Need                              | Use                                                               |
-| --------------------------------- | ----------------------------------------------------------------- |
-| The models                        | `prisma/schema/tenancy.prisma` — `Org`, `OrgMembership`           |
-| The install org's fixed id / slug | `INSTALL_ORG_ID`, `INSTALL_ORG_SLUG` — `lib/tenancy/constants.ts` |
-| The role vocabulary (client-safe) | `ORG_ROLES`, `orgAdministers()` — `lib/tenancy/roles.ts`          |
-| Make a user a member              | `ensureMembership()` — `lib/tenancy/membership.ts`                |
-| The role a new user gets          | `initialMembershipFor()` / `membershipForNewUser()` — same module |
-| The org a new session starts in   | `activeOrgForSession()` — same module                             |
-| Change the org a session acts in  | `POST /api/v1/orgs/switch` — `app/api/v1/orgs/switch/route.ts`    |
-| Invite someone into an org        | `POST /api/v1/users/invite` with `orgId` (+ `orgRole`) — platform |
-| …as that org's OWNER/ADMIN        | `POST /api/v1/orgs/[id]/invitations` — `checkInvitationInto()`    |
-| Create / suspend / erase an org   | `/api/v1/admin/orgs` — `lib/tenancy/lifecycle.ts`, `erase-org.ts` |
-| Manage an org's members           | `/api/v1/orgs/[id]/members` — `lib/tenancy/lifecycle.ts`          |
-| Give an org its data              | `exportOrgData()` — `lib/privacy/export-org.ts`                   |
-| Prove it against a real database  | `npm run smoke:tenancy`                                           |
-| The migration                     | `prisma/migrations/20260917120000_org_identity/`                  |
+| Need                              | Use                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| The models                        | `prisma/schema/tenancy.prisma` — `Org`, `OrgMembership`                |
+| The install org's fixed id / slug | `INSTALL_ORG_ID`, `INSTALL_ORG_SLUG` — `lib/tenancy/constants.ts`      |
+| The role vocabulary (client-safe) | `ORG_ROLES`, `orgAdministers()` — `lib/tenancy/roles.ts`               |
+| Make a user a member              | `ensureMembership()` — `lib/tenancy/membership.ts`                     |
+| The role a new user gets          | `initialMembershipFor()` / `membershipForNewUser()` — same module      |
+| The org a new session starts in   | `activeOrgForSession()` — same module                                  |
+| Change the org a session acts in  | `POST /api/v1/orgs/switch` — `app/api/v1/orgs/switch/route.ts`         |
+| Invite someone into an org        | `POST /api/v1/users/invite` with `orgId` (+ `orgRole`) — platform      |
+| …as that org's OWNER/ADMIN        | `POST /api/v1/orgs/[id]/invitations` — `checkInvitationInto()`         |
+| Accept as an existing account     | `POST /api/v1/invitations/accept` — `lib/tenancy/accept-invitation.ts` |
+| Decline an invitation             | `POST /api/v1/invitations/decline` — same module                       |
+| Create / suspend / erase an org   | `/api/v1/admin/orgs` — `lib/tenancy/lifecycle.ts`, `erase-org.ts`      |
+| Manage an org's members           | `/api/v1/orgs/[id]/members` — `lib/tenancy/lifecycle.ts`               |
+| Give an org its data              | `exportOrgData()` — `lib/privacy/export-org.ts`                        |
+| Prove it against a real database  | `npm run smoke:tenancy`                                                |
+| The migration                     | `prisma/migrations/20260917120000_org_identity/`                       |
 
 ### Anti-Pattern
 
@@ -71,6 +73,8 @@ model Org {
   //   the four credential relations (see "Credentials") and the 38 the
   //   row-isolation feature added. The relation, not a list, is what lets
   //   eraseOrg() cascade — see "The lifecycle".
+  // Then the framework zone and the app zone, empty in Sunrise: a fork's
+  // back-relations go below its tier's marker (#859).
 }
 
 model OrgMembership {
@@ -99,7 +103,7 @@ Three things about the shape are decisions, not defaults:
   fork's product tiers sit beneath the org). The database refuses a fourth
   value, and `tests/unit/lib/tenancy/roles.test.ts` asserts the enum and
   `ORG_ROLES` agree.
-- **`settings` is one JSON column with four platform-owned keys**, and the
+- **`settings` is one JSON column with five platform-owned keys**, and the
   rest of it is a fork's. `retention` (§108 t-713) holds the retention
   windows this org keeps instead of the platform's, described in
   [Data Retention](../orchestration/retention.md#per-org-windows) and written
@@ -119,6 +123,12 @@ Three things about the shape are decisions, not defaults:
   cap of its own (see
   [Costs](../admin/orchestration-costs.md#per-org-monthly-budget-cap) and
   [Rate limiting](../security/rate-limiting.md#per-org-request-cap)).
+  `privacy` (§127 t-1010) holds the org's LLM privacy floor (`minimumMode`)
+  and the names it always protects (`protectedTerms`), written through
+  `PUT /api/v1/admin/orgs/[id]/privacy`. Like `providers`, it is read whole
+  and fails closed: an unreadable slice refuses the org's every AI call until
+  it is saved again (see
+  [LLM privacy layer](../privacy/llm-privacy-layer.md#what-is-built-t-1010)).
   `lib/tenancy/org-settings.ts` is the whole of what the platform reads and
   writes there. It **replaces its own slice rather than the object**, in a
   serializable read-modify-write, so a fork's keys, and the other platform
@@ -170,8 +180,8 @@ and refuses at `multi` ([context.md](./context.md)). It is deliberately **not** 
 contributor: that registry is the fork's seam and runs last; this is a core
 invariant and runs first.
 
-**When deciding fails.** The decision reads the invited org's member count
-(for the first-member-is-OWNER bootstrap), and a failure there is logged at
+**When deciding fails.** The decision reads the invited org's non-staff
+member count (for the first-owner bootstrap), and a failure there is logged at
 `error` and never blocks the signup. The before hook then records
 `undecidedMembershipsForNewUser(user, invitation)`: the invitation's org with
 the role it names, default `MEMBER`, plus the install-org floor at `single`,
@@ -317,8 +327,31 @@ membership would let any customer admin make outsiders members of the
 vendor's org. And suspending a customer org is meant to lock its members
 out.
 
-The last row is the **per-org bootstrap**: an org nobody owns is one nobody
-can administer, so its first member owns it. It sits beside the install-scoped
+The last row is the **per-org bootstrap** (`takesFirstOwnership`): an org
+nobody owns is one nobody can administer, so **an org's first member who isn't
+platform staff** owns it. Staff are a platform `ADMIN` (by the account's role
+or by the role the invitation grants) or a SERVICE account.
+
+- **Staff in the org don't count** (#1178). A vendor's staff can be in an org
+  as `ADMIN`, preparing it, before its first real person arrives, and that
+  person still becomes its owner.
+- **Staff never take it.** An org whose only owner is the vendor is not one
+  its own people can administer. Staff who should hold `OWNER` are given it
+  explicitly.
+- **It is not "no `OWNER` yet".** An org can lose its last owner to an erasure
+  and keep its ADMINs, and an ADMIN may add members or invite with no role.
+  Under "no owner yet" that ADMIN would pick the next owner, their own second
+  account included, without the owner standing every explicit `OWNER` grant
+  needs. Any non-staff member closes the bootstrap, and a platform admin
+  repairs such an org.
+- **Its grantor needs owner standing**, as for an explicit `OWNER`: the
+  `addMember` actor, or an invitation's issuer (`invitedBy`) **when it is
+  accepted** (`hasOwnerStandingIn`). Otherwise an ADMIN could invite a second
+  account of theirs, then remove every other non-staff member and leave, and
+  the count would be 0 again by acceptance.
+
+Whether an invitation's explicit `orgRole` should win over the bootstrap is a
+separate question (#1156). The bootstrap sits beside the install-scoped
 `AuthBootstrap` (first human on a fresh database → platform `ADMIN`) and never
 replaces it: the install org's owner is decided by the platform role, and on a
 fresh database its first member is the seeded SERVICE account, which must
@@ -342,13 +375,20 @@ an invitation into the URL's org as a platform `USER`. It has no platform
 role and no `orgId` in its body. `checkInvitationInto()` holds the rules: an
 `OWNER` invitation needs owner standing, the install org is refused (invite
 there from Users, where the platform role is set), and a suspended org is
-refused. Two refusals protect invitations the caller does not own. A pending
-invitation for the same email into another org, or one carrying a platform
-role, gets a `409` that names neither and is left untouched; re-sending it
-from here would re-target it. An email that already has an account also gets
-a `409`. That tells an org admin an account exists, which is the cost of
-telling them why the invitation cannot go: adding an existing account takes
-its user id, which only a platform admin can look up.
+refused. Pending invitations are kept **one per (email, org)** (#1199): the
+address may hold invitations into several orgs at once, and this route reads,
+re-sends and replaces only the URL's org's. Two pending invitations it does
+not own refuse it with a `409` that names neither, and are left untouched: one
+carrying a platform role or naming no org (the platform's, from Users, which
+an existing account could never redeem if this one were accepted first), and
+one whose metadata cannot be read (its org is unknown). **An address that
+already has an account is invited like any other**: the invitation is stored
+and sent, and the answer is the same whether or not the account exists, so an
+org admin learns nothing about accounts outside their roster. Only someone
+already a member of the org gets a different answer, `409 ALREADY_MEMBER`, and
+they are on the roster the caller can read. The email names the inviter and
+the org, and asks an existing account to sign in and accept rather than set a
+password; see [existing accounts](#accepting-as-an-existing-account).
 The named org must exist and be `ACTIVE` _when the invitation
 is written_; a missing and a suspended org get the same 400, so the endpoint
 leaks nothing about orgs the caller may not administer. Acceptance does not
@@ -359,9 +399,70 @@ org (the guard — [context.md](./context.md) — and the switch), never by
 withholding memberships. A
 resend (`?resend=true`) re-sends _this_ invitation: the pending `orgId` /
 `orgRole` carry over (an install-org `orgRole` is dropped) unless the body sends either key (then the body's pair
-replaces both) — the admin table's Resend button posts only name, email and
-role — and the inherited org goes through the same existence, status and
+replaces both), and the inherited org goes through the same existence, status and
 policy checks. The "already pending" response echoes the pending org keys.
+Which pending invitation is _this_ one (#1199): the one in the org the body
+names, and with no org named the install org's. Never simply the newest,
+which may be another org's. A platform invitation (a platform role, or the
+install org) and an org invitation are never written side by side for one
+address: a new one of either kind, or a resend that changes the pending one's
+kind, is refused with a `409` while the other kind is pending. Whichever is
+accepted first creates the account, and the platform one could then never be
+redeemed. The org route refuses the same way. The admin table's Resend
+and Delete name the row's org for that reason, and Delete revokes only that
+org's invitation (`?orgId=`). A caller who is not a platform admin is refused
+while any platform-role invitation is pending for the address.
+**The platform route invites an existing account into an org too** (t-1008),
+so the table's Resend works on an invitation the org route sent to one. An
+invitation into another org at the default role is sent as the org route
+sends it: the email asks them to sign in, and the answer does not depend on
+whether the account exists. Someone already in that org gets `409
+ALREADY_MEMBER`. A platform invitation (a platform role, or the install org)
+to an address with an account is still `409 EMAIL_TAKEN`, because an existing
+account cannot redeem one.
+
+## Accepting as an existing account
+
+An invitation to an address that already has an account cannot be redeemed by
+creating one, so its owner signs in and accepts (#1199, t-1006):
+`POST /api/v1/invitations/accept` with `{ token, email }`, the rules in
+`acceptInvitationAsExistingUser` (`lib/tenancy/accept-invitation.ts`). The
+accept page learns which way to go from `GET /api/v1/invitations/metadata`
+(`accountExists`, answered only to a valid token).
+
+- **The session must be signed in as the invited address, and it must be
+  verified.** The token proves the email arrived; the session proves who is
+  acting on it. A session for any other account is refused with `403
+INVITATION_WRONG_ACCOUNT`, and the page says who is signed in and offers to
+  sign out, rather than redeeming the invitation into the wrong account. An
+  unverified address gets `403 EMAIL_NOT_VERIFIED`.
+- **Only an org invitation with no platform role.** One that grants a platform
+  role, or names no org, is the platform's: it exists to create an account,
+  and following a link does not give an existing account a platform role
+  (`409 INVITATION_NEEDS_NEW_ACCOUNT`). The password accept route answers an
+  address with an account `409 EMAIL_TAKEN` and points it here.
+- **The membership follows the new-account rule.** `membershipForNewUser`
+  decides the role (the invitation's `orgRole`, default `MEMBER`, and `OWNER`
+  by the per-org bootstrap), and `addMember` writes it. The
+  inviter's owner standing for an `OWNER` invitation was checked when it was
+  issued, and is checked again at acceptance: an `OWNER` invitation whose
+  issuer has since lost owner standing lands its invitee as `MEMBER`
+  (#1235). An existing user
+  already has their install-org floor at `single`, so nothing else is
+  written. A suspended org's invitation is accepted as on the new-account
+  path, and the member is refused at entry.
+- **Only the redeemed invitation is consumed**, after the membership is
+  written, so a failure in between leaves it to retry. Someone already a
+  member gets `409 ALREADY_MEMBER`, and the moot invitation is deleted. The
+  address's invitations into other orgs stay pending; so do they when a new
+  account is created from one of them, which then become existing-account
+  invitations.
+- **Declining needs only the token**: `POST /api/v1/invitations/decline`,
+  public, deletes that one invitation. Whoever received the link may turn it
+  down without an account.
+
+Acceptance runs in the session's current org like any guarded route, so a
+member whose active org is suspended switches to another org first.
 
 ## The active org: which org a session acts in
 
@@ -475,9 +576,10 @@ while they are acting in that org — never by a role check in a route.
   state the admin list flags (`ownerCount: 0`), and a platform admin — whom
   the policy admits everywhere — repairs it through the same members route.
   `POST /api/v1/admin/orgs` takes `ownerUserId` so the org starts with one.
-- **The first member of an empty org becomes OWNER** when no role is asked for
-  — the same bootstrap as an invitation into an empty org
-  (`membershipForNewUser`). Unlike the invitation path, an explicit role on
+- **An org's first non-staff member becomes OWNER** when no role is asked
+  for — the same bootstrap as an invitation (`takesFirstOwnership`, shared
+  with `membershipForNewUser`). It needs an actor with owner standing, so an
+  org ADMIN never triggers it. Unlike the invitation path, an explicit role on
   `POST …/members` is honoured: it is an API call by someone who chose it.
 - **Only an OWNER confers or revokes OWNER** (`OWNER_STANDING`). The policy
   admits an ADMIN to the roster; the lifecycle is where "without the OWNER's
@@ -491,8 +593,15 @@ while they are acting in that org — never by a role check in a route.
 - **An invitation is held to the same rules before it is sent**
   (`checkInvitationInto`, t-813): an `OWNER` invitation needs owner standing,
   and the install org and a suspended org (`ORG_NOT_ACTIVE`) take none from
-  the org route. Acceptance cannot check the inviter's standing, so the check
-  is made when the invitation is written.
+  the org route. An invitation outlives that check, so acceptance asks the
+  issuer's (`invitedBy`) standing again: an `OWNER` invitation whose issuer
+  has since been demoted or removed confers `MEMBER`, not `OWNER` (#1235).
+  It narrows rather than refuses, so the invitee still joins the org that
+  invited them and the signup hooks never block; an owner can promote them.
+  One edge follows: a sole owner who hands over by `OWNER` invitation and
+  then erases their account before it is accepted leaves the org with no
+  owner. The invitee lands as `MEMBER`, and a platform admin grants `OWNER`
+  on the members route. Erasure does not yet hold to the last-owner rule.
 - **The install org's memberships follow the platform role**
   (`INSTALL_ORG_MEMBERSHIP`; the ruling above), so the members API refuses a
   role there, and refuses a removal there.
@@ -588,7 +697,11 @@ merge-impact section promises forks.
   @@index([orgId])
   ```
 
-  plus a back-relation line on `Org`. `Cascade` is the rule for data that is
+  plus a back-relation line on `Org`, in your tier's zone at the end of the
+  model: the framework zone for a framework fork, the app zone for a leaf
+  (`prisma format` puts a leaf's there). Sunrise never edits below the first
+  marker, so the line merges cleanly and is not a divergence (#859; CUSTOMIZATION.md §5,
+  "Relating your models to `Org` and `User`"). `Cascade` is the rule for data that is
   the org's; a retained record (a billing row — `AiCostLog` is the one core
   case) uses `onDelete: SetNull` instead, per the FK rule in `CLAUDE.md`.
   `tests/unit/lib/tenancy/model-classification.test.ts`
@@ -656,7 +769,8 @@ merge-impact section promises forks.
   real guard: row + cookie, non-enumerating refusals, API keys refused.
 - `tests/unit/app/api/v1/users/invite/route.test.ts` — an invitation without
   an org writes metadata byte-identical to before; one with an org asks the
-  policy.
+  policy; an existing account's org invitation re-sends (that org's only, the
+  same answer either way) while a platform one to it is still refused.
 - `tests/unit/auth-role-literals.test.ts` — no bare `'OWNER'` / `'MEMBER'`
   outside `lib/tenancy/roles.ts`, the way it already polices `'ADMIN'`.
 

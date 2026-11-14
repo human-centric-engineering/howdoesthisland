@@ -23,6 +23,12 @@ import { IMPORTED_FROM_SLUG_KEY } from '@/lib/orchestration/backup/schema';
 import { z } from 'zod';
 import { REASONING_EFFORTS } from '@/lib/orchestration/llm/types';
 import {
+  parseIgnoredEntityTypes,
+  parseEmbeddingsPolicy,
+  isTighteningMode,
+  parsePrivacyMode,
+} from '@/lib/orchestration/privacy/settings-policy';
+import {
   narrowProviderTools,
   narrowServiceTier,
   narrowVerbosity,
@@ -84,6 +90,7 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
         inputGuardMode: true,
         outputGuardMode: true,
         citationGuardMode: true,
+        privacyMode: true,
         maxHistoryTokens: true,
         maxHistoryMessages: true,
         retentionDays: true,
@@ -200,6 +207,12 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
           maxConversationsPerUser: true,
           maxMessagesPerConversation: true,
           escalationConfig: true,
+          // LLM privacy layer (§127): without them a restore would start in
+          // the column defaults, scanning calls an operator had turned off.
+          privacyMode: true,
+          privacyIgnoredEntityTypes: true,
+          privacyProtectLocalProviders: true,
+          privacyEmbeddingsPolicy: true,
         },
       })
     ),
@@ -249,6 +262,7 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
       verbosity,
       serviceTier,
       providerTools,
+      privacyMode,
       ...rest
     } = a;
     return {
@@ -260,6 +274,11 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
         ? (knowledgeRetrievalMode as (typeof retrievalModes)[number])
         : ('model' as const),
       kind: kind === 'judge' ? ('judge' as const) : ('chat' as const),
+      // A stored mode that is not one is left out, as the settings' mode is
+      // below: a restore then keeps the target agent's own mode, rather than
+      // read an explicit none and loosen it. The source agent refuses every
+      // call until a mode is chosen.
+      ...(privacyMode === null || isTighteningMode(privacyMode) ? { privacyMode } : {}),
       personaMode: narrowMode(personaMode),
       voiceMode: narrowMode(voiceMode),
       guardrailsMode: narrowMode(guardrailsMode),
@@ -289,6 +308,22 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
     channel: w.channel === 'email' ? ('email' as const) : ('webhook' as const),
   }));
 
+  // The privacy settings as the layer reads them (§127): a stored mode that
+  // is not one is left out, so a restore leaves the target's mode alone, and
+  // ignored types that are not a list of type names export as none ignored.
+  const exportedSettings =
+    settings === null
+      ? null
+      : (({ privacyMode, privacyIgnoredEntityTypes, privacyEmbeddingsPolicy, ...rest }) => {
+          const mode = parsePrivacyMode(privacyMode);
+          return {
+            ...rest,
+            ...(mode !== null ? { privacyMode: mode } : {}),
+            privacyIgnoredEntityTypes: parseIgnoredEntityTypes(privacyIgnoredEntityTypes),
+            privacyEmbeddingsPolicy: parseEmbeddingsPolicy(privacyEmbeddingsPolicy),
+          };
+        })(settings);
+
   return {
     schemaVersion: 3 as const,
     exportedAt,
@@ -297,7 +332,7 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
       orgId,
       contacts: bundleContacts({
         webhooks: exportedWebhooks,
-        settings,
+        settings: exportedSettings,
         workflows: flattenedWorkflows,
       }),
     }),
@@ -307,7 +342,7 @@ async function readConfig(includeShared: boolean, orgId: string): Promise<Backup
       workflows: flattenedWorkflows,
       webhooks: exportedWebhooks,
       knowledgeTags,
-      settings,
+      settings: exportedSettings,
     },
   };
 }

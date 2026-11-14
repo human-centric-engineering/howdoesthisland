@@ -14,6 +14,7 @@
  */
 
 import { logger } from '@/lib/logging';
+import { isRecord } from '@/lib/utils';
 import type { ContentPart, LlmMessage, LlmRole, LlmToolCall } from '@/lib/orchestration/llm/types';
 import type { ChatAttachment } from '@/lib/orchestration/chat/types';
 import { MAX_HISTORY_MESSAGES } from '@/lib/orchestration/chat/types';
@@ -33,6 +34,28 @@ import type { InputBreakdown, InputBreakdownPart } from '@/types/orchestration';
  */
 const ATTACHMENT_OVERHEAD_TOKENS = 1600;
 
+/**
+ * Whether a stored message is left out of the history a later call resends.
+ * Every reader that rebuilds a conversation for a provider applies it: the
+ * chat handler's history reads (and so the summariser), and the `chat_turn`
+ * workflow step. Two kinds of row:
+ *
+ * - **An error marker** (`MessageMetadata.error`). It exists so the client can
+ *   show a failed turn. Resent, "[An error occurred …]" burns context and
+ *   invites imitation for the rest of the conversation.
+ * - **A row of a turn the privacy layer refused under `block`**
+ *   (`MessageMetadata.excludedFromHistory`, §127 t-1014). Resent, it would be
+ *   refused again on every turn.
+ *
+ * Read from the row's metadata in code, never as a Prisma JSON-path `NOT`
+ * filter: that also drops every row whose metadata is null, which is most of
+ * them. Any `excludedFromHistory` value leaves the row out, so a reason added
+ * later does not slip back in on a reader that does not know it.
+ */
+export function isLeftOutOfHistory(metadata: unknown): boolean {
+  return isRecord(metadata) && (metadata.error === true || metadata.excludedFromHistory != null);
+}
+
 export interface HistoryRow {
   role: string;
   content: string;
@@ -47,6 +70,10 @@ export interface HistoryRow {
    */
   toolCalls?: LlmToolCall[] | null;
 }
+
+/** The fixed line the user's memories follow, each in a message of its own. */
+const USER_MEMORIES_HEADING =
+  '[User memories]\nThe following are things you have previously remembered about this user:';
 
 export interface UserMemoryEntry {
   key: string;
@@ -162,8 +189,30 @@ export function buildMessages(args: BuildMessagesArgs): LlmMessage[] {
   return buildMessagesAndBreakdown(args).messages;
 }
 
+/**
+ * Where one built message came from (§127 t-1017). Lets a caller that is told
+ * which messages held personal details tell whose they are: the agent's setup,
+ * the stored summary, an earlier row (by its index in `history`), one of the
+ * user's memories (by its index in `userMemories`), or this turn.
+ */
+export type MessageSource =
+  | { kind: 'system_prompt' }
+  | { kind: 'context' }
+  /** The heading of the user's memories: fixed text, part of the setup. */
+  | { kind: 'memories' }
+  /** One of the user's memories, by its index in `userMemories` (t-1018). */
+  | { kind: 'memory'; memoryIndex: number }
+  | { kind: 'summary' }
+  /** A line the builder writes itself: "[... N earlier messages omitted ...]". */
+  | { kind: 'note' }
+  | { kind: 'history'; historyIndex: number }
+  | { kind: 'opening_turn' }
+  | { kind: 'user_message' };
+
 export interface BuildMessagesResult {
   messages: LlmMessage[];
+  /** One per message, in the same order: where each came from. */
+  sources: MessageSource[];
   /**
    * Per-section input-token breakdown for the initial LLM call. Does
    * not include `toolDefinitions` (those are passed separately by the
@@ -194,6 +243,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
     brandVoiceInstructions: args.brandVoiceInstructions,
   });
   const messages: LlmMessage[] = [{ role: 'system', content: systemPrompt }];
+  const sources: MessageSource[] = [{ kind: 'system_prompt' }];
 
   // A turn the agent opens (#474) carries no user text. Its content still counts
   // toward the token budget and still needs a part in the breakdown, so estimate
@@ -209,15 +259,25 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
 
   if (args.contextBlock) {
     messages.push({ role: 'system', content: args.contextBlock });
+    sources.push({ kind: 'context' });
     breakdown.contextBlock = makePart(args.contextBlock, modelId);
   }
 
   if (args.userMemories && args.userMemories.length > 0) {
-    const formatted = args.userMemories.map((m) => `- ${m.key}: ${m.value}`).join('\n');
-    const memoryBlock = `[User memories]\nThe following are things you have previously remembered about this user:\n${formatted}`;
-    messages.push({ role: 'system', content: memoryBlock });
+    // A heading, then one message per memory, so a refusal under `block` can
+    // say which memory held personal details (§127 t-1018). The text is the
+    // block the model was always sent, split at its lines; providers frame
+    // each as a system message or block of its own. The breakdown counts the
+    // joined text.
+    const lines = args.userMemories.map((m) => `- ${m.key}: ${m.value}`);
+    messages.push({ role: 'system', content: USER_MEMORIES_HEADING });
+    sources.push({ kind: 'memories' });
+    lines.forEach((line, memoryIndex) => {
+      messages.push({ role: 'system', content: line });
+      sources.push({ kind: 'memory', memoryIndex });
+    });
     breakdown.userMemories = {
-      ...makePart(memoryBlock, modelId),
+      ...makePart([USER_MEMORIES_HEADING, ...lines].join('\n'), modelId),
       count: args.userMemories.length,
     };
   }
@@ -303,6 +363,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
           : '[Conversation summary of earlier messages]';
       const summaryBlock = `${heading}\n\n${args.conversationSummary}`;
       messages.push({ role: 'system', content: summaryBlock });
+      sources.push({ kind: 'summary' });
       breakdown.conversationSummary = makePart(summaryBlock, modelId);
     }
     if (omittedBeforeHistory > 0) {
@@ -312,6 +373,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
         role: 'system',
         content: `[... up to ${omittedBeforeHistory} earlier messages omitted ...]`,
       });
+      sources.push({ kind: 'note' });
     }
     const unsummarised = droppedCount - summarised;
     if (unsummarised > 0) {
@@ -322,6 +384,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
         role: 'system',
         content: `[... ${unsummarised} older messages omitted for context window ...]`,
       });
+      sources.push({ kind: 'note' });
     }
   }
 
@@ -356,8 +419,9 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
   let historyChars = 0;
   let historyTokens = 0;
   let historyMessageCount = 0;
-  for (const row of truncated) {
+  for (const [j, row] of truncated.entries()) {
     const role = normaliseRole(row.role);
+    const source: MessageSource = { kind: 'history', historyIndex: droppedCount + j };
 
     if (role === 'tool') {
       if (!row.toolCallId || !pendingToolCallIds.has(row.toolCallId)) {
@@ -366,6 +430,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
       }
       pendingToolCallIds.delete(row.toolCallId);
       messages.push({ role: 'tool', content: row.content, toolCallId: row.toolCallId });
+      sources.push(source);
       historyChars += row.content.length;
       historyTokens += estimateTokens(row.content, modelId);
       historyMessageCount += 1;
@@ -404,6 +469,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
     } else {
       messages.push({ role, content: row.content });
     }
+    sources.push(source);
     historyChars += row.content.length;
     historyTokens += estimateTokens(row.content, modelId);
     historyMessageCount += 1;
@@ -426,6 +492,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
   // hoist it into the system prompt and leave the request ending on history.
   if (isOpeningTurn) {
     messages.push({ role: 'system', content: turnText, turnInstruction: true });
+    sources.push({ kind: 'opening_turn' });
   } else if (args.attachments && args.attachments.length > 0) {
     const parts: ContentPart[] = [{ type: 'text', text: args.newUserMessage }];
     for (const attachment of args.attachments) {
@@ -451,12 +518,14 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
       }
     }
     messages.push({ role: 'user', content: parts });
+    sources.push({ kind: 'user_message' });
     breakdown.attachments = {
       tokens: args.attachments.length * ATTACHMENT_OVERHEAD_TOKENS,
       count: args.attachments.length,
     };
   } else {
     messages.push({ role: 'user', content: args.newUserMessage });
+    sources.push({ kind: 'user_message' });
   }
 
   breakdown.totalEstimated =
@@ -468,7 +537,7 @@ export function buildMessagesAndBreakdown(args: BuildMessagesArgs): BuildMessage
     (breakdown.attachments?.tokens ?? 0) +
     breakdown.userMessage.tokens;
 
-  return { messages, breakdown };
+  return { messages, sources, breakdown };
 }
 
 /** Build a breakdown part for a single text chunk. Includes the raw text. */

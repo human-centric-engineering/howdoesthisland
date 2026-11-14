@@ -12,8 +12,9 @@
  *
  * So `userCreateBeforeHook` asks {@link uninvitedSignupAdmission} while it
  * decides the membership, and treats the answer as an invitation into that org.
- * The rules an invitation follows then apply unchanged: the first member of an
- * org becomes its `OWNER`; at `single` the install-org floor is added too
+ * The rules an invitation follows then apply, with one adaptation: the first
+ * person who is not platform staff to join the org becomes its `OWNER`
+ * ({@link resolvedSignupMemberships}); at `single` the install-org floor is added too
  * (#872); the decision is recorded on the user row and carried to the session,
  * so the first session's `activeOrgId` is the resolved org.
  *
@@ -36,7 +37,15 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { isPlatformAdmin } from '@/lib/auth/roles';
 import { appSignupOrgResolver } from '@/lib/app/signup-org';
-import type { AcceptedInvitation, NewUserShape } from '@/lib/tenancy/membership';
+import {
+  countNonStaffMembers,
+  membershipsForNewUser,
+  takesFirstOwnership,
+  type AcceptedInvitation,
+  type NewUserMemberships,
+  type NewUserShape,
+} from '@/lib/tenancy/membership';
+import { ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 
 /** What the resolver is told about the person signing up. */
 export interface UninvitedSignup {
@@ -122,4 +131,36 @@ export async function uninvitedSignupAdmission(
     return null;
   }
   return { orgId };
+}
+
+/**
+ * The memberships for a signup the resolver admitted: {@link membershipsForNewUser},
+ * with the resolver standing as the grantor of first ownership.
+ *
+ * Sunrise 0.19.0 (#1235) gives first ownership of an org only when whoever
+ * grants the membership holds owner standing in it, asked of an invitation's
+ * issuer at acceptance. The resolver's admission has no issuer: the app's own
+ * code chose the org, so core reads it as granted by nobody and the person
+ * lands as `MEMBER` of the workspace made for them, which nobody in it can
+ * then administer.
+ *
+ * Here the grantor is the resolver, so its standing is taken as given. The
+ * other half of the rule still holds: the org must have no member who is not
+ * platform staff, and the newcomer must not be staff
+ * ({@link takesFirstOwnership}). #1235's case was an org ADMIN who empties an
+ * org and invites a second account of their own. That cannot reach this path,
+ * because no org member chooses where a resolved signup lands.
+ */
+export async function resolvedSignupMemberships(
+  user: NewUserShape,
+  admission: AcceptedInvitation,
+  db: Parameters<typeof membershipsForNewUser>[2] = prisma
+): Promise<NewUserMemberships> {
+  const decided = await membershipsForNewUser(user, admission, db);
+  const { membership } = decided;
+  if (!admission.orgId || membership.orgId !== admission.orgId) return decided;
+  if (membership.role === ORG_OWNER_ROLE) return decided;
+  const nonStaff = await countNonStaffMembers(admission.orgId, db);
+  if (!takesFirstOwnership(user, nonStaff, true)) return decided;
+  return { ...decided, membership: { ...membership, role: ORG_OWNER_ROLE } };
 }

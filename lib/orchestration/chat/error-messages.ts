@@ -205,6 +205,60 @@ const ERROR_MAP: Record<string, UserFacingError> = {
     message: 'This request uses an AI provider this deployment does not permit.',
     action: 'Ask an administrator to review this deployment’s provider settings.',
   },
+  // The LLM privacy layer refused the call (§127): either it could not
+  // establish what the privacy policy is, or the policy itself says to
+  // refuse. Nothing was sent. The reason is in the log; the reader is told
+  // only that it stopped, and where to look.
+  privacy_refused: {
+    title: 'Stopped by Privacy Settings',
+    message: "This request was stopped before it was sent, by the deployment's privacy settings.",
+    action: 'Ask an administrator to check the deployment’s LLM privacy settings.',
+  },
+  // The privacy layer's `block` mode (§127): something in what would have
+  // been sent — the message, a tool's result — contained personal details,
+  // and the policy sends none. The refused turn is left out of what later
+  // turns resend (t-1014), so asking again without them works in the same
+  // conversation. Also the code when the handler could not tell where the
+  // details were (t-1017), so an administrator is still named as the other
+  // way out.
+  privacy_blocked: {
+    title: 'Personal Details Not Sent',
+    message:
+      'Your message, or something the assistant looked up for it, contains personal details, such as names or contact details, that this deployment does not send to an AI provider.',
+    action:
+      "Ask again without them, here in this conversation. If you didn't include any, ask an administrator.",
+  },
+  // `block` again, for details in an earlier message or the stored summary,
+  // written before the mode was `block` (t-1017). The refusal left them out
+  // of what later turns send and discarded the summary, so asking again
+  // works, and the assistant has forgotten that part (owner ruling,
+  // 2026-11-12).
+  privacy_blocked_earlier: {
+    title: 'Personal Details Not Sent',
+    message:
+      'Earlier messages in this conversation contain personal details, such as names or contact details, that this deployment does not send to an AI provider.',
+    action:
+      "Ask again. The assistant now leaves out the earlier messages that held them, so it may not remember everything said before. Don't include personal details in your message.",
+  },
+  // `block` again, for details in the assistant's own setup: its
+  // instructions or the context it was given (t-1017). Nothing the reader
+  // writes can change that.
+  privacy_blocked_setup: {
+    title: 'Personal Details Not Sent',
+    message:
+      "The assistant's setup contains personal details, such as names or contact details, that this deployment does not send to an AI provider. It can't answer until that changes.",
+    action: "Ask an administrator to check this assistant's setup. Rephrasing won't help.",
+  },
+  // `block` again, for details in something the assistant remembered about
+  // the reader, written before the mode was `block` (t-1018). The refusal
+  // deleted that memory, so asking again works (owner ruling, 2026-11-12).
+  privacy_blocked_memory: {
+    title: 'Personal Details Not Sent',
+    message:
+      'Something this assistant remembered about you contains personal details, such as names or contact details, that this deployment does not send to an AI provider. The assistant has now forgotten it.',
+    action:
+      "Ask again. The assistant may not remember everything it knew about you. Don't include personal details in your message.",
+  },
   no_default_model_configured: {
     title: 'Default Model Not Set',
     message: 'A default model for this task has not been chosen yet.',
