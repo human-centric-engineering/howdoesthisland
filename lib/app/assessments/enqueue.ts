@@ -61,10 +61,12 @@ export async function enqueueAssessment(
   if (text.trim() === '') {
     throw new AssessmentInputError('content_empty', 'There is no text to assess.');
   }
-  if (text.length > MAX_CONTENT_CHARS) {
+  // Counted in code points, as an editor counts characters, not UTF-16 units.
+  const chars = [...text].length;
+  if (chars > MAX_CONTENT_CHARS) {
     throw new AssessmentInputError(
       'content_too_long',
-      `The text is ${text.length.toLocaleString('en-GB')} characters long. The most an assessment takes is ${MAX_CONTENT_CHARS.toLocaleString('en-GB')}.`
+      `The text is ${chars.toLocaleString('en-GB')} characters long. The most an assessment takes is ${MAX_CONTENT_CHARS.toLocaleString('en-GB')}.`
     );
   }
 

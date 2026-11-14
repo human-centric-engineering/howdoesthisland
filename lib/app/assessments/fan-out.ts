@@ -21,6 +21,7 @@ import {
   runJudge,
   type JudgeReply,
   type JudgeRunErrorCode,
+  type JudgeSpend,
 } from '@/lib/app/judges/run-judge';
 
 /** One judge's outcome, as it lands. */
@@ -32,6 +33,8 @@ export type LandedJudge =
       code: JudgeRunErrorCode;
       message: string;
       latencyMs: number;
+      /** What it was billed, when it reached the provider. */
+      spend?: JudgeSpend;
     };
 
 export interface RunJudgesInput {
@@ -92,6 +95,7 @@ export async function runJudges(input: RunJudgesInput): Promise<RunJudgesResult>
         code: err.code,
         message: err.message,
         latencyMs: Date.now() - started,
+        ...(err.spend ? { spend: err.spend } : {}),
       };
     }
     landed.push(outcome);
@@ -100,15 +104,17 @@ export async function runJudges(input: RunJudgesInput): Promise<RunJudgesResult>
 
   const worker = async (): Promise<void> => {
     while (queue.length > 0 && !state.stopped && !state.failure) {
-      if (input.shouldContinue && !(await input.shouldContinue())) {
-        state.stopped = true;
-        return;
-      }
-      // Taken after the check, so a judge is never claimed by a worker that
-      // then stops without running it.
-      const slot = queue.shift();
-      if (slot === undefined) return;
+      // Inside the try, so a check that throws (its read failing) is the
+      // fan-out's failure like any other, raised once the others settle.
       try {
+        if (input.shouldContinue && !(await input.shouldContinue())) {
+          state.stopped = true;
+          return;
+        }
+        // Taken after the check, so a judge is never claimed by a worker
+        // that then stops without running it.
+        const slot = queue.shift();
+        if (slot === undefined) return;
         await runOne(slot);
       } catch (error) {
         state.failure ??= { error };

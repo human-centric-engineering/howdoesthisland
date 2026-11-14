@@ -72,6 +72,47 @@ describe('runJudges', () => {
     expect(settled).toBe(2);
   });
 
+  it('rejects when shouldContinue throws, after the judges in flight settle', async () => {
+    let settled = 0;
+    let asks = 0;
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await new Promise((r) => setTimeout(r, 5));
+      settled += 1;
+      return { slot, output: {} };
+    });
+    const run = runJudges(
+      input({
+        slots: ['judge_a', 'judge_b', 'judge_c', 'judge_d'],
+        concurrency: 2,
+        shouldContinue: async () => {
+          asks += 1;
+          // The first two start; the next check's read fails.
+          if (asks > 2) throw new Error('database down');
+          return true;
+        },
+      })
+    );
+    await expect(run).rejects.toThrow('database down');
+    expect(settled).toBe(2);
+    expect(mocks.runJudge).toHaveBeenCalledTimes(2);
+  });
+
+  it('carries what a failed judge was billed onto its landing', async () => {
+    const spend = {
+      provider: 'openai',
+      model: 'gpt-4.1',
+      usage: { input: 10, output: 2, attempts: 2 },
+      costUsd: 0.002,
+    };
+    mocks.runJudge.mockImplementation(async () => {
+      const err = new JudgeRunError('malformed', 'Not usable, twice.');
+      err.spend = spend;
+      throw err;
+    });
+    const { landed } = await runJudges(input({ slots: ['judge_a'] }));
+    expect(landed[0]).toMatchObject({ ok: false, code: 'malformed', spend });
+  });
+
   it('starts no judge once shouldContinue says no', async () => {
     const { landed, stopped } = await runJudges(
       input({ concurrency: 1, shouldContinue: async () => mocks.runJudge.mock.calls.length < 1 })

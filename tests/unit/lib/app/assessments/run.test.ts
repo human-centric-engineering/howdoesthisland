@@ -85,6 +85,9 @@ function deferred<T = void>() {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+/** Long enough for runs the recovery job started, and did not wait for, to end. */
+const settle = () => new Promise((r) => setTimeout(r, 20));
+
 const runsOf = (assessmentId: unknown) =>
   fake.judgeRuns.filter((r) => r.assessmentId === assessmentId);
 
@@ -213,12 +216,46 @@ describe('a judge that fails', () => {
     });
   });
 
-  it('fails the assessment on an error that is not a judge’s, leaving no live lease', async () => {
+  it('queues the assessment again on an error that is not a judge’s, with no live lease', async () => {
     const a = fake.seed({ judges: ['judge_a'] });
-    mocks.runJudge.mockRejectedValue(new Error('connection reset'));
-    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
-    expect(a).toMatchObject({ status: 'FAILED', leaseToken: null });
-    expect(a.error).toEqual(expect.any(String));
+    mocks.runJudge.mockRejectedValueOnce(new Error('connection reset'));
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    expect(a).toMatchObject({ status: 'QUEUED', leaseToken: null, leaseExpiresAt: null });
+    expect(a.attempts).toBe(1);
+
+    // The next run takes it up under the attempts it has left.
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+    expect(a).toMatchObject({ status: 'COMPLETED', attempts: 2 });
+  });
+
+  it('stores what a failed judge was billed, and counts it in the assessment’s cost', async () => {
+    const a = fake.seed();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      if (slot !== 'judge_b') return reply(slot);
+      const err = new JudgeRunError(
+        'malformed',
+        'The judge_b judge’s reply was not usable, twice.'
+      );
+      err.spend = {
+        provider: 'openai',
+        model: 'gpt-4.1',
+        usage: { input: 200, output: 40, attempts: 2 },
+        costUsd: 0.02,
+      };
+      throw err;
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('partial');
+    expect(runsOf(a.id).find((r) => r.judge === 'judge_b')).toMatchObject({
+      status: 'FAILED',
+      errorCode: 'malformed',
+      provider: 'openai',
+      modelName: 'gpt-4.1',
+      attempts: 2,
+      costUsd: 0.02,
+      tokens: { input: 200, output: 40 },
+    });
+    expect(a.costUsd).toBeCloseTo(0.03);
   });
 
   it('fails the assessment when its framework version can no longer be run', async () => {
@@ -326,6 +363,30 @@ describe('the lease', () => {
     // The first wave lands; no further judge starts.
     expect(mocks.runJudge).toHaveBeenCalledTimes(JUDGES_IN_FLIGHT);
     expect(a).toMatchObject({ status: 'RUNNING', leaseToken: 'new-run', result: null });
+    // Its judges landed after the takeover, so none is stored over the new run's.
+    expect(runsOf(a.id)).toHaveLength(0);
+  });
+
+  it('a judge that lands after a takeover leaves the new run’s row as it is', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      // The new run claims it, and its judge_a lands first.
+      Object.assign(a, { leaseToken: 'new-run' });
+      fake.judgeRuns.push({
+        id: 'theirs',
+        assessmentId: a.id,
+        judge: 'judge_a',
+        status: 'SUCCEEDED',
+        output: { from: 'new-run' },
+        costUsd: 0.05,
+      });
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
+    expect(runsOf(a.id)).toEqual([
+      expect.objectContaining({ id: 'theirs', output: { from: 'new-run' }, costUsd: 0.05 }),
+    ]);
   });
 });
 
@@ -383,7 +444,7 @@ describe('the recovery job', () => {
         },
         [
           { judge: 'judge_a', status: 'SUCCEEDED', output: { from: 'judge_a' }, costUsd: 0.01 },
-          { judge: 'judge_b', status: 'FAILED', errorCode: 'provider_error' },
+          { judge: 'judge_b', status: 'FAILED', errorCode: 'malformed' },
         ]
       ),
       // Queued, and never started.
@@ -419,6 +480,7 @@ describe('the recovery job', () => {
     const p = population();
 
     expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 2, gaveUp: 1 });
+    await settle();
 
     // Only judge_c was called for the run that died; judge_a's output was reused.
     expect(
@@ -441,6 +503,7 @@ describe('the recovery job', () => {
   it('is idempotent: a second pass over the same population changes nothing', async () => {
     population();
     await inOrg(() => recoverAssessments());
+    await settle();
     const calls = mocks.runJudge.mock.calls.length;
     const snapshot = structuredClone({ a: fake.assessments, r: fake.judgeRuns });
 
@@ -464,8 +527,53 @@ describe('the recovery job', () => {
 
     const first = await inOrg(() => recoverAssessments());
     expect(first.redriven).toBe(3);
-    expect(most).toBeLessThanOrEqual(3);
     expect(fake.assessments.filter((a) => a.status === 'QUEUED')).toHaveLength(2);
+    await settle();
+    expect(most).toBeLessThanOrEqual(3);
+  });
+
+  it('does not wait for the runs it starts', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 1, gaveUp: 0 });
+    expect(a.status).toBe('RUNNING');
+
+    gate.resolve();
+    await settle();
+    expect(a.status).toBe('COMPLETED');
+  });
+
+  it('runs a judge again whose earlier failure was the moment’s, keeping what it cost', async () => {
+    const a = fake.seed(
+      {
+        judges: ['judge_a', 'judge_b'],
+        status: 'RUNNING',
+        leaseToken: 'dead',
+        leaseExpiresAt: new Date(Date.now() - 5_000),
+        attempts: 1,
+      },
+      [
+        { judge: 'judge_a', status: 'SUCCEEDED', output: { from: 'judge_a' }, costUsd: 0.01 },
+        { judge: 'judge_b', status: 'FAILED', errorCode: 'provider_error', costUsd: 0.004 },
+      ]
+    );
+
+    await inOrg(() => recoverAssessments());
+    await settle();
+
+    expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_b']);
+    expect(a).toMatchObject({ status: 'COMPLETED', result: { judged: ['judge_a', 'judge_b'] } });
+    expect(a.costUsd).toBeCloseTo(0.024);
+    expect(runsOf(a.id).find((r) => r.judge === 'judge_b')).toMatchObject({
+      status: 'SUCCEEDED',
+      errorCode: null,
+    });
+    expect(runsOf(a.id).find((r) => r.judge === 'judge_b')?.costUsd).toBeCloseTo(0.014);
   });
 });
 
@@ -491,10 +599,17 @@ describe('edges of the run', () => {
     expect(a).toMatchObject({ status: 'QUEUED', attempts: 0 });
   });
 
-  it('lets any other claim error through', async () => {
+  it('leaves the assessment as it was on any other claim error, and logs it', async () => {
     const a = fake.seed();
     fake.db.$transaction.mockRejectedValueOnce(new Error('connection refused'));
-    await expect(inOrg(() => runAssessment(String(a.id)))).rejects.toThrow('connection refused');
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('not_claimed');
+    expect(fake.db.$transaction).toHaveBeenCalledTimes(1);
+    expect(a).toMatchObject({ status: 'QUEUED', attempts: 0 });
+    expect(logger.error).toHaveBeenCalledWith(
+      'Assessment claim failed',
+      expect.any(Error),
+      expect.objectContaining({ assessmentId: a.id })
+    );
   });
 
   it('does not claim an assessment that has had its three runs', async () => {

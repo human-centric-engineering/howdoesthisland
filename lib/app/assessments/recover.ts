@@ -8,21 +8,28 @@
  *
  * - **given up on**, once it has had {@link MAX_ATTEMPTS} runs: `FAILED`, with
  *   the reason; or
- * - **re-driven** through `runAssessment`, which claims it under a new lease
- *   and runs only the judges that have no row yet.
+ * - **re-driven**: claimed under a new lease (`beginAssessment`), which runs
+ *   only the judges that have no row yet.
+ *
+ * Claims are taken one at a time, so they never conflict with each other on
+ * the workspace's running count. The pass does not wait for the runs it
+ * starts: per-org jobs run one workspace after another, and a long run here
+ * would hold up every other workspace's pass. Each run is handed to
+ * `keepRunningAfterResponse`, which keeps the tick's invocation alive until it
+ * settles; a run killed part-way leaves a lease that runs out, and a later
+ * tick takes it over, at the cost of an attempt.
  *
  * Idempotent: a second pass over the same rows finds them final, or held by
- * the first pass's live lease, and changes nothing. The pass waits for the
- * runs it starts; a tick killed mid-run leaves a lease that runs out, and a
- * later tick takes it over, at the cost of an attempt.
+ * the first pass's live lease, and changes nothing.
  */
+import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
-import { runAssessment } from '@/lib/app/assessments/run';
+import { beginAssessment } from '@/lib/app/assessments/run';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 
 export interface RecoveryResult {
-  /** Runs this pass claimed and drove to an end. */
+  /** Runs this pass claimed and started. */
   redriven: number;
   /** Assessments marked `FAILED` after their last attempt. */
   gaveUp: number;
@@ -53,8 +60,13 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
     take: RECOVERY_BATCH,
     select: { id: true },
   });
-  const outcomes = await Promise.all(candidates.map((row) => runAssessment(row.id)));
-  const redriven = outcomes.filter((outcome) => outcome !== 'not_claimed').length;
+  let redriven = 0;
+  for (const { id } of candidates) {
+    const run = await beginAssessment(id);
+    if (!run) continue;
+    redriven += 1;
+    keepRunningAfterResponse(run.done, 'app: assessment re-drive', { assessmentId: id });
+  }
 
   return { redriven, gaveUp };
 }

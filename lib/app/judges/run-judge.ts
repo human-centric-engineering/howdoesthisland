@@ -96,6 +96,14 @@ const CAP_NAMES: Record<BudgetCap, string> = {
   agent: 'its monthly budget',
 };
 
+/** What a judge's attempts were billed, on whatever path the run ended. */
+export interface JudgeSpend {
+  provider: string;
+  model: string;
+  usage: { input: number; output: number; attempts: number };
+  costUsd: number;
+}
+
 /** Why a judge did not produce a reply. Its message never carries the reply or the prompt. */
 export class JudgeRunError extends Error {
   readonly code: JudgeRunErrorCode;
@@ -103,6 +111,11 @@ export class JudgeRunError extends Error {
   readonly resetAt?: number;
   /** For `over_budget`: whose monthly cap was reached. */
   readonly cap?: BudgetCap;
+  /**
+   * What the failed judge was billed, when it reached the provider: a reply
+   * that was malformed twice, or a call that failed part-way, still costs.
+   */
+  spend?: JudgeSpend;
 
   constructor(
     code: JudgeRunErrorCode,
@@ -337,16 +350,22 @@ export async function runJudge<Ctx, Output>(
     })
   );
   const usage = sumUsage(billed);
-
-  if ('error' in outcome) throw outcome.error;
-  return {
-    slot,
-    output: outcome.value.output,
-    drops: outcome.value.drops,
+  const spend: JudgeSpend = {
     provider: binding.providerSlug,
     model: binding.model,
     usage: { input: usage.inputTokens, output: usage.outputTokens, attempts: billed.length },
     costUsd: rows.reduce((sum, row) => sum + (row?.totalCostUsd ?? 0), 0),
+  };
+
+  if ('error' in outcome) {
+    outcome.error.spend = spend;
+    throw outcome.error;
+  }
+  return {
+    slot,
+    output: outcome.value.output,
+    drops: outcome.value.drops,
+    ...spend,
     costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
     finishReason: outcome.finishReason,
   };

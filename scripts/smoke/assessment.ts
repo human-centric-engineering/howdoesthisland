@@ -159,12 +159,19 @@ async function main(): Promise<number> {
       return queued.assessmentId;
     });
     const recovered = await runAsOrg(orgA.id, () => recoverAssessments());
-    const diedRow = await runAsOrg(orgA.id, () =>
-      prisma.assessment.findUnique({
-        where: { id: died },
-        select: { status: true, attempts: true },
-      })
-    );
+    // The job starts the run and does not wait for it, so wait here for it to end.
+    const readDied = () =>
+      runAsOrg(orgA.id, () =>
+        prisma.assessment.findUnique({
+          where: { id: died },
+          select: { status: true, attempts: true },
+        })
+      );
+    let diedRow = await readDied();
+    for (let waited = 0; diedRow?.status === 'RUNNING' && waited < 30_000; waited += 250) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      diedRow = await readDied();
+    }
     check(
       recovered.redriven === 1 && diedRow?.status === 'COMPLETED' && diedRow.attempts === 2,
       `the recovery job completed the run that died (${JSON.stringify(recovered)}, ${diedRow?.status}, attempt ${diedRow?.attempts})`

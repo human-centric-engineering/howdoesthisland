@@ -16,10 +16,21 @@
  * place; the loser of a conflict leaves the assessment `QUEUED` for the
  * recovery job.
  *
- * **Re-driving.** A run starts only the judges with no `JudgeRun` row yet. A
- * judge that landed in an earlier run, whether it answered or failed, keeps
- * its row: a success is reused at assembly, and a failure stands (its
- * dimensions fall back to the quick scan and the result is `PARTIAL`).
+ * **Re-driving.** A run starts only the judges with no `JudgeRun` row yet,
+ * and those whose earlier failure may not recur ({@link RETRIED_ON_REDRIVE}:
+ * a rate limit, a provider outage). A judge that answered keeps its row and is
+ * reused at assembly; any other failure stands (its dimensions fall back to
+ * the quick scan and the result is `PARTIAL`). A judge run again keeps what
+ * its earlier attempt cost on its row.
+ *
+ * **An error that is not a judge's** (the database failing part-way) hands the
+ * assessment back to the queue under the same attempt count, so the recovery
+ * job re-drives it until {@link MAX_ATTEMPTS}. Only the engine refusing the
+ * version is final at once.
+ *
+ * **Saving a judge** takes the assessment's row lock under the run's lease,
+ * so a run that lost its lease never overwrites the row its successor wrote;
+ * its late judge is billed (the cost log has it) but not stored.
  *
  * **Cancel** ({@link cancelAssessment}) sets `CANCELLED`. The run asks before
  * each judge starts, so no further judge is called; the ones in flight finish
@@ -58,16 +69,49 @@ export type RunOutcome =
   /** Cancelled while it ran: no further judge was called. */
   | 'cancelled'
   /** Its lease went to another run (it stopped renewing in time); that run finishes it. */
-  | 'lease_lost';
+  | 'lease_lost'
+  /** Stopped on an error that was not a judge's; queued again for the recovery job. */
+  | 'requeued';
 
 /** The two numbers every framework's result carries for listing (§9 `overall`, `band`). */
 const resultScores = z.object({ scores: z.object({ overall: z.number(), band: z.string() }) });
 
-export async function runAssessment(assessmentId: string): Promise<RunOutcome> {
-  const orgId = requireOrgId();
-  const token = await claim(assessmentId, orgId);
-  if (!token) return 'not_claimed';
+/**
+ * Failures a re-drive runs the judge again for: each is about the moment
+ * (a rate-limit window, a provider outage), not the judge or the text.
+ */
+const RETRIED_ON_REDRIVE: ReadonlySet<string> = new Set(['rate_limited', 'provider_error']);
 
+export async function runAssessment(assessmentId: string): Promise<RunOutcome> {
+  const run = await beginAssessment(assessmentId);
+  return run ? await run.done : 'not_claimed';
+}
+
+/** A run that has been claimed and started. */
+export interface StartedRun {
+  /** Settles when the run ends; never rejects. */
+  done: Promise<RunOutcome>;
+}
+
+/**
+ * Claim the assessment and start its run, without waiting for it: `null` when
+ * it was not claimed. A claim that fails for any reason leaves it as it was,
+ * for the recovery job.
+ */
+export async function beginAssessment(assessmentId: string): Promise<StartedRun | null> {
+  const orgId = requireOrgId();
+  let token: string | null;
+  try {
+    token = await claim(assessmentId, orgId);
+  } catch (err) {
+    logger.error('Assessment claim failed', err, { assessmentId });
+    return null;
+  }
+  if (!token) return null;
+  return { done: execute(assessmentId, orgId, token) };
+}
+
+async function execute(assessmentId: string, orgId: string, token: string): Promise<RunOutcome> {
   const lease = holdLease(assessmentId, token);
   try {
     const row = await prisma.assessment.findUnique({
@@ -91,15 +135,17 @@ export async function runAssessment(assessmentId: string): Promise<RunOutcome> {
     });
     return await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
   } catch (err) {
-    // A failure the run cannot carry on past: the engine refusing the
-    // version, or the database. Recorded when the lease is still ours; if the
-    // write fails too, the lease runs out and the recovery job tries again.
-    logger.error('Assessment run failed', err, { assessmentId });
-    await finish(assessmentId, token, {
-      status: 'FAILED',
-      error: 'The assessment could not be run.',
-    }).catch(() => undefined);
-    return 'failed';
+    // Not the judges' and not final (the database, most likely): back to the
+    // queue for the recovery job, which re-drives it until it is out of
+    // attempts. If this write fails too, the lease runs out to the same end.
+    logger.error('Assessment run stopped on an error; queued again', err, { assessmentId });
+    await prisma.assessment
+      .updateMany({
+        where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
+        data: { status: 'QUEUED', leaseToken: null, leaseExpiresAt: null },
+      })
+      .catch(() => undefined);
+    return 'requeued';
   } finally {
     lease.release();
   }
@@ -115,6 +161,7 @@ type AssessmentRow = {
   judgeRuns: {
     judge: string;
     status: 'SUCCEEDED' | 'FAILED';
+    errorCode: string | null;
     output: Prisma.JsonValue;
     costUsd: number;
   }[];
@@ -141,12 +188,21 @@ async function drive(
   const outputs: Record<string, unknown> = {};
   let failures = 0;
   let costUsd = 0;
+  // What a judge run again already cost, carried onto its new row.
+  const priorCost = new Map<string, number>();
+  const done = new Set<string>();
   for (const run of row.judgeRuns) {
     costUsd += run.costUsd;
-    if (run.status === 'SUCCEEDED') outputs[run.judge] = run.output;
-    else failures += 1;
+    if (run.status === 'SUCCEEDED') {
+      outputs[run.judge] = run.output;
+      done.add(run.judge);
+    } else if (run.errorCode && RETRIED_ON_REDRIVE.has(run.errorCode)) {
+      priorCost.set(run.judge, run.costUsd);
+    } else {
+      failures += 1;
+      done.add(run.judge);
+    }
   }
-  const done = new Set(row.judgeRuns.map((run) => run.judge));
   const missing = row.judges.filter((slot) => !done.has(slot));
 
   const fan = await runJudges({
@@ -159,13 +215,12 @@ async function drive(
     userId: row.createdByUserId,
     shouldContinue: () => stillOurs(row.id, token, lease),
     onLanded: async (landed) => {
-      await saveJudgeRun(row.id, orgId, landed);
-      if (landed.ok) {
-        outputs[landed.slot] = landed.reply.output;
-        costUsd += landed.reply.costUsd;
-      } else {
-        failures += 1;
-      }
+      const saved = await saveJudgeRun(row.id, orgId, token, landed, priorCost.get(landed.slot));
+      // A judge that landed after the lease was lost is not this run's to count.
+      if (!saved) return;
+      costUsd += landed.ok ? landed.reply.costUsd : (landed.spend?.costUsd ?? 0);
+      if (landed.ok) outputs[landed.slot] = landed.reply.output;
+      else failures += 1;
     },
   });
   if (fan.stopped || !(await stillOurs(row.id, token, lease))) {
@@ -187,33 +242,59 @@ async function drive(
   return status === 'PARTIAL' ? 'partial' : 'completed';
 }
 
-/** Save one judge's outcome. One row per judge per assessment; a re-run replaces it. */
-async function saveJudgeRun(assessmentId: string, orgId: string, landed: LandedJudge) {
-  const data = landed.ok
-    ? {
-        status: 'SUCCEEDED' as const,
-        provider: landed.reply.provider,
-        modelName: landed.reply.model,
-        attempts: landed.reply.usage.attempts,
-        costUsd: landed.reply.costUsd,
-        tokens: { input: landed.reply.usage.input, output: landed.reply.usage.output },
-        latencyMs: landed.latencyMs,
-        // The engine's post-validated reply and its drop record: plain data.
-        output: landed.reply.output as Prisma.InputJsonValue,
-        dropped: landed.reply.drops as unknown as Prisma.InputJsonValue,
-        errorCode: null,
-        errorMessage: null,
-      }
-    : {
-        status: 'FAILED' as const,
-        latencyMs: landed.latencyMs,
-        errorCode: landed.code,
-        errorMessage: landed.message,
-      };
-  await prisma.judgeRun.upsert({
-    where: { assessmentId_judge: { assessmentId, judge: landed.slot } },
-    create: { orgId, assessmentId, judge: landed.slot, ...data },
-    update: data,
+/**
+ * Save one judge's outcome, if the run still holds the assessment (or it was
+ * cancelled under it). One row per judge per assessment; a re-run replaces it,
+ * keeping `priorCostUsd`, what its earlier attempt cost. Answers whether it
+ * was saved.
+ *
+ * The guard is an update of the assessment row in the same transaction, so it
+ * holds the row's lock until the upsert commits: a claim by another run waits
+ * for it, and a save after that claim finds the token changed.
+ */
+async function saveJudgeRun(
+  assessmentId: string,
+  orgId: string,
+  token: string,
+  landed: LandedJudge,
+  priorCostUsd = 0
+): Promise<boolean> {
+  const spend = landed.ok ? landed.reply : landed.spend;
+  const data = {
+    status: landed.ok ? ('SUCCEEDED' as const) : ('FAILED' as const),
+    provider: spend?.provider ?? null,
+    modelName: spend?.model ?? null,
+    attempts: spend?.usage.attempts ?? 0,
+    costUsd: priorCostUsd + (spend?.costUsd ?? 0),
+    // Left out when nothing was billed: only a failed row is ever replaced, so
+    // there is no earlier reply or token count to clear.
+    ...(spend ? { tokens: { input: spend.usage.input, output: spend.usage.output } } : {}),
+    latencyMs: landed.latencyMs,
+    ...(landed.ok
+      ? {
+          // The engine's post-validated reply and its drop record: plain data.
+          output: landed.reply.output as Prisma.InputJsonValue,
+          dropped: landed.reply.drops as unknown as Prisma.InputJsonValue,
+          errorCode: null,
+          errorMessage: null,
+        }
+      : { errorCode: landed.code, errorMessage: landed.message }),
+  };
+  return await prisma.$transaction(async (tx) => {
+    const { count } = await tx.assessment.updateMany({
+      where: {
+        id: assessmentId,
+        OR: [{ leaseToken: token, status: 'RUNNING' }, { status: 'CANCELLED' }],
+      },
+      data: { updatedAt: new Date() },
+    });
+    if (count === 0) return false;
+    await tx.judgeRun.upsert({
+      where: { assessmentId_judge: { assessmentId, judge: landed.slot } },
+      create: { orgId, assessmentId, judge: landed.slot, ...data },
+      update: data,
+    });
+    return true;
   });
 }
 
@@ -233,6 +314,8 @@ async function claim(assessmentId: string, orgId: string): Promise<string | null
     } catch (err) {
       if (!isSerializableConflict(err)) throw err;
       if (tries >= CLAIM_TRIES) return null;
+      // A jittered pause, so claimers that conflicted do not retry in step.
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 50 * tries));
     }
   }
 }

@@ -145,6 +145,12 @@ describe('enqueueAssessment', () => {
     expect(fake.assessments).toHaveLength(1);
   });
 
+  it('counts characters as an editor does, not UTF-16 units', async () => {
+    // Each emoji is two UTF-16 units: 40,000 characters, 80,000 units.
+    await enqueue({ content: { text: '😀'.repeat(MAX_CONTENT_CHARS), sourceKind: 'TEXT' } });
+    expect(fake.assessments).toHaveLength(1);
+  });
+
   it('refuses an empty text', async () => {
     expect((await refusal(enqueue({ content: { text: '  \n ', sourceKind: 'TEXT' } }))).code).toBe(
       'content_empty'

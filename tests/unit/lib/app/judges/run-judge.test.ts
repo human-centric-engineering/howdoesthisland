@@ -454,6 +454,11 @@ describe('runJudge on a malformed reply', () => {
       outputTokens: 70,
       metadata: { attempts: 2, error: 'malformed', judge: SLOT },
     });
+    // And carries what it was billed, for the stored job's row.
+    expect(err.spend).toMatchObject({
+      usage: { input: 2100, output: 70, attempts: 2 },
+      costUsd: expect.any(Number),
+    });
   });
 });
 

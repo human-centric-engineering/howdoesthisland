@@ -61,12 +61,22 @@ from either of the first two.
   in the workspace. The count and the claim are one serializable transaction.
   A fourth assessment stays `QUEUED` for the recovery job.
 - **Judges** run at most four at once. Each `JudgeRun` row is written as the
-  judge lands. A run starts only judges with no row yet.
+  judge lands, in one transaction with an update of the assessment under the
+  run's token. A run that lost its lease therefore stores nothing over its
+  successor's rows. Its late judge is still in the cost log.
+- **A run starts only judges with no row yet**, plus those whose row failed
+  with `rate_limited` or `provider_error`, which are about the moment. A judge
+  that runs again keeps its earlier cost on its row.
 - **A failed judge** (any `JudgeRunError`: over budget, refused, malformed…)
-  keeps a `FAILED` row with its code. Its dimensions fall back to the quick
-  scan, and the assessment ends `PARTIAL`.
-- **`FAILED`** is for what the run cannot carry on past: the version can no
-  longer be run, or an error that is not a judge's. `error` says which.
+  keeps a `FAILED` row with its code, and with what it was billed when it
+  reached the provider. Its dimensions fall back to the quick scan, and the
+  assessment ends `PARTIAL`.
+- **An error that is not a judge's** (the database failing part-way) puts the
+  assessment back to `QUEUED` with no lease. The recovery job re-drives it
+  until it is out of attempts. A claim that fails is logged, and the
+  assessment is left as it was.
+- **`FAILED`** is for a version that can no longer be run, and for an
+  assessment that ran out of attempts. `error` says which.
 - **Cancel** (`cancelAssessment`) sets `CANCELLED`. The run asks before each
   judge starts, so no further judge is called. Judges already in flight
   finish and their rows are saved, since their cost is already spent.
@@ -81,13 +91,18 @@ The limits are constants in `limits.ts` until f-usage measures them.
 `app:assessment-recovery` runs every minute, once per workspace
 (`lib/app/jobs.ts`). It finds `QUEUED` and `RUNNING` assessments with no live
 lease. Those that have had three runs are marked `FAILED`. Up to three of the
-rest are re-driven through `runAssessment`, which reruns only the judges with
-no row. A judge that already failed keeps its failure.
+rest are claimed one at a time (`beginAssessment`), so their claims do not
+conflict, and run as described above.
 
-It is idempotent: a second pass finds every row final or held by a live
-lease. The pass waits for the runs it starts. A tick killed mid-run leaves a
+The pass does not wait for the runs it starts. Per-workspace jobs run one
+workspace after another, so a long run would hold up every other workspace's
+pass. Each run is handed to `keepRunningAfterResponse`, which keeps the
+tick's invocation alive until the run ends. A run killed part-way leaves a
 lease that runs out, and a later tick takes the run over, at the cost of an
 attempt.
+
+It is idempotent: a second pass finds every row final or held by a live
+lease.
 
 ## Checking it
 
