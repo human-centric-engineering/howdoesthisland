@@ -193,13 +193,12 @@ function post(body: unknown, headers: Record<string, string> = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
-    }),
-    undefined
+    })
   );
 }
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const getList = (query = '', headers: Record<string, string> = {}) =>
-  list(new NextRequest(`${BASE}${query}`, { headers }), undefined);
+  list(new NextRequest(`${BASE}${query}`, { headers }));
 const getOne = (id: string, headers: Record<string, string> = {}) =>
   read(new NextRequest(`${BASE}/${id}`, { headers }), params(id));
 const del = (id: string) =>
