@@ -60,6 +60,15 @@ export interface FrameworkDefinition {
   sections: Readonly<Record<string, z.ZodType>>;
   collections: readonly CollectionSpec[];
   references: readonly ReferenceSpec[];
+  /**
+   * The judge slots: the ids of the records of `kind` (the model's
+   * `judges[]`). Order is not part of the check; it is the order agents are
+   * listed in. Code, not data (app-plan §5): each slot is a platform agent every
+   * workspace owns (`lib/app/judges/agents.ts`), so a version that adds,
+   * drops or renames a judge needs code to run it. `decompose()` refuses a
+   * version whose records of `kind` are not this set.
+   */
+  judges: { kind: string; slots: readonly string[] };
   /** Reads the version and schema version from the file's own metadata. */
   versionOf: (document: JsonObject) => { version: string; schemaVersion: string };
   /**

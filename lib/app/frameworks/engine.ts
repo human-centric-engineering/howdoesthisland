@@ -7,10 +7,15 @@
  * framework.
  *
  * **This interface grows with the features that implement it.** §8.2 lists
- * six methods; only the two that exist today are here. `judgeSlots`,
+ * six methods; only the two that exist today are here. `activeJudgeSlots`,
  * `buildJudgeRequest` and `outputSchema` arrive with f-judges, and
  * `rewriteRequest` with f-rewrite, each together with its implementation, so
  * no method is ever a stub (B31).
+ *
+ * The slots themselves are not the engine's: they are the definition's static
+ * `judges.slots` (`types.ts`), because each is a platform agent that exists
+ * before any engine is made. `activeJudgeSlots` only chooses, for one run,
+ * which of those run; it never names a slot that list does not have.
  *
  * The type parameters are the framework's own shapes. A caller that does not
  * know the framework holds a `FrameworkEngine` with the `unknown` defaults.

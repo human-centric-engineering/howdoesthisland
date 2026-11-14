@@ -43,6 +43,9 @@ All of it is reported in one run, and nothing is written:
 - a section the definition does not know, or one it expects that is missing;
 - a record failing its kind's Zod schema, or with no `id`;
 - two records of one kind with the same key;
+- judges whose ids are not the definition's `judges.slots` (order aside): each slot is a
+  platform agent in every workspace ([`judges.md`](./judges.md)), so a version
+  cannot add, drop or rename one without code;
 - a file that is not JSON.
 
 The reference fields follow the model's own spec, `meta.reference_rules`, and are

@@ -46,6 +46,10 @@
  *
  * Full guide: .context/orchestration/platform-agents.md
  */
+import { judgeAgentDefinitions } from '@/lib/app/judges/agents';
+import { registerPlatformAgent } from '@/lib/orchestration/agents/platform-agents';
+
 export function initAppPlatformAgents(): void {
-  // No app platform agents by default.
+  // The nine judges and the editor, one instance per workspace (t-17, D17).
+  for (const definition of judgeAgentDefinitions()) registerPlatformAgent(definition);
 }

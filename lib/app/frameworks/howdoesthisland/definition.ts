@@ -10,6 +10,7 @@
 import { isJsonObject } from '@/lib/app/frameworks/codec';
 import { isCultureEnabled } from '@/lib/app/frameworks/culture';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
+import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
 import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import {
   SECTION_KIND,
@@ -303,6 +304,7 @@ export const howDoesThisLand: FrameworkDefinition = {
   sections,
   collections,
   references,
+  judges: { kind: 'judge', slots: HOWDOESTHISLAND_JUDGE_SLOTS },
   versionOf: (document) => {
     // decompose() has already checked meta against its schema.
     const meta = isJsonObject(document.meta) ? document.meta : {};

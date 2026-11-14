@@ -183,6 +183,31 @@ describe('decompose() refuses', () => {
     expect(decompose(howDoesThisLand, doc).problems).toContain('culture: expected an object');
   });
 
+  it('a judge that is not one of the definition’s slots (it would have no agent)', () => {
+    const doc = model();
+    const judges = list(doc, 'judges');
+    judges.push({ ...judges[0], id: 'judge_voice' });
+    expect(decompose(howDoesThisLand, doc).problems).toEqual([
+      `judge "judge_voice" is not a judge slot this code runs (${howDoesThisLand.judges.slots.join(', ')})`,
+    ]);
+  });
+
+  it('a version that drops one of the definition’s judge slots (its agent would be idle)', () => {
+    const doc = model();
+    doc.judges = list(doc, 'judges').filter((j) => j.id !== 'judge_craft');
+    expect(decompose(howDoesThisLand, doc).problems).toContain(
+      'judge slot "judge_craft" is missing'
+    );
+  });
+
+  it('a missing judges list once, not again for every slot', () => {
+    const doc = model();
+    delete doc.judges;
+    const { problems } = decompose(howDoesThisLand, doc);
+    expect(problems).toContain('missing section "judges"');
+    expect(problems.filter((p) => p.startsWith('judge slot'))).toEqual([]);
+  });
+
   it('a file that is not an object', () => {
     expect(decompose(howDoesThisLand, []).problems).toEqual(['the file is not a JSON object']);
   });
@@ -197,6 +222,12 @@ describe('decompose() refuses', () => {
 });
 
 describe('decompose() accepts', () => {
+  it('the judge slots in another order', () => {
+    const doc = model();
+    doc.judges = [...list(doc, 'judges')].reverse();
+    expect(decompose(howDoesThisLand, doc).problems).toEqual([]);
+  });
+
   it('the named judge slots that are not records', () => {
     // judges[].appeal may be "lenses" or "influence" (meta.reference_rules).
     const doc = model();

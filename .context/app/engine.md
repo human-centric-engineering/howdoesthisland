@@ -17,8 +17,11 @@ const result = engine.assemble(text, ctx, quick, judgeOutputs, source);
 
 - **`FrameworkEngine`** (`lib/app/frameworks/engine.ts`) has `quickScan` and `assemble`
   only. §8.2 lists six methods, and each of the other four arrives with the feature that
-  implements it (`judgeSlots`, `buildJudgeRequest` and `outputSchema` with f-judges,
+  implements it (`activeJudgeSlots`, `buildJudgeRequest` and `outputSchema` with f-judges,
   `rewriteRequest` with f-rewrite). That way no method is a stub.
+- **The judge slots are the definition's, not the engine's.** `judges.slots` on the
+  framework definition is the one list (each slot is a platform agent, see
+  [`judges.md`](./judges.md)); `activeJudgeSlots` only picks which of them run.
 - **The model is never written.** `createEngine` checks the materialised model against
   the fields the engine reads, then indexes it (`engine/model.ts`). It throws a
   `ZodError` naming the field when one is missing. The parsed copy is frozen, and it is
