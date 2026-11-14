@@ -17,12 +17,13 @@
  *    already bound spend, and consumer chat's 10 RPM fallback
  *    (`agentChatLimiter`) means something else.
  * 4. **Call**: `runStructuredCompletion` with the slot's schema in strict
- *    mode and the slot's `maxTokens` / timeout, never above the agent's
- *    ceiling. A reply that does not parse, or that the engine's validator
+ *    mode, the slot's `maxTokens` (never above the agent's ceiling) and its
+ *    timeout, which bounds each attempt. A reply that does not parse, or that the engine's validator
  *    refuses as malformed, gets the runner's one retry. A refusal (an empty
  *    reply, which is how OpenAI's strict-mode refusal arrives, or a
  *    content-filter finish) gets none.
- * 5. **Cost**: one `AiCostLog` row per run, with `{ judge, frameworkVersion,
+ * 5. **Cost**: one `AiCostLog` row per run (one per service tier, in the
+ *    rare run whose attempts were served at two), with `{ judge, frameworkVersion,
  *    assessmentId? }` in its metadata, counting every attempt the provider
  *    billed: the retry, and an attempt that failed, as well as the one that
  *    answered. The runner sums both attempts only when it succeeds, so the
@@ -39,7 +40,6 @@
 import type { FrameworkEngine, JudgeDrop } from '@/lib/app/frameworks/engine';
 import { judgeAgentSlug } from '@/lib/app/judges/agents';
 import { prisma } from '@/lib/db/client';
-import { logger } from '@/lib/logging';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
@@ -50,7 +50,6 @@ import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-comp
 import type { LlmFinishReason, LlmUsage } from '@/lib/orchestration/llm/types';
 import { createDynamicLimiter } from '@/lib/security/rate-limit';
 import { requireOrgId } from '@/lib/tenancy/context';
-import type { AiCostLog } from '@/types/prisma';
 import { CostOperation } from '@/types/orchestration';
 
 /**
@@ -77,21 +76,33 @@ export type JudgeRunErrorCode =
   /** The provider call failed: auth, network, timeout, a spend gate. */
   | 'provider_error';
 
+/** Whose monthly cap an `over_budget` run reached: the install's, the workspace's or the agent's. */
+export type BudgetCap = 'global' | 'org' | 'agent';
+
+const CAP_NAMES: Record<BudgetCap, string> = {
+  global: "the install's monthly budget",
+  org: "the workspace's monthly budget",
+  agent: 'its monthly budget',
+};
+
 /** Why a judge did not produce a reply. Its message never carries the reply or the prompt. */
 export class JudgeRunError extends Error {
   readonly code: JudgeRunErrorCode;
   /** For `rate_limited`: when the window resets, in Unix seconds. */
   readonly resetAt?: number;
+  /** For `over_budget`: whose monthly cap was reached. */
+  readonly cap?: BudgetCap;
 
   constructor(
     code: JudgeRunErrorCode,
     message: string,
-    options: { cause?: unknown; resetAt?: number } = {}
+    options: { cause?: unknown; resetAt?: number; cap?: BudgetCap } = {}
   ) {
     super(message, options.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'JudgeRunError';
     this.code = code;
     if (options.resetAt !== undefined) this.resetAt = options.resetAt;
+    if (options.cap !== undefined) this.cap = options.cap;
   }
 }
 
@@ -122,9 +133,13 @@ export interface JudgeRun<Output> {
   model: string;
   /** Tokens billed across every attempt. */
   usage: { input: number; output: number; attempts: number };
+  /** What the rows written record; a row that could not be written counts nothing. */
   costUsd: number;
-  /** The cost row's id, or `null` when it could not be written. */
-  costLogId: string | null;
+  /**
+   * The cost rows written: one, or one per service tier when the attempts
+   * were served at two. Empty when none could be written.
+   */
+  costLogIds: string[];
   finishReason: LlmFinishReason;
 }
 
@@ -132,9 +147,13 @@ const RETRY_MESSAGE =
   'Your previous reply was not a valid JSON object in the shape the brief gives. Reply again with exactly one JSON object in that shape: no prose around it and no code fences.';
 
 /**
- * Run the judge for `slot` on the current workspace's agent. Throws
- * {@link JudgeRunError}; the cost of every billed attempt is logged first,
- * whatever the outcome.
+ * Run the judge for `slot` on the current workspace's agent.
+ *
+ * Every outcome the run decides is a {@link JudgeRunError} with a `code`, and
+ * the cost of every billed attempt is logged first, whatever the outcome. Two
+ * failures are not the run's to decide and propagate as they are: the
+ * database failing (the agent or budget read), and a slot the engine cannot
+ * run, which is the caller's error.
  */
 export async function runJudge<Ctx, Output>(
   slot: string,
@@ -188,7 +207,12 @@ export async function runJudge<Ctx, Output>(
   // also enforced at the provider gate, which exempts local providers too.)
   const budget = await withAgentBudgetLock(agent.id, () => checkBudget(agent.id));
   if (!budget.withinBudget && !isLocal) {
-    throw new JudgeRunError('over_budget', `The ${slot} judge is over its monthly budget.`);
+    // Which cap, in the chat handler's order: the install's, then the
+    // workspace's, then the agent's own.
+    const cap = budget.globalCapExceeded ? 'global' : budget.orgCapExceeded ? 'org' : 'agent';
+    throw new JudgeRunError('over_budget', `The ${slot} judge is over ${CAP_NAMES[cap]}.`, {
+      cap,
+    });
   }
 
   if (agent.rateLimitRpm !== null) {
@@ -242,37 +266,41 @@ export async function runJudge<Ctx, Output>(
     outcome = { error: toJudgeRunError(slot, err) };
   }
 
+  // One row per service tier the attempts were served at: a row is priced at
+  // one tier, and under `auto` one attempt can be priority and the retry
+  // standard. Almost always a single row.
+  //
   // `logCost` is called with its FK columns written out, so the platform's
   // attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
   // `agent.id` is the row just loaded, and `userId` is a real `User.id` or
-  // nothing (see `RunJudgeInput.userId`).
+  // nothing (see `RunJudgeInput.userId`). It never rejects: a failed write is
+  // logged there and answers `null`.
+  const rows = await Promise.all(
+    [...byTier(billed)].map(([tier, attempts]) => {
+      const usage = sumUsage(attempts);
+      return logCost({
+        agentId: agent.id,
+        userId: input.userId ?? null,
+        provider: binding.providerSlug,
+        model: binding.model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        ...(usage.cacheReadTokens ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+        ...(usage.cacheWriteTokens ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+        ...(tier ? { serviceTier: tier } : {}),
+        operation: CostOperation.CHAT,
+        isLocal,
+        metadata: {
+          judge: slot,
+          frameworkVersion: input.frameworkVersion,
+          ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
+          attempts: attempts.length,
+          ...('error' in outcome ? { error: outcome.error.code } : {}),
+        },
+      });
+    })
+  );
   const usage = sumUsage(billed);
-  const cost =
-    billed.length === 0
-      ? { id: null, costUsd: 0 }
-      : await settleCost(
-          logCost({
-            agentId: agent.id,
-            userId: input.userId ?? null,
-            provider: binding.providerSlug,
-            model: binding.model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            ...(usage.cacheReadTokens ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-            ...(usage.cacheWriteTokens ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
-            ...(usage.serviceTier ? { serviceTier: usage.serviceTier } : {}),
-            operation: CostOperation.CHAT,
-            isLocal,
-            metadata: {
-              judge: slot,
-              frameworkVersion: input.frameworkVersion,
-              ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
-              attempts: billed.length,
-              ...('error' in outcome ? { error: outcome.error.code } : {}),
-            },
-          }),
-          { agentId: agent.id, judge: slot }
-        );
 
   if ('error' in outcome) throw outcome.error;
   return {
@@ -282,8 +310,8 @@ export async function runJudge<Ctx, Output>(
     provider: binding.providerSlug,
     model: binding.model,
     usage: { input: usage.inputTokens, output: usage.outputTokens, attempts: billed.length },
-    costUsd: cost.costUsd,
-    costLogId: cost.id,
+    costUsd: rows.reduce((sum, row) => sum + (row?.totalCostUsd ?? 0), 0),
+    costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
     finishReason: outcome.finishReason,
   };
 }
@@ -343,15 +371,10 @@ function toJudgeRunError(slot: string, err: unknown): JudgeRunError {
   return new JudgeRunError('provider_error', `The ${slot} judge's call failed.`, { cause: err });
 }
 
-/**
- * The attempts' usage added together. A cost row has one tier, so it names
- * one only when every attempt was served at it, as the runner's own result
- * does: under `auto` one attempt can be priority and the next standard.
- */
-function sumUsage(billed: readonly LlmUsage[]): LlmUsage {
+/** The attempts' token counts added together. */
+function sumUsage(attempts: readonly LlmUsage[]): LlmUsage {
   const total: LlmUsage = { inputTokens: 0, outputTokens: 0 };
-  const tiers = new Set(billed.map((u) => u.serviceTier));
-  for (const u of billed) {
+  for (const u of attempts) {
     total.inputTokens += u.inputTokens;
     total.outputTokens += u.outputTokens;
     if (u.cacheReadTokens) total.cacheReadTokens = (total.cacheReadTokens ?? 0) + u.cacheReadTokens;
@@ -359,24 +382,12 @@ function sumUsage(billed: readonly LlmUsage[]): LlmUsage {
       total.cacheWriteTokens = (total.cacheWriteTokens ?? 0) + u.cacheWriteTokens;
     }
   }
-  const [onlyTier] = tiers;
-  if (tiers.size === 1 && onlyTier) total.serviceTier = onlyTier;
   return total;
 }
 
-/**
- * Waits for the run's cost row. A failed write is logged, never thrown: the
- * reply was billed either way, and refusing it would bill a rerun too.
- */
-async function settleCost(
-  write: Promise<AiCostLog | null>,
-  about: { agentId: string; judge: string }
-): Promise<{ id: string | null; costUsd: number }> {
-  try {
-    const row = await write;
-    return { id: row?.id ?? null, costUsd: row?.totalCostUsd ?? 0 };
-  } catch (err) {
-    logger.error('Failed to log a judge run cost', err, about);
-    return { id: null, costUsd: 0 };
-  }
+/** The attempts grouped by the service tier that served them, in order. */
+function byTier(attempts: readonly LlmUsage[]): Map<LlmUsage['serviceTier'], LlmUsage[]> {
+  const groups = new Map<LlmUsage['serviceTier'], LlmUsage[]>();
+  for (const u of attempts) groups.set(u.serviceTier, [...(groups.get(u.serviceTier) ?? []), u]);
+  return groups;
 }

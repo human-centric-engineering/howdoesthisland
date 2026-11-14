@@ -76,6 +76,9 @@ async function main(): Promise<number> {
   try {
     const { granted } = await system(() => equipWorkspace(org.id, 'smoke:judge'));
     check(granted, 'the workspace is approved for OpenAI');
+    // Without the grant the call would fail at the provider gate, or bill
+    // against a set-up the app never runs; the workspace is still erased.
+    if (!granted) return 1;
 
     await runAsOrg(org.id, async () => {
       const agent = await prisma.aiAgent.findUnique({
@@ -109,9 +112,9 @@ async function main(): Promise<number> {
       const scores = run.output.dimension_scores ?? [];
       check(scores.length > 0, `the reply scores ${scores.length} ethos dimension(s)`);
 
-      const row = run.costLogId
-        ? await prisma.aiCostLog.findUnique({ where: { id: run.costLogId } })
-        : null;
+      check(run.costLogIds.length === 1, `one cost row written (${run.costLogIds.length})`);
+      const [rowId] = run.costLogIds;
+      const row = rowId ? await prisma.aiCostLog.findUnique({ where: { id: rowId } }) : null;
       console.log('  cost row:');
       console.log(
         JSON.stringify(

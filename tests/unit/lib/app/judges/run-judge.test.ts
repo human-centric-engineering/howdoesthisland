@@ -186,7 +186,7 @@ describe('runJudge on a good reply', () => {
       model: 'gpt-4.1',
       usage: { input: 1000, output: 200, attempts: 1 },
       costUsd: 0.0036,
-      costLogId: 'cost-1',
+      costLogIds: ['cost-1'],
       finishReason: 'stop',
     });
   });
@@ -297,10 +297,30 @@ describe('runJudge refuses before any provider call', () => {
       limit: 10,
       remaining: -2,
     });
-    expect((await refusal(run())).code).toBe('over_budget');
+    const err = await refusal(run());
+    expect(err.code).toBe('over_budget');
+    expect(err.cap).toBe('agent');
     expect(mocks.getProvider).not.toHaveBeenCalled();
     expect(chat).not.toHaveBeenCalled();
     expect(mocks.logCost).not.toHaveBeenCalled();
+  });
+});
+
+describe('runJudge names the cap an over-budget run reached', () => {
+  it.each([
+    [{ globalCapExceeded: true, orgCapExceeded: true }, 'global', "the install's"],
+    [{ orgCapExceeded: true }, 'org', "the workspace's"],
+  ])('%o → %s', async (flags, cap, words) => {
+    mocks.checkBudget.mockResolvedValue({
+      withinBudget: false,
+      spent: 1,
+      limit: null,
+      remaining: null,
+      ...flags,
+    });
+    const err = await refusal(run());
+    expect(err).toMatchObject({ code: 'over_budget', cap });
+    expect(err.message).toContain(words);
   });
 });
 
@@ -530,16 +550,41 @@ describe('runJudge counts prompt-cache tokens and the service tier', () => {
     });
   });
 
-  it('names no tier when the attempts were served at different ones', async () => {
+  it('writes a row per tier when the attempts were served at different ones', async () => {
+    mocks.logCost
+      .mockResolvedValueOnce({ id: 'cost-p', totalCostUsd: 0.004 })
+      .mockResolvedValueOnce({ id: 'cost-s', totalCostUsd: 0.003 });
     chat
       .mockResolvedValueOnce(
         response('nope', {
           usage: { inputTokens: 1000, outputTokens: 40, serviceTier: 'priority' },
         })
       )
-      .mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
-    await run();
-    expect(costRow()).not.toHaveProperty('serviceTier');
+      .mockResolvedValueOnce(
+        response(JSON.stringify(ethosReply()), { usage: { inputTokens: 1100, outputTokens: 200 } })
+      );
+
+    const result = await run();
+
+    expect(mocks.logCost).toHaveBeenCalledTimes(2);
+    const [priority, standard] = mocks.logCost.mock.calls.map((call) => call[0]);
+    expect(priority).toMatchObject({
+      inputTokens: 1000,
+      outputTokens: 40,
+      serviceTier: 'priority',
+      metadata: { attempts: 1, judge: SLOT },
+    });
+    expect(standard).toMatchObject({
+      inputTokens: 1100,
+      outputTokens: 200,
+      metadata: { attempts: 1 },
+    });
+    expect(standard).not.toHaveProperty('serviceTier');
+    expect(result).toMatchObject({
+      usage: { input: 2100, output: 240, attempts: 2 },
+      costUsd: 0.007,
+      costLogIds: ['cost-p', 'cost-s'],
+    });
   });
 
   it('leaves them off a row whose attempts reported none', async () => {
@@ -593,15 +638,10 @@ describe('runJudge passes a reply through the engine’s validator', () => {
 });
 
 describe('runJudge when the cost write fails', () => {
+  // `logCost` never rejects: a failed write is logged there and answers null.
   it('returns the reply with no row id when logCost writes nothing', async () => {
     chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
     mocks.logCost.mockResolvedValueOnce(null);
-    await expect(run()).resolves.toMatchObject({ costLogId: null, costUsd: 0 });
-  });
-
-  it('still returns the reply', async () => {
-    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
-    mocks.logCost.mockRejectedValueOnce(new Error('db down'));
-    await expect(run()).resolves.toMatchObject({ costLogId: null, costUsd: 0 });
+    await expect(run()).resolves.toMatchObject({ costLogIds: [], costUsd: 0 });
   });
 });

@@ -94,11 +94,14 @@ the checks the chat routes would have made itself:
    limiter is keyed per user and falls back to 10 RPM, which means something
    else; the monthly caps already bound spend.
 4. **Call**: `runStructuredCompletion` in strict mode, with the slot's
-   `maxTokens` and timeout, never above the agent's ceiling. A reply that is
+   `maxTokens` (never above the agent's ceiling) and its timeout, which bounds
+   each attempt. A reply that is
    not JSON, or that the engine's validator refuses whole, gets one retry. A
    refusal does not: an empty reply (how OpenAI's strict-mode refusal arrives)
    or a content-filter finish.
-5. **Cost**: one `AiCostLog` row per run, `operation: 'chat'`, with
+5. **Cost**: one `AiCostLog` row per run, `operation: 'chat'` (one per service
+   tier, in the rare run whose attempts were served at two, since a row is
+   priced at one), with
    `{ judge, frameworkVersion, assessmentId?, attempts, error? }` in its
    metadata. It counts every attempt the provider billed, read off the
    provider's responses: the runner sums both attempts only when it succeeds,
@@ -106,11 +109,13 @@ the checks the chat routes would have made itself:
 6. **Result**: the validated output and its drop record.
 
 A failure is a `JudgeRunError` with a `code`: `agent_not_found`,
-`agent_inactive`, `over_budget`, `rate_limited`, `malformed` (twice),
+`agent_inactive`, `over_budget` (with `cap`: `global`, `org` or `agent`),
+`rate_limited`, `malformed` (twice),
 `truncated`, `refused` (an empty reply or a content-filter finish, not
 retried) or `provider_error` (including a binding that cannot be resolved).
 A slot the engine cannot run, such as culture's with the switch off, throws
-the engine's own error before anything is counted. A
+the engine's own error before anything is counted, and a database failure
+propagates as it is. A
 `JudgeRunError`'s message never carries the prompt or the reply.
 
 **It runs in the caller's tenant context.** The agent is found by the
