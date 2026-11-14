@@ -24,7 +24,7 @@
  */
 import { z } from 'zod';
 import { orgIdParamSchema } from '@/lib/validations/tenancy';
-import { ORG_ROLES } from '@/lib/tenancy/roles';
+import { ORG_OWNER_ROLE, ORG_ROLES } from '@/lib/tenancy/roles';
 import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/service';
 import { JUDGE_ROLES } from '@/lib/app/judges/approved-models';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
@@ -125,7 +125,7 @@ export const createdWorkspaceSchema = z.object({
   id: z.string(),
   slug: z.string(),
   name: z.string(),
-  role: z.literal('OWNER'),
+  role: z.literal(ORG_OWNER_ROLE),
 });
 
 /** `InvitationForInvitee` in `lib/app/workspaces/invitations.ts`. */
