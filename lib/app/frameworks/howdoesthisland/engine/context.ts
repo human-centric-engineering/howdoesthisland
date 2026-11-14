@@ -14,6 +14,8 @@
  * dropped, takes its first option, since every judge prompt names one option
  * for each modifier (`audienceText()`).
  *
+ * An empty `role`, `reader` or `writer` means none, as the prototype sends it.
+ *
  * With the culture switch off, `culture` is refused rather than ignored, as
  * the culture judge is (`activeJudgeSlots`), so a caller learns it is off.
  */
@@ -37,9 +39,12 @@ const DEFAULT_KIND = 'general';
 /** The reader or writer culture that means no country in particular. */
 export const GLOBAL_CULTURE = 'global';
 
-/** `z.enum` over ids read at run time; a version always has at least one of each. */
-function oneOf(ids: readonly string[], what: string): z.ZodType<string> {
-  const allowed = new Set(ids);
+/**
+ * One of `ids`, read at run time. `orNone` also accepts `''`, which the
+ * prototype sends for "none" (`role: ''`, `writer: ''`).
+ */
+function oneOf(ids: readonly string[], what: string, orNone = false): z.ZodType<string> {
+  const allowed = new Set(orNone ? ['', ...ids] : ids);
   return z.string().refine((id) => allowed.has(id), { error: `Not a ${what} in this version` });
 }
 
@@ -54,13 +59,13 @@ export function contextSchema(m: EngineModel, culture: boolean): z.ZodType<Engin
       `${mod.id} option`
     ).optional();
   }
-  const country = oneOf([GLOBAL_CULTURE, ...m.COUNTRY.keys()], 'culture');
+  const country = oneOf([GLOBAL_CULTURE, ...m.COUNTRY.keys()], 'culture', true);
 
   return z
     .strictObject({
       contentType: oneOf(contentTypes, 'content type').optional(),
       archetype: oneOf(archetypes, 'archetype').optional(),
-      role: oneOf([...m.ROLE.keys()], 'role').optional(),
+      role: oneOf([...m.ROLE.keys()], 'role', true).optional(),
       audience: z.strictObject(audienceShape).optional(),
       culture: culture
         ? z.strictObject({ reader: country.optional(), writer: country.optional() }).optional()

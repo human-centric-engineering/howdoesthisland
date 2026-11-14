@@ -9,7 +9,8 @@
  *
  * Events (each is the SSE `event:` name and the `data:` payload's `type`):
  *
- * - `assessment_status` — the state changed (and once, first, with the state it is in).
+ * - `assessment_status` — first, the state the stream found; then each change,
+ *   after the judges that brought it about.
  * - `assessment_judge` — a judge landed, or landed again on a re-drive.
  * - `assessment_done` — the run is final; the stream ends after it.
  * - `assessment_gone` — the assessment was deleted; the stream ends.
@@ -101,7 +102,10 @@ export async function* assessmentEvents(
       return;
     }
     const state = stateOf(row.status);
-    if (state !== lastState) {
+    // The first event is the state the stream found. After that, the judges
+    // that landed come before the state they brought about: a final judge and
+    // the final state are often read in the same poll.
+    if (lastState === null) {
       lastState = state;
       yield { type: 'assessment_status', id, status: state };
     }
@@ -114,6 +118,10 @@ export async function* assessmentEvents(
       if (sent.get(run.judge) === written) continue;
       sent.set(run.judge, written);
       yield { type: 'assessment_judge', id, ...judgeRunView(run) };
+    }
+    if (state !== lastState) {
+      lastState = state;
+      yield { type: 'assessment_status', id, status: state };
     }
     if (isFinal(state)) {
       yield {
