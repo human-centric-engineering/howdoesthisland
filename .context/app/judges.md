@@ -83,18 +83,21 @@ engine builds (`buildJudgeRequest`). It goes to the provider directly, not
 through chat, so the reply can be held to a strict schema, and so it applies
 the checks the chat routes would have made itself:
 
-1. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat handler
+1. **Binding**: the agent's provider and model, inherited at run time while
+   either is unset.
+2. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat handler
    does. Over the agent's, the workspace's or the install's monthly cap is
-   refused before any provider call.
-2. **Rate limit**: the agent's `rateLimitRpm`, on a limiter of the judges' own
+   refused before any provider call, unless the agent is bound to a local
+   provider: as in chat, a reached cap stops paid calls only.
+3. **Rate limit**: the agent's `rateLimitRpm`, on a limiter of the judges' own
    keyed by agent id, and only when the workspace has set one. Consumer chat's
    limiter is keyed per user and falls back to 10 RPM, which means something
    else; the monthly caps already bound spend.
-3. **Binding**: the agent's provider and model, inherited at run time while
-   either is unset.
 4. **Call**: `runStructuredCompletion` in strict mode, with the slot's
    `maxTokens` and timeout, never above the agent's ceiling. A reply that is
-   not JSON, or that the engine's validator refuses whole, gets one retry.
+   not JSON, or that the engine's validator refuses whole, gets one retry. A
+   refusal does not: an empty reply (how OpenAI's strict-mode refusal arrives)
+   or a content-filter finish.
 5. **Cost**: one `AiCostLog` row per run, `operation: 'chat'`, with
    `{ judge, frameworkVersion, assessmentId?, attempts, error? }` in its
    metadata. It counts every attempt the provider billed, read off the
@@ -104,8 +107,11 @@ the checks the chat routes would have made itself:
 
 A failure is a `JudgeRunError` with a `code`: `agent_not_found`,
 `agent_inactive`, `over_budget`, `rate_limited`, `malformed` (twice),
-`truncated`, `refused` (a content-filter finish, not retried) or
-`provider_error`. Its message never carries the prompt or the reply.
+`truncated`, `refused` (an empty reply or a content-filter finish, not
+retried) or `provider_error` (including a binding that cannot be resolved).
+A slot the engine cannot run, such as culture's with the switch off, throws
+the engine's own error before anything is counted. A
+`JudgeRunError`'s message never carries the prompt or the reply.
 
 **It runs in the caller's tenant context.** The agent is found by the
 workspace's slug, and at `TENANCY_MODE=multi` the spend gate refuses a call

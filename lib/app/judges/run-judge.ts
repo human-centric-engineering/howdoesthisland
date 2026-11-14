@@ -6,19 +6,22 @@
  * chat, so the reply can be held to a strict schema. Going direct skips what
  * the chat routes check, so this applies the agent's own limits itself:
  *
- * 1. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat
+ * 1. **Binding**: the agent's provider and model, inherited at run time
+ *    (`resolveAgentProviderAndModel`) while either is unset.
+ * 2. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat
  *    handler does, refusing before any provider call when the agent, its
- *    workspace or the install is over its monthly cap.
- * 2. **Rate limit**: the agent's `rateLimitRpm`, on a limiter of its own keyed
+ *    workspace or the install is over its monthly cap. As in chat, a reached
+ *    cap stops paid calls only: a judge bound to a local model still runs.
+ * 3. **Rate limit**: the agent's `rateLimitRpm`, on a limiter of its own keyed
  *    by agent id. Only when the workspace has set one: the monthly caps
  *    already bound spend, and consumer chat's 10 RPM fallback
  *    (`agentChatLimiter`) means something else.
- * 3. **Binding**: the agent's provider and model, inherited at run time
- *    (`resolveAgentProviderAndModel`) while either is unset.
  * 4. **Call**: `runStructuredCompletion` with the slot's schema in strict
  *    mode and the slot's `maxTokens` / timeout, never above the agent's
  *    ceiling. A reply that does not parse, or that the engine's validator
- *    refuses as malformed, gets the runner's one retry.
+ *    refuses as malformed, gets the runner's one retry. A refusal (an empty
+ *    reply, which is how OpenAI's strict-mode refusal arrives, or a
+ *    content-filter finish) gets none.
  * 5. **Cost**: one `AiCostLog` row per run, with `{ judge, frameworkVersion,
  *    assessmentId? }` in its metadata, counting every attempt the provider
  *    billed: the retry, and an attempt that failed, as well as the one that
@@ -42,7 +45,7 @@ import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
-import { getProvider } from '@/lib/orchestration/llm/provider-manager';
+import { getProvider, isLocalProvider } from '@/lib/orchestration/llm/provider-manager';
 import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-completion';
 import type { LlmFinishReason, LlmUsage } from '@/lib/orchestration/llm/types';
 import { createDynamicLimiter } from '@/lib/security/rate-limit';
@@ -159,8 +162,32 @@ export async function runJudge<Ctx, Output>(
     throw new JudgeRunError('agent_inactive', `The agent for ${slot} is switched off.`);
   }
 
+  // A slot this engine cannot run (culture's, with the switch off) is the
+  // caller's error, thrown by the engine before anything is counted or spent.
+  const request = input.engine.buildJudgeRequest(
+    slot,
+    input.text,
+    input.ctx,
+    input.projectContext ?? null
+  );
+
+  let binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
+  let isLocal: boolean;
+  try {
+    binding = await resolveAgentProviderAndModel(
+      { provider: agent.provider, model: agent.model, fallbackProviders: [] },
+      'chat'
+    );
+    isLocal = await isLocalProvider(binding.providerSlug);
+  } catch (err) {
+    throw toJudgeRunError(slot, err);
+  }
+
+  // A reached cap stops paid calls, not free ones, as in the chat handler: a
+  // judge bound to a local model still runs. (The org and install caps are
+  // also enforced at the provider gate, which exempts local providers too.)
   const budget = await withAgentBudgetLock(agent.id, () => checkBudget(agent.id));
-  if (!budget.withinBudget) {
+  if (!budget.withinBudget && !isLocal) {
     throw new JudgeRunError('over_budget', `The ${slot} judge is over its monthly budget.`);
   }
 
@@ -172,17 +199,6 @@ export async function runJudge<Ctx, Output>(
       });
     }
   }
-
-  const binding = await resolveAgentProviderAndModel(
-    { provider: agent.provider, model: agent.model, fallbackProviders: [] },
-    'chat'
-  );
-  const request = input.engine.buildJudgeRequest(
-    slot,
-    input.text,
-    input.ctx,
-    input.projectContext ?? null
-  );
 
   // Every response the provider returns, and the usage on any error it
   // raises, so the cost row counts what was billed on every path.
@@ -246,6 +262,7 @@ export async function runJudge<Ctx, Output>(
             ...(usage.cacheWriteTokens ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
             ...(usage.serviceTier ? { serviceTier: usage.serviceTier } : {}),
             operation: CostOperation.CHAT,
+            isLocal,
             metadata: {
               judge: slot,
               frameworkVersion: input.frameworkVersion,
@@ -275,15 +292,18 @@ type Provider = Awaited<ReturnType<typeof getProvider>>;
 
 /**
  * The provider, with every `chat()` result's usage pushed onto `billed`, and
- * a content-filter finish raised as a refusal (no retry: a filter that
- * declined once declines again, and the retry would be billed).
+ * a refusal raised as one (no retry: a model or filter that declined once
+ * declines again, and the retry would be billed).
  */
 function meteredProvider(provider: Provider, billed: LlmUsage[], slot: string): Provider {
   const chat: Provider['chat'] = async (messages, options) => {
     try {
       const response = await provider.chat(messages, options);
       billed.push(response.usage);
-      if (response.finishReason === 'error') {
+      // OpenAI's strict-mode refusal arrives as empty content (the adapter
+      // drops `message.refusal`), and a content filter as an `error` finish.
+      // Neither is a reply of any shape, and a retry would be billed too.
+      if (response.finishReason === 'error' || response.content.trim() === '') {
         throw new JudgeRunError('refused', `The provider declined to run the ${slot} judge.`);
       }
       return response;
@@ -323,8 +343,14 @@ function toJudgeRunError(slot: string, err: unknown): JudgeRunError {
   return new JudgeRunError('provider_error', `The ${slot} judge's call failed.`, { cause: err });
 }
 
+/**
+ * The attempts' usage added together. A cost row has one tier, so it names
+ * one only when every attempt was served at it, as the runner's own result
+ * does: under `auto` one attempt can be priority and the next standard.
+ */
 function sumUsage(billed: readonly LlmUsage[]): LlmUsage {
   const total: LlmUsage = { inputTokens: 0, outputTokens: 0 };
+  const tiers = new Set(billed.map((u) => u.serviceTier));
   for (const u of billed) {
     total.inputTokens += u.inputTokens;
     total.outputTokens += u.outputTokens;
@@ -332,8 +358,9 @@ function sumUsage(billed: readonly LlmUsage[]): LlmUsage {
     if (u.cacheWriteTokens) {
       total.cacheWriteTokens = (total.cacheWriteTokens ?? 0) + u.cacheWriteTokens;
     }
-    if (u.serviceTier) total.serviceTier = u.serviceTier;
   }
+  const [onlyTier] = tiers;
+  if (tiers.size === 1 && onlyTier) total.serviceTier = onlyTier;
   return total;
 }
 

@@ -60,6 +60,8 @@ const system = <T>(fn: () => Promise<T>) => runAsSystem('smoke: judge', fn);
 
 async function main(): Promise<number> {
   check(isMultiTenant(), 'TENANCY_MODE is multi');
+  // Nothing is created or billed on a database not set up as the app runs.
+  if (failures > 0) return 1;
   const { text, ctx } = caseSchema.parse(JSON.parse(readFileSync(CASE_FILE, 'utf8'))).input;
 
   const version = await system(() => repo.findVersion(howDoesThisLand.slug, VERSION));
@@ -142,7 +144,11 @@ async function main(): Promise<number> {
       );
     });
   } finally {
-    await system(() => eraseOrg({ orgId: org.id, actorUserId: 'smoke' })).catch(() => undefined);
+    await system(() => eraseOrg({ orgId: org.id, actorUserId: 'smoke' })).catch((err: unknown) => {
+      // Left behind, so say which, and fail the run.
+      console.error(`  ✗ could not erase the smoke workspace ${org.id}:`, err);
+      failures++;
+    });
   }
 
   console.log(failures === 0 ? 'Judge smoke passed' : `${failures} check(s) failed`);

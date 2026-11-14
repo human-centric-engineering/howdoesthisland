@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   logCost: vi.fn(),
   resolve: vi.fn(),
   getProvider: vi.fn(),
+  isLocalProvider: vi.fn(),
 }));
 
 vi.mock('@/lib/db/client', () => ({
@@ -26,16 +27,19 @@ vi.mock('@/lib/orchestration/llm/cost-tracker', async (importOriginal) => ({
   checkBudget: mocks.checkBudget,
   logCost: mocks.logCost,
 }));
-vi.mock('@/lib/orchestration/llm/agent-resolver', () => ({
+vi.mock('@/lib/orchestration/llm/agent-resolver', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/orchestration/llm/agent-resolver')>()),
   resolveAgentProviderAndModel: mocks.resolve,
 }));
 vi.mock('@/lib/orchestration/llm/provider-manager', () => ({
   getProvider: mocks.getProvider,
+  isLocalProvider: mocks.isLocalProvider,
 }));
 
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import { JudgeRunError, runJudge, type RunJudgeInput } from '@/lib/app/judges/run-judge';
+import { NoEligibleProviderError } from '@/lib/orchestration/llm/agent-resolver';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import type { LlmResponse } from '@/lib/orchestration/llm/types';
@@ -142,6 +146,7 @@ beforeEach(() => {
     provenance: { task: 'chat', primary: 'primary', fallbacks: 'system' },
   });
   mocks.getProvider.mockResolvedValue({ name: 'openai', isLocal: false, chat });
+  mocks.isLocalProvider.mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -210,6 +215,7 @@ describe('runJudge on a good reply', () => {
       inputTokens: 1000,
       outputTokens: 200,
       operation: 'chat',
+      isLocal: false,
       userId: 'user-1',
       metadata: {
         judge: SLOT,
@@ -245,6 +251,32 @@ describe('runJudge on a good reply', () => {
 });
 
 describe('runJudge refuses before any provider call', () => {
+  it('when the binding cannot be resolved, as provider_error, counting nothing', async () => {
+    const agent = agentRow({ rateLimitRpm: 1 });
+    mocks.findUnique.mockResolvedValue(agent);
+    mocks.resolve.mockRejectedValueOnce(new NoEligibleProviderError());
+
+    const err = await refusal(run());
+
+    expect(err.code).toBe('provider_error');
+    expect(err.cause).toBeInstanceOf(NoEligibleProviderError);
+    expect(mocks.checkBudget).not.toHaveBeenCalled();
+    expect(chat).not.toHaveBeenCalled();
+    expect(mocks.logCost).not.toHaveBeenCalled();
+    // The failed run took no rate-limit slot.
+    mocks.findUnique.mockResolvedValue(agent);
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await expect(run()).resolves.toMatchObject({ slot: SLOT });
+  });
+
+  it('when the slot does not run with the culture switch off, before anything is counted', async () => {
+    await expect(run({}, 'judge_culture')).rejects.toThrow(
+      'does not run with the culture switch off'
+    );
+    expect(mocks.checkBudget).not.toHaveBeenCalled();
+    expect(chat).not.toHaveBeenCalled();
+  });
+
   it('when the workspace has no agent for the slot', async () => {
     mocks.findUnique.mockResolvedValue(null);
     expect((await refusal(run())).code).toBe('agent_not_found');
@@ -269,6 +301,29 @@ describe('runJudge refuses before any provider call', () => {
     expect(mocks.getProvider).not.toHaveBeenCalled();
     expect(chat).not.toHaveBeenCalled();
     expect(mocks.logCost).not.toHaveBeenCalled();
+  });
+});
+
+describe('runJudge on a local provider', () => {
+  it('runs over budget, as chat does, and logs the row as local', async () => {
+    mocks.isLocalProvider.mockResolvedValue(true);
+    mocks.checkBudget.mockResolvedValue({
+      withinBudget: false,
+      spent: 12,
+      limit: 10,
+      remaining: -2,
+    });
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+
+    await expect(run()).resolves.toMatchObject({ output: ethosReply() });
+    expect(mocks.isLocalProvider).toHaveBeenCalledWith('openai');
+    expect(costRow()).toMatchObject({ isLocal: true });
+  });
+
+  it('logs a paid provider’s row as not local', async () => {
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await run();
+    expect(costRow()).toMatchObject({ isLocal: false });
   });
 });
 
@@ -407,6 +462,16 @@ describe('runJudge on a truncated reply', () => {
 });
 
 describe('runJudge on a provider refusal', () => {
+  it('fails as refused on an empty reply (OpenAI’s strict refusal), without a retry', async () => {
+    chat.mockResolvedValueOnce(response(''));
+
+    const err = await refusal(run());
+
+    expect(err.code).toBe('refused');
+    expect(chat).toHaveBeenCalledTimes(1);
+    expect(costRow()).toMatchObject({ metadata: { attempts: 1, error: 'refused' } });
+  });
+
   it('fails as refused on a content-filter finish, without a billed retry', async () => {
     chat.mockResolvedValueOnce(response('', { finishReason: 'error' }));
 
@@ -463,6 +528,18 @@ describe('runJudge counts prompt-cache tokens and the service tier', () => {
       cacheWriteTokens: 50,
       serviceTier: 'flex',
     });
+  });
+
+  it('names no tier when the attempts were served at different ones', async () => {
+    chat
+      .mockResolvedValueOnce(
+        response('nope', {
+          usage: { inputTokens: 1000, outputTokens: 40, serviceTier: 'priority' },
+        })
+      )
+      .mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await run();
+    expect(costRow()).not.toHaveProperty('serviceTier');
   });
 
   it('leaves them off a row whose attempts reported none', async () => {
