@@ -160,13 +160,24 @@ the checks the chat routes would have made itself:
    metadata. It counts every attempt the provider billed, read off the
    provider's responses: the runner sums both attempts only when it succeeds,
    so a run that failed after a retry would otherwise log nothing.
-6. **Result**: the validated output and its drop record.
+6. **Result**: a `JudgeReply`, the validated output and its drop record.
+   (Not `JudgeRun`, which is the model an assessment stores each one in.)
+
+**The call runs in the agent's privacy scope** (`agentPrivacyScope`, Sunrise
+0.19.0), inside the caller's scope when there is one, so the privacy stage
+applies that agent's mode and the workspace's minimum. Outside any scope it
+would apply neither. Under `pseudonymise` the reply's quotes come back restored
+before the engine checks each is in the text, so they are kept
+(`run-judge-pseudonymise.test.ts`).
 
 A failure is a `JudgeRunError` with a `code`: `agent_not_found`,
 `agent_inactive`, `model_not_approved`, `over_budget` (with `cap`: `global`, `org` or `agent`),
 `rate_limited`, `malformed` (twice),
 `truncated`, `refused` (an empty reply or a content-filter finish, not
 retried) or `provider_error` (including a binding that cannot be resolved).
+A failure that reached the provider carries `spend`, what it was billed, for
+the stored job's row. (`slot_unavailable` is the stored job's own code, never
+raised here; see [`assessments.md`](./assessments.md).)
 A slot the engine cannot run, such as culture's with the switch off, throws
 the engine's own error before anything is counted, and a database failure
 propagates as it is. A

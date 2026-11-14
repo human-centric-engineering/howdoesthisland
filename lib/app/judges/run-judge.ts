@@ -34,6 +34,9 @@
  *    usage is read off the provider's responses here instead.
  * 6. **Result**: the engine's post-validated output and its drop record.
  *
+ * The call runs in the agent's privacy scope (`agentPrivacyScope`), inside
+ * the caller's when there is one, so the agent's privacy mode applies to it.
+ *
  * **Tenant context is the caller's.** The agent is looked up by the org's
  * slug, and at `TENANCY_MODE=multi` the provider manager's spend gate refuses
  * a call with no org in context, so `runJudge` runs inside `runAsOrg` (a
@@ -50,6 +53,7 @@ import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
+import { agentPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { getProvider, isLocalProvider } from '@/lib/orchestration/llm/provider-manager';
 import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-completion';
 import type { LlmFinishReason, LlmUsage } from '@/lib/orchestration/llm/types';
@@ -81,7 +85,12 @@ export type JudgeRunErrorCode =
   /** The provider declined to answer (a content filter). */
   | 'refused'
   /** The provider call failed: auth, network, timeout, a spend gate. */
-  | 'provider_error';
+  | 'provider_error'
+  /**
+   * Not raised here: the stored job's, for a slot the engine no longer runs
+   * (its switch turned off after the assessment was queued).
+   */
+  | 'slot_unavailable';
 
 /** Whose monthly cap an `over_budget` run reached: the install's, the workspace's or the agent's. */
 export type BudgetCap = 'global' | 'org' | 'agent';
@@ -92,6 +101,14 @@ const CAP_NAMES: Record<BudgetCap, string> = {
   agent: 'its monthly budget',
 };
 
+/** What a judge's attempts were billed, on whatever path the run ended. */
+export interface JudgeSpend {
+  provider: string;
+  model: string;
+  usage: { input: number; output: number; attempts: number };
+  costUsd: number;
+}
+
 /** Why a judge did not produce a reply. Its message never carries the reply or the prompt. */
 export class JudgeRunError extends Error {
   readonly code: JudgeRunErrorCode;
@@ -99,6 +116,11 @@ export class JudgeRunError extends Error {
   readonly resetAt?: number;
   /** For `over_budget`: whose monthly cap was reached. */
   readonly cap?: BudgetCap;
+  /**
+   * What the failed judge was billed, when it reached the provider: a reply
+   * that was malformed twice, or a call that failed part-way, still costs.
+   */
+  spend?: JudgeSpend;
 
   constructor(
     code: JudgeRunErrorCode,
@@ -131,7 +153,8 @@ export interface RunJudgeInput<Ctx, Output> {
   userId?: string | null;
 }
 
-export interface JudgeRun<Output> {
+/** A judge's reply, checked, with what it cost. (Not the `JudgeRun` model, which stores one.) */
+export interface JudgeReply<Output> {
   slot: string;
   output: Output;
   /** What post-validation dropped or changed in the reply. */
@@ -165,7 +188,7 @@ const RETRY_MESSAGE =
 export async function runJudge<Ctx, Output>(
   slot: string,
   input: RunJudgeInput<Ctx, Output>
-): Promise<JudgeRun<Output>> {
+): Promise<JudgeReply<Output>> {
   const orgId = requireOrgId();
   const slug = judgeAgentSlug(slot);
   const agent = await prisma.aiAgent.findUnique({
@@ -257,33 +280,41 @@ export async function runJudge<Ctx, Output>(
       billed,
       slot
     );
-    const result = await runStructuredCompletion({
-      provider,
-      model: binding.model,
-      messages: [
-        { role: 'system', content: agent.systemInstructions },
-        { role: 'user', content: request.prompt },
-      ],
-      parse: (raw) => {
-        const reply = parseJson(raw);
-        if (reply === undefined) return null;
-        const checked = input.engine.validateJudgeReply(slot, reply, input.text);
-        return checked.ok ? { output: checked.output, drops: checked.drops } : null;
-      },
-      retryUserMessage: RETRY_MESSAGE,
-      onFinalFailure: () =>
-        new JudgeRunError('malformed', `The ${slot} judge's reply was not usable, twice.`),
-      responseSchema: request.schema,
-      responseSchemaName: request.schemaName,
-      responseSchemaStrict: true,
-      temperature: agent.temperature,
-      maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
-      timeoutMs: approved.settings.timeoutMs,
-      ...(approved.settings.reasoningEffort
-        ? { reasoningEffort: approved.settings.reasoningEffort }
-        : {}),
-      phase: 'judge',
-    });
+    // In the agent's privacy scope (Sunrise 0.19.0), so the privacy stage
+    // applies this agent's mode, and the workspace's minimum, to the call and
+    // records its counts in the caller's scope (an assessment's). Outside any
+    // scope the stage would apply neither. Under `pseudonymise` the reply's
+    // quotes come back restored before `parse` sees them, so the engine's
+    // check that each quote is in the text still holds.
+    const result = await runInPrivacyScope(agentPrivacyScope(agent.id), () =>
+      runStructuredCompletion({
+        provider,
+        model: binding.model,
+        messages: [
+          { role: 'system', content: agent.systemInstructions },
+          { role: 'user', content: request.prompt },
+        ],
+        parse: (raw) => {
+          const reply = parseJson(raw);
+          if (reply === undefined) return null;
+          const checked = input.engine.validateJudgeReply(slot, reply, input.text);
+          return checked.ok ? { output: checked.output, drops: checked.drops } : null;
+        },
+        retryUserMessage: RETRY_MESSAGE,
+        onFinalFailure: () =>
+          new JudgeRunError('malformed', `The ${slot} judge's reply was not usable, twice.`),
+        responseSchema: request.schema,
+        responseSchemaName: request.schemaName,
+        responseSchemaStrict: true,
+        temperature: agent.temperature,
+        maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
+        timeoutMs: approved.settings.timeoutMs,
+        ...(approved.settings.reasoningEffort
+          ? { reasoningEffort: approved.settings.reasoningEffort }
+          : {}),
+        phase: 'judge',
+      })
+    );
     outcome = { value: result.value, finishReason: result.finishReason };
   } catch (err) {
     outcome = { error: toJudgeRunError(slot, err) };
@@ -324,16 +355,24 @@ export async function runJudge<Ctx, Output>(
     })
   );
   const usage = sumUsage(billed);
-
-  if ('error' in outcome) throw outcome.error;
-  return {
-    slot,
-    output: outcome.value.output,
-    drops: outcome.value.drops,
+  const spend: JudgeSpend = {
     provider: binding.providerSlug,
     model: binding.model,
     usage: { input: usage.inputTokens, output: usage.outputTokens, attempts: billed.length },
     costUsd: rows.reduce((sum, row) => sum + (row?.totalCostUsd ?? 0), 0),
+  };
+
+  if ('error' in outcome) {
+    // Only a call that reached the provider was billed; one refused before it
+    // (the spend gate, a provider that could not be built) carries nothing.
+    if (billed.length > 0) outcome.error.spend = spend;
+    throw outcome.error;
+  }
+  return {
+    slot,
+    output: outcome.value.output,
+    drops: outcome.value.drops,
+    ...spend,
     costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
     finishReason: outcome.finishReason,
   };

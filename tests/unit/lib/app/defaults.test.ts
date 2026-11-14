@@ -338,30 +338,38 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/data-export.ts',
     risk: 'a stray collector would leak app rows into every install’s subject-access export, and a stray declaration would pre-account for a table nobody decided about',
     assert: async () => {
-      // FORK (HowDoesThisLand): pinned to our one section and one source, the
-      // workspace invitations (t-9). The reads are stubbed: this pins the
-      // shape, not the query. Ledger: .context/app/platform-divergences.md row 2.
-      const findMany = vi
-        .spyOn(prisma.workspaceInvitation, 'findMany')
-        .mockResolvedValue([] as never);
+      // FORK (HowDoesThisLand): pinned to our sections and sources, the
+      // workspace invitations (t-9) and content and assessments (t-22). The
+      // reads are stubbed: this pins the shape, not the query. Ledger:
+      // .context/app/platform-divergences.md row 2.
+      const reads = [
+        vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.content, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.assessment, 'findMany').mockResolvedValue([] as never),
+      ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
+        contents: [],
+        assessments: [],
       });
-      findMany.mockRestore();
+      for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
       // exercises the REAL seam. A stray source here would also silence the
       // fork-accounting rule in export-sources.test.ts for that model.
       __resetAppSubjectSourceRegistryForTests();
       expect(getAppSubjectSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
+        ['Content', 'contents'],
+        ['Assessment', 'assessments'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
-      // holding no personal data (t-10). Ledger row 2.
+      // holding no personal data (t-10), and judge runs (t-22). Ledger row 2.
       expect(getAppExcludedSubjectSources().map((entry) => entry.model)).toEqual([
         'Framework',
         'FrameworkVersion',
         'FrameworkNode',
         'FrameworkLink',
+        'JudgeRun',
       ]);
     },
   },
@@ -371,10 +379,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppOrgSourceRegistryForTests();
       // The reads trigger the lazy init, so this exercises the REAL file.
-      // FORK (HowDoesThisLand): pinned to our one source, the workspace
-      // invitations (t-9). Ledger: .context/app/platform-divergences.md row 2.
+      // FORK (HowDoesThisLand): pinned to our sources, the workspace
+      // invitations (t-9) and assessments (t-22). Ledger:
+      // .context/app/platform-divergences.md row 2.
       expect(getAppOrgSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
+        ['Content', 'contents'],
+        ['Assessment', 'assessments'],
+        ['JudgeRun', 'judgeRuns'],
       ]);
       expect(getAppExcludedOrgSources()).toEqual([]);
       expect(appOrgDeclarationsFailed()).toBe(false);
@@ -386,11 +398,16 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppOwnerClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
-      // FORK (HowDoesThisLand): pinned to our one model, the workspace
-      // invitation, as not personal (t-9). Ledger: .context/app/platform-divergences.md row 2.
+      // FORK (HowDoesThisLand): pinned to our models, the workspace invitation
+      // (t-9) and content and assessments (t-22), as not personal. Ledger:
+      // .context/app/platform-divergences.md row 2.
       expect(
         Object.entries(appOwnerClassifications()).map(([model, rule]) => [model, rule.kind])
-      ).toEqual([['WorkspaceInvitation', 'not-personal']]);
+      ).toEqual([
+        ['WorkspaceInvitation', 'not-personal'],
+        ['Content', 'not-personal'],
+        ['Assessment', 'not-personal'],
+      ]);
     },
   },
   {
@@ -482,14 +499,16 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppJobsForTests();
       // getAppJobs() triggers the lazy init, so this exercises the REAL seam.
-      // FORK (HowDoesThisLand): pinned to our one job, the signup-workspace
-      // sweep (t-7). Ledger: .context/app/platform-divergences.md row 2.
+      // FORK (HowDoesThisLand): pinned to our jobs, the signup-workspace
+      // sweep (t-7) and assessment recovery (t-22). Ledger:
+      // .context/app/platform-divergences.md row 2.
       expect(getAppJobs().map((job) => [job.name, job.intervalMs, job.scope])).toEqual([
         [
           'app:signup-workspace-sweep',
           15 * 60 * 1000,
           { system: 'signup workspaces span orgs; Org is a system model' },
         ],
+        ['app:assessment-recovery', 15 * 60 * 1000, 'per-org'],
       ]);
     },
   },

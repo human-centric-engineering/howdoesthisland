@@ -16,5 +16,6 @@ domain folders beside this one: start at [`../substrate.md`](../substrate.md).
 | [`engine.md`](./engine.md)                             | The engine: getting one from a definition, its modules, where it differs from the prototype, the culture switch.                |
 | [`intake.md`](./intake.md)                             | Intake: turning an uploaded file into text, the formats, each refusal and its code, and the limits.                             |
 | [`judges.md`](./judges.md)                             | Judges: the nine judge agents and the editor, what their instructions hold and what comes from the version, the interim models. |
+| [`assessments.md`](./assessments.md)                   | Assessments: the stored rows, the job's states and lease, its limits, cancel, the recovery job, and the smoke run.              |
 
 Features add their own page here as they land, and a row to this table.

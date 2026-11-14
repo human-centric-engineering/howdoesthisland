@@ -43,6 +43,12 @@ import { NoEligibleProviderError } from '@/lib/orchestration/llm/agent-resolver'
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import type { LlmResponse } from '@/lib/orchestration/llm/types';
+import {
+  createPrivacyScope,
+  currentPrivacyScope,
+  runInPrivacyScope,
+  type PrivacyScope,
+} from '@/lib/orchestration/privacy/scope';
 import { runAsOrg } from '@/lib/tenancy/context';
 import {
   loadCases,
@@ -448,6 +454,11 @@ describe('runJudge on a malformed reply', () => {
       outputTokens: 70,
       metadata: { attempts: 2, error: 'malformed', judge: SLOT },
     });
+    // And carries what it was billed, for the stored job's row.
+    expect(err.spend).toMatchObject({
+      usage: { input: 2100, output: 70, attempts: 2 },
+      costUsd: expect.any(Number),
+    });
   });
 });
 
@@ -516,6 +527,8 @@ describe('runJudge on a provider refusal', () => {
     expect(err.code).toBe('provider_error');
     expect(err.message).not.toContain('bad key');
     expect(mocks.logCost).not.toHaveBeenCalled();
+    // Nothing was billed, so it carries no spend for the stored row.
+    expect(err.spend).toBeUndefined();
   });
 });
 
@@ -712,5 +725,37 @@ describe('runJudge holds the call to the approved entry for the bound model (j4)
     chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
     await run();
     expect(chat.mock.calls[0][1]).toMatchObject({ maxTokens: 8_192, timeoutMs: 180_000 });
+  });
+});
+
+describe('runJudge runs the call in its agent’s privacy scope', () => {
+  it('binds the agent’s id on the scope the provider call sees, inside the caller’s', async () => {
+    mocks.findUnique.mockResolvedValue(agentRow({ id: 'agent-ethos' }));
+    let seen: PrivacyScope | undefined;
+    chat.mockImplementationOnce(async () => {
+      seen = currentPrivacyScope();
+      return response(JSON.stringify(ethosReply()));
+    });
+    const assessment = createPrivacyScope({ scopeId: 'assessment:a-1', orgId: ORG });
+
+    await runInPrivacyScope(assessment, () => run());
+
+    expect(seen?.agentId).toBe('agent-ethos');
+    expect(seen?.scopeId).toBe('assessment:a-1:agent:agent-ethos');
+    // Its counts are recorded in the assessment's scope too.
+    expect(seen?.parent).toBe(assessment);
+  });
+
+  it('enters the agent’s own scope when the caller has none', async () => {
+    mocks.findUnique.mockResolvedValue(agentRow({ id: 'agent-solo' }));
+    let seen: PrivacyScope | undefined;
+    chat.mockImplementationOnce(async () => {
+      seen = currentPrivacyScope();
+      return response(JSON.stringify(ethosReply()));
+    });
+
+    await run();
+
+    expect(seen).toMatchObject({ agentId: 'agent-solo', scopeId: 'agent:agent-solo' });
   });
 });

@@ -70,4 +70,19 @@ export function registerAppDriftProbes(): void {
     table: 'app_workspace_invitation',
     probe: constraintExists('app_workspace_invitation_invitedByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-22: the hand-written FKs from content and assessments to `user` and
+  // `ai_api_key` (the migration header says why). All SET NULL: the rows are
+  // the workspace's and outlive a member's erasure or a revoked key.
+  for (const [table, constraint, target] of [
+    ['app_content', 'app_content_createdByUserId_fkey', 'user'],
+    ['app_assessment', 'app_assessment_createdByUserId_fkey', 'user'],
+    ['app_assessment', 'app_assessment_apiKeyId_fkey', 'ai_api_key'],
+  ] as const) {
+    registerAppDriftProbe({
+      name: `${constraint} (hand-written FK → ${target})`,
+      kind: 'FK constraint',
+      table,
+      probe: constraintExists(constraint, 'ON DELETE SET NULL'),
+    });
+  }
 }
