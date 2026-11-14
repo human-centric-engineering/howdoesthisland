@@ -323,6 +323,28 @@ describe('validateJudgeReply() locates quotes in the text', () => {
     );
     expect(drops).toEqual([]);
   });
+
+  it('does not count a blank quote as located, though the text has spaces', () => {
+    const rec = ethos().recommendations[0];
+    const { output, drops } = ok(
+      validate(
+        'judge_ethos',
+        ethos({
+          highlights: [{ quote: ' ', dimension: 'eth_polish', polarity: 'weakness' }],
+          recommendations: [{ ...rec, original: '\n ' }],
+          red_flags: [{ id: 'rf_hype', quote: '  ' }],
+        })
+      )
+    );
+    expect(drops).toEqual([
+      { at: 'highlights[0]', reason: 'unlocated_quote', detail: ' ' },
+      { at: 'red_flags[0]', reason: 'unlocated_quote', detail: '  ' },
+      { at: 'recommendations[0].original', reason: 'unlocated_quote', detail: '\n ' },
+    ]);
+    expect(output.highlights).toEqual([]);
+    expect(output.red_flags).toEqual([]);
+    expect(output.recommendations).toEqual([{ ...rec, original: '' }]);
+  });
 });
 
 describe('validateJudgeReply() holds lists to the judge’s limits', () => {

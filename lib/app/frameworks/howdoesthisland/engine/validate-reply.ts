@@ -111,8 +111,12 @@ class Reader {
     return clamped;
   }
 
+  /**
+   * Whether the quote is in the text. A blank quote points at nothing, though
+   * `locate()` would find a space in any text, so it is not located.
+   */
   located(quote: string): boolean {
-    return locate(this.text, quote) !== null;
+    return quote.trim() !== '' && locate(this.text, quote) !== null;
   }
 
   /** Keeps the first `max`; records the rest. */
