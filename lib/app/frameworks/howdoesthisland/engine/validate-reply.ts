@@ -22,6 +22,10 @@
  * its judge got wrong. Only a reply that is not an object, or lacks the list
  * its shape is built on, is refused whole.
  */
+import type {
+  JudgeDrop as FrameworkJudgeDrop,
+  JudgeReplyValidation as FrameworkJudgeReplyValidation,
+} from '@/lib/app/frameworks/engine';
 import {
   IMPACTS,
   LEVER_STATUSES,
@@ -55,17 +59,10 @@ export type JudgeDropReason =
   /** Past the judge's limit for the list. */
   | 'over_limit';
 
-export interface JudgeDrop {
-  /** Where in the reply: `highlights[2]`, `perspectives[0].levers[3].quote`. */
-  at: string;
-  reason: JudgeDropReason;
-  /** The offending value, when there is one worth showing. */
-  detail?: string;
-}
+/** A drop, by path (`highlights[2]`, `perspectives[0].levers[3].quote`), with the offending value. */
+export type JudgeDrop = FrameworkJudgeDrop<JudgeDropReason>;
 
-export type JudgeReplyValidation =
-  | { ok: true; output: JudgeOutput; drops: JudgeDrop[] }
-  | { ok: false; reason: 'malformed'; detail: string };
+export type JudgeReplyValidation = FrameworkJudgeReplyValidation<JudgeOutput, JudgeDropReason>;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);

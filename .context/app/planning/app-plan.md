@@ -1379,10 +1379,11 @@ recovery job (per org, each tick): queued/running with an expired lease ─▶ r
   The mechanism it uses for durability (a row, `after()`, a tick sweep) is the one copied
   here, because its reason (crash recovery without a queue) holds here too.
 - **`FrameworkEngine`** is the interface a framework implements: `quickScan(text, ctx)`,
-  `activeJudgeSlots(ctx, profile)` (which of the definition's `judges.slots` run; the slots
+  `activeJudgeSlots(profile)` (which of the definition's `judges.slots` run; the slots
   themselves are the definition's, since each is a platform agent),
   `buildJudgeRequest(slot, text, ctx, projectContext)`,
-  `outputSchema(slot)`, `assemble(text, ctx, quick, outputs)`, `rewriteRequest(…)`.
+  `outputSchema(slot)`, `validateJudgeReply(slot, reply, text)`,
+  `assemble(text, ctx, quick, outputs)`, `rewriteRequest(…)`.
 - **Ephemeral runs** (`store: false`) are synchronous only; they keep no content or result,
   only the usage and cost record: its cost rows carry `ephemeral: true` and no
   `assessmentId`, and count toward usage and the budget like any other (§8.3).

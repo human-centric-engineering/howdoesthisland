@@ -12,13 +12,20 @@ const model = await materialise(repo, def, versionId);
 const engine = def.createEngine(model);
 
 const quick = engine.quickScan(text, ctx); // free, deterministic
-const result = engine.assemble(text, ctx, quick, judgeOutputs, source);
+
+for (const slot of engine.activeJudgeSlots(profile)) {
+  const request = engine.buildJudgeRequest(slot, text, ctx, projectContext);
+  // the runtime (t-19) makes the call with request.prompt, request.schema, …
+  const checked = engine.validateJudgeReply(slot, JSON.parse(reply), text);
+  if (checked.ok) outputs[group] = checked.output; // and keep checked.drops
+}
+const result = engine.assemble(text, ctx, quick, outputs, source);
 ```
 
-- **`FrameworkEngine`** (`lib/app/frameworks/engine.ts`) has `quickScan` and `assemble`
-  only. §8.2 lists six methods, and each of the other four arrives with the feature that
-  implements it (`activeJudgeSlots`, `buildJudgeRequest` and `outputSchema` with f-judges,
-  `rewriteRequest` with f-rewrite). That way no method is a stub.
+- **`FrameworkEngine`** (`lib/app/frameworks/engine.ts`) has `quickScan`, `assemble` and
+  the judge methods (f-judges): `activeJudgeSlots`, `buildJudgeRequest`, `outputSchema`
+  and `validateJudgeReply`. `rewriteRequest` arrives with f-rewrite, so no method is a
+  stub.
 - **The judge slots are the definition's, not the engine's.** `judges.slots` on the
   framework definition is the one list (each slot is a platform agent, see
   [`judges.md`](./judges.md)); `activeJudgeSlots` only picks which of them run.
@@ -28,25 +35,58 @@ const result = engine.assemble(text, ctx, quick, judgeOutputs, source);
   cached per model object, so a published version is indexed once.
 - **`assemble` with no judge outputs is the quick-scan result.** That is also what
   stands in when a judge fails. It drops ids the model lacks and coerces a judge's
-  score, as the prototype did. Validating a judge's reply is j2's (f-judges).
+  score, as the prototype did. A reply from a real judge goes through
+  `validateJudgeReply` first (below).
 
 ## The modules
 
 `lib/app/frameworks/howdoesthisland/engine/`. Each follows its prototype function, so a
 diff against `prototype/src/engine.js` stays readable.
 
-| Module          | From the prototype                                                    |
-| --------------- | --------------------------------------------------------------------- |
-| `text.ts`       | `wordCount`, `splitSentences`, `syllables`, the regex cache, `locate` |
-| `craft.ts`      | `craft()`                                                             |
-| `model.ts`      | `createEngine`'s lookup maps, typed and checked                       |
-| `culture.ts`    | `cultureProfile`, `lewisLabel`, `culturePositions` and the cues       |
-| `quick-scan.ts` | `quickScan`, `extraScan`                                              |
-| `scoring.ts`    | `effectiveWeights`, `fnTarget`, `appealScore`, balance, appeal share  |
-| `assemble.ts`   | `assemble`, `libraryRecs`, `dedupeFlags`                              |
+| Module              | From the prototype                                                    |
+| ------------------- | --------------------------------------------------------------------- |
+| `text.ts`           | `wordCount`, `splitSentences`, `syllables`, the regex cache, `locate` |
+| `craft.ts`          | `craft()`                                                             |
+| `model.ts`          | `createEngine`'s lookup maps, typed and checked                       |
+| `culture.ts`        | `cultureProfile`, `lewisLabel`, `culturePositions` and the cues       |
+| `quick-scan.ts`     | `quickScan`, `extraScan`                                              |
+| `scoring.ts`        | `effectiveWeights`, `fnTarget`, `appealScore`, balance, appeal share  |
+| `assemble.ts`       | `assemble`, `libraryRecs`, `dedupeFlags`                              |
+| `prompts.ts`        | `audienceText`, `contentBlock`, `judgePrompt`                         |
+| `validate-reply.ts` | `validJudgeOutput`, replaced by post-validation                       |
 
-Not ported here: the judge prompts, `validJudgeOutput`, `rewritePrompt`, `calibrate` and
-`toApi` (see the porting map, app-plan §3).
+Two have no prototype function. `judge-schemas.ts` builds each judge's strict reply
+schema, and `judges.ts` decides which judges a profile runs and builds each call.
+
+Not ported here: `rewritePrompt`, `calibrate` and `toApi` (see the porting map, app-plan
+§3).
+
+## The judges' side
+
+- **Profiles.** `activeJudgeSlots(profile)` takes `quick` (none), `full` (every judge the
+  engine can run), a group from the version's `judge_catalogue` (that group plus the
+  four appeals, which are `always`), or an explicit list of slots (exactly those, once
+  each). It returns slots in the version's order, and throws `JudgeProfileError` for a
+  name or slot the version lacks.
+- **Prompts are the prototype's, byte for byte**, for every baseline case and slot
+  (`baseline-prompts.test.ts`). What a judge is told is versioned with the model (D17)
+  and is what calibration measures, so change one only as a listed difference. A
+  project's context, when given, follows the audience block, fenced and framed as the
+  author's background, not instructions.
+- **Strict schemas.** `outputSchema(slot)` is the reply's JSON Schema in OpenAI's strict
+  subset, with the version's ids as enums, so a reply cannot name a dimension, move,
+  flag, perspective or lever the version lacks. A judge with no red flags has no
+  `red_flags` field, since strict mode refuses an empty enum. A test walks every schema
+  against the strict rules and limits.
+- **Post-validation.** `validateJudgeReply(slot, reply, text)` is still needed, because
+  a provider may ignore the schema. It drops unknown ids, clamps scores to their scale,
+  drops a quote it cannot find in the text (a highlight or red flag goes with its quote),
+  and holds lists to the judge's `max_highlights` and `max_recommendations`. Each drop is
+  recorded by path and reason. It refuses only a reply that is not an object, or one
+  that lacks its core list (`dimension_scores`, or `perspectives` for influence).
+- **Limits.** Each request carries interim `maxTokens` and timeout hints for its shape
+  (`JUDGE_LIMITS`), under its agent's ceiling ([`judges.md`](./judges.md)). k3 measures
+  them.
 
 ## Where it differs from the prototype
 
@@ -71,7 +111,9 @@ fails on any difference not listed there, and on any listed difference that has 
 - **`mode`.** The prototype called a result `full` when its judge outputs had any key. The
   port counts only replies it used: a key with no reply, or a culture reply with culture
   off, leaves the result `quick`. Nothing in the baseline shows this change.
-- **Judge output validation** (BRIEF §5) is j2's, in f-judges.
+- **Judge output validation** (BRIEF §5). The prototype's `validJudgeOutput` checked only
+  that a reply had an array. `validateJudgeReply` checks it against the version and the
+  text (above). The prompts themselves are unchanged.
 
 ## The culture switch (D11)
 
@@ -83,6 +125,8 @@ switch off:
 - there are no `cul_*` scores, notes, highlights, dimensions or recommendations. The
   culture group has no score and no judge summary, and `culture` is `null` in both the
   quick scan and the result;
-- a culture dimension named by any judge is dropped, the same as an unknown id.
+- a culture dimension named by any judge is dropped, the same as an unknown id;
+- the judges' prompts name no reader or writer culture, `full` runs no culture judge, and
+  asking for it by name or by its group is refused.
 
 The text's formality is still measured, because craft's tone score uses it.

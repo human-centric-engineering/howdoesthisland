@@ -11,9 +11,14 @@
  * | `quickScan`, `extraScan`                     | `quick-scan.ts`  |
  * | weights, duties, appeal scores, balance      | `scoring.ts`     |
  * | `assemble`, `libraryRecs`, `dedupeFlags`     | `assemble.ts`    |
+ * | `audienceText`, `contentBlock`, `judgePrompt`  | `prompts.ts`     |
+ * | `validJudgeOutput`, as post-validation       | `validate-reply.ts` |
  *
- * Not here: the judge prompts and output validation (f-judges), the rewrite
- * prompt (f-rewrite), `calibrate` (f-calibration) and `toApi` (f-assessments).
+ * New here (t-18): each judge's strict reply schema (`judge-schemas.ts`), and
+ * which judges a profile runs and the call each makes (`judges.ts`).
+ *
+ * Not here: the rewrite prompt (f-rewrite), `calibrate` (f-calibration) and
+ * `toApi` (f-assessments).
  *
  * Differences from the prototype, each listed against the baseline
  * (`tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-differences.ts`):
@@ -23,6 +28,11 @@
  */
 import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 import { assemble } from '@/lib/app/frameworks/howdoesthisland/engine/assemble';
+import { outputSchema } from '@/lib/app/frameworks/howdoesthisland/engine/judge-schemas';
+import {
+  activeJudgeSlots,
+  buildJudgeRequest,
+} from '@/lib/app/frameworks/howdoesthisland/engine/judges';
 import { indexModel, type EngineModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import {
   quickScan,
@@ -32,18 +42,26 @@ import { primaryDuty } from '@/lib/app/frameworks/howdoesthisland/engine/scoring
 import type {
   Assessment,
   EngineContext,
+  JudgeOutput,
   JudgeOutputs,
   QuickScan,
 } from '@/lib/app/frameworks/howdoesthisland/engine/types';
+import { validateJudgeReply } from '@/lib/app/frameworks/howdoesthisland/engine/validate-reply';
 
 export type { EngineOptions } from '@/lib/app/frameworks/howdoesthisland/engine/quick-scan';
 export type * from '@/lib/app/frameworks/howdoesthisland/engine/types';
+export type {
+  JudgeDrop,
+  JudgeDropReason,
+  JudgeReplyValidation,
+} from '@/lib/app/frameworks/howdoesthisland/engine/validate-reply';
 
 export interface HowDoesThisLandEngine extends FrameworkEngine<
   EngineContext,
   QuickScan,
   JudgeOutputs,
-  Assessment
+  Assessment,
+  JudgeOutput
 > {
   /** Whether this engine was built with the culture switch on. */
   readonly culture: boolean;
@@ -67,5 +85,10 @@ export function createHowDoesThisLandEngine(
     assemble: (text, ctx, quick, outputs = {}, source = null) =>
       assemble(m, text, ctx, quick, outputs, source, options),
     primaryDuty: (ctx) => primaryDuty(m, ctx),
+    activeJudgeSlots: (profile) => activeJudgeSlots(m, profile, options),
+    buildJudgeRequest: (slot, text, ctx, projectContext = null) =>
+      buildJudgeRequest(m, slot, text, ctx, { ...options, projectContext }),
+    outputSchema: (slot) => outputSchema(m, slot),
+    validateJudgeReply: (slot, reply, text) => validateJudgeReply(m, slot, reply, text),
   };
 }

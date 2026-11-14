@@ -216,6 +216,10 @@ export const engineModelSchema = z.object({
   exec_roles: z.array(execRoleSchema),
   balance_rules: z.array(balanceRuleSchema),
   judges: z.array(judgeSchema),
+  /** The judge groups a caller may ask for by name; `always` ones run in every group. */
+  judge_catalogue: z.array(
+    z.object({ id: z.string(), judges: strings, always: z.boolean().optional() })
+  ),
   /** Every kind of reference record; the prompts read only their names. */
   knowledge_refs: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string() }))),
   scoring: z.object({
