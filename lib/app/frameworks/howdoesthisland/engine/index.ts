@@ -47,6 +47,7 @@ import type {
   QuickScan,
 } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 import { validateJudgeReply } from '@/lib/app/frameworks/howdoesthisland/engine/validate-reply';
+import { parseContext } from '@/lib/app/frameworks/howdoesthisland/engine/context';
 
 export type { EngineOptions } from '@/lib/app/frameworks/howdoesthisland/engine/quick-scan';
 export type * from '@/lib/app/frameworks/howdoesthisland/engine/types';
@@ -81,6 +82,7 @@ export function createHowDoesThisLandEngine(
   const options: EngineOptions = { culture: opts.culture };
   return {
     culture: options.culture,
+    parseContext: (input) => parseContext(m, input, options.culture),
     quickScan: (text, ctx) => quickScan(m, text, ctx, options),
     assemble: (text, ctx, quick, outputs = {}, source = null) =>
       assemble(m, text, ctx, quick, outputs, source, options),
