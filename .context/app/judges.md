@@ -75,3 +75,43 @@ from an approved list per role, each entry with settings that model accepts (D8)
 timeout under the ceiling (j2 per slot, rw1 from the text's length), and k3
 measures them and chooses reasoning effort, left at the provider's default
 until then.
+
+## Running a judge
+
+`runJudge(slot, input)` (`lib/app/judges/run-judge.ts`) makes the call the
+engine builds (`buildJudgeRequest`). It goes to the provider directly, not
+through chat, so the reply can be held to a strict schema, and so it applies
+the checks the chat routes would have made itself:
+
+1. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat handler
+   does. Over the agent's, the workspace's or the install's monthly cap is
+   refused before any provider call.
+2. **Rate limit**: the agent's `rateLimitRpm`, on a limiter of the judges' own
+   keyed by agent id, and only when the workspace has set one. Consumer chat's
+   limiter is keyed per user and falls back to 10 RPM, which means something
+   else; the monthly caps already bound spend.
+3. **Binding**: the agent's provider and model, inherited at run time while
+   either is unset.
+4. **Call**: `runStructuredCompletion` in strict mode, with the slot's
+   `maxTokens` and timeout, never above the agent's ceiling. A reply that is
+   not JSON, or that the engine's validator refuses whole, gets one retry.
+5. **Cost**: one `AiCostLog` row per run, `operation: 'chat'`, with
+   `{ judge, frameworkVersion, assessmentId?, attempts, error? }` in its
+   metadata. It counts every attempt the provider billed, read off the
+   provider's responses: the runner sums both attempts only when it succeeds,
+   so a run that failed after a retry would otherwise log nothing.
+6. **Result**: the validated output and its drop record.
+
+A failure is a `JudgeRunError` with a `code`: `agent_not_found`,
+`agent_inactive`, `over_budget`, `rate_limited`, `malformed` (twice),
+`truncated`, `refused` (a content-filter finish, not retried) or
+`provider_error`. Its message never carries the prompt or the reply.
+
+**It runs in the caller's tenant context.** The agent is found by the
+workspace's slug, and at `TENANCY_MODE=multi` the spend gate refuses a call
+with no org, so a request's guard or a job's `runAsOrg` must already be
+entered.
+
+`npm run smoke:judge` runs the ethos judge on a baseline case against real
+OpenAI in a throwaway workspace, and prints the reply and its cost row (about a
+cent).
