@@ -39,7 +39,7 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
-import { checkBudget, logCost, type LogCostParams } from '@/lib/orchestration/llm/cost-tracker';
+import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
 import { getProvider } from '@/lib/orchestration/llm/provider-manager';
@@ -47,6 +47,7 @@ import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-comp
 import type { LlmFinishReason, LlmUsage } from '@/lib/orchestration/llm/types';
 import { createDynamicLimiter } from '@/lib/security/rate-limit';
 import { requireOrgId } from '@/lib/tenancy/context';
+import type { AiCostLog } from '@/types/prisma';
 import { CostOperation } from '@/types/orchestration';
 
 /**
@@ -102,7 +103,10 @@ export interface RunJudgeInput<Ctx, Output> {
   projectContext?: string | null;
   /** The assessment this run is for; absent on an ephemeral run (§8.2). */
   assessmentId?: string;
-  /** Who asked for the run, for the cost row; absent for a job. */
+  /**
+   * Who asked for the run, for the cost row: a real `User.id` from the
+   * session, never a synthetic visitor id. Absent for a job.
+   */
   userId?: string | null;
 }
 
@@ -222,29 +226,36 @@ export async function runJudge<Ctx, Output>(
     outcome = { error: toJudgeRunError(slot, err) };
   }
 
+  // `logCost` is called with its FK columns written out, so the platform's
+  // attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
+  // `agent.id` is the row just loaded, and `userId` is a real `User.id` or
+  // nothing (see `RunJudgeInput.userId`).
   const usage = sumUsage(billed);
-  const cost = await recordCost(
-    {
-      agentId: agent.id,
-      provider: binding.providerSlug,
-      model: binding.model,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      ...(usage.cacheReadTokens ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-      ...(usage.cacheWriteTokens ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
-      ...(usage.serviceTier ? { serviceTier: usage.serviceTier } : {}),
-      operation: CostOperation.CHAT,
-      userId: input.userId ?? null,
-      metadata: {
-        judge: slot,
-        frameworkVersion: input.frameworkVersion,
-        ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
-        attempts: billed.length,
-        ...('error' in outcome ? { error: outcome.error.code } : {}),
-      },
-    },
-    billed.length > 0
-  );
+  const cost =
+    billed.length === 0
+      ? { id: null, costUsd: 0 }
+      : await settleCost(
+          logCost({
+            agentId: agent.id,
+            userId: input.userId ?? null,
+            provider: binding.providerSlug,
+            model: binding.model,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            ...(usage.cacheReadTokens ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+            ...(usage.cacheWriteTokens ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+            ...(usage.serviceTier ? { serviceTier: usage.serviceTier } : {}),
+            operation: CostOperation.CHAT,
+            metadata: {
+              judge: slot,
+              frameworkVersion: input.frameworkVersion,
+              ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
+              attempts: billed.length,
+              ...('error' in outcome ? { error: outcome.error.code } : {}),
+            },
+          }),
+          { agentId: agent.id, judge: slot }
+        );
 
   if ('error' in outcome) throw outcome.error;
   // The runner returned, so the last parse succeeded and set it.
@@ -333,21 +344,19 @@ function sumUsage(billed: readonly LlmUsage[]): LlmUsage {
 }
 
 /**
- * Writes the run's cost row. A failed write is logged, never thrown: the
+ * Waits for the run's cost row. A failed write is logged, never thrown: the
  * reply was billed either way, and refusing it would bill a rerun too.
  */
-async function recordCost(
-  params: LogCostParams,
-  anyBilled: boolean
+async function settleCost(
+  write: Promise<AiCostLog | null>,
+  about: { agentId: string; judge: string }
 ): Promise<{ id: string | null; costUsd: number }> {
-  if (!anyBilled) return { id: null, costUsd: 0 };
   try {
-    const row = await logCost(params);
+    const row = await write;
     return { id: row?.id ?? null, costUsd: row?.totalCostUsd ?? 0 };
   } catch (err) {
     logger.error('Failed to log a judge run cost', {
-      agentId: params.agentId,
-      judge: params.metadata?.judge,
+      ...about,
       error: err instanceof Error ? err.message : String(err),
     });
     return { id: null, costUsd: 0 };
