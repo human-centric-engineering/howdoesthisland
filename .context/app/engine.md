@@ -81,8 +81,11 @@ Not ported here: `rewritePrompt`, `calibrate` and `toApi` (see the porting map, 
 - **Post-validation.** `validateJudgeReply(slot, reply, text)` is still needed, because
   a provider may ignore the schema. It drops unknown ids, clamps scores to their scale,
   drops a quote it cannot find in the text (a highlight or red flag goes with its quote),
-  and holds lists to the judge's `max_highlights` and `max_recommendations`. Each drop is
-  recorded by path and reason. It refuses only a reply that is not an object, or one
+  and holds lists to the judge's `max_highlights` and `max_recommendations`. What the
+  prompt asks for and the output lacks is recorded as `missing`: a dimension not scored,
+  a perspective or lever not given, a duty, the primary duty or a culture position. The
+  strict schema cannot require these, since a list of ids is not a set of them. Nothing is
+  filled in. Each drop is recorded by path and reason. It refuses only a reply that is not an object, or one
   that lacks its core list (`dimension_scores`, or `perspectives` for influence).
 - **Limits.** Each request carries interim `maxTokens` and timeout hints for its shape
   (`JUDGE_LIMITS`), under its agent's ceiling ([`judges.md`](./judges.md)). k3 measures

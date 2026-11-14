@@ -17,10 +17,16 @@
  *   point; a lever or a recommendation loses only the quote.
  * - **lists are held to the judge's limits** (`max_highlights`,
  *   `max_recommendations`), most important first as the prompt asks.
+ * - **what the prompt asks for and the reply lacks is recorded as missing**:
+ *   a dimension not scored, a perspective or one of its levers not given, a
+ *   duty, the primary duty or a culture position. The strict schema cannot
+ *   require these (a list of ids is not a set of them), so a reply can leave
+ *   them out. Nothing is filled in; an item dropped for another reason is
+ *   also missing, since the output does not have it.
  *
- * Every drop and every clamp is recorded, by path, so a run can say what
- * its judge got wrong. Only a reply that is not an object, or lacks the list
- * its shape is built on, is refused whole.
+ * Every drop, every clamp and every gap is recorded, by path, so a run can
+ * say what its judge got wrong. Only a reply that is not an object, or lacks
+ * the list its shape is built on, is refused whole.
  */
 import type {
   JudgeDrop as FrameworkJudgeDrop,
@@ -57,7 +63,9 @@ export type JudgeDropReason =
   /** A quote not found in the text. */
   | 'unlocated_quote'
   /** Past the judge's limit for the list. */
-  | 'over_limit';
+  | 'over_limit'
+  /** Asked for and not in the output. Nothing is dropped; the gap is recorded, the id as detail. */
+  | 'missing';
 
 /** A drop, by path (`highlights[2]`, `perspectives[0].levers[3].quote`), with the offending value. */
 export type JudgeDrop = FrameworkJudgeDrop<JudgeDropReason>;
@@ -119,6 +127,12 @@ class Reader {
     return quote.trim() !== '' && locate(this.text, quote) !== null;
   }
 
+  /** Records each of `wanted` that `got` lacks, at `at`. */
+  missing(at: string, wanted: Iterable<string>, got: Iterable<string>): void {
+    const have = new Set(got);
+    for (const id of wanted) if (!have.has(id)) this.drop(at, 'missing', id);
+  }
+
   /** Keeps the first `max`; records the rest. */
   limit<T>(items: T[], key: string, max: number, indexOf: (item: T) => number): T[] {
     for (const item of items.slice(max)) this.drop(`${key}[${indexOf(item)}]`, 'over_limit');
@@ -142,6 +156,11 @@ function dimensionScores(r: Reader, raw: Record<string, unknown>): JudgeDimensio
     seen.add(item.id);
     out.push({ id: item.id, score, rationale: optionalString(item.rationale) });
   });
+  r.missing(
+    'dimension_scores',
+    r.ids.dimensions,
+    out.map((d) => d.id)
+  );
   return out;
 }
 
@@ -270,13 +289,33 @@ function perspectives(r: Reader, raw: Record<string, unknown>): JudgePerspective
       id: item.id,
       score,
       summary: optionalString(item.summary),
-      levers: levers(r, item, at, new Set(own)),
+      levers: levers(r, item, at, own),
     });
   });
+  r.missing(
+    'perspectives',
+    r.ids.perspectives.keys(),
+    out.map((p) => p.id)
+  );
   return out;
 }
 
 function levers(
+  r: Reader,
+  perspective: Record<string, unknown>,
+  at: string,
+  own: readonly string[]
+): JudgeLever[] {
+  const out = leversGiven(r, perspective, at, new Set(own));
+  r.missing(
+    `${at}.levers`,
+    own,
+    out.map((l) => l.id)
+  );
+  return out;
+}
+
+function leversGiven(
   r: Reader,
   perspective: Record<string, unknown>,
   at: string,
@@ -352,10 +391,13 @@ export function validateJudgeReply(
       else r.drop('duties.primary', 'unknown_id', v);
       return true;
     });
+    r.missing('duties', ids.duties, Object.keys(d ?? {}));
+    if (primary === undefined) r.drop('duties.primary', 'missing');
     if (d) output.duties = primary === undefined ? d : { ...d, primary };
   }
   if (ids.scales.length) {
     const positions = numbersBy(r, reply, 'text_positions', ids.scales, 1);
+    r.missing('text_positions', ids.scales, Object.keys(positions ?? {}));
     if (positions) output.text_positions = positions;
   }
   return { ok: true, output, drops: r.drops };
