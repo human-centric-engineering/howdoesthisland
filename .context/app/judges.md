@@ -69,7 +69,9 @@ for a judge, 32,768 for the influence judge (13 perspectives × 6 levers) and
 for the editor, whose rewrite repeats the whole text (up to 40,000 characters,
 about 10,000 tokens). Only tokens produced are billed, so headroom costs
 nothing unless used. 32,768 is the top, because it is `gpt-4.1`'s output limit
-and nothing clamps a cap to the model's. Calls size their own `maxTokens` and
+and nothing clamps a cap to the model's. Until `j4`, a workspace that rebinds an agent
+to a model with a lower limit has its calls refused. `j4` lets workspaces choose only
+from an approved list per role, each entry with settings that model accepts (D8). Calls size their own `maxTokens` and
 timeout under the ceiling (j2 per slot, rw1 from the text's length), and k3
 measures them and chooses reasoning effort, left at the provider's default
 until then.
