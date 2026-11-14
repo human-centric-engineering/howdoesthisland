@@ -232,10 +232,19 @@ describe('runJudge on a good reply', () => {
     });
   });
 
-  it('carries no assessmentId on an ephemeral run', async () => {
+  it('carries no assessmentId on an ephemeral run, and says it is one', async () => {
     chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
-    await run();
+    await run({ ephemeral: true, userId: 'user-1' });
     expect(costRow().metadata).not.toHaveProperty('assessmentId');
+    expect(costRow().metadata).toMatchObject({ ephemeral: true, judge: 'judge_ethos' });
+    // Still attributed to the person, so it counts toward their usage and budget.
+    expect(costRow().userId).toBe('user-1');
+  });
+
+  it('does not mark a stored run as ephemeral', async () => {
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await run({ assessmentId: 'asmt-1' });
+    expect(costRow().metadata).not.toHaveProperty('ephemeral');
   });
 
   it('never asks for more than the agent’s ceiling', async () => {
