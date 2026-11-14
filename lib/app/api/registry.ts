@@ -9,15 +9,20 @@
  *
  * **Request schemas are the handlers' own.** Each one is imported from where
  * its handler (or the service behind it) parses with it, never restated, so
- * the contract cannot drift from what is enforced. Response schemas describe
+ * the contract cannot drift from what is enforced. The one assembly done here
+ * is wrapping the framework routes' per-segment schemas, which their service
+ * checks one at a time, into a `params` object. Response schemas describe
  * the `data` (and `meta`) of the success envelope on the wire, where a `Date`
- * is an ISO string. A type test (`tests/unit/lib/app/api/registry.test.ts`)
- * holds each against the type its service returns.
+ * is an ISO string. Where a service returns the value, a type test
+ * (`tests/unit/lib/app/api/registry.test.ts`) holds the schema against that
+ * type; the two bodies a handler builds inline (`invitationSentSchema` and the
+ * decline's `{ declined: true }`) are checked by reading the handler.
  *
  * **Which routes are the app's:** the route directories this fork added under
- * `app/api/v1/`, listed in that test. Core's routes are not ours to declare.
- * The same test fails when a route file exports a method this registry does
- * not declare, or this registry declares one no file exports.
+ * `app/api/v1/`, listed in that test beside core's, so a directory in neither
+ * list fails it. Core's routes are not ours to declare. The same test fails
+ * when a route file exports a method this registry does not declare, or this
+ * registry declares one no file exports.
  *
  * Errors are not declared per route: every route answers the standard error
  * envelope, and its docblock lists the codes.
@@ -34,9 +39,10 @@ import {
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
 
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+/** Every method a Next.js route handler can export. */
+export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
-export const HTTP_METHODS: readonly HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+export type HttpMethod = (typeof HTTP_METHODS)[number];
 
 /**
  * Who may call a route.
@@ -45,13 +51,21 @@ export const HTTP_METHODS: readonly HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH
  * - `signed-in` — any session.
  * - `workspace-admin` — the workspace the path names, as its `OWNER` or
  *   `ADMIN` acting in it, or a platform admin (the authorization policy's
- *   answer for an org resource).
+ *   answer for an org resource). `platformAdmin` says where that platform
+ *   admin may be acting: `anywhere`, or only `entered` — acting in this very
+ *   workspace, which for a customer's means under its support grant.
  *
  * `apiKeyScope` is the scope an API key needs, or `null` when the route
  * refuses API keys and wants a browser session.
  */
 export type RouteAuth =
-  { who: 'anyone' } | { who: 'signed-in' | 'workspace-admin'; apiKeyScope: string | null };
+  | { who: 'anyone' }
+  | { who: 'signed-in'; apiKeyScope: string | null }
+  | {
+      who: 'workspace-admin';
+      apiKeyScope: string | null;
+      platformAdmin: 'anywhere' | 'entered';
+    };
 
 export interface RouteContract {
   method: HttpMethod;
@@ -59,6 +73,11 @@ export interface RouteContract {
   path: string;
   summary: string;
   auth: RouteAuth;
+  /**
+   * The schemas the handler parses with. A request that fails one answers as
+   * the route's docblock says: usually 400 `VALIDATION_ERROR`, but the
+   * framework routes answer a malformed segment as the 404 an unknown one gets.
+   */
   request: {
     params?: z.ZodType;
     query?: z.ZodType;
@@ -71,6 +90,11 @@ export interface RouteContract {
     data: z.ZodType;
     /** The success envelope's `meta`, when the route sends one. */
     meta?: z.ZodType;
+    /**
+     * A conditional GET: the response carries an `ETag`, and a request whose
+     * `If-None-Match` holds it is answered 304 with no body.
+     */
+    conditional?: true;
   };
 }
 
@@ -104,14 +128,14 @@ export const frameworkDetailSchema = frameworkSummarySchema.extend({
 /** A framework record or model as the version materialises it: open JSON. */
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 
-/** The `meta` of a version response (`versionMeta()`). */
+/** `VersionMeta` in `lib/app/frameworks/api/service.ts`. */
 export const versionMetaSchema = versionSummarySchema.extend({
   framework: z.string(),
   /** Sections a switch withholds; absent when none is. */
   omitted: z.array(z.string()).optional(),
 });
 
-/** The `meta` of a kind response (`kindRecords()`). */
+/** `KindMeta`. */
 export const kindMetaSchema = versionMetaSchema.extend({
   kind: z.string(),
   count: z.number().int(),
@@ -175,7 +199,17 @@ const kindParams = versionParams.extend({ kind: kindParam });
 
 /** Browser-session routes: an API key is refused. */
 const SIGNED_IN: RouteAuth = { who: 'signed-in', apiKeyScope: null };
-const WORKSPACE_ADMIN: RouteAuth = { who: 'workspace-admin', apiKeyScope: null };
+const WORKSPACE_ADMIN: RouteAuth = {
+  who: 'workspace-admin',
+  apiKeyScope: null,
+  platformAdmin: 'anywhere',
+};
+/** As above, and a platform admin must have entered the workspace (`requireEnteredWorkspace`). */
+const WORKSPACE_ADMIN_ENTERED: RouteAuth = {
+  who: 'workspace-admin',
+  apiKeyScope: null,
+  platformAdmin: 'entered',
+};
 
 export const APP_ROUTES: readonly RouteContract[] = [
   // Frameworks (t-11): public, read-only, conditional GETs.
@@ -185,7 +219,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary: 'List every framework with a published version, newest version first.',
     auth: { who: 'anyone' },
     request: {},
-    response: { status: 200, data: z.array(frameworkSummarySchema) },
+    response: { status: 200, data: z.array(frameworkSummarySchema), conditional: true },
   },
   {
     method: 'GET',
@@ -193,7 +227,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary: 'Get one framework, its published versions and the record kinds a version serves.',
     auth: { who: 'anyone' },
     request: { params: frameworkParams },
-    response: { status: 200, data: frameworkDetailSchema },
+    response: { status: 200, data: frameworkDetailSchema, conditional: true },
   },
   {
     method: 'GET',
@@ -201,7 +235,12 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary: 'Get the whole model of a published version.',
     auth: { who: 'anyone' },
     request: { params: versionParams },
-    response: { status: 200, data: jsonObjectSchema, meta: versionMetaSchema },
+    response: {
+      status: 200,
+      data: jsonObjectSchema,
+      meta: versionMetaSchema,
+      conditional: true,
+    },
   },
   {
     method: 'GET',
@@ -209,7 +248,12 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary: "Get one kind of record from a published version, in the model's order.",
     auth: { who: 'anyone' },
     request: { params: kindParams },
-    response: { status: 200, data: z.array(jsonObjectSchema), meta: kindMetaSchema },
+    response: {
+      status: 200,
+      data: z.array(jsonObjectSchema),
+      meta: kindMetaSchema,
+      conditional: true,
+    },
   },
 
   // Workspaces (t-8, t-9).
@@ -259,7 +303,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'GET',
     path: '/api/v1/workspaces/{id}/judges',
     summary: "List the workspace's judges and editor, the model each runs on, and its options.",
-    auth: WORKSPACE_ADMIN,
+    auth: WORKSPACE_ADMIN_ENTERED,
     request: { params: orgIdParamSchema },
     response: { status: 200, data: z.object({ agents: z.array(judgeModelChoiceSchema) }) },
   },
@@ -267,7 +311,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'PATCH',
     path: '/api/v1/workspaces/{id}/judges/{key}',
     summary: 'Choose the model one judge or the editor runs on, or return it to the default.',
-    auth: WORKSPACE_ADMIN,
+    auth: WORKSPACE_ADMIN_ENTERED,
     request: { params: judgeModelParamsSchema, body: chooseJudgeModelSchema },
     response: { status: 200, data: judgeModelChoiceSchema },
   },

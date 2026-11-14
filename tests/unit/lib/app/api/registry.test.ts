@@ -3,13 +3,17 @@
  * app's route files export, and each response schema matches the type the
  * service behind it returns.
  *
- * FORK NOTE: this is HowDoesThisLand's own test of its own module. A route
- * directory the app adds under `app/api/v1/` goes in `APP_ROUTE_DIRS`, and
- * every route in it then needs a registry entry before this passes.
+ * FORK NOTE: this is HowDoesThisLand's own test of its own module. Every
+ * directory under `app/api/v1/` is either the app's (`APP_ROUTE_DIRS`) or
+ * core's (`CORE_ROUTE_DIRS`), and one in neither fails, so a directory the app
+ * adds cannot go unscanned. Every route in an app directory then needs a
+ * registry entry. An upstream sync that adds a core directory fails here
+ * until it is added to `CORE_ROUTE_DIRS`.
  *
  * Route files are read as text, not imported: importing a handler pulls in
- * the auth guards and the database client, and an export the regex cannot
- * read (`export { GET }`) is refused rather than missed.
+ * the auth guards and the database client. An export of a method in a form
+ * the scan cannot read (`export { GET }`, `export const { GET } = …`) is
+ * refused rather than missed.
  *
  * @see lib/app/api/registry.ts
  */
@@ -26,19 +30,47 @@ import {
   frameworkSummarySchema,
   invitationForInviteeSchema,
   judgeModelChoiceSchema,
+  kindMetaSchema,
+  versionMetaSchema,
   versionSummarySchema,
 } from '@/lib/app/api/registry';
 import type {
   FrameworkDetail,
   FrameworkSummary,
+  KindMeta,
+  VersionMeta,
   VersionSummary,
 } from '@/lib/app/frameworks/api/service';
 import type { CreatedWorkspace } from '@/lib/app/workspaces/create';
 import type { InvitationForInvitee, acceptInvitation } from '@/lib/app/workspaces/invitations';
 import type { JudgeModelChoice } from '@/lib/app/judges/model-choice';
 
-/** The route directories this fork added under `app/api/v1/`. Core's are not the app's. */
+/** The route directories this fork added under `app/api/v1/`. */
 const APP_ROUTE_DIRS = ['frameworks', 'workspaces'] as const;
+
+/** Sunrise's route directories under `app/api/v1/`, which are not the app's to declare. */
+const CORE_ROUTE_DIRS = [
+  'admin',
+  'chat',
+  'contact',
+  'embed',
+  'inbound',
+  'invitations',
+  'mcp',
+  'orchestration',
+  'orgs',
+  'storage',
+  'user',
+  'users',
+  'waitlist',
+  'webhooks',
+] as const;
+
+/** Directories under `app/api/v1/` that are in neither list. */
+function unclassifiedDirs(onDisk: readonly string[]): string[] {
+  const known = new Set<string>([...APP_ROUTE_DIRS, ...CORE_ROUTE_DIRS]);
+  return onDisk.filter((d) => !known.has(d)).sort();
+}
 
 const ROOT = process.cwd();
 const API_ROOT = join(ROOT, 'app', 'api', 'v1');
@@ -52,7 +84,7 @@ function routeFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) return routeFiles(full);
-    return entry.name === 'route.ts' ? [full] : [];
+    return /^route\.(?:ts|tsx|js|mjs)$/.test(entry.name) ? [full] : [];
   });
 }
 
@@ -68,15 +100,25 @@ function urlPathOf(file: string): string {
   );
 }
 
+const METHODS = HTTP_METHODS.join('|');
+
 const EXPORT_RE = new RegExp(
-  `^export\\s+(?:const|async\\s+function|function)\\s+(${HTTP_METHODS.join('|')})\\b`,
+  `^export\\s+(?:const|let|var|async\\s+function|function)\\s+(${METHODS})\\b`,
   'gm'
 );
 
-/** The HTTP methods a route file exports. Throws on an export form it cannot read. */
+/** `export { GET }`, `export { x as POST } from …`, `export const { GET } = …`. */
+const UNREADABLE_EXPORT_RE = new RegExp(
+  `^export\\s+(?:(?:const|let|var)\\s*)?\\{[^}]*\\b(?:${METHODS})\\b`,
+  'm'
+);
+
+/** The HTTP methods a route file exports. Throws on an export of one it cannot read. */
 function exportedMethods(source: string, file: string): string[] {
-  if (/^export\s*\{/m.test(source)) {
-    throw new Error(`${file}: re-exports a method; declare it as \`export const GET = …\``);
+  if (UNREADABLE_EXPORT_RE.test(source)) {
+    throw new Error(
+      `${file}: exports a method in a form the scan cannot read; declare it as \`export const GET = …\``
+    );
   }
   return [...source.matchAll(EXPORT_RE)].map((m) => m[1]);
 }
@@ -94,26 +136,45 @@ function compareRoutes(
   };
 }
 
-function exportedRoutes(): Set<RouteKey> {
-  const found = new Set<RouteKey>();
+/** Each app directory's exported routes. */
+function exportedRoutesByDir(): Map<string, Set<RouteKey>> {
+  const byDir = new Map<string, Set<RouteKey>>();
   for (const dir of APP_ROUTE_DIRS) {
+    const found = new Set<RouteKey>();
     for (const file of routeFiles(join(API_ROOT, dir))) {
       for (const method of exportedMethods(readFileSync(file, 'utf8'), file)) {
         found.add(key(method, urlPathOf(file)));
       }
     }
+    byDir.set(dir, found);
   }
-  return found;
+  return byDir;
+}
+
+function exportedRoutes(): Set<RouteKey> {
+  return new Set([...exportedRoutesByDir().values()].flatMap((routes) => [...routes]));
 }
 
 const declaredRoutes = APP_ROUTES.map((r) => key(r.method, r.path));
 
 describe('the route registry and the route files', () => {
+  it("classes every directory under app/api/v1 as the app's or core's", () => {
+    const onDisk = readdirSync(API_ROOT, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    expect(unclassifiedDirs(onDisk)).toEqual([]);
+  });
+
+  it('fails for a directory in neither list', () => {
+    expect(unclassifiedDirs(['frameworks', 'admin', 'assessments'])).toEqual(['assessments']);
+  });
+
   it('declares exactly the methods the app route files export', () => {
-    const exported = exportedRoutes();
-    // Guards against a scan that finds nothing and so passes vacuously.
-    expect(exported.size).toBeGreaterThanOrEqual(11);
-    expect(compareRoutes(exported, declaredRoutes)).toEqual({
+    // Guards against a directory that scans to nothing and so passes vacuously.
+    for (const [dir, routes] of exportedRoutesByDir()) {
+      expect(routes.size, `${dir} has no routes`).toBeGreaterThan(0);
+    }
+    expect(compareRoutes(exportedRoutes(), declaredRoutes)).toEqual({
       undeclared: [],
       unexported: [],
       duplicated: [],
@@ -144,7 +205,17 @@ describe('the route registry and the route files', () => {
     expect(exportedMethods('export const POST = withAuth(…);', 'a')).toEqual(['POST']);
     expect(exportedMethods('export async function GET(request) {}', 'b')).toEqual(['GET']);
     expect(exportedMethods('export const dynamic = "force-dynamic";', 'c')).toEqual([]);
-    expect(() => exportedMethods('export { GET } from "./x";', 'd')).toThrow(/re-exports/);
+    expect(exportedMethods('export function OPTIONS() {}\nexport const HEAD = h;', 'd')).toEqual([
+      'OPTIONS',
+      'HEAD',
+    ]);
+    // An export naming no method is not the scan's business.
+    expect(exportedMethods("export { revalidate } from '@/lib/x';\nexport {};", 'e')).toEqual([]);
+    expect(() => exportedMethods('export { GET } from "./x";', 'f')).toThrow(/cannot read/);
+    expect(() => exportedMethods('export { handler as POST };', 'g')).toThrow(/cannot read/);
+    expect(() => exportedMethods('export const { GET, POST } = make();', 'h')).toThrow(
+      /cannot read/
+    );
   });
 
   it('maps a route file to its URL path', () => {
@@ -187,6 +258,8 @@ describe('response schemas match what the services return', () => {
     expectTypeOf<z.infer<typeof versionSummarySchema>>().toEqualTypeOf<Wire<VersionSummary>>();
     expectTypeOf<z.infer<typeof frameworkSummarySchema>>().toEqualTypeOf<Wire<FrameworkSummary>>();
     expectTypeOf<z.infer<typeof frameworkDetailSchema>>().toEqualTypeOf<Wire<FrameworkDetail>>();
+    expectTypeOf<z.infer<typeof versionMetaSchema>>().toEqualTypeOf<Wire<VersionMeta>>();
+    expectTypeOf<z.infer<typeof kindMetaSchema>>().toEqualTypeOf<Wire<KindMeta>>();
     expectTypeOf<z.infer<typeof createdWorkspaceSchema>>().toEqualTypeOf<Wire<CreatedWorkspace>>();
     expectTypeOf<z.infer<typeof invitationForInviteeSchema>>().toEqualTypeOf<
       Wire<InvitationForInvitee>
