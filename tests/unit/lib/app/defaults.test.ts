@@ -499,14 +499,16 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppJobsForTests();
       // getAppJobs() triggers the lazy init, so this exercises the REAL seam.
-      // FORK (HowDoesThisLand): pinned to our one job, the signup-workspace
-      // sweep (t-7). Ledger: .context/app/platform-divergences.md row 2.
+      // FORK (HowDoesThisLand): pinned to our jobs, the signup-workspace
+      // sweep (t-7) and assessment recovery (t-22). Ledger:
+      // .context/app/platform-divergences.md row 2.
       expect(getAppJobs().map((job) => [job.name, job.intervalMs, job.scope])).toEqual([
         [
           'app:signup-workspace-sweep',
           15 * 60 * 1000,
           { system: 'signup workspaces span orgs; Org is a system model' },
         ],
+        ['app:assessment-recovery', 60 * 1000, 'per-org'],
       ]);
     },
   },

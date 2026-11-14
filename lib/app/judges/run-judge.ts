@@ -34,6 +34,9 @@
  *    usage is read off the provider's responses here instead.
  * 6. **Result**: the engine's post-validated output and its drop record.
  *
+ * The call runs in the agent's privacy scope (`agentPrivacyScope`), inside
+ * the caller's when there is one, so the agent's privacy mode applies to it.
+ *
  * **Tenant context is the caller's.** The agent is looked up by the org's
  * slug, and at `TENANCY_MODE=multi` the provider manager's spend gate refuses
  * a call with no org in context, so `runJudge` runs inside `runAsOrg` (a
@@ -50,6 +53,7 @@ import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
+import { agentPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { getProvider, isLocalProvider } from '@/lib/orchestration/llm/provider-manager';
 import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-completion';
 import type { LlmFinishReason, LlmUsage } from '@/lib/orchestration/llm/types';
@@ -131,7 +135,8 @@ export interface RunJudgeInput<Ctx, Output> {
   userId?: string | null;
 }
 
-export interface JudgeRun<Output> {
+/** A judge's reply, checked, with what it cost. (Not the `JudgeRun` model, which stores one.) */
+export interface JudgeReply<Output> {
   slot: string;
   output: Output;
   /** What post-validation dropped or changed in the reply. */
@@ -165,7 +170,7 @@ const RETRY_MESSAGE =
 export async function runJudge<Ctx, Output>(
   slot: string,
   input: RunJudgeInput<Ctx, Output>
-): Promise<JudgeRun<Output>> {
+): Promise<JudgeReply<Output>> {
   const orgId = requireOrgId();
   const slug = judgeAgentSlug(slot);
   const agent = await prisma.aiAgent.findUnique({
@@ -257,33 +262,41 @@ export async function runJudge<Ctx, Output>(
       billed,
       slot
     );
-    const result = await runStructuredCompletion({
-      provider,
-      model: binding.model,
-      messages: [
-        { role: 'system', content: agent.systemInstructions },
-        { role: 'user', content: request.prompt },
-      ],
-      parse: (raw) => {
-        const reply = parseJson(raw);
-        if (reply === undefined) return null;
-        const checked = input.engine.validateJudgeReply(slot, reply, input.text);
-        return checked.ok ? { output: checked.output, drops: checked.drops } : null;
-      },
-      retryUserMessage: RETRY_MESSAGE,
-      onFinalFailure: () =>
-        new JudgeRunError('malformed', `The ${slot} judge's reply was not usable, twice.`),
-      responseSchema: request.schema,
-      responseSchemaName: request.schemaName,
-      responseSchemaStrict: true,
-      temperature: agent.temperature,
-      maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
-      timeoutMs: approved.settings.timeoutMs,
-      ...(approved.settings.reasoningEffort
-        ? { reasoningEffort: approved.settings.reasoningEffort }
-        : {}),
-      phase: 'judge',
-    });
+    // In the agent's privacy scope (Sunrise 0.19.0), so the privacy stage
+    // applies this agent's mode, and the workspace's minimum, to the call and
+    // records its counts in the caller's scope (an assessment's). Outside any
+    // scope the stage would apply neither. Under `pseudonymise` the reply's
+    // quotes come back restored before `parse` sees them, so the engine's
+    // check that each quote is in the text still holds.
+    const result = await runInPrivacyScope(agentPrivacyScope(agent.id), () =>
+      runStructuredCompletion({
+        provider,
+        model: binding.model,
+        messages: [
+          { role: 'system', content: agent.systemInstructions },
+          { role: 'user', content: request.prompt },
+        ],
+        parse: (raw) => {
+          const reply = parseJson(raw);
+          if (reply === undefined) return null;
+          const checked = input.engine.validateJudgeReply(slot, reply, input.text);
+          return checked.ok ? { output: checked.output, drops: checked.drops } : null;
+        },
+        retryUserMessage: RETRY_MESSAGE,
+        onFinalFailure: () =>
+          new JudgeRunError('malformed', `The ${slot} judge's reply was not usable, twice.`),
+        responseSchema: request.schema,
+        responseSchemaName: request.schemaName,
+        responseSchemaStrict: true,
+        temperature: agent.temperature,
+        maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
+        timeoutMs: approved.settings.timeoutMs,
+        ...(approved.settings.reasoningEffort
+          ? { reasoningEffort: approved.settings.reasoningEffort }
+          : {}),
+        phase: 'judge',
+      })
+    );
     outcome = { value: result.value, finishReason: result.finishReason };
   } catch (err) {
     outcome = { error: toJudgeRunError(slot, err) };

@@ -35,10 +35,14 @@
  * Full guide: CUSTOMIZATION.md §4 · .context/orchestration/scheduling.md
  */
 import { registerAppJob } from '@/lib/orchestration/maintenance/app-jobs';
+import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
 
 /** The signup-workspace sweep's name, as the tick logs it. */
 export const SIGNUP_WORKSPACE_SWEEP_JOB = 'app:signup-workspace-sweep';
+
+/** The assessment recovery job's name, as the tick logs it. */
+export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
 
 export function initAppJobs(): void {
   // Erase signup workspaces nobody joined (t-7). Org is a system model and the
@@ -48,5 +52,15 @@ export function initAppJobs(): void {
     intervalMs: 15 * 60 * 1000,
     scope: { system: 'signup workspaces span orgs; Org is a system model' },
     run: () => sweepSignupWorkspaces(),
+  });
+
+  // Re-drive assessments whose run died or never started, and give up on
+  // those out of attempts (t-22). Per workspace: each pass sees and claims
+  // only its own rows, and counts its own running limit.
+  registerAppJob({
+    name: ASSESSMENT_RECOVERY_JOB,
+    intervalMs: 60 * 1000,
+    scope: 'per-org',
+    run: () => recoverAssessments(),
   });
 }

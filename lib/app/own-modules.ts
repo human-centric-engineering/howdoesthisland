@@ -68,4 +68,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/intake/',
   // The judge and editor platform agents (t-17).
   'lib/app/judges/',
+  // Assessments as a durable job: enqueue, run, recovery (t-22).
+  'lib/app/assessments/',
 ];
