@@ -91,13 +91,7 @@ export function createFakeDb() {
         return { count: rows.length };
       }),
       create: vi.fn(async ({ data }: { data: Row }) => {
-        const { content, frameworkVersion, ...rest } = data as Row & {
-          content: { create: Row };
-          frameworkVersion: { connect: { id: string } };
-        };
         seq += 1;
-        const contentRow = { id: `content-${seq}`, ...content.create, createdAt: new Date() };
-        contents.push(contentRow);
         const row: Row = {
           id: `assessment-${seq}`,
           status: 'QUEUED',
@@ -109,13 +103,19 @@ export function createFakeDb() {
           result: null,
           error: null,
           costUsd: 0,
-          ...rest,
-          frameworkVersionId: frameworkVersion.connect.id,
-          contentId: contentRow.id,
+          ...data,
           createdAt: new Date(),
         };
         assessments.push(row);
         return { id: row.id, contentId: row.contentId };
+      }),
+    },
+    content: {
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        seq += 1;
+        const row = { id: `content-${seq}`, ...data, createdAt: new Date() };
+        contents.push(row);
+        return { id: row.id };
       }),
     },
     judgeRun: {

@@ -83,33 +83,40 @@ export async function enqueueAssessment(
   }
 
   const userId = input.userId ?? null;
-  const assessment = await prisma.assessment.create({
-    data: {
-      orgId,
-      profile: typeof input.profile === 'string' ? input.profile : 'custom',
-      judges: [...judges],
-      context: input.context,
-      requestedVia: input.requestedVia,
-      apiKeyId: input.apiKeyId ?? null,
-      createdByUserId: userId,
-      projectId: input.content.projectId ?? null,
-      frameworkVersion: { connect: { id: loaded.version.id } },
-      content: {
-        create: {
-          orgId,
-          projectId: input.content.projectId ?? null,
-          title: input.content.title ?? null,
-          sourceKind: input.content.sourceKind,
-          sourceUrl: input.content.sourceUrl ?? null,
-          fileName: input.content.fileName ?? null,
-          text,
-          textSha256: await sha256(text),
-          wordCount: text.split(/\s+/).filter(Boolean).length,
-          createdByUserId: userId,
-        },
+  const projectId = input.content.projectId ?? null;
+  const textSha256 = await sha256(text);
+  // One transaction, so a content row never exists without its assessment.
+  const assessment = await prisma.$transaction(async (tx) => {
+    const content = await tx.content.create({
+      data: {
+        orgId,
+        projectId,
+        title: input.content.title ?? null,
+        sourceKind: input.content.sourceKind,
+        sourceUrl: input.content.sourceUrl ?? null,
+        fileName: input.content.fileName ?? null,
+        text,
+        textSha256,
+        wordCount: text.split(/\s+/).filter(Boolean).length,
+        createdByUserId: userId,
       },
-    },
-    select: { id: true, contentId: true },
+      select: { id: true },
+    });
+    return tx.assessment.create({
+      data: {
+        orgId,
+        contentId: content.id,
+        projectId,
+        frameworkVersionId: loaded.version.id,
+        profile: typeof input.profile === 'string' ? input.profile : 'custom',
+        judges: [...judges],
+        context: input.context,
+        requestedVia: input.requestedVia,
+        apiKeyId: input.apiKeyId ?? null,
+        createdByUserId: userId,
+      },
+      select: { id: true, contentId: true },
+    });
   });
 
   noteMaintenanceWork('app:assessment-queued');
