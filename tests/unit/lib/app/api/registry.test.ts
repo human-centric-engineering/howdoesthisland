@@ -25,12 +25,20 @@ import {
   APP_ROUTES,
   HTTP_METHODS,
   acceptedInvitationSchema,
+  assessmentDeletedSchema,
+  assessmentDetailSchema,
+  assessmentEventSchema,
+  assessmentSummarySchema,
   createdWorkspaceSchema,
+  ephemeralAssessmentSchema,
   frameworkDetailSchema,
   frameworkSummarySchema,
   invitationForInviteeSchema,
   judgeModelChoiceSchema,
+  judgeRunViewSchema,
   kindMetaSchema,
+  paginationMetaSchema,
+  quickScanViewSchema,
   versionMetaSchema,
   versionSummarySchema,
 } from '@/lib/app/api/registry';
@@ -44,9 +52,19 @@ import type {
 import type { CreatedWorkspace } from '@/lib/app/workspaces/create';
 import type { InvitationForInvitee, acceptInvitation } from '@/lib/app/workspaces/invitations';
 import type { JudgeModelChoice } from '@/lib/app/judges/model-choice';
+import type {
+  AssessmentDetail,
+  AssessmentSummary,
+  EphemeralAssessment,
+  JudgeRunView,
+  QuickScanView,
+} from '@/lib/app/assessments/api/views';
+import type { AssessmentEvent } from '@/lib/app/assessments/api/events';
+import type { remove } from '@/lib/app/assessments/api/service';
+import type { PaginationMeta } from '@/types/api';
 
 /** The route directories this fork added under `app/api/v1/`. */
-const APP_ROUTE_DIRS = ['frameworks', 'workspaces'] as const;
+const APP_ROUTE_DIRS = ['assessments', 'frameworks', 'scan', 'workspaces'] as const;
 
 /** Sunrise's route directories under `app/api/v1/`, which are not the app's to declare. */
 const CORE_ROUTE_DIRS = [
@@ -169,7 +187,7 @@ describe('the route registry and the route files', () => {
   });
 
   it('fails for a directory in neither list', () => {
-    expect(unclassifiedDirs(['frameworks', 'admin', 'assessments'])).toEqual(['assessments']);
+    expect(unclassifiedDirs(['frameworks', 'admin', 'not-a-dir'])).toEqual(['not-a-dir']);
   });
 
   it('declares exactly the methods the app route files export', () => {
@@ -193,9 +211,9 @@ describe('the route registry and the route files', () => {
   });
 
   it('fails for a route the registry declares that no file exports', () => {
-    const declared = [...declaredRoutes, 'GET /api/v1/assessments'];
+    const declared = [...declaredRoutes, 'PUT /api/v1/assessments'];
     expect(compareRoutes(exportedRoutes(), declared).unexported).toEqual([
-      'GET /api/v1/assessments',
+      'PUT /api/v1/assessments',
     ]);
   });
 
@@ -272,6 +290,20 @@ describe('response schemas match what the services return', () => {
       Wire<Awaited<ReturnType<typeof acceptInvitation>>>
     >();
     expectTypeOf<z.infer<typeof judgeModelChoiceSchema>>().toEqualTypeOf<Wire<JudgeModelChoice>>();
+    expectTypeOf<z.infer<typeof judgeRunViewSchema>>().toEqualTypeOf<Wire<JudgeRunView>>();
+    expectTypeOf<z.infer<typeof assessmentSummarySchema>>().toEqualTypeOf<
+      Wire<AssessmentSummary>
+    >();
+    expectTypeOf<z.infer<typeof assessmentDetailSchema>>().toEqualTypeOf<Wire<AssessmentDetail>>();
+    expectTypeOf<z.infer<typeof ephemeralAssessmentSchema>>().toEqualTypeOf<
+      Wire<EphemeralAssessment>
+    >();
+    expectTypeOf<z.infer<typeof quickScanViewSchema>>().toEqualTypeOf<Wire<QuickScanView>>();
+    expectTypeOf<z.infer<typeof assessmentEventSchema>>().toEqualTypeOf<Wire<AssessmentEvent>>();
+    expectTypeOf<z.infer<typeof assessmentDeletedSchema>>().toEqualTypeOf<
+      Wire<Awaited<ReturnType<typeof remove>>>
+    >();
+    expectTypeOf<z.infer<typeof paginationMetaSchema>>().toEqualTypeOf<Wire<PaginationMeta>>();
   });
 
   it('accepts a service value once serialised', () => {

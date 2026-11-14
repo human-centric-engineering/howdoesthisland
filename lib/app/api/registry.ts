@@ -34,6 +34,14 @@ import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/val
 import { JUDGE_ROLES } from '@/lib/app/judges/approved-models';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
 import {
+  ASSESSMENT_STATES,
+  assessmentIdParamSchema,
+  createAssessmentSchema,
+  listAssessmentsQuerySchema,
+  scanRequestSchema,
+} from '@/lib/app/assessments/api/validations';
+import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
+import {
   createWorkspaceSchema,
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
@@ -86,9 +94,15 @@ export interface RouteContract {
     body?: z.ZodType;
   };
   response: {
-    /** The success status. */
-    status: 200 | 201 | 202;
-    /** The success envelope's `data`. */
+    /**
+     * The success status, or each one the route answers with the same `data`
+     * shape (`POST assessments`: 200 once final, 202 while it runs).
+     */
+    status: SuccessStatus | readonly [SuccessStatus, ...SuccessStatus[]];
+    /**
+     * The success envelope's `data`; for a `stream`, each event's payload,
+     * which is also its `type`.
+     */
     data: z.ZodType;
     /** The success envelope's `meta`, when the route sends one. */
     meta?: z.ZodType;
@@ -97,8 +111,15 @@ export interface RouteContract {
      * `If-None-Match` holds it is answered 304 with no body.
      */
     conditional?: true;
+    /**
+     * `sse`: the response is `text/event-stream` (`sseResponse`), not the
+     * envelope. Each event is `event: <type>` and `data: <payload>`.
+     */
+    stream?: 'sse';
   };
 }
+
+export type SuccessStatus = 200 | 201 | 202;
 
 // --- Response shapes -------------------------------------------------------
 
@@ -193,11 +214,118 @@ export const judgeModelChoiceSchema = z.object({
   ),
 });
 
+/** `FrameworkRef` in `lib/app/assessments/api/views.ts`. */
+export const frameworkRefSchema = z.object({ slug: z.string(), version: z.string() });
+
+const assessmentStateSchema = z.enum(ASSESSMENT_STATES);
+
+/** `JudgeRunView`. */
+export const judgeRunViewSchema = z.object({
+  judge: z.string(),
+  status: z.enum(['succeeded', 'failed']),
+  model: z.string().nullable(),
+  costUsd: z.number(),
+  latencyMs: z.number().int().nullable(),
+  errorCode: z.string().nullable(),
+});
+
+/** `AssessmentSummary`. */
+export const assessmentSummarySchema = z.object({
+  id: z.string(),
+  stored: z.literal(true),
+  status: assessmentStateSchema,
+  profile: z.string(),
+  judges: z.array(z.string()),
+  framework: frameworkRefSchema,
+  title: z.string().nullable(),
+  source: z.object({
+    kind: z.enum(['text', 'file', 'url']),
+    url: z.string().nullable(),
+    fileName: z.string().nullable(),
+  }),
+  wordCount: z.number().int(),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+  costUsd: z.number(),
+  error: z.string().nullable(),
+  createdAt: isoDateTime,
+  startedAt: isoDateTime.nullable(),
+  completedAt: isoDateTime.nullable(),
+});
+
+/**
+ * `AssessmentDetail`. `context` and `result` are the framework's own shapes,
+ * so open here; `dp2` documents HowDoesThisLand's.
+ */
+export const assessmentDetailSchema = assessmentSummarySchema.extend({
+  context: z.unknown(),
+  result: z.unknown(),
+  judgeRuns: z.array(judgeRunViewSchema),
+});
+
+/** `EphemeralAssessment`. */
+export const ephemeralAssessmentSchema = z.object({
+  stored: z.literal(false),
+  status: z.enum(['completed', 'partial']),
+  profile: z.string(),
+  judges: z.array(z.string()),
+  framework: frameworkRefSchema,
+  wordCount: z.number().int(),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+  costUsd: z.number(),
+  context: z.unknown(),
+  result: z.unknown(),
+  judgeRuns: z.array(judgeRunViewSchema),
+});
+
+/** `QuickScanView`. */
+export const quickScanViewSchema = z.object({
+  framework: frameworkRefSchema,
+  wordCount: z.number().int(),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+  context: z.unknown(),
+  result: z.unknown(),
+});
+
+/** `PaginationMeta` in `lib/api/responses.ts`. */
+export const paginationMetaSchema = z.object({
+  page: z.number().int(),
+  limit: z.number().int(),
+  total: z.number().int(),
+  totalPages: z.number().int(),
+});
+
+/** `AssessmentEvent` in `lib/app/assessments/api/events.ts`. */
+export const assessmentEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('assessment_status'), id: z.string(), status: assessmentStateSchema }),
+  judgeRunViewSchema.extend({ type: z.literal('assessment_judge'), id: z.string() }),
+  z.object({
+    type: z.literal('assessment_done'),
+    id: z.string(),
+    status: assessmentStateSchema,
+    overall: z.number().nullable(),
+    band: z.string().nullable(),
+    costUsd: z.number(),
+    error: z.string().nullable(),
+  }),
+  z.object({ type: z.literal('assessment_gone'), id: z.string() }),
+  z.object({ type: z.literal('assessment_timeout'), id: z.string() }),
+]);
+
+/** What `remove()` in `lib/app/assessments/api/service.ts` returns. */
+export const assessmentDeletedSchema = z.object({ deleted: z.literal(true) });
+
 // --- The routes ------------------------------------------------------------
 
 const frameworkParams = z.object({ slug: slugParam });
 const versionParams = frameworkParams.extend({ version: versionParam });
 const kindParams = versionParams.extend({ kind: kindParam });
+
+/** A browser session, or an API key with the `assess` scope. */
+const ASSESS: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE };
+const assessmentParams = assessmentIdParamSchema;
 
 /** Browser-session routes: an API key is refused. */
 const SIGNED_IN: RouteAuth = { who: 'signed-in', apiKeyScope: null };
@@ -256,6 +384,69 @@ export const APP_ROUTES: readonly RouteContract[] = [
       meta: kindMetaSchema,
       conditional: true,
     },
+  },
+
+  // The quick scan and assessments (t-24).
+  {
+    method: 'POST',
+    path: '/api/v1/scan',
+    summary:
+      'Run the free quick scan on pasted text: deterministic, no AI, nothing stored. Limited per IP.',
+    auth: { who: 'anyone' },
+    request: { body: scanRequestSchema },
+    response: { status: 200, data: quickScanViewSchema },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/assessments',
+    summary:
+      'Assess a text, a page or a file with a profile or a list of judges: queued, waited for, or kept nowhere.',
+    auth: ASSESS,
+    request: { body: createAssessmentSchema },
+    response: {
+      status: [200, 202],
+      data: z.union([assessmentDetailSchema, ephemeralAssessmentSchema]),
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/assessments',
+    summary: "List the workspace's assessments, newest first.",
+    auth: ASSESS,
+    request: { query: listAssessmentsQuerySchema },
+    response: { status: 200, data: z.array(assessmentSummarySchema), meta: paginationMetaSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/assessments/{id}',
+    summary: 'Get one assessment, its judges and, once final, its result.',
+    auth: ASSESS,
+    request: { params: assessmentParams },
+    response: { status: 200, data: assessmentDetailSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/assessments/{id}',
+    summary: 'Delete an assessment, its judge runs and its text.',
+    auth: ASSESS,
+    request: { params: assessmentParams },
+    response: { status: 200, data: assessmentDeletedSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/assessments/{id}/events',
+    summary: "Follow an assessment's progress as Server-Sent Events, read from its stored rows.",
+    auth: ASSESS,
+    request: { params: assessmentParams },
+    response: { status: 200, data: assessmentEventSchema, stream: 'sse' },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/assessments/{id}/cancel',
+    summary: 'Cancel a queued or running assessment: no further judge is called.',
+    auth: ASSESS,
+    request: { params: assessmentParams },
+    response: { status: 200, data: assessmentDetailSchema },
   },
 
   // Workspaces (t-8, t-9).
