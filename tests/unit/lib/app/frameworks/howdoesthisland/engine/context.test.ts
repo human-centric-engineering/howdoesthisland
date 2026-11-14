@@ -91,6 +91,28 @@ describe('defaults', () => {
   });
 });
 
+describe('defaults a version cannot honour', () => {
+  it('takes the first content type, archetype and option when the default is not in the version', () => {
+    type Listed = { id: string; options?: { id: string }[] };
+    const edited = structuredClone(model) as unknown as {
+      content_types: Listed[];
+      archetypes: Listed[];
+      audience_modifiers: Listed[];
+    };
+    edited.content_types = edited.content_types.filter((c) => c.id !== 'general');
+    edited.archetypes = edited.archetypes.filter((a) => a.id !== 'general');
+    const relationship = edited.audience_modifiers.find((m) => m.id === 'relationship');
+    if (!relationship?.options) throw new Error('the model has no relationship modifier');
+    relationship.options = relationship.options.filter((o) => o.id !== 'warm');
+    const engine = createHowDoesThisLandEngine(edited, { culture: true });
+
+    const ctx = accepted({}, engine);
+    expect(ctx.contentType).toBe(edited.content_types[0]?.id);
+    expect(ctx.archetype).toBe(edited.archetypes[0]?.id);
+    expect(ctx.audience.relationship).toBe(relationship.options[0]?.id);
+  });
+});
+
 describe('what is accepted can be scored', () => {
   it('runs the quick scan and builds every judge prompt for a defaulted context', () => {
     const ctx = accepted({ role: 'cto', culture: { reader: 'global' } });
