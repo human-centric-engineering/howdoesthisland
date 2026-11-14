@@ -645,3 +645,72 @@ describe('runJudge when the cost write fails', () => {
     await expect(run()).resolves.toMatchObject({ costLogIds: [], costUsd: 0 });
   });
 });
+
+describe('runJudge holds the call to the approved entry for the bound model (j4)', () => {
+  const bindTo = (providerSlug: string, boundModel: string) =>
+    mocks.resolve.mockResolvedValue({
+      providerSlug,
+      model: boundModel,
+      fallbacks: [],
+      provenance: { task: 'chat', primary: 'primary', fallbacks: 'system' },
+    });
+
+  it('refuses a model off the role’s list as model_not_approved, before anything is spent', async () => {
+    const agent = agentRow({ rateLimitRpm: 1 });
+    mocks.findUnique.mockResolvedValue(agent);
+    bindTo('openai', 'gpt-4o-mini');
+
+    const err = await refusal(run());
+
+    expect(err.code).toBe('model_not_approved');
+    expect(err.message).toContain('gpt-4o-mini');
+    expect(mocks.checkBudget).not.toHaveBeenCalled();
+    expect(mocks.getProvider).not.toHaveBeenCalled();
+    expect(chat).not.toHaveBeenCalled();
+    expect(mocks.logCost).not.toHaveBeenCalled();
+    // The refused run took no rate-limit slot.
+    bindTo('openai', 'gpt-4.1');
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await expect(run()).resolves.toMatchObject({ slot: SLOT });
+  });
+
+  it('refuses a model on another provider’s list under the same id', async () => {
+    bindTo('azure-openai', 'gpt-4.1');
+    expect((await refusal(run())).code).toBe('model_not_approved');
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it('refuses a model approved for a judge but not for the influence judge', async () => {
+    bindTo('anthropic', 'claude-haiku-4.5');
+    expect((await refusal(run({}, 'judge_influence'))).code).toBe('model_not_approved');
+    expect(chat).not.toHaveBeenCalled();
+
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await expect(run()).resolves.toMatchObject({ model: 'claude-haiku-4.5' });
+  });
+
+  it('sends the influence judge on a 16,384-token model no more than that model can produce', async () => {
+    // The influence request asks for 24,576 and its agent's ceiling is
+    // 32,768: gpt-4o stops at 16,384, so its entry caps the call there.
+    mocks.findUnique.mockResolvedValue(agentRow({ maxTokens: 32_768 }));
+    bindTo('openai', 'gpt-4o');
+    const request = engine.buildJudgeRequest('judge_influence', TEXT, CTX, null);
+    expect(request.maxTokens).toBeGreaterThan(16_384);
+    chat.mockResolvedValue(response('not json'));
+
+    await run({}, 'judge_influence').catch(() => undefined);
+
+    expect(chat).toHaveBeenCalled();
+    for (const [, options] of chat.mock.calls) {
+      expect(options).toMatchObject({ maxTokens: 16_384, timeoutMs: 240_000 });
+      expect(options).not.toHaveProperty('reasoningEffort');
+    }
+  });
+
+  it('takes the timeout from the entry, so a reasoning model gets longer', async () => {
+    bindTo('openai', 'gpt-5');
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await run();
+    expect(chat.mock.calls[0][1]).toMatchObject({ maxTokens: 8_192, timeoutMs: 180_000 });
+  });
+});

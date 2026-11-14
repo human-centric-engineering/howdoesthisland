@@ -7,7 +7,9 @@
  * the chat routes check, so this applies the agent's own limits itself:
  *
  * 1. **Binding**: the agent's provider and model, inherited at run time
- *    (`resolveAgentProviderAndModel`) while either is unset.
+ *    (`resolveAgentProviderAndModel`) while either is unset. The bound model
+ *    must be on the slot's role's approved list (`approved-models.ts`, j4):
+ *    one that is not is refused before anything is spent, never sent.
  * 2. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat
  *    handler does, refusing before any provider call when the agent, its
  *    workspace or the install is over its monthly cap. As in chat, a reached
@@ -17,8 +19,10 @@
  *    already bound spend, and consumer chat's 10 RPM fallback
  *    (`agentChatLimiter`) means something else.
  * 4. **Call**: `runStructuredCompletion` with the slot's schema in strict
- *    mode, the slot's `maxTokens` (never above the agent's ceiling) and its
- *    timeout, which bounds each attempt. A reply that does not parse, or that the engine's validator
+ *    mode and the approved entry's settings: `maxTokens` is the slot's, never
+ *    above the entry's (which is within the model's output limit) or the
+ *    agent's ceiling; the timeout, which bounds each attempt, and the
+ *    reasoning effort are the entry's. A reply that does not parse, or that the engine's validator
  *    refuses as malformed, gets the runner's one retry. A refusal (an empty
  *    reply, which is how OpenAI's strict-mode refusal arrives, or a
  *    content-filter finish) gets none.
@@ -39,6 +43,7 @@
  */
 import type { FrameworkEngine, JudgeDrop } from '@/lib/app/frameworks/engine';
 import { judgeAgentSlug } from '@/lib/app/judges/agents';
+import { approvedEntry, roleOfSlot } from '@/lib/app/judges/approved-models';
 import { prisma } from '@/lib/db/client';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
@@ -63,6 +68,8 @@ export type JudgeRunErrorCode =
   | 'agent_not_found'
   /** The workspace has switched the agent off. */
   | 'agent_inactive'
+  /** The bound model is not on the approved list for this judge's role. */
+  | 'model_not_approved'
   /** The agent, its workspace or the install is over its monthly budget. */
   | 'over_budget'
   /** The agent's own `rateLimitRpm` is used up for this minute. */
@@ -202,6 +209,19 @@ export async function runJudge<Ctx, Output>(
     throw toJudgeRunError(slot, err);
   }
 
+  // Only a model on the role's list is sent, with that entry's settings, so
+  // no call asks a model for more than it can produce.
+  const approved = approvedEntry(roleOfSlot(slot), {
+    provider: binding.providerSlug,
+    model: binding.model,
+  });
+  if (!approved) {
+    throw new JudgeRunError(
+      'model_not_approved',
+      `The ${slot} judge is bound to "${binding.model}", which is not approved for it.`
+    );
+  }
+
   // A reached cap stops paid calls, not free ones, as in the chat handler: a
   // judge bound to a local model still runs. (The org and install caps are
   // also enforced at the provider gate, which exempts local providers too.)
@@ -257,8 +277,11 @@ export async function runJudge<Ctx, Output>(
       responseSchemaName: request.schemaName,
       responseSchemaStrict: true,
       temperature: agent.temperature,
-      maxTokens: Math.min(request.maxTokens, agent.maxTokens),
-      timeoutMs: request.timeoutMs,
+      maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
+      timeoutMs: approved.settings.timeoutMs,
+      ...(approved.settings.reasoningEffort
+        ? { reasoningEffort: approved.settings.reasoningEffort }
+        : {}),
       phase: 'judge',
     });
     outcome = { value: result.value, finishReason: result.finishReason };

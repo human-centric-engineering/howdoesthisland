@@ -43,6 +43,7 @@ import {
   bindingOwnerAfterWrite,
 } from '@/lib/orchestration/agents/binding-owner';
 import {
+  assertBindingAllowed,
   bindingFollowsPlatform,
   picksOwnBinding,
 } from '@/lib/orchestration/agents/platform-agent-guard';
@@ -202,6 +203,12 @@ export const POST = withAdminAuth<{ id: string; versionId: string }>(
         model: snapshot.model,
       });
       if (bindingOwner !== undefined) updateData.bindingOwner = bindingOwner;
+    }
+
+    // A platform agent may limit what it is bound to (its `bindingRule`), and
+    // an old version may hold a pair it no longer allows.
+    if (!followsPlatform) {
+      assertBindingAllowed(agent, { provider: snapshot.provider, model: snapshot.model });
     }
 
     // A restore is a write like any other: at multi, a provider it brings back

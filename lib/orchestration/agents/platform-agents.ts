@@ -211,6 +211,22 @@ export interface PlatformAgentDefinition {
     db: TenancyClient,
     catalogue: PlatformAgentCatalogue
   ) => Promise<PlatformAgentBinding | null>;
+  /**
+   * Which provider and model an org may bind its instance to. Answers `null`
+   * when the pair is allowed, or the reason it is refused, which the agent
+   * routes return as a validation error. Absent: any binding, as before.
+   *
+   * Asked by every route that writes an instance's provider or model (the
+   * agent PATCH and a version restore), only when the write changes one of
+   * them, so a client echoing the agent back is never refused for a binding
+   * it already holds. Never asked of the platform's own pick
+   * (`defaultBinding`), which the definition chooses itself. An empty
+   * provider or model (inherit at run time) is passed as `''`.
+   *
+   * Synchronous and pure: it runs inside the write's validation, and must
+   * answer the same for the same pair.
+   */
+  bindingRule?: (binding: PlatformAgentBinding) => string | null;
 }
 
 /**
