@@ -188,8 +188,14 @@ beforeEach(() => {
     },
   ];
   s.models = [
-    { id: 'm1', providerSlug: 'openai', modelId: 'gpt-4.1', isActive: true },
-    { id: 'm2', providerSlug: 'openai', modelId: 'gpt-5', isActive: true },
+    {
+      id: 'm1',
+      providerSlug: 'openai',
+      modelId: 'gpt-4.1',
+      isActive: true,
+      capabilities: ['chat'],
+    },
+    { id: 'm2', providerSlug: 'openai', modelId: 'gpt-5', isActive: true, capabilities: ['chat'] },
   ];
   s.writes = [];
   s.orgOf = () => getTenantContext()?.orgId ?? 'NO-CONTEXT';

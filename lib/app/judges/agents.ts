@@ -23,6 +23,7 @@ import {
   HOWDOESTHISLAND_JUDGE_SLOTS,
   type HowDoesThisLandJudgeSlot,
 } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
+import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
 import type { TenancyClient } from '@/lib/db/tenancy-extension';
 import type {
   PlatformAgentBinding,
@@ -37,12 +38,10 @@ import {
 import { requireOrgId } from '@/lib/tenancy/context';
 
 /**
- * The provider the judges and editor default to (D8). The same provider every
- * new workspace is approved for (`WORKSPACE_PROVIDER_SLUG`, pinned equal by a
- * test); not imported from there, because that module brings org creation
- * into the platform-agent registry's import graph.
+ * The provider the judges and editor default to (D8): the one every new
+ * workspace is approved for, so a new workspace's agents can be bound.
  */
-export const JUDGE_PROVIDER_SLUG = 'openai';
+export const JUDGE_PROVIDER_SLUG = WORKSPACE_PROVIDER_SLUG;
 
 /** The interim judge model (D8), until k3 measures. */
 export const INTERIM_JUDGE_MODEL = 'gpt-4.1';
@@ -102,9 +101,19 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  *   the editor rewrites the whole text, up to `MAX_TEXT_CHARS` (40,000
  *   characters, about 10,000 tokens): each needs about 10–15k for the reply.
  *
- * 32,768 is the highest a ceiling goes: it is the lowest output limit among
- * the models these agents may be bound to (`gpt-4.1`), and nothing clamps a
- * cap to the model's, so a higher one would be refused by that model.
+ * 32,768 is the highest a ceiling goes while the platform owns the binding:
+ * it is `gpt-4.1`'s output limit, and nothing clamps a cap to the model's, so
+ * a higher one would be refused by that model. Two limits follow, both for
+ * the tasks that make the calls:
+ *
+ * - On `gpt-5` at its default effort, a rewrite of the longest text may not
+ *   fit its thinking and its reply in 32,768, so a rewrite call (rw1) sets a
+ *   low reasoning effort rather than relying on the ceiling.
+ * - A workspace that binds an agent to a model with a lower output limit
+ *   (`gpt-4o`, 16,384; an older Claude Haiku, 8,192) has that agent's calls
+ *   refused, and cannot lower this code-owned cap. The model catalogue does
+ *   not record output limits, so a call cannot clamp to one yet: j2 has to
+ *   bring them in before a workspace's own model choice is safe.
  *
  * These are ceilings. A call sizes its own `maxTokens` and timeout under them
  * (§8.3: per judge slot in j2, from the text's length for rewrites in rw1),
@@ -206,8 +215,8 @@ function providerReachableOnce(
 
 /**
  * The binding for one of these agents: the interim `model` on the default
- * provider, when the model is active, the org may use that provider, and it
- * has a key. Otherwise `null`, and the agent inherits at run time.
+ * provider, when the model is active and offers chat, the org may use that
+ * provider, and it has a key. Otherwise `null`, and the agent inherits at run time.
  *
  * The model is checked first, from the catalogue, so an inactive model answers
  * `null` without asking anything that can fail.
@@ -225,7 +234,10 @@ export async function pickInterimBinding(
   catalogue: PlatformAgentCatalogue
 ): Promise<PlatformAgentBinding | null> {
   const active = (await catalogue.activeModels(db)).some(
-    (m) => m.providerSlug === JUDGE_PROVIDER_SLUG && m.modelId === model
+    (m) =>
+      m.providerSlug === JUDGE_PROVIDER_SLUG &&
+      m.modelId === model &&
+      m.capabilities.includes('chat')
   );
   if (!active) return null;
   return (await providerReachableOnce(db, catalogue))

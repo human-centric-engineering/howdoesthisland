@@ -1,11 +1,11 @@
 /**
- * The HowDoesThisLand judge slots, in the model's own order.
+ * The HowDoesThisLand judge slots, listed in model 0.5.1's order.
  *
  * On their own so the judges' platform agents (`lib/app/judges/agents.ts`) can
  * name them without importing the framework definition, which brings the
  * engine, the schemas and the env module into the platform-agent registry's
  * import graph. The definition reads them from here too, and the codec refuses
- * a model version whose `judges[]` is not this list.
+ * a model version whose `judges[]` ids are not this set (in any order).
  *
  * Culture is listed whether or not the culture switch is on: the switch decides
  * whether the slot runs (f-assessments), not whether its agent exists.

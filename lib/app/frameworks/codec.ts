@@ -211,7 +211,7 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
     );
   }
 
-  checkJudgeSlots(def, records, problems);
+  checkJudgeSlots(def, document, records, problems);
   const links = resolveReferences(def, records, invalid, problems);
   return { nodes, links, problems };
 }
@@ -219,14 +219,21 @@ export function decompose(def: FrameworkDefinition, document: unknown): Decompos
 /**
  * A version's judges must be the definition's slots: each slot is an agent in
  * every workspace, so a judge the code does not know would run with no agent,
- * and a slot the version drops would leave one with nothing to do.
+ * and a slot the version drops would leave one with nothing to do. Order is
+ * not checked: it changes nothing an agent does.
+ *
+ * Skipped when the judges' list is missing or not a list, which is already
+ * reported once; checking it would add a "missing" line for every slot.
  */
 function checkJudgeSlots(
   def: FrameworkDefinition,
+  document: JsonObject,
   records: ReadonlyMap<string, ReadonlyMap<string, JsonObject>>,
   problems: string[]
 ): void {
   const { kind, slots } = def.judges;
+  const spec = def.collections.find((c) => c.kind === kind);
+  if (!spec || !Array.isArray(listAt(document, spec.path))) return;
   const present = [...(records.get(kind)?.keys() ?? [])];
   for (const id of present) {
     if (!slots.includes(id)) {
@@ -236,6 +243,13 @@ function checkJudgeSlots(
   for (const slot of slots) {
     if (!present.includes(slot)) problems.push(`judge slot "${slot}" is missing`);
   }
+}
+
+/** The value at a collection's path in the file, or `undefined`. */
+function listAt(document: JsonObject, path: CollectionSpec['path']): unknown {
+  const top = document[path[0]];
+  if (path.length === 1) return top;
+  return isJsonObject(top) ? top[path[1]] : undefined;
 }
 
 function resolveReferences(

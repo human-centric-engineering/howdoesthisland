@@ -200,6 +200,14 @@ describe('decompose() refuses', () => {
     );
   });
 
+  it('a missing judges list once, not again for every slot', () => {
+    const doc = model();
+    delete doc.judges;
+    const { problems } = decompose(howDoesThisLand, doc);
+    expect(problems).toContain('missing section "judges"');
+    expect(problems.filter((p) => p.startsWith('judge slot'))).toEqual([]);
+  });
+
   it('a file that is not an object', () => {
     expect(decompose(howDoesThisLand, []).problems).toEqual(['the file is not a JSON object']);
   });
@@ -214,6 +222,12 @@ describe('decompose() refuses', () => {
 });
 
 describe('decompose() accepts', () => {
+  it('the judge slots in another order', () => {
+    const doc = model();
+    doc.judges = [...list(doc, 'judges')].reverse();
+    expect(decompose(howDoesThisLand, doc).problems).toEqual([]);
+  });
+
   it('the named judge slots that are not records', () => {
     // judges[].appeal may be "lenses" or "influence" (meta.reference_rules).
     const doc = model();

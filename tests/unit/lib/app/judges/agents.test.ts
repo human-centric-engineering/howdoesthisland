@@ -203,6 +203,7 @@ function model(modelId: string, overrides: Partial<AiProviderModel> = {}): AiPro
     providerSlug: 'openai',
     modelId,
     isActive: true,
+    capabilities: ['chat'],
     ...overrides,
   } as AiProviderModel; // test-review:accept as_cast — a fixture of the fields the pick reads
 }
@@ -297,6 +298,16 @@ describe('pickInterimBinding', () => {
     await expect(
       pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
     ).rejects.toBeInstanceOf(ProviderSeamUnavailableError);
+  });
+
+  it('answers null when the interim model does not offer chat', async () => {
+    await expect(
+      pickInterimBinding(
+        INTERIM_JUDGE_MODEL,
+        db,
+        catalogue([provider()], [model(INTERIM_JUDGE_MODEL, { capabilities: ['embedding'] })])
+      )
+    ).resolves.toBeNull();
   });
 
   it('answers null without asking the credential resolver when the model is inactive', async () => {

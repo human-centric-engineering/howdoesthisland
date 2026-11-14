@@ -43,7 +43,7 @@ All of it is reported in one run, and nothing is written:
 - a section the definition does not know, or one it expects that is missing;
 - a record failing its kind's Zod schema, or with no `id`;
 - two records of one kind with the same key;
-- judges that are not exactly the definition's `judges.slots`: each slot is a
+- judges whose ids are not the definition's `judges.slots` (order aside): each slot is a
   platform agent in every workspace ([`judges.md`](./judges.md)), so a version
   cannot add, drop or rename one without code;
 - a file that is not JSON.

@@ -41,9 +41,9 @@ import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-po
 import { forgetOrgCap } from '@/lib/orchestration/llm/spend-caps';
 import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
 import type { UninvitedSignup } from '@/lib/tenancy/signup-org';
+import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
 
-/** The provider every new workspace is approved for, by slug. */
-export const WORKSPACE_PROVIDER_SLUG = 'openai';
+export { WORKSPACE_PROVIDER_SLUG };
 
 /** The monthly AI budget every new workspace starts with, in USD (D6). */
 export const WORKSPACE_MONTHLY_BUDGET_USD = 10;
