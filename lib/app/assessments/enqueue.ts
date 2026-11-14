@@ -57,7 +57,9 @@ export async function enqueueAssessment(
   input: EnqueueAssessmentInput
 ): Promise<EnqueuedAssessment> {
   const orgId = requireOrgId();
-  const { text } = input.content;
+  // NUL is never text (a PDF or DOCX extraction can leave one), and Postgres
+  // refuses it in a text column, so it is dropped rather than failing the insert.
+  const text = input.content.text.replaceAll('\u0000', '');
   if (text.trim() === '') {
     throw new AssessmentInputError('content_empty', 'There is no text to assess.');
   }

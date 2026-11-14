@@ -42,7 +42,8 @@ startAssessmentInBackground(assessmentId); // or: await runAssessment(assessment
 `enqueueAssessment` refuses with an `AssessmentInputError` before storing
 anything: `content_empty`, `content_too_long` (over 40,000 characters, never
 truncated), `version_not_found` (no published version with that id) or
-`profile_unknown`. It wakes the maintenance tick (`noteMaintenanceWork`).
+`profile_unknown`. It drops NUL characters, which Postgres refuses in a text
+column. It wakes the maintenance tick (`noteMaintenanceWork`).
 
 `runJudges` (`fan-out.ts`) is the judge fan-out on its own, with no rows, for
 a run that keeps nothing (`store: false`).
@@ -78,10 +79,9 @@ from either of the first two.
   with the switch turned off after the assessment was queued) fails the same
   way, as `slot_unavailable`, without being called.
 - **An error that is not a judge's** (the database failing part-way) puts the
-  assessment back to `QUEUED` with no lease and a note in `error`. The
-  recovery job re-drives it until it is out of attempts, then fails it with
-  that note. A claim that fails is logged, and the assessment is left as it
-  was.
+  assessment back to `QUEUED` with no lease and a note in `error`, to be
+  re-driven. On its last attempt it is `FAILED` at once, with that note. A
+  claim that fails is logged, and the assessment is left as it was.
 - **`FAILED`** is for a version that can no longer be run, a text the engine
   cannot score (its quick scan or `assemble()` threw, which would throw
   again), and an assessment that ran out of attempts. `error` says which.

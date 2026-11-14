@@ -742,17 +742,15 @@ describe('the recovery job', () => {
     expect(runsOf(a.id).find((r) => r.judge === 'judge_b')?.costUsd).toBeCloseTo(0.014);
   });
 
-  it('gives up with the reason its last run recorded, when it recorded one', async () => {
+  it('fails on its last attempt with the reason, not leaving it queued', async () => {
     const a = fake.seed({ judges: ['judge_a'] });
     mocks.runJudge.mockRejectedValue(new Error('connection reset'));
-    for (let n = 0; n < 3; n += 1) {
-      expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
-    }
-    expect(a).toMatchObject({ status: 'QUEUED', attempts: 3 });
-
-    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 0, gaveUp: 1 });
-    expect(a.status).toBe('FAILED');
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+    expect(a).toMatchObject({ status: 'FAILED', attempts: 3, leaseToken: null });
     expect(a.error).toMatch(/not a judge/);
+    expect(a.completedAt).toEqual(expect.any(Date));
   });
 });
 

@@ -136,36 +136,22 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
       },
     });
     if (!row) {
-      lease.release();
-      return 'lease_lost';
+      outcome = 'lease_lost';
+    } else {
+      const scope = createPrivacyScope({
+        scopeId: `assessment:${row.id}`,
+        orgId,
+        ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
+      });
+      outcome = await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
     }
-
-    const scope = createPrivacyScope({
-      scopeId: `assessment:${row.id}`,
-      orgId,
-      ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
-    });
-    outcome = await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
   } catch (err) {
     // Not the judges' and not final (the database, most likely): back to the
-    // queue for the recovery job, which re-drives it until it is out of
-    // attempts. If this write fails too, the lease runs out to the same end.
-    logger.error('Assessment run stopped on an error; queued again', err, { assessmentId });
-    const requeued = await prisma.assessment
-      .updateMany({
-        where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
-        data: {
-          status: 'QUEUED',
-          leaseToken: null,
-          leaseExpiresAt: null,
-          // Kept for the recovery job's give-up; cleared by a run that finishes.
-          error: 'Its run stopped on an error that was not a judge’s.',
-        },
-      })
-      .then(({ count }) => count === 1)
-      .catch(() => false);
-    // Not requeued: it was cancelled under the run, or its lease went elsewhere.
-    outcome = requeued ? 'requeued' : await lostTo(assessmentId).catch(() => 'lease_lost' as const);
+    // queue, to be re-driven until it is out of attempts, or failed now if
+    // this was its last. If the write fails too, the lease runs out and the
+    // recovery job does the same.
+    logger.error('Assessment run stopped on an error', err, { assessmentId });
+    outcome = await stoppedOnError(assessmentId, token).catch(() => 'lease_lost' as const);
   }
   lease.release();
   if (outcome === 'cancelled') await freePlace(assessmentId, token).catch(() => undefined);
@@ -173,16 +159,38 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
   return outcome;
 }
 
+const STOPPED_ON_ERROR = 'Its run stopped on an error that was not a judge’s.';
+
+/** Hand back a run that stopped on an error: `QUEUED` again, or `FAILED` on its last attempt. */
+async function stoppedOnError(assessmentId: string, token: string): Promise<RunOutcome> {
+  const ours = { id: assessmentId, leaseToken: token, status: 'RUNNING' as const };
+  const released = { leaseToken: null, leaseExpiresAt: null, error: STOPPED_ON_ERROR };
+  const failed = await prisma.assessment.updateMany({
+    where: { ...ours, attempts: { gte: MAX_ATTEMPTS } },
+    data: { ...released, status: 'FAILED', completedAt: new Date() },
+  });
+  if (failed.count === 1) return 'failed';
+  const requeued = await prisma.assessment.updateMany({
+    where: ours,
+    // The note is kept for the recovery job's give-up; a claim clears it.
+    data: { ...released, status: 'QUEUED' },
+  });
+  if (requeued.count === 1) return 'requeued';
+  // Neither: it was cancelled under the run, or its lease went elsewhere.
+  return await lostTo(assessmentId);
+}
+
 /**
  * Start the workspace's oldest queued assessment, now that this run's place
  * is free, without waiting for it. This is what picks up an assessment that
  * was queued while the workspace was at its limit; the recovery job is the
- * backstop. Never throws.
+ * backstop. Tries the next few in turn, since another claimer may take the
+ * oldest first. Never throws.
  */
 function startNextQueued(orgId: string, finished: string): void {
   keepRunningAfterResponse(
     async () => {
-      const next = await prisma.assessment.findFirst({
+      const queued = await prisma.assessment.findMany({
         where: {
           orgId,
           status: 'QUEUED',
@@ -191,11 +199,16 @@ function startNextQueued(orgId: string, finished: string): void {
           OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
         },
         orderBy: { createdAt: 'asc' },
+        take: RUNNING_PER_WORKSPACE,
         select: { id: true },
       });
-      if (!next) return;
-      const run = await beginAssessment(next.id);
-      if (run) await run.done;
+      for (const { id } of queued) {
+        const run = await beginAssessment(id);
+        if (run) {
+          await run.done;
+          return;
+        }
+      }
     },
     'app: next queued assessment',
     { orgId }

@@ -151,6 +151,11 @@ describe('enqueueAssessment', () => {
     expect(fake.assessments).toHaveLength(1);
   });
 
+  it('drops NUL characters, which Postgres refuses in a text column', async () => {
+    await enqueue({ content: { text: 'Before\u0000after', sourceKind: 'TEXT' } });
+    expect(fake.contents[0]).toMatchObject({ text: 'Beforeafter' });
+  });
+
   it('refuses an empty text', async () => {
     expect((await refusal(enqueue({ content: { text: '  \n ', sourceKind: 'TEXT' } }))).code).toBe(
       'content_empty'
