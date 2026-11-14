@@ -187,13 +187,15 @@ export async function runJudge<Ctx, Output>(
   // Every response the provider returns, and the usage on any error it
   // raises, so the cost row counts what was billed on every path.
   const billed: LlmUsage[] = [];
-  let validation: { output: Output; drops: JudgeDrop[] } | null = null;
 
-  let outcome: { finishReason: LlmFinishReason } | { error: JudgeRunError };
+  let outcome:
+    | { value: { output: Output; drops: JudgeDrop[] }; finishReason: LlmFinishReason }
+    | { error: JudgeRunError };
   try {
     const provider = meteredProvider(
       await getProvider(binding.providerSlug, primaryCallContext(binding.provenance)),
-      billed
+      billed,
+      slot
     );
     const result = await runStructuredCompletion({
       provider,
@@ -206,9 +208,7 @@ export async function runJudge<Ctx, Output>(
         const reply = parseJson(raw);
         if (reply === undefined) return null;
         const checked = input.engine.validateJudgeReply(slot, reply, input.text);
-        if (!checked.ok) return null;
-        validation = { output: checked.output, drops: checked.drops };
-        return validation;
+        return checked.ok ? { output: checked.output, drops: checked.drops } : null;
       },
       retryUserMessage: RETRY_MESSAGE,
       onFinalFailure: () =>
@@ -221,7 +221,7 @@ export async function runJudge<Ctx, Output>(
       timeoutMs: request.timeoutMs,
       phase: 'judge',
     });
-    outcome = { finishReason: result.finishReason };
+    outcome = { value: result.value, finishReason: result.finishReason };
   } catch (err) {
     outcome = { error: toJudgeRunError(slot, err) };
   }
@@ -258,13 +258,10 @@ export async function runJudge<Ctx, Output>(
         );
 
   if ('error' in outcome) throw outcome.error;
-  // The runner returned, so the last parse succeeded and set it.
-  const checked = validation as { output: Output; drops: JudgeDrop[] } | null;
-  if (!checked) throw new JudgeRunError('malformed', `The ${slot} judge's reply was not usable.`);
   return {
     slot,
-    output: checked.output,
-    drops: checked.drops,
+    output: outcome.value.output,
+    drops: outcome.value.drops,
     provider: binding.providerSlug,
     model: binding.model,
     usage: { input: usage.inputTokens, output: usage.outputTokens, attempts: billed.length },
@@ -281,13 +278,13 @@ type Provider = Awaited<ReturnType<typeof getProvider>>;
  * a content-filter finish raised as a refusal (no retry: a filter that
  * declined once declines again, and the retry would be billed).
  */
-function meteredProvider(provider: Provider, billed: LlmUsage[]): Provider {
+function meteredProvider(provider: Provider, billed: LlmUsage[], slot: string): Provider {
   const chat: Provider['chat'] = async (messages, options) => {
     try {
       const response = await provider.chat(messages, options);
       billed.push(response.usage);
       if (response.finishReason === 'error') {
-        throw new JudgeRunError('refused', 'The provider declined to answer.');
+        throw new JudgeRunError('refused', `The provider declined to run the ${slot} judge.`);
       }
       return response;
     } catch (err) {
@@ -295,10 +292,11 @@ function meteredProvider(provider: Provider, billed: LlmUsage[]): Provider {
       throw err;
     }
   };
-  return new Proxy(provider, {
-    get: (target, prop, receiver) =>
-      prop === 'chat' ? chat : (Reflect.get(target, prop, receiver) as unknown),
-  });
+  // The provider's own fields and methods, through the prototype, with only
+  // `chat` replaced.
+  const metered: Provider = Object.create(provider) as Provider;
+  metered.chat = chat;
+  return metered;
 }
 
 /** The parsed reply, or `undefined` when `raw` is not JSON. */
@@ -311,11 +309,7 @@ function parseJson(raw: string): unknown {
 }
 
 function toJudgeRunError(slot: string, err: unknown): JudgeRunError {
-  if (err instanceof JudgeRunError) {
-    return err.code === 'refused'
-      ? new JudgeRunError('refused', `The provider declined to run the ${slot} judge.`)
-      : err;
-  }
+  if (err instanceof JudgeRunError) return err;
   if (err instanceof ProviderError) {
     if (err.code === 'truncated_no_output') {
       return new JudgeRunError('truncated', `The ${slot} judge's reply was cut off at its limit.`, {
@@ -355,10 +349,7 @@ async function settleCost(
     const row = await write;
     return { id: row?.id ?? null, costUsd: row?.totalCostUsd ?? 0 };
   } catch (err) {
-    logger.error('Failed to log a judge run cost', {
-      ...about,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logger.error('Failed to log a judge run cost', err, about);
     return { id: null, costUsd: 0 };
   }
 }

@@ -434,6 +434,60 @@ describe('runJudge on a provider refusal', () => {
   });
 });
 
+describe('runJudge counts prompt-cache tokens and the service tier', () => {
+  it('sums each attempt’s cache reads and writes into the cost row, with the tier', async () => {
+    chat
+      .mockResolvedValueOnce(
+        response('nope', {
+          usage: { inputTokens: 1000, outputTokens: 40, cacheReadTokens: 600, serviceTier: 'flex' },
+        })
+      )
+      .mockResolvedValueOnce(
+        response(JSON.stringify(ethosReply()), {
+          usage: {
+            inputTokens: 1100,
+            outputTokens: 200,
+            cacheReadTokens: 700,
+            cacheWriteTokens: 50,
+            serviceTier: 'flex',
+          },
+        })
+      );
+
+    await run();
+
+    expect(costRow()).toMatchObject({
+      inputTokens: 2100,
+      outputTokens: 240,
+      cacheReadTokens: 1300,
+      cacheWriteTokens: 50,
+      serviceTier: 'flex',
+    });
+  });
+
+  it('leaves them off a row whose attempts reported none', async () => {
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await run();
+    const row = costRow();
+    expect(row).not.toHaveProperty('cacheReadTokens');
+    expect(row).not.toHaveProperty('cacheWriteTokens');
+    expect(row).not.toHaveProperty('serviceTier');
+  });
+});
+
+describe('runJudge on a failure that is not a ProviderError', () => {
+  it('fails as provider_error, e.g. a timeout abort, keeping the cause', async () => {
+    const abort = new DOMException('The operation timed out.', 'TimeoutError');
+    chat.mockRejectedValueOnce(abort);
+
+    const err = await refusal(run());
+
+    expect(err.code).toBe('provider_error');
+    expect(err.cause).toBe(abort);
+    expect(mocks.logCost).not.toHaveBeenCalled();
+  });
+});
+
 describe('runJudge passes a reply through the engine’s validator', () => {
   it('drops unknown ids and clamps out-of-range scores, returning the drop record', async () => {
     const [first, ...rest] = ETHOS_DIMS;
@@ -462,6 +516,12 @@ describe('runJudge passes a reply through the engine’s validator', () => {
 });
 
 describe('runJudge when the cost write fails', () => {
+  it('returns the reply with no row id when logCost writes nothing', async () => {
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    mocks.logCost.mockResolvedValueOnce(null);
+    await expect(run()).resolves.toMatchObject({ costLogId: null, costUsd: 0 });
+  });
+
   it('still returns the reply', async () => {
     chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
     mocks.logCost.mockRejectedValueOnce(new Error('db down'));
