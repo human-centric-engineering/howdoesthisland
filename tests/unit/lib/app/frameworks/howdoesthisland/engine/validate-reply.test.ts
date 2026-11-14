@@ -422,8 +422,9 @@ describe('validateJudgeReply() records what the reply leaves out', () => {
   });
   const LENS_DIMS = m.LENSES.map((d) => d.id);
   const DUTIES = m.FN.map((f) => f.id);
+  /** Every duty, totalling 100. */
   const allDuties = () => ({
-    ...Object.fromEntries(DUTIES.map((k) => [k, 0])),
+    ...Object.fromEntries(DUTIES.map((k, i) => [k, i === 0 ? 100 : 0])),
     primary: DUTIES[0],
   });
   const CULTURE_DIMS = m.EXTRA.filter((d) => d.group === 'culture').map((d) => d.id);
@@ -493,6 +494,29 @@ describe('validateJudgeReply() records what the reply leaves out', () => {
       })
     );
     expect(culture.drops).toEqual([{ at: 'text_positions', reason: 'missing', detail: unplaced }]);
+  });
+
+  it('duties that do not total 100, kept as given, and only when every duty is there', () => {
+    const [first, ...others] = DUTIES;
+    const off = {
+      ...Object.fromEntries(DUTIES.map((k) => [k, 30])),
+      primary: first,
+    };
+    const lenses = ok(
+      validate('judge_lenses', { dimension_scores: scores(LENS_DIMS), duties: off })
+    );
+    expect(lenses.drops).toEqual([
+      { at: 'duties', reason: 'off_total', detail: String(30 * DUTIES.length) },
+    ]);
+    expect(lenses.output.duties).toEqual(off);
+
+    const partial = ok(
+      validate('judge_lenses', {
+        dimension_scores: scores(LENS_DIMS),
+        duties: { ...Object.fromEntries(others.map((k) => [k, 10])), primary: others[0] },
+      })
+    );
+    expect(partial.drops).toEqual([{ at: 'duties', reason: 'missing', detail: first }]);
   });
 
   it('every duty and position when the block is absent', () => {

@@ -23,6 +23,9 @@
  *   require these (a list of ids is not a set of them), so a reply can leave
  *   them out. Nothing is filled in; an item dropped for another reason is
  *   also missing, since the output does not have it.
+ * - **duties that do not total 100 are recorded**, when every duty is given.
+ *   They are not rescaled: `assemble()` does that (and ignores a total of 0),
+ *   as the prototype does, so the record is what says the judge was off.
  *
  * Every drop, every clamp and every gap is recorded, by path, so a run can
  * say what its judge got wrong. Only a reply that is not an object, or lacks
@@ -65,7 +68,9 @@ export type JudgeDropReason =
   /** Past the judge's limit for the list. */
   | 'over_limit'
   /** Asked for and not in the output. Nothing is dropped; the gap is recorded, the id as detail. */
-  | 'missing';
+  | 'missing'
+  /** Duties whose total is not 100, the total as detail. Kept as given; `assemble()` rescales. */
+  | 'off_total';
 
 /** A drop, by path (`highlights[2]`, `perspectives[0].levers[3].quote`), with the offending value. */
 export type JudgeDrop = FrameworkJudgeDrop<JudgeDropReason>;
@@ -392,6 +397,10 @@ export function validateJudgeReply(
       return true;
     });
     r.missing('duties', ids.duties, Object.keys(d ?? {}));
+    if (d && ids.duties.every((k) => typeof d[k] === 'number')) {
+      const total = ids.duties.reduce((sum, k) => sum + Number(d[k]), 0);
+      if (total !== 100) r.drop('duties', 'off_total', total);
+    }
     if (primary === undefined) r.drop('duties.primary', 'missing');
     if (d) output.duties = primary === undefined ? d : { ...d, primary };
   }

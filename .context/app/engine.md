@@ -85,7 +85,9 @@ Not ported here: `rewritePrompt`, `calibrate` and `toApi` (see the porting map, 
   prompt asks for and the output lacks is recorded as `missing`: a dimension not scored,
   a perspective or lever not given, a duty, the primary duty or a culture position. The
   strict schema cannot require these, since a list of ids is not a set of them. Nothing is
-  filled in. Each drop is recorded by path and reason. It refuses only a reply that is not an object, or one
+  filled in. Duties that do not total 100 are recorded as `off_total` when every duty is
+  given, and left as given, since `assemble()` rescales them. Each drop is recorded by
+  path and reason. It refuses only a reply that is not an object, or one
   that lacks its core list (`dimension_scores`, or `perspectives` for influence).
 - **Limits.** Each request carries interim `maxTokens` and timeout hints for its shape
   (`JUDGE_LIMITS`), under its agent's ceiling ([`judges.md`](./judges.md)). k3 measures
