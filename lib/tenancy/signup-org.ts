@@ -45,6 +45,7 @@ import {
   type NewUserMemberships,
   type NewUserShape,
 } from '@/lib/tenancy/membership';
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 
 /** What the resolver is told about the person signing up. */
@@ -147,7 +148,8 @@ export async function uninvitedSignupAdmission(
  * Here the grantor is the resolver, so its standing is taken as given. The
  * other half of the rule still holds: the org must have no member who is not
  * platform staff, and the newcomer must not be staff
- * ({@link takesFirstOwnership}). #1235's case was an org ADMIN who empties an
+ * ({@link takesFirstOwnership}). The install org is never bootstrapped, as in
+ * core. #1235's case was an org ADMIN who empties an
  * org and invites a second account of their own. That cannot reach this path,
  * because no org member chooses where a resolved signup lands.
  */
@@ -159,6 +161,9 @@ export async function resolvedSignupMemberships(
   const decided = await membershipsForNewUser(user, admission, db);
   const { membership } = decided;
   if (!admission.orgId || membership.orgId !== admission.orgId) return decided;
+  // The install org's owner follows the platform role, never the bootstrap,
+  // as in core's own rule (`membershipForNewUser`).
+  if (admission.orgId === INSTALL_ORG_ID) return decided;
   if (membership.role === ORG_OWNER_ROLE) return decided;
   const nonStaff = await countNonStaffMembers(admission.orgId, db);
   if (!takesFirstOwnership(user, nonStaff, true)) return decided;

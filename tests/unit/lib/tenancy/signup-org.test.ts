@@ -20,6 +20,7 @@ import {
   uninvitedSignupAdmission,
   type SignupOrgResolver,
 } from '@/lib/tenancy/signup-org';
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { DEFAULT_ORG_ROLE, ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 
 const ORG = 'cmorg00000000000000newws1';
@@ -115,6 +116,24 @@ describe('resolvedSignupMemberships', () => {
     const result = await resolvedSignupMemberships(signup, { orgId: ORG }, membershipDb(1));
 
     expect(result.membership).toEqual({ orgId: ORG, role: DEFAULT_ORG_ROLE });
+  });
+
+  it('never bootstraps the install org, whose owner follows the platform role', async () => {
+    const result = await resolvedSignupMemberships(
+      signup,
+      { orgId: INSTALL_ORG_ID },
+      membershipDb(0)
+    );
+
+    expect(result.membership).toEqual({ orgId: INSTALL_ORG_ID, role: DEFAULT_ORG_ROLE });
+  });
+
+  it('never makes a SERVICE account the owner, even of an empty org', async () => {
+    const service = { ...signup, accountType: 'SERVICE' };
+
+    const result = await resolvedSignupMemberships(service, { orgId: ORG }, membershipDb(0));
+
+    expect(result.membership.role).not.toBe(ORG_OWNER_ROLE);
   });
 
   it('never makes platform staff the owner, even of an empty org', async () => {
