@@ -29,7 +29,7 @@ import { enqueueAssessment, startAssessmentInBackground } from '@/lib/app/assess
 import { beginAssessment, cancelAssessment } from '@/lib/app/assessments/run';
 import { assessableText } from '@/lib/app/assessments/text';
 import { POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
-import { resolveVersion, type ResolvedVersion } from '@/lib/app/assessments/api/version';
+import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
 import {
   isFinal,
@@ -66,7 +66,7 @@ export async function refusingAsApi<T>(fn: () => Promise<T> | T): Promise<T> {
 }
 
 /** The caller's context checked against the version, or `CONTEXT_INVALID` with each problem. */
-export function contextFor(resolved: ResolvedVersion, input: unknown): unknown {
+export function contextFor(resolved: VersionToScore, input: unknown): unknown {
   const parsed = resolved.engine.parseContext(input);
   if (!parsed.ok) {
     throw new APIError('The context does not fit this framework version.', 'CONTEXT_INVALID', 400, {
@@ -77,7 +77,7 @@ export function contextFor(resolved: ResolvedVersion, input: unknown): unknown {
 }
 
 /** The judges a profile or list resolves to, or `PROFILE_UNKNOWN`. */
-export function judgesFor(resolved: ResolvedVersion, profile: JudgeProfile): readonly string[] {
+export function judgesFor(resolved: VersionToScore, profile: JudgeProfile): readonly string[] {
   try {
     return resolved.engine.activeJudgeSlots(profile);
   } catch (err) {
@@ -152,7 +152,7 @@ export async function createAssessment(
   options: { boundMs?: number } = {}
 ): Promise<CreatedAssessment> {
   // Everything that can be refused without fetching or reading anything first.
-  const resolved = await resolveVersion(body);
+  const resolved = await versionToScore(body);
   const ctx = contextFor(resolved, body.context);
   const profile: JudgeProfile = body.judges ?? body.profile ?? 'full';
   const judges = judgesFor(resolved, profile);
@@ -230,7 +230,7 @@ async function waitForRun(assessmentId: string, boundMs: number): Promise<void> 
 
 /** The quick scan and the judges with no rows: the result, and the cost rows alone. */
 async function runEphemeral(
-  resolved: ResolvedVersion,
+  resolved: VersionToScore,
   rawText: string,
   ctx: unknown,
   profile: JudgeProfile,

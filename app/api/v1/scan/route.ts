@@ -28,7 +28,7 @@ import type { NextRequest } from 'next/server';
 import { handleAPIError } from '@/lib/api/errors';
 import { successResponse } from '@/lib/api/responses';
 import { validateRequestBody } from '@/lib/api/validation';
-import { quickScan, refuseAccountOnlyInput } from '@/lib/app/assessments/api/scan';
+import { refuseAccountOnlyInput, runQuickScan } from '@/lib/app/assessments/api/scan';
 import { scanRequestSchema } from '@/lib/app/assessments/api/validations';
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         .catch(() => null)
     );
     const body = await validateRequestBody(request, scanRequestSchema);
-    return successResponse(await quickScan(body));
+    return successResponse(await runQuickScan(body));
   } catch (error) {
     return handleAPIError(error);
   }

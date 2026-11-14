@@ -8,7 +8,7 @@
 import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
 import { prismaFrameworkRepo, type StoredVersion } from '@/lib/app/frameworks/repo';
-import { materialise } from '@/lib/app/frameworks/store';
+import { materialise, type FrameworkReader } from '@/lib/app/frameworks/store';
 
 export interface VersionEngine {
   version: StoredVersion;
@@ -17,13 +17,24 @@ export interface VersionEngine {
   label: string;
 }
 
+/**
+ * The two reads this needs, and nothing else of the repo. Scoring never
+ * writes a framework row, and holding only reads says so, to a reader and to
+ * `scripts/ci/shared-settings-writes.ts`, which counts the whole repo object
+ * as a writer (it also imports and publishes) wherever it is passed.
+ */
+const frameworkReader: FrameworkReader = {
+  findVersionById: (versionId) => prismaFrameworkRepo.findVersionById(versionId),
+  readNodes: (versionId) => prismaFrameworkRepo.readNodes(versionId),
+};
+
 /** The version and its engine, or `null` when no version has that id or no code runs its framework. */
 export async function engineForVersion(versionId: string): Promise<VersionEngine | null> {
-  const version = await prismaFrameworkRepo.findVersionById(versionId);
+  const version = await frameworkReader.findVersionById(versionId);
   if (!version) return null;
   const def = getFrameworkDefinition(version.frameworkSlug);
   if (!def) return null;
-  const model = await materialise(prismaFrameworkRepo, def, version.id);
+  const model = await materialise(frameworkReader, def, version.id);
   return {
     version,
     engine: def.createEngine(model),

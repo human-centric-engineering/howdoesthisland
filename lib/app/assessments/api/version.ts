@@ -19,14 +19,14 @@ import type { FrameworkRef } from '@/lib/app/assessments/api/views';
 /** The framework a request that names none is scored with. */
 export const DEFAULT_FRAMEWORK = HOWDOESTHISLAND_SLUG;
 
-export interface ResolvedVersion extends VersionEngine {
+export interface VersionToScore extends VersionEngine {
   framework: FrameworkRef;
 }
 
-export async function resolveVersion(choice: {
+export async function versionToScore(choice: {
   framework?: string;
   version?: string;
-}): Promise<ResolvedVersion> {
+}): Promise<VersionToScore> {
   const slug = choice.framework ?? DEFAULT_FRAMEWORK;
   const framework = await prismaFrameworkCatalog.findFramework(slug);
   if (!framework) {

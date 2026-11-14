@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { APIError } from '@/lib/api/errors';
 import { countWords } from '@/lib/app/intake/extract-text';
 import { assessableText } from '@/lib/app/assessments/text';
-import { resolveVersion } from '@/lib/app/assessments/api/version';
+import { versionToScore } from '@/lib/app/assessments/api/version';
 import { contextFor, refusingAsApi, scoresOf } from '@/lib/app/assessments/api/service';
 import type { QuickScanView } from '@/lib/app/assessments/api/views';
 import type { scanRequestSchema } from '@/lib/app/assessments/api/validations';
@@ -37,8 +37,10 @@ export function refuseAccountOnlyInput(body: unknown): void {
   }
 }
 
-export async function quickScan(body: z.infer<typeof scanRequestSchema>): Promise<QuickScanView> {
-  const resolved = await resolveVersion(body);
+export async function runQuickScan(
+  body: z.infer<typeof scanRequestSchema>
+): Promise<QuickScanView> {
+  const resolved = await versionToScore(body);
   const ctx = contextFor(resolved, body.context);
   const text = await refusingAsApi(() => assessableText(body.text));
   const { engine } = resolved;

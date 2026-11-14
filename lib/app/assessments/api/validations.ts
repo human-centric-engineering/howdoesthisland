@@ -18,7 +18,7 @@ import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
  */
 const textField = z.string().max(MAX_CONTENT_CHARS * 2);
 
-/** The framework and version to score against; both default (`resolveVersion`). */
+/** The framework and version to score against; both default (`versionToScore`). */
 const versionChoice = {
   framework: slugParam.optional(),
   version: versionParam.optional(),
@@ -37,7 +37,7 @@ export const scanRequestSchema = z.strictObject({
 /** The largest upload, as base64: four characters per three bytes. */
 const MAX_FILE_BASE64 = Math.ceil(DEFAULT_INTAKE_LIMITS.maxBytes / 3) * 4;
 
-/** Exactly one of pasted text, a page to fetch (D14) or a file to read. */
+/** Exactly one of: pasted text, a page by URL (D14), or a file to read. */
 export const assessmentSourceSchema = z.union([
   z.strictObject({ text: textField }),
   z.strictObject({ url: z.url({ protocol: /^https?$/ }).max(2048) }),
