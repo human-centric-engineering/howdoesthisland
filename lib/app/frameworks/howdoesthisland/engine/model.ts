@@ -29,6 +29,11 @@ const appealWeights = z.object({
 });
 const partialAppealWeights = appealWeights.partial();
 const example = z.object({ before: z.string(), after: z.string() });
+const strings = z.array(z.string());
+/** A rubric: score (`"0"`…`"4"`) → what it means. */
+const rubric = z.record(z.string(), z.string());
+/** What a record is grounded in, by kind; the prompts name only the thinkers. */
+const groundedIn = z.object({ thinkers: strings.optional() }).nullable().optional();
 
 const heuristicSchema = z.object({
   ratio: z.object({ num: z.string(), den: z.string(), ideal: z.number() }).optional(),
@@ -58,12 +63,24 @@ const dimensionSchema = z.object({
   moves: z.array(z.string()).optional(),
   advice: z.string().nullable().optional(),
   example: example.nullable().optional(),
+  // Read by the judge prompts (t-18).
+  description: z.string(),
+  judge_asks: strings,
+  rubric: rubric.nullable().optional(),
+  positive_signals: strings.nullable().optional(),
+  grounded_in: groundedIn,
 });
 
 const coreDimensionSchema = dimensionSchema.extend({ appeal: z.enum(APPEALS), weight: z.number() });
 const extraDimensionSchema = dimensionSchema.extend({ appeal: z.string(), group: z.string() });
 
-const moveSchema = z.object({ id: z.string(), how: z.string(), example });
+const moveSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  how: z.string(),
+  example,
+  dimensions: strings,
+});
 
 const redFlagSchema = z.object({
   id: z.string(),
@@ -72,42 +89,93 @@ const redFlagSchema = z.object({
   severity: z.string(),
   description: z.string(),
   pattern: z.string(),
+  appeal: z.string(),
 });
 
-const dutySchema = z.object({ id: z.string(), pos: z.array(z.string()) });
+const dutySchema = z.object({
+  id: z.string(),
+  pos: z.array(z.string()),
+  name: z.string(),
+  latin: z.string(),
+  verb: z.string(),
+  description: z.string(),
+  signals: z.string(),
+});
 
 const leverSchema = z.object({
   id: z.string(),
   name: z.string(),
   quick: z.array(z.string()).nullable().optional(),
+  look_for: z.string(),
+  misuse: z.string(),
 });
-const perspectiveSchema = z.object({ id: z.string(), levers: z.array(leverSchema) });
+const perspectiveSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  school: z.string(),
+  question: z.string(),
+  levers: z.array(leverSchema),
+});
 
 const contentTypeSchema = z.object({
   id: z.string(),
+  name: z.string(),
   weights: appealWeights,
   priority_dimensions: z.array(z.string()),
+  watch_outs: strings,
 });
 
 const audienceModifierSchema = z.object({
   id: z.string(),
+  name: z.string(),
   options: z.array(
-    z.object({ id: z.string(), weight_delta: partialAppealWeights.nullable().optional() })
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      guidance: z.string(),
+      weight_delta: partialAppealWeights.nullable().optional(),
+    })
   ),
 });
 
+/**
+ * The prompt fields are optional because `general`, which has no primary
+ * duty, has none of them; the prompts read them only for an archetype with one.
+ */
 const archetypeSchema = z.object({
   id: z.string(),
+  name: z.string(),
   primary: z.string().nullable(),
   secondary: z.string().nullable(),
   weight_delta: partialAppealWeights.nullable().optional(),
+  motto: z.string().nullable().optional(),
+  basis: z.string().nullable().optional(),
+  values: z.string().nullable().optional(),
+  style: z.string().nullable().optional(),
+  persuaded_by: strings.nullable().optional(),
+  backfires: strings.nullable().optional(),
+  key_question: z.string().nullable().optional(),
 });
 
 const execRoleSchema = z.object({
   id: z.string(),
+  name: z.string(),
   primary: z.string(),
   secondary: z.string(),
   cares_about: z.array(z.string()),
+  question: z.string(),
+  red_flags: strings,
+});
+
+/** A judge as the version describes it: who it is and what it is told (D17). */
+const judgeSchema = z.object({
+  id: z.string(),
+  appeal: z.string(),
+  persona: z.string(),
+  instruction: z.string(),
+  rules: strings,
+  max_highlights: z.number(),
+  max_recommendations: z.number(),
 });
 
 const balanceRuleSchema = z.object({ id: z.string(), name: z.string(), message: z.string() });
@@ -123,7 +191,12 @@ const countrySchema = z.looseObject({
   persuading: z.number(),
 });
 
-const scaleSchema = z.object({ id: z.string(), low: z.string(), high: z.string() });
+const scaleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  low: z.string(),
+  high: z.string(),
+});
 
 export const engineModelSchema = z.object({
   meta: z.object({ version: z.string() }),
@@ -142,6 +215,13 @@ export const engineModelSchema = z.object({
   archetypes: z.array(archetypeSchema),
   exec_roles: z.array(execRoleSchema),
   balance_rules: z.array(balanceRuleSchema),
+  judges: z.array(judgeSchema),
+  /** The judge groups a caller may ask for by name; `always` ones run in every group. */
+  judge_catalogue: z.array(
+    z.object({ id: z.string(), judges: strings, always: z.boolean().optional() })
+  ),
+  /** Every kind of reference record; the prompts read only their names. */
+  knowledge_refs: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string() }))),
   scoring: z.object({
     bands: z.array(z.object({ min: z.number(), max: z.number(), label: z.string() })),
     integrity_caps: z
@@ -176,6 +256,7 @@ export type ExecRole = z.infer<typeof execRoleSchema>;
 export type Country = z.infer<typeof countrySchema>;
 export type Scale = z.infer<typeof scaleSchema>;
 export type Lewis = z.infer<typeof lewisSchema>;
+export type JudgeDef = z.infer<typeof judgeSchema>;
 export type AppealWeights = z.infer<typeof appealWeights>;
 export type PartialAppealWeights = z.infer<typeof partialAppealWeights>;
 
@@ -208,6 +289,12 @@ export interface EngineModel {
   readonly SCALES: readonly Scale[];
   readonly SCALE_IDS: readonly string[];
   readonly LEN_TARGET: Readonly<Record<string, readonly [number, number]>>;
+  /** Extra groups (`craft`, …) by id. */
+  readonly GROUP: ReadonlyMap<string, { id: string }>;
+  /** Judges by their slot id (`judge_ethos`). */
+  readonly JUDGE: ReadonlyMap<string, JudgeDef>;
+  /** Every reference record (thinker, framework, …) by id. */
+  readonly REF: ReadonlyMap<string, { id: string; name: string }>;
 }
 
 const byId = <T extends { id: string }>(list: readonly T[]): Map<string, T> =>
@@ -264,6 +351,9 @@ export function indexModel(model: object): EngineModel {
     SCALES: culture.scales,
     SCALE_IDS: culture.scales.map((s) => s.id),
     LEN_TARGET: data.length_targets ?? {},
+    GROUP: byId(data.groups),
+    JUDGE: byId(data.judges),
+    REF: new Map(Object.values(data.knowledge_refs).flatMap((refs) => refs.map((r) => [r.id, r]))),
   };
   indexed.set(model, engineModel);
   return engineModel;

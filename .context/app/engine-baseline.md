@@ -19,8 +19,14 @@ fixtures.
   writer culture is unset in some pairs, the same as the reader in some, and
   different from it in others. Two texts have `İ` ahead of a sentence that
   `locate()` finds only case-insensitively, so its offset shift shows up.
+- `prompts.json`: the prompt `judgePrompt()` builds for every judge slot and every
+  case (t-18), 594 in all. Most of a prompt is the model's own wording, the same in
+  every case, so the file is a line table: each distinct line once, and each prompt
+  as the indices of its lines (`scripts/app/baseline/prompts.ts`). That keeps it
+  near 370 KB, lossless, and readable in a diff.
 - `manifest.json`: the sha256 of `engine.js`, the model and the eval set the run
-  read, the sha256 of each of the recorder's own files, and the list of cases.
+  read, the sha256 of each of the recorder's own files, the list of cases and the
+  prompts file.
 
 Each case holds its input, `quickScan()`, the synthetic judge outputs, and
 `assemble()` twice. `assemble.quick` is called with no judge outputs, which is
@@ -37,9 +43,11 @@ reach the branches the port has to reproduce:
   more than six words (all but `ev17`, a bullet list);
 - and in each list, an id that does not exist.
 
-`judgePrompt`, `validJudgeOutput`, `rewritePrompt`, `calibrate` and `toApi` are
-not recorded. They belong to f-judges, f-rewrite, f-calibration and
-f-assessments.
+`validJudgeOutput`, `rewritePrompt`, `calibrate` and `toApi` are not recorded.
+The first is replaced by post-validation (f-judges), and the rest belong to
+f-rewrite, f-calibration and f-assessments. The prompts are compared in
+`baseline-prompts.test.ts`, which lists no differences: the port changes nothing
+a judge is told.
 
 ## Re-recording
 

@@ -1,5 +1,5 @@
 /**
- * Tests: scripts/app/baseline/{canonical,corpus,synthetic}.ts — the pure parts
+ * Tests: scripts/app/baseline/{canonical,corpus,prompts,synthetic}.ts — the pure parts
  * of the engine-baseline recorder (t-12).
  *
  * What matters: canonical JSON does not depend on key order; the corpus covers
@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { canonicalJson, sortKeys } from '@/scripts/app/baseline/canonical';
+import { decodePrompt, encodePrompts } from '@/scripts/app/baseline/prompts';
 import {
   CORPUS_TEXTS,
   buildCorpus,
@@ -238,5 +239,37 @@ describe('syntheticJudgeOutputs', () => {
   it('copes with a text that has no sentences', () => {
     const empty = syntheticJudgeOutputs(model, [], 'empty');
     expect((empty.ethos.highlights as { quote: string }[])[0].quote).toBe('(empty)');
+  });
+});
+
+describe('the prompt line table (t-18)', () => {
+  const prompts = [
+    [
+      'eval/a.json',
+      [
+        ['judge_x', 'Shared head\nCase A\n\nShared tail'],
+        ['judge_y', ''],
+      ],
+    ],
+    ['eval/b.json', [['judge_x', 'Shared head\nCase B\n\nShared tail']]],
+  ] as const;
+
+  it('stores each distinct line once and gives every prompt back exactly', () => {
+    const table = encodePrompts(prompts);
+    expect(table.lines).toEqual(['Shared head', 'Case A', '', 'Shared tail', 'Case B']);
+    for (const [file, slots] of prompts) {
+      for (const [slot, prompt] of slots) {
+        expect(decodePrompt(table, table.prompts[file][slot])).toBe(prompt);
+      }
+    }
+  });
+
+  it('gives the same table for the same input', () => {
+    expect(canonicalJson(encodePrompts(prompts))).toBe(canonicalJson(encodePrompts(prompts)));
+  });
+
+  it('refuses an index the table does not have', () => {
+    expect(() => decodePrompt({ lines: ['a'] }, '0 1')).toThrow('"1" is not in the table');
+    expect(() => decodePrompt({ lines: ['a'] }, '0 x')).toThrow('"x" is not in the table');
   });
 });

@@ -7,8 +7,11 @@
  * case holding the case's input, `quickScan()`'s result, and `assemble()`'s
  * result twice — with no judge outputs (the quick-scan path the free scan and
  * the judge-failure fallback use), and with the synthetic judge outputs in
- * `synthetic.ts` (the merge path, with a `source`). `manifest.json` records the sha256 of the
- * engine, the model and the eval set the run read, and the case list.
+ * `synthetic.ts` (the merge path, with a `source`). `prompts.json` holds the
+ * prompt `judgePrompt()` builds for every judge slot and case (t-18), as a
+ * line table (`prompts.ts`). `manifest.json` records the sha256 of the
+ * engine, the model and the eval set the run read, the case list and the
+ * prompts file.
  *
  * **Why it runs from a copy.** `prototype/` stays as delivered and no app code
  * imports it (`tests/unit/lib/app/prototype-guard.test.ts`). So this copies
@@ -46,6 +49,7 @@ import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { canonicalJson } from '@/scripts/app/baseline/canonical';
 import { buildCorpus, checkCoverage, corpusInputs } from '@/scripts/app/baseline/corpus';
+import { encodePrompts } from '@/scripts/app/baseline/prompts';
 import { syntheticJudgeOutputs, syntheticModelSchema } from '@/scripts/app/baseline/synthetic';
 
 const ROOT = process.cwd();
@@ -62,10 +66,13 @@ const SOURCES = {
 const RECORDER = [
   'scripts/app/baseline/canonical.ts',
   'scripts/app/baseline/corpus.ts',
+  'scripts/app/baseline/prompts.ts',
   'scripts/app/baseline/record.ts',
   'scripts/app/baseline/synthetic.ts',
 ] as const;
 const OUT = 'tests/fixtures/app/engine-baseline';
+/** The judge prompts, beside the cases. */
+const PROMPTS = 'prompts.json';
 /** Written in full first, then swapped in for {@link OUT}. */
 const STAGING = `${OUT}.staging`;
 
@@ -77,6 +84,11 @@ const STAGING = `${OUT}.staging`;
 const sourceFor = (id: string) => `baseline:${id}`;
 
 const versionSchema = z.object({ meta: z.object({ version: z.string() }) });
+
+/** Each judge's slot and the appeal `judgePrompt()` is called with. */
+const judgesSchema = z.object({
+  judges: z.array(z.object({ id: z.string(), appeal: z.string() })).min(1),
+});
 
 const evalSetSchema = z.object({
   meta: z.object({ version: z.string() }),
@@ -91,6 +103,7 @@ interface Engine {
   quickScan: Fn;
   assemble: Fn;
   caseCtx: Fn;
+  judgePrompt: Fn;
 }
 
 /** The module's surface, checked rather than cast: it is code we did not write. */
@@ -107,10 +120,11 @@ function loadEngine(mod: unknown, model: unknown): { engine: Engine; split: Fn }
   const quickScan = prop(e, 'quickScan');
   const assemble = prop(e, 'assemble');
   const caseCtx = prop(e, 'caseCtx');
-  if (!isFn(quickScan) || !isFn(assemble) || !isFn(caseCtx)) {
-    throw new Error('the engine no longer has quickScan, assemble and caseCtx');
+  const judgePrompt = prop(e, 'judgePrompt');
+  if (!isFn(quickScan) || !isFn(assemble) || !isFn(caseCtx) || !isFn(judgePrompt)) {
+    throw new Error('the engine no longer has quickScan, assemble, caseCtx and judgePrompt');
   }
-  return { engine: { quickScan, assemble, caseCtx }, split: splitSentences };
+  return { engine: { quickScan, assemble, caseCtx, judgePrompt }, split: splitSentences };
 }
 
 function sentenceTexts(split: Fn, text: string): string[] {
@@ -137,6 +151,7 @@ async function main(): Promise<number> {
     const modelRaw: unknown = JSON.parse(readFileSync(copy.model, 'utf8'));
     const modelVersion = versionSchema.parse(modelRaw).meta.version;
     const synthModel = syntheticModelSchema.parse(modelRaw);
+    const { judges } = judgesSchema.parse(modelRaw);
     const evalSet = evalSetSchema.parse(JSON.parse(readFileSync(copy.evalSet, 'utf8')));
 
     const mod: unknown = await import(pathToFileURL(copy.engine).href);
@@ -161,7 +176,12 @@ async function main(): Promise<number> {
     ];
 
     const files = new Map<string, string>();
+    const prompts: [string, [string, string][]][] = [];
     for (const c of cases) {
+      prompts.push([
+        `${c.source}/${c.id}.json`,
+        judges.map((j) => [j.id, z.string().parse(engine.judgePrompt(j.appeal, c.text, c.ctx))]),
+      ]);
       const q = engine.quickScan(c.text, c.ctx);
       const judgeOutputs = syntheticJudgeOutputs(synthModel, sentenceTexts(split, c.text), c.id);
       // Each assemble gets its own copy of the scan, so neither can see what
@@ -206,8 +226,10 @@ async function main(): Promise<number> {
         modelVersion,
         evalSetVersion: evalSet.meta.version,
         cases: cases.map((c) => `${c.source}/${c.id}.json`),
+        prompts: PROMPTS,
       })
     );
+    files.set(PROMPTS, canonicalJson(encodePrompts(prompts)));
 
     const staging = path.join(ROOT, STAGING);
     rmSync(staging, { recursive: true, force: true });
@@ -222,7 +244,7 @@ async function main(): Promise<number> {
     rmSync(path.join(ROOT, OUT), { recursive: true, force: true });
     renameSync(staging, path.join(ROOT, OUT));
 
-    console.log(`Wrote ${cases.length} cases and manifest.json to ${OUT}/`);
+    console.log(`Wrote ${cases.length} cases, ${PROMPTS} and manifest.json to ${OUT}/`);
     return 0;
   } finally {
     rmSync(tmp, { recursive: true, force: true });

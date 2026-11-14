@@ -111,9 +111,9 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  *   low reasoning effort rather than relying on the ceiling.
  * - A workspace that binds an agent to a model with a lower output limit
  *   (`gpt-4o`, 16,384; an older Claude Haiku, 8,192) has that agent's calls
- *   refused, and cannot lower this code-owned cap. The model catalogue does
- *   not record output limits, so a call cannot clamp to one yet: j2 has to
- *   bring them in before a workspace's own model choice is safe.
+ *   refused, and cannot lower this code-owned cap. j4 (D8, amended) closes
+ *   this: workspaces choose only from an approved list per role, and each
+ *   entry carries settings within that model's limit.
  *
  * These are ceilings. A call sizes its own `maxTokens` and timeout under them
  * (§8.3: per judge slot in j2, from the text's length for rewrites in rw1),

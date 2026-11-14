@@ -70,10 +70,12 @@
   ],
   "evalSetVersion": "0.4.0",
   "modelVersion": "0.5.1",
+  "prompts": "prompts.json",
   "recorder": {
     "scripts/app/baseline/canonical.ts": "79a08064c8f81b0495bd6a10d6fc65f048bf0563f2c3e788df276c4993ba0a63",
     "scripts/app/baseline/corpus.ts": "7ac81438451b2f79a27adf2e4ecbff7c6098cff11ded13619be733692bac6285",
-    "scripts/app/baseline/record.ts": "d74b48db2416651837cb82f46d7fd7d89679d8c773bd1add2686cb86cc71460d",
+    "scripts/app/baseline/prompts.ts": "1bb657159a8182ed46ac185c7b00e083e097599d52651b1d32ccbb078c0ee478",
+    "scripts/app/baseline/record.ts": "243fd51e26153e2c9281fe6f7697252a5400d35102e970259a56f5de78f0ad1b",
     "scripts/app/baseline/synthetic.ts": "42a3cf793bce9b18f296bdf70e08443a57299baca5d467c8c795a4f85519a90f"
   },
   "sources": {
