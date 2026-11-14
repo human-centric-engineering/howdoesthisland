@@ -34,3 +34,27 @@ export const MAX_CONTENT_CHARS = 40_000;
 
 /** Assessments the recovery job re-drives in one workspace per tick. */
 export const RECOVERY_BATCH = RUNNING_PER_WORKSPACE;
+
+/**
+ * How long `POST assessments` with `wait: true` waits for the run before
+ * answering 202 (t-24). The run carries on after the response, under the
+ * route's `maxDuration`.
+ */
+export const WAIT_BOUND_MS = 60_000;
+
+/** How often a waiting request, and the events stream, read the rows. */
+export const POLL_MS = 1_000;
+
+/** How long one events stream stays open before it ends with `assessment_timeout`. */
+export const EVENTS_MAX_MS = 5 * 60_000;
+
+/**
+ * Assessments that call judges, per user per minute, across every way in
+ * (t-24): a per-flow sub-cap under the proxy's section cap, because each one
+ * spends money. `store: false` counts the same. A `quick` profile calls no
+ * model and is not counted.
+ */
+export const AI_ASSESSMENTS_PER_MINUTE = 10;
+
+/** Free quick scans per IP per minute (`POST scan`, D7). */
+export const SCANS_PER_MINUTE = 30;

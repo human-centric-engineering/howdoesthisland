@@ -19,7 +19,7 @@ import { sha256 } from '@/lib/app/frameworks/store';
 import type { Prisma } from '@prisma/client';
 import { engineForVersion } from '@/lib/app/assessments/engine';
 import { AssessmentInputError } from '@/lib/app/assessments/errors';
-import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
+import { assessableText } from '@/lib/app/assessments/text';
 import { runAssessment } from '@/lib/app/assessments/run';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { prisma } from '@/lib/db/client';
@@ -57,21 +57,7 @@ export async function enqueueAssessment(
   input: EnqueueAssessmentInput
 ): Promise<EnqueuedAssessment> {
   const orgId = requireOrgId();
-  // NUL is never text (a PDF or DOCX extraction can leave one), and Postgres
-  // refuses it in a text column, so it is dropped rather than failing the insert.
-  const text = input.content.text.replaceAll('\u0000', '');
-  if (text.trim() === '') {
-    throw new AssessmentInputError('content_empty', 'There is no text to assess.');
-  }
-  // Counted in code points, as an editor counts characters, not UTF-16 units.
-  let chars = 0;
-  for (const _char of text) chars += 1;
-  if (chars > MAX_CONTENT_CHARS) {
-    throw new AssessmentInputError(
-      'content_too_long',
-      `The text is ${chars.toLocaleString('en-GB')} characters long. The most an assessment takes is ${MAX_CONTENT_CHARS.toLocaleString('en-GB')}.`
-    );
-  }
+  const text = assessableText(input.content.text);
 
   const loaded = await engineForVersion(input.frameworkVersionId);
   if (!loaded || loaded.version.status !== 'PUBLISHED') {
