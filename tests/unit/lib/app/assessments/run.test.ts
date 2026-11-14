@@ -265,6 +265,32 @@ describe('a judge that fails', () => {
     expect(a.status).toBe('FAILED');
     expect(mocks.runJudge).not.toHaveBeenCalled();
   });
+
+  it('fails the assessment at once when the engine cannot score the text, not re-queuing it', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('no dimension for judge_a');
+    });
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+    expect(a).toMatchObject({
+      status: 'FAILED',
+      error: 'The framework could not score this text.',
+      leaseToken: null,
+      attempts: 1,
+    });
+    // Its judge was saved and counted before assembly threw.
+    expect(a.costUsd).toBeCloseTo(0.01);
+  });
+
+  it('fails the assessment at once when the quick scan throws, calling no judge', async () => {
+    const a = fake.seed();
+    engine.quickScan.mockImplementationOnce(() => {
+      throw new Error('bad text');
+    });
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+    expect(a.status).toBe('FAILED');
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
 });
 
 describe('cancel', () => {
@@ -297,6 +323,41 @@ describe('cancel', () => {
 
     expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
     expect(a).toMatchObject({ status: 'CANCELLED', result: null, overall: null });
+  });
+
+  it('counts what the judges in flight cost, though the assessment is not written again', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      if (slot === 'judge_a') await inOrg(() => cancelAssessment(String(a.id)));
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
+    expect(runsOf(a.id)).toHaveLength(2);
+    expect(a.costUsd).toBeCloseTo(0.02);
+  });
+
+  it('a run that lost its lease saves nothing after its successor was cancelled', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockImplementation(async () => {
+      // A successor claims it and saves judge_a; then the user cancels.
+      Object.assign(a, { leaseToken: 'new-run' });
+      fake.judgeRuns.push({
+        id: 'theirs',
+        assessmentId: a.id,
+        judge: 'judge_a',
+        status: 'SUCCEEDED',
+        output: { from: 'new-run' },
+        costUsd: 0.05,
+      });
+      await inOrg(() => cancelAssessment(String(a.id)));
+      throw new JudgeRunError('refused', 'The provider declined to run the judge_a judge.');
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
+    expect(runsOf(a.id)).toEqual([
+      expect.objectContaining({ id: 'theirs', status: 'SUCCEEDED', costUsd: 0.05 }),
+    ]);
   });
 
   it('refuses to cancel a final assessment, or another workspace’s', async () => {
@@ -441,6 +502,7 @@ describe('the recovery job', () => {
           leaseToken: 'dead',
           leaseExpiresAt: expired,
           attempts: 1,
+          costUsd: 0.01, // judge_a's, added when it was saved
         },
         [
           { judge: 'judge_a', status: 'SUCCEEDED', output: { from: 'judge_a' }, costUsd: 0.01 },
@@ -556,10 +618,20 @@ describe('the recovery job', () => {
         leaseToken: 'dead',
         leaseExpiresAt: new Date(Date.now() - 5_000),
         attempts: 1,
+        costUsd: 0.014,
       },
       [
         { judge: 'judge_a', status: 'SUCCEEDED', output: { from: 'judge_a' }, costUsd: 0.01 },
-        { judge: 'judge_b', status: 'FAILED', errorCode: 'provider_error', costUsd: 0.004 },
+        {
+          judge: 'judge_b',
+          status: 'FAILED',
+          errorCode: 'provider_error',
+          provider: 'openai',
+          modelName: 'gpt-4.1',
+          attempts: 1,
+          tokens: { input: 80, output: 0 },
+          costUsd: 0.004,
+        },
       ]
     );
 
@@ -569,11 +641,27 @@ describe('the recovery job', () => {
     expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_b']);
     expect(a).toMatchObject({ status: 'COMPLETED', result: { judged: ['judge_a', 'judge_b'] } });
     expect(a.costUsd).toBeCloseTo(0.024);
+    // Its row counts both runs' attempts and tokens, as its cost does.
     expect(runsOf(a.id).find((r) => r.judge === 'judge_b')).toMatchObject({
       status: 'SUCCEEDED',
       errorCode: null,
+      attempts: 2,
+      tokens: { input: 180, output: 20 },
     });
     expect(runsOf(a.id).find((r) => r.judge === 'judge_b')?.costUsd).toBeCloseTo(0.014);
+  });
+
+  it('gives up with the reason its last run recorded, when it recorded one', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockRejectedValue(new Error('connection reset'));
+    for (let n = 0; n < 3; n += 1) {
+      expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    }
+    expect(a).toMatchObject({ status: 'QUEUED', attempts: 3 });
+
+    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 0, gaveUp: 1 });
+    expect(a.status).toBe('FAILED');
+    expect(a.error).toMatch(/not a judge/);
   });
 });
 

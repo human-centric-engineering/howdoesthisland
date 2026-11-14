@@ -62,7 +62,8 @@ export async function enqueueAssessment(
     throw new AssessmentInputError('content_empty', 'There is no text to assess.');
   }
   // Counted in code points, as an editor counts characters, not UTF-16 units.
-  const chars = [...text].length;
+  let chars = 0;
+  for (const _char of text) chars += 1;
   if (chars > MAX_CONTENT_CHARS) {
     throw new AssessmentInputError(
       'content_too_long',

@@ -43,16 +43,24 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
     OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
   };
 
-  const { count: gaveUp } = await prisma.assessment.updateMany({
-    where: { ...stalled, attempts: { gte: MAX_ATTEMPTS } },
-    data: {
-      status: 'FAILED',
-      error: `It stopped before finishing ${MAX_ATTEMPTS} times.`,
-      completedAt: now,
-      leaseToken: null,
-      leaseExpiresAt: null,
-    },
+  // Given up on with the reason its last run recorded, if it recorded one (an
+  // error that was not a judge's); otherwise its process died each time.
+  const giveUp = {
+    status: 'FAILED' as const,
+    completedAt: now,
+    leaseToken: null,
+    leaseExpiresAt: null,
+  };
+  const spent = { ...stalled, attempts: { gte: MAX_ATTEMPTS } };
+  const withReason = await prisma.assessment.updateMany({
+    where: { ...spent, error: { not: null } },
+    data: giveUp,
   });
+  const withoutReason = await prisma.assessment.updateMany({
+    where: { ...spent, error: null },
+    data: { ...giveUp, error: `It stopped before finishing ${MAX_ATTEMPTS} times.` },
+  });
+  const gaveUp = withReason.count + withoutReason.count;
 
   const candidates = await prisma.assessment.findMany({
     where: { ...stalled, attempts: { lt: MAX_ATTEMPTS } },

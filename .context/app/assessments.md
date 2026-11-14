@@ -66,20 +66,26 @@ from either of the first two.
   successor's rows. Its late judge is still in the cost log.
 - **A run starts only judges with no row yet**, plus those whose row failed
   with `rate_limited` or `provider_error`, which are about the moment. A judge
-  that runs again keeps its earlier cost on its row.
+  that runs again keeps its earlier attempts, tokens and cost on its row.
+- **Cost.** Each judge's spend is added to the assessment's `costUsd` in the
+  transaction that saves it, so the total is right however the run ends,
+  cancelled and given-up runs included.
 - **A failed judge** (any `JudgeRunError`: over budget, refused, malformed…)
   keeps a `FAILED` row with its code, and with what it was billed when it
   reached the provider. Its dimensions fall back to the quick scan, and the
   assessment ends `PARTIAL`.
 - **An error that is not a judge's** (the database failing part-way) puts the
-  assessment back to `QUEUED` with no lease. The recovery job re-drives it
-  until it is out of attempts. A claim that fails is logged, and the
-  assessment is left as it was.
-- **`FAILED`** is for a version that can no longer be run, and for an
-  assessment that ran out of attempts. `error` says which.
-- **Cancel** (`cancelAssessment`) sets `CANCELLED`. The run asks before each
-  judge starts, so no further judge is called. Judges already in flight
-  finish and their rows are saved, since their cost is already spent.
+  assessment back to `QUEUED` with no lease and a note in `error`. The
+  recovery job re-drives it until it is out of attempts, then fails it with
+  that note. A claim that fails is logged, and the assessment is left as it
+  was.
+- **`FAILED`** is for a version that can no longer be run, a text the engine
+  cannot score (its quick scan or `assemble()` threw, which would throw
+  again), and an assessment that ran out of attempts. `error` says which.
+- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease
+  token. The run asks before each judge starts, so no further judge is
+  called. Judges already in flight finish and their rows are saved, since
+  their cost is already spent. Only the run that held the token saves them.
 - **Privacy.** The run is one privacy scope (`assessment:<id>`), and each
   judge's call sits in its agent's scope inside it (`runJudge`), so each
   agent's privacy mode applies to its call.
