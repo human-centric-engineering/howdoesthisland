@@ -56,7 +56,7 @@ from either of the first two.
   90 seconds ahead, renewed every 30 while it runs. Every later write is
   conditional on that token and on `RUNNING`, so a run that lost its lease or
   was cancelled writes nothing more to the assessment.
-- **The claim** succeeds only for a `QUEUED` or `RUNNING` assessment with no
+- **The claim** succeeds only for this workspace's `QUEUED` or `RUNNING` assessment with no
   live lease, fewer than three attempts, and fewer than three other live runs
   in the workspace. The count and the claim are one serializable transaction.
   A fourth assessment stays `QUEUED` for the recovery job.
@@ -73,7 +73,9 @@ from either of the first two.
 - **A failed judge** (any `JudgeRunError`: over budget, refused, malformed…)
   keeps a `FAILED` row with its code, and with what it was billed when it
   reached the provider. Its dimensions fall back to the quick scan, and the
-  assessment ends `PARTIAL`.
+  assessment ends `PARTIAL`. A slot the engine no longer runs (culture's,
+  with the switch turned off after the assessment was queued) fails the same
+  way, as `slot_unavailable`, without being called.
 - **An error that is not a judge's** (the database failing part-way) puts the
   assessment back to `QUEUED` with no lease and a note in `error`. The
   recovery job re-drives it until it is out of attempts, then fails it with
@@ -82,10 +84,11 @@ from either of the first two.
 - **`FAILED`** is for a version that can no longer be run, a text the engine
   cannot score (its quick scan or `assemble()` threw, which would throw
   again), and an assessment that ran out of attempts. `error` says which.
-- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease
-  token. The run asks before each judge starts, so no further judge is
-  called. Judges already in flight finish and their rows are saved, since
-  their cost is already spent. Only the run that held the token saves them.
+- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease. The
+  run asks before each judge starts, so no further judge is called. Judges
+  already in flight finish and their rows are saved, since their cost is
+  already spent. Only the run that held the token saves them. The cancelled
+  run keeps its place in the workspace's limit until they have landed.
 - **Privacy.** The run is one privacy scope (`assessment:<id>`), and each
   judge's call sits in its agent's scope inside it (`runJudge`), so each
   agent's privacy mode applies to its call.

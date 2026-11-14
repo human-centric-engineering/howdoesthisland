@@ -39,6 +39,7 @@ vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineF
 import { JUDGES_IN_FLIGHT, LEASE_MS, LEASE_RENEW_MS } from '@/lib/app/assessments/limits';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { cancelAssessment, runAssessment } from '@/lib/app/assessments/run';
+import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { logger } from '@/lib/logging';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
@@ -282,6 +283,27 @@ describe('a judge that fails', () => {
     expect(a.costUsd).toBeCloseTo(0.01);
   });
 
+  it('fails a judge the engine no longer runs as that judge, and finishes PARTIAL', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_culture'] });
+    // Asked once per missing slot, in order: judge_a runs, judge_culture is off.
+    engine.activeJudgeSlots
+      .mockImplementationOnce((slots: readonly string[]) => slots)
+      .mockImplementationOnce(() => {
+        throw new JudgeProfileError(
+          'The judge_culture judge does not run with the culture switch off'
+        );
+      });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('partial');
+    expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_a']);
+    expect(runsOf(a.id).find((r) => r.judge === 'judge_culture')).toMatchObject({
+      status: 'FAILED',
+      errorCode: 'slot_unavailable',
+      costUsd: 0,
+    });
+    expect(a).toMatchObject({ status: 'PARTIAL', result: { judged: ['judge_a'] } });
+  });
+
   it('fails the assessment at once when the quick scan throws, calling no judge', async () => {
     const a = fake.seed();
     engine.quickScan.mockImplementationOnce(() => {
@@ -358,6 +380,30 @@ describe('cancel', () => {
     expect(runsOf(a.id)).toEqual([
       expect.objectContaining({ id: 'theirs', status: 'SUCCEEDED', costUsd: 0.05 }),
     ]);
+  });
+
+  it('keeps its place in the workspace’s limit until its judges in flight land', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+    const live = { status: 'RUNNING', leaseExpiresAt: new Date(Date.now() + 30_000), attempts: 1 };
+    fake.seed({ ...live, leaseToken: 'run-1' });
+    fake.seed({ ...live, leaseToken: 'run-2' });
+    const waiting = fake.seed({ judges: [] });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    // Its judge is still out, so the workspace is still at its limit.
+    expect(await inOrg(() => runAssessment(String(waiting.id)))).toBe('not_claimed');
+
+    gate.resolve();
+    expect(await running).toBe('cancelled');
+    expect(a).toMatchObject({ status: 'CANCELLED', leaseExpiresAt: null });
+    expect(await inOrg(() => runAssessment(String(waiting.id)))).toBe('completed');
   });
 
   it('refuses to cancel a final assessment, or another workspace’s', async () => {
@@ -698,6 +744,33 @@ describe('edges of the run', () => {
       expect.any(Error),
       expect.objectContaining({ assessmentId: a.id })
     );
+  });
+
+  it('does not claim another workspace’s assessment', async () => {
+    const theirs = fake.seed({ orgId: 'org-b', judges: ['judge_a'] });
+    expect(await inOrg(() => runAssessment(String(theirs.id)))).toBe('not_claimed');
+    expect(theirs).toMatchObject({ status: 'QUEUED', attempts: 0 });
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
+
+  it('clears an earlier run’s note when it is claimed again', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockRejectedValueOnce(new Error('connection reset'));
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    expect(a.error).toMatch(/not a judge/);
+
+    // While the next run is out, the note is gone: were its process killed
+    // now, the give-up would not report the first run's reason.
+    const gate = deferred();
+    mocks.runJudge.mockImplementationOnce(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+    const next = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(a).toMatchObject({ status: 'RUNNING', error: null, attempts: 2 });
+    gate.resolve();
+    expect(await next).toBe('completed');
   });
 
   it('does not claim an assessment that has had its three runs', async () => {

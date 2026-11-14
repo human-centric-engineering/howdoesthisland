@@ -527,6 +527,8 @@ describe('runJudge on a provider refusal', () => {
     expect(err.code).toBe('provider_error');
     expect(err.message).not.toContain('bad key');
     expect(mocks.logCost).not.toHaveBeenCalled();
+    // Nothing was billed, so it carries no spend for the stored row.
+    expect(err.spend).toBeUndefined();
   });
 });
 

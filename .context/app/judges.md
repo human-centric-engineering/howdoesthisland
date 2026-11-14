@@ -175,6 +175,9 @@ A failure is a `JudgeRunError` with a `code`: `agent_not_found`,
 `rate_limited`, `malformed` (twice),
 `truncated`, `refused` (an empty reply or a content-filter finish, not
 retried) or `provider_error` (including a binding that cannot be resolved).
+A failure that reached the provider carries `spend`, what it was billed, for
+the stored job's row. (`slot_unavailable` is the stored job's own code, never
+raised here; see [`assessments.md`](./assessments.md).)
 A slot the engine cannot run, such as culture's with the switch off, throws
 the engine's own error before anything is counted, and a database failure
 propagates as it is. A

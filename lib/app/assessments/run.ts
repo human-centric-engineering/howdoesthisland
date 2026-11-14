@@ -52,6 +52,7 @@
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { engineForVersion } from '@/lib/app/assessments/engine';
+import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { runJudges, type LandedJudge } from '@/lib/app/assessments/fan-out';
 import {
   LEASE_MS,
@@ -121,7 +122,7 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
   const lease = holdLease(assessmentId, token);
   try {
     const row = await prisma.assessment.findUnique({
-      where: { id: assessmentId },
+      where: { id: assessmentId, orgId },
       select: {
         id: true,
         frameworkVersionId: true,
@@ -139,7 +140,9 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
       orgId,
       ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
     });
-    return await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
+    const outcome = await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
+    if (outcome === 'cancelled') await freePlace(assessmentId, token);
+    return outcome;
   } catch (err) {
     // Not the judges' and not final (the database, most likely): back to the
     // queue for the recovery job, which re-drives it until it is out of
@@ -229,7 +232,26 @@ async function drive(
       done.add(run.judge);
     }
   }
-  const missing = row.judges.filter((slot) => !done.has(slot));
+  // A slot the engine no longer runs (its switch turned off after the
+  // assessment was queued) fails as that judge, not as the run: it would
+  // refuse again on every re-drive.
+  const missing: string[] = [];
+  for (const slot of row.judges.filter((s) => !done.has(s))) {
+    try {
+      engine.activeJudgeSlots([slot]);
+      missing.push(slot);
+    } catch (err) {
+      if (!(err instanceof JudgeProfileError)) throw err;
+      const landed = {
+        slot,
+        ok: false,
+        code: 'slot_unavailable',
+        message: err.message,
+        latencyMs: 0,
+      } as const;
+      if (await saveJudgeRun(row.id, orgId, token, landed, prior.get(slot))) failures += 1;
+    }
+  }
 
   const fan = await runJudges({
     engine,
@@ -350,9 +372,10 @@ const CLAIM_TRIES = 3;
 
 /**
  * Take the lease, or answer `null`. See the file header for when a claim
- * succeeds. Claimers in one workspace conflict on its running count (the
- * recovery job claims several at once), so a conflict is retried a few times
- * before the assessment is left queued for a later tick.
+ * succeeds. Claimers in one workspace conflict on its running count (a
+ * request's background run against the recovery job, or two instances'
+ * ticks), so a conflict is retried a few times before the assessment is left
+ * queued for a later tick.
  */
 async function claim(assessmentId: string, orgId: string): Promise<string | null> {
   for (let tries = 1; ; tries += 1) {
@@ -372,7 +395,7 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
   return await prisma.$transaction(
     async (tx) => {
       const row = await tx.assessment.findUnique({
-        where: { id: assessmentId },
+        where: { id: assessmentId, orgId },
         select: { status: true, leaseExpiresAt: true, attempts: true, startedAt: true },
       });
       if (!row || (row.status !== 'QUEUED' && row.status !== 'RUNNING')) return null;
@@ -381,7 +404,8 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
       const running = await tx.assessment.count({
         where: {
           orgId,
-          status: 'RUNNING',
+          // A cancelled run holds its place until its judges in flight land.
+          status: { in: ['RUNNING', 'CANCELLED'] },
           leaseExpiresAt: { gt: now },
           id: { not: assessmentId },
         },
@@ -397,6 +421,8 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
           leaseExpiresAt: new Date(now.getTime() + LEASE_MS),
           attempts: { increment: 1 },
           startedAt: row.startedAt ?? now,
+          // An earlier run's note, which this run's own ending replaces.
+          error: null,
         },
       });
       return token;
@@ -476,9 +502,19 @@ async function finish(
 export async function cancelAssessment(assessmentId: string): Promise<boolean> {
   const { count } = await prisma.assessment.updateMany({
     where: { id: assessmentId, orgId: requireOrgId(), status: { in: ['QUEUED', 'RUNNING'] } },
-    // The token stays, so the run that held it can still save the judges it
-    // has in flight, and no other run can (see `saveJudgeRun`).
-    data: { status: 'CANCELLED', completedAt: new Date(), leaseExpiresAt: null },
+    // The token and lease stay: the run that held them can still save the
+    // judges it has in flight, and no other run can (see `saveJudgeRun`), and
+    // the run keeps its place in the workspace's limit until they land
+    // (`freePlace`), or its lease runs out.
+    data: { status: 'CANCELLED', completedAt: new Date() },
   });
   return count === 1;
+}
+
+/** A cancelled run's judges have all landed: give up its place in the workspace's limit. */
+async function freePlace(assessmentId: string, token: string): Promise<void> {
+  await prisma.assessment.updateMany({
+    where: { id: assessmentId, leaseToken: token, status: 'CANCELLED' },
+    data: { leaseExpiresAt: null },
+  });
 }

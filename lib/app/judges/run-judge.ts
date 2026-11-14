@@ -85,7 +85,12 @@ export type JudgeRunErrorCode =
   /** The provider declined to answer (a content filter). */
   | 'refused'
   /** The provider call failed: auth, network, timeout, a spend gate. */
-  | 'provider_error';
+  | 'provider_error'
+  /**
+   * Not raised here: the stored job's, for a slot the engine no longer runs
+   * (its switch turned off after the assessment was queued).
+   */
+  | 'slot_unavailable';
 
 /** Whose monthly cap an `over_budget` run reached: the install's, the workspace's or the agent's. */
 export type BudgetCap = 'global' | 'org' | 'agent';
@@ -358,7 +363,9 @@ export async function runJudge<Ctx, Output>(
   };
 
   if ('error' in outcome) {
-    outcome.error.spend = spend;
+    // Only a call that reached the provider was billed; one refused before it
+    // (the spend gate, a provider that could not be built) carries nothing.
+    if (billed.length > 0) outcome.error.spend = spend;
     throw outcome.error;
   }
   return {
