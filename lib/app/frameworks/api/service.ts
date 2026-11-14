@@ -16,7 +16,7 @@
  * The ETag of a version response is computed from the version's identity, not
  * its body: a published version cannot change, so a 304 costs no materialise.
  */
-import { z } from 'zod';
+import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
 import { withheldSections } from '@/lib/app/frameworks/culture';
 import { isJsonObject } from '@/lib/app/frameworks/codec';
 import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
@@ -54,16 +54,6 @@ const defaultDeps: FrameworkApiDeps = {
   catalog: prismaFrameworkCatalog,
   repo: prismaFrameworkRepo,
 };
-
-// Path segments are checked before any query: anything else cannot name a
-// record, so it is the same 404 a well-formed unknown value gets. Exported
-// for the route registry (`lib/app/api/registry.ts`), which declares them.
-export const slugParam = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
-export const versionParam = z
-  .string()
-  .max(64)
-  .regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
-export const kindParam = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
 
 // A type, not an interface, so the meta types built on it stay assignable to
 // the `Record<string, unknown>` a success envelope's `meta` takes.

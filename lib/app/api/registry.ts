@@ -30,7 +30,7 @@
 import { z } from 'zod';
 import { orgIdParamSchema } from '@/lib/validations/tenancy';
 import { ORG_OWNER_ROLE, ORG_ROLES } from '@/lib/tenancy/roles';
-import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/service';
+import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
 import { JUDGE_ROLES } from '@/lib/app/judges/approved-models';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
 import {
@@ -73,13 +73,15 @@ export interface RouteContract {
   path: string;
   summary: string;
   auth: RouteAuth;
-  /**
-   * The schemas the handler parses with. A request that fails one answers as
-   * the route's docblock says: usually 400 `VALIDATION_ERROR`, but the
-   * framework routes answer a malformed segment as the 404 an unknown one gets.
-   */
+  /** The schemas the handler parses with. */
   request: {
     params?: z.ZodType;
+    /**
+     * What a path that fails `params` is answered with. Absent: 400
+     * `VALIDATION_ERROR`. The framework routes answer 404, as for a
+     * well-formed segment that names nothing.
+     */
+    invalidParamsStatus?: 404;
     query?: z.ZodType;
     body?: z.ZodType;
   };
@@ -226,7 +228,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     path: '/api/v1/frameworks/{slug}',
     summary: 'Get one framework, its published versions and the record kinds a version serves.',
     auth: { who: 'anyone' },
-    request: { params: frameworkParams },
+    request: { params: frameworkParams, invalidParamsStatus: 404 },
     response: { status: 200, data: frameworkDetailSchema, conditional: true },
   },
   {
@@ -234,7 +236,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     path: '/api/v1/frameworks/{slug}/versions/{version}',
     summary: 'Get the whole model of a published version.',
     auth: { who: 'anyone' },
-    request: { params: versionParams },
+    request: { params: versionParams, invalidParamsStatus: 404 },
     response: {
       status: 200,
       data: jsonObjectSchema,
@@ -247,7 +249,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     path: '/api/v1/frameworks/{slug}/versions/{version}/{kind}',
     summary: "Get one kind of record from a published version, in the model's order.",
     auth: { who: 'anyone' },
-    request: { params: kindParams },
+    request: { params: kindParams, invalidParamsStatus: 404 },
     response: {
       status: 200,
       data: z.array(jsonObjectSchema),

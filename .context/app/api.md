@@ -13,7 +13,7 @@ tasks read.
 | `path`     | The URL path, with each dynamic segment as `{name}`: `app/api/v1/frameworks/[slug]/route.ts` is `/api/v1/frameworks/{slug}`.                                                                                                                                                                                                    |
 | `summary`  | One line, in the words a developer reading the docs would use.                                                                                                                                                                                                                                                                  |
 | `auth`     | `{ who: 'anyone' }`; `{ who: 'signed-in', apiKeyScope }`; or `{ who: 'workspace-admin', apiKeyScope, platformAdmin }`, where `platformAdmin` is `'anywhere'` or `'entered'` (a platform admin must be acting in this workspace). `apiKeyScope` is the scope an API key needs, or `null` when the route wants a browser session. |
-| `request`  | `params`, `query`, `body`: the Zod schemas the handler parses with, **imported, never restated**. The `params` object has one key per `{name}` in the path. A failed parse answers as the route's docblock says: usually 400, but the framework routes answer a malformed segment as 404.                                       |
+| `request`  | `params`, `query`, `body`: the Zod schemas the handler parses with, **imported, never restated**. The `params` object has one key per `{name}` in the path. A path that fails `params` answers 400 `VALIDATION_ERROR` unless `invalidParamsStatus` says otherwise: the framework routes set it to 404.                          |
 | `response` | The success `status`; the Zod schemas of the envelope's `data` and (if sent) `meta`, as they are on the wire, where a `Date` is an ISO string; and `conditional: true` for a route that sends an `ETag` and answers a matching `If-None-Match` with 304.                                                                        |
 
 Errors are not declared per entry. Every route answers the standard error envelope,
@@ -31,17 +31,21 @@ and its docblock lists its codes.
    also needs that directory added to `APP_ROUTE_DIRS` in the same test. Until it is, the
    test fails: every directory there must be in `APP_ROUTE_DIRS` or `CORE_ROUTE_DIRS`.
 
+An app route goes in an app directory, never inside one of core's: the scan does not
+look inside `CORE_ROUTE_DIRS`, so a route added under, say, `app/api/v1/orgs/` would go
+undeclared.
+
 ## What keeps it honest
 
 `tests/unit/lib/app/api/registry.test.ts`:
 
-- fails for a directory under `app/api/v1/` in neither `APP_ROUTE_DIRS` nor
+- fails for a directory directly under `app/api/v1/` in neither `APP_ROUTE_DIRS` nor
   `CORE_ROUTE_DIRS`. An upstream sync that adds a core directory lands here: add it to
   `CORE_ROUTE_DIRS`;
 - reads every route file under the app's directories **as text** and fails when a file
   exports a method the registry does not declare, when the registry declares one no file
   exports, or when an entry is declared twice. A method exported in a form the scan
-  cannot read (`export { GET }`, `export const { GET } = …`) is refused;
+  cannot read (`export { GET }`, `export const { GET } = …`, `export * from …`) is refused;
 - fails when an entry's `params` keys differ from the `{name}` segments of its path;
 - holds each response schema to its service type with `expectTypeOf`, so a field
   added to a service's return type and not to the schema fails `npm run type-check`.

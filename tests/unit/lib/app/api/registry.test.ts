@@ -115,6 +115,9 @@ const UNREADABLE_EXPORT_RE = new RegExp(
 
 /** The HTTP methods a route file exports. Throws on an export of one it cannot read. */
 function exportedMethods(source: string, file: string): string[] {
+  if (/^export\s*\*/m.test(source)) {
+    throw new Error(`${file}: \`export *\` hides which methods it exports; export each by name`);
+  }
   if (UNREADABLE_EXPORT_RE.test(source)) {
     throw new Error(
       `${file}: exports a method in a form the scan cannot read; declare it as \`export const GET = …\``
@@ -213,6 +216,7 @@ describe('the route registry and the route files', () => {
     expect(exportedMethods("export { revalidate } from '@/lib/x';\nexport {};", 'e')).toEqual([]);
     expect(() => exportedMethods('export { GET } from "./x";', 'f')).toThrow(/cannot read/);
     expect(() => exportedMethods('export { handler as POST };', 'g')).toThrow(/cannot read/);
+    expect(() => exportedMethods("export * from '@/lib/app/handlers';", 'i')).toThrow(/export \*/);
     expect(() => exportedMethods('export const { GET, POST } = make();', 'h')).toThrow(
       /cannot read/
     );
