@@ -1,0 +1,293 @@
+/**
+ * A workspace choosing the model each judge and the editor runs on (j4, D8).
+ *
+ * What is offered is the role's approved list (`approved-models.ts`)
+ * intersected with what the workspace has available (`availability.ts`), by
+ * name, with at most a plain-language trade-off: never a reply ceiling,
+ * temperature or reasoning effort, which come with the entry. Anything else is
+ * refused, here and, through the agents' `bindingRule`, on Sunrise's agent
+ * routes.
+ *
+ * A choice is a write like the agent PATCH's: the binding becomes the
+ * workspace's (`bindingOwner: 'org'`), so the platform stops moving it; a new
+ * version is snapshotted; and it is audited. Choosing the default instead
+ * hands the binding back to the platform, which puts the agent on its pick
+ * now and keeps it there as the default moves.
+ *
+ * Tenancy posture: every read and write is filtered by the workspace's id as
+ * well as running in its tenant context.
+ */
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import {
+  EDITOR_AGENT_SLUG,
+  INTERIM_EDITOR_MODEL,
+  INTERIM_JUDGE_MODEL,
+  judgeAgentSlug,
+} from '@/lib/app/judges/agents';
+import {
+  APPROVED_MODELS,
+  approvedEntry,
+  roleOfSlot,
+  type JudgeRole,
+} from '@/lib/app/judges/approved-models';
+import {
+  grantedCatalogueAvailability,
+  type AvailableModel,
+  type ModelAvailability,
+} from '@/lib/app/judges/availability';
+import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
+import { prisma } from '@/lib/db/client';
+import { buildChangeSummary } from '@/lib/orchestration/agent-version-diff';
+import {
+  asSnapshotJson,
+  buildAgentSnapshot,
+  INITIAL_VERSION_SUMMARY,
+  isAgentVersionConflict,
+  nextAgentVersionNumber,
+} from '@/lib/orchestration/agents/agent-versioning';
+import { tryReconcilePlatformAgents } from '@/lib/orchestration/agents/reconcile-platform-agents';
+import { computeChanges, logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+
+/** One agent a workspace chooses a model for: a judge slot, or the editor. */
+interface ChoosableAgent {
+  /** The key the API names it by: the judge slot, or `editor`. */
+  key: string;
+  slug: string;
+  role: JudgeRole;
+  /** The model the platform runs it on while the workspace has not chosen. */
+  defaultModel: string;
+}
+
+export const CHOOSABLE_AGENTS: readonly ChoosableAgent[] = [
+  ...HOWDOESTHISLAND_JUDGE_SLOTS.map((slot) => ({
+    key: slot,
+    slug: judgeAgentSlug(slot),
+    role: roleOfSlot(slot),
+    defaultModel: INTERIM_JUDGE_MODEL,
+  })),
+  { key: 'editor', slug: EDITOR_AGENT_SLUG, role: 'editor', defaultModel: INTERIM_EDITOR_MODEL },
+];
+
+/** A model a workspace may choose, as it sees it. */
+export interface ModelOption {
+  model: string;
+  label: string;
+  tradeoff: string;
+  /** Whether it is what the platform runs this agent on by default. */
+  isDefault: boolean;
+}
+
+export interface JudgeModelChoice {
+  key: string;
+  /** The agent's name, e.g. "Ethos Judge". */
+  name: string;
+  role: JudgeRole;
+  /**
+   * What the agent runs on now. `label` is the approved entry's name, or the
+   * model id when the model is not on the list (a binding set before the
+   * list, or an inherited one); `approved` says which. `null` while it
+   * inherits a model at run time.
+   */
+  current: { model: string; label: string; approved: boolean } | null;
+  /** Whether the platform picks the model (the workspace has not chosen). */
+  followsDefault: boolean;
+  /** The approved models this workspace has available, in the list's order. */
+  options: ModelOption[];
+}
+
+function offered(
+  agent: ChoosableAgent,
+  available: readonly AvailableModel[]
+): Array<(typeof APPROVED_MODELS)[JudgeRole][number]> {
+  return APPROVED_MODELS[agent.role].filter((entry) =>
+    available.some((a) => a.provider === entry.provider && a.model === entry.model)
+  );
+}
+
+function agentByKey(key: string): ChoosableAgent {
+  const agent = CHOOSABLE_AGENTS.find((a) => a.key === key);
+  if (!agent) throw new NotFoundError(`No judge or editor called "${key}"`);
+  return agent;
+}
+
+/** Each judge and the editor in `orgId`, with what it runs on and what it may. */
+export async function listJudgeModels(
+  orgId: string,
+  availability: ModelAvailability = grantedCatalogueAvailability
+): Promise<JudgeModelChoice[]> {
+  const [rows, available] = await Promise.all([
+    prisma.aiAgent.findMany({
+      where: { orgId, isSystem: true, slug: { in: CHOOSABLE_AGENTS.map((a) => a.slug) } },
+      select: { slug: true, name: true, provider: true, model: true, bindingOwner: true },
+    }),
+    availability(),
+  ]);
+  const bySlug = new Map(rows.map((row) => [row.slug, row]));
+  return CHOOSABLE_AGENTS.flatMap((agent) => {
+    const row = bySlug.get(agent.slug);
+    if (!row) return [];
+    const entry =
+      row.provider && row.model
+        ? approvedEntry(agent.role, { provider: row.provider, model: row.model })
+        : undefined;
+    return [
+      {
+        key: agent.key,
+        name: row.name,
+        role: agent.role,
+        current: row.model
+          ? { model: row.model, label: entry?.label ?? row.model, approved: entry !== undefined }
+          : null,
+        followsDefault: row.bindingOwner === 'platform',
+        options: offered(agent, available).map((e) => ({
+          model: e.model,
+          label: e.label,
+          tradeoff: e.tradeoff,
+          isDefault: e.model === agent.defaultModel,
+        })),
+      },
+    ];
+  });
+}
+
+export interface ChooseJudgeModelInput {
+  orgId: string;
+  key: string;
+  /** A model from the agent's options, or `null` to follow the default. */
+  model: string | null;
+  userId: string;
+  clientIp?: string | null;
+  availability?: ModelAvailability;
+}
+
+/**
+ * Bind one agent to a model from its options, or hand it back to the default.
+ * Refuses a model off the role's approved list, or one the workspace does not
+ * have available, as a validation error on `model`.
+ */
+export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<JudgeModelChoice> {
+  const agent = agentByKey(input.key);
+  const current = await prisma.aiAgent.findFirst({
+    where: { orgId: input.orgId, slug: agent.slug, isSystem: true, deletedAt: null },
+    include: {
+      grantedTags: { select: { tagId: true } },
+      grantedDocuments: { select: { documentId: true } },
+    },
+  });
+  if (!current) throw new NotFoundError(`This workspace has no agent for "${input.key}"`);
+
+  if (input.model === null) {
+    if (current.bindingOwner !== 'platform') {
+      await prisma.aiAgent.update({
+        where: { id: current.id },
+        data: { bindingOwner: 'platform' },
+      });
+      logAdminAction({
+        userId: input.userId,
+        action: 'agent.update',
+        entityType: 'agent',
+        entityId: current.id,
+        entityName: current.name,
+        changes: { bindingOwner: { from: current.bindingOwner, to: 'platform' } },
+        clientIp: input.clientIp ?? null,
+      });
+      // Onto the platform's pick now rather than at the next maintenance
+      // pass, which remains the guarantee. Never throws.
+      await tryReconcilePlatformAgents(input.orgId, 'agent.bindingOwner');
+    }
+    return choiceFor(input.orgId, agent, input.availability);
+  }
+
+  const entry = APPROVED_MODELS[agent.role].find((e) => e.model === input.model);
+  if (!entry) {
+    const message = `"${input.model}" is not one of the models approved for this job.`;
+    throw new ValidationError(message, { model: [message] });
+  }
+  const available = await (input.availability ?? grantedCatalogueAvailability)();
+  if (!offered(agent, available).includes(entry)) {
+    const message = `${entry.label} is not available in this workspace.`;
+    throw new ValidationError(message, { model: [message] });
+  }
+
+  const sameBinding = current.provider === entry.provider && current.model === entry.model;
+  if (sameBinding && current.bindingOwner === 'org') {
+    return choiceFor(input.orgId, agent, input.availability);
+  }
+
+  const data = { provider: entry.provider, model: entry.model, bindingOwner: 'org' };
+  const grants = {
+    grantedTagIds: current.grantedTags.map((g) => g.tagId),
+    grantedDocumentIds: current.grantedDocuments.map((g) => g.documentId),
+  };
+  const changedFields = sameBinding
+    ? []
+    : [
+        ...(current.provider !== entry.provider ? ['provider'] : []),
+        ...(current.model !== entry.model ? ['model'] : []),
+      ];
+
+  let updated;
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      if (changedFields.length > 0) {
+        // An agent created before create-time versioning gets its original
+        // version first, as the agent PATCH does.
+        const first = await nextAgentVersionNumber(tx, current.id);
+        if (first === 1) {
+          await tx.aiAgentVersion.create({
+            data: {
+              agentId: current.id,
+              version: 1,
+              snapshot: asSnapshotJson(buildAgentSnapshot(current, grants)),
+              changeSummary: INITIAL_VERSION_SUMMARY,
+              createdBy: input.userId,
+            },
+          });
+        }
+        const row = await tx.aiAgent.update({ where: { id: current.id }, data });
+        await tx.aiAgentVersion.create({
+          data: {
+            agentId: current.id,
+            version: first === 1 ? 2 : first,
+            snapshot: asSnapshotJson(buildAgentSnapshot(row, grants)),
+            changeSummary: buildChangeSummary(changedFields),
+            createdBy: input.userId,
+          },
+        });
+        return row;
+      }
+      return tx.aiAgent.update({ where: { id: current.id }, data });
+    });
+  } catch (err) {
+    if (isAgentVersionConflict(err)) {
+      throw new ConflictError('The model was changed at the same time elsewhere. Please retry.');
+    }
+    throw err;
+  }
+
+  logAdminAction({
+    userId: input.userId,
+    action: 'agent.update',
+    entityType: 'agent',
+    entityId: current.id,
+    entityName: current.name,
+    changes: computeChanges(
+      { provider: current.provider, model: current.model, bindingOwner: current.bindingOwner },
+      { provider: updated.provider, model: updated.model, bindingOwner: updated.bindingOwner }
+    ),
+    clientIp: input.clientIp ?? null,
+  });
+
+  return choiceFor(input.orgId, agent, input.availability);
+}
+
+async function choiceFor(
+  orgId: string,
+  agent: ChoosableAgent,
+  availability?: ModelAvailability
+): Promise<JudgeModelChoice> {
+  const all = await listJudgeModels(orgId, availability);
+  const choice = all.find((c) => c.key === agent.key);
+  if (!choice) throw new NotFoundError(`This workspace has no agent for "${agent.key}"`);
+  return choice;
+}

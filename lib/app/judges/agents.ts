@@ -18,7 +18,11 @@
  * `defaults.provider/model`: while a workspace has not chosen a model itself
  * the platform owns the binding (`AiAgent.bindingOwner`), so k3's choice
  * moves every such workspace with it; one that has chosen keeps its choice.
+ * What a workspace may choose is its role's approved list
+ * (`approved-models.ts`, j4): the `bindingRule` refuses anything else on
+ * Sunrise's agent routes, and the app's own route offers only the list.
  */
+import { refuseUnapproved, roleOfSlot } from '@/lib/app/judges/approved-models';
 import {
   HOWDOESTHISLAND_JUDGE_SLOTS,
   type HowDoesThisLandJudgeSlot,
@@ -111,9 +115,9 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  *   low reasoning effort rather than relying on the ceiling.
  * - A workspace that binds an agent to a model with a lower output limit
  *   (`gpt-4o`, 16,384; an older Claude Haiku, 8,192) has that agent's calls
- *   refused, and cannot lower this code-owned cap. j4 (D8, amended) closes
- *   this: workspaces choose only from an approved list per role, and each
- *   entry carries settings within that model's limit.
+ *   refused, and cannot lower this code-owned cap. So workspaces choose
+ *   only from an approved list per role (`approved-models.ts`, j4), and the
+ *   judge call takes its ceiling from the entry, within that model's limit.
  *
  * These are ceilings. A call sizes its own `maxTokens` and timeout under them
  * (§8.3: per judge slot in j2, from the text's length for rewrites in rw1),
@@ -263,6 +267,7 @@ function judgeAgent(slot: HowDoesThisLandJudgeSlot): PlatformAgentDefinition {
     capabilities: [],
     knowledgeTags: [],
     defaultBinding: (db, catalogue) => pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue),
+    bindingRule: (binding) => refuseUnapproved(roleOfSlot(slot), binding),
   };
 }
 
@@ -281,6 +286,7 @@ const EDITOR_AGENT: PlatformAgentDefinition = {
   capabilities: [],
   knowledgeTags: [],
   defaultBinding: (db, catalogue) => pickInterimBinding(INTERIM_EDITOR_MODEL, db, catalogue),
+  bindingRule: (binding) => refuseUnapproved('editor', binding),
 };
 
 /** The judges, one per slot in the definition's order, then the editor. */
