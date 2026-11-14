@@ -2,6 +2,11 @@
  * Tests: the app's maintenance jobs (t-7, t-22) — each registration runs the
  * work it names. Names, intervals and scopes are pinned in defaults.test.ts.
  *
+ * FORK NOTE: this is HowDoesThisLand's own test of its own seam, so it reads
+ * the real `lib/app/jobs.ts` on purpose, with the work each job calls mocked.
+ * A job added there gets a case here that it runs its work, and its name,
+ * interval and scope pinned in `defaults.test.ts` (ledger row 2).
+ *
  * @see lib/app/jobs.ts
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
