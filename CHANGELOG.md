@@ -16,6 +16,748 @@ release process.
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-11-13
+
+> **Alpha release.** Twenty-sixth tagged Sunrise release. **MINOR bump**:
+> three new fork seams, new public API and seven migrations. The headline is the **LLM
+> privacy layer** (§127). It finds personal details in what Sunrise sends to
+> an LLM vendor and, by the mode an operator picks, counts them, masks them
+> and restores the reply, or refuses the call. An org or an agent can only
+> tighten that mode. Orgs can also now invite people who already have
+> accounts, and see their own admin history. The admin area says when missing
+> config has quietly switched a feature off. Every open Dependabot alert is
+> cleared. Measured against `v0.18.0`: 26 PRs merged, no direct commits, 14
+> issues closed as fixed and 1 as a duplicate; the suite is 1,579 files
+> and 33,361 tests.
+>
+> ## What a fork has to do
+>
+> **Run the seven migrations** (`npm run db:migrate:deploy`), then
+> **`npm run db:seed`**:
+>
+> - `20261110120000_audit_log_acting_org` and its two backfills add
+>   `AiAdminAuditLog.actingOrgId` and fill it for earlier rows.
+> - `20261111120000_privacy_settings`, `20261111200000_privacy_embeddings_policy`
+>   and `20261112100000_agent_privacy_mode` add the privacy settings and
+>   `AiAgent.privacyMode`.
+> - `20261112220000_message_embedding_retry` adds the embedding-retry columns
+>   on `AiMessage`.
+> - The seed refiles the Ollama embedding models from `ollama` to
+>   `ollama-local`, the slug the provider form gives. It moves only rows an
+>   admin has not edited, and renames no provider. Act only if you named your
+>   Ollama provider `ollama` by hand **and** picked one of these models for
+>   embeddings: rename the provider to `ollama-local`, or edit the model's
+>   provider slug.
+>
+> **Run `npm install`.** Tailwind moves to 4.3.5 and `@hookform/resolvers` to
+> 7, beside minor and patch bumps. **Keep, when you merge `package.json`:**
+>
+> - the four new `overrides` entries and their `overrideReasons`, or the alerts
+>   they cleared come back;
+> - the new `lockfileMetadataReasons` block, or your Lockfile metadata job
+>   fails on the Tailwind bump;
+> - your own `version`, in `package.json` and the lockfile, if you set one.
+>
+> **An existing install's LLM calls go out as before until an operator turns
+> privacy on, with one exception.** The migration reads an existing install as
+> `off`; a new install starts in `detect`. The exception holds in every mode,
+> `off` included, so that a stricter rule can't go missing silently:
+>
+> - if `initAppPrivacyAdapters()` throws, every LLM call is refused until it
+>   is fixed (the scaffold ships empty, so only once you register something);
+> - a call whose policy resolver fails is refused. Core's own,
+>   `core.scope-settings`, reads the agent's privacy mode and the org's floor,
+>   so a stored value it cannot read refuses that call.
+>
+> **Three new fork-owned scaffolds** ship empty: `lib/app/privacy-adapters.ts`,
+> `lib/app/config-health.ts` and `lib/app/admin-breadcrumbs.ts`. Take them as
+> they are. A fork that built config health or breadcrumb labels itself moves
+> its own into them.
+>
+> **Conflicts to expect,** each resolved by taking Sunrise's version unless
+> said otherwise:
+>
+> - **`Org` and `User`** now end with two fixed back-relation zones. Keep both
+>   markers, move your block of back-relations below your tier's marker, and
+>   retire the ledger row for it.
+> - **`lib/app/db-drift.ts`**: Sunrise rewrote its header comment. Keep your
+>   registrations and take the new comment.
+> - **A fork that built config health or breadcrumb labels itself** (ConQuest's
+>   shape) conflicts on those files and on `components/admin/admin-header.tsx`
+>   and `app/admin/layout.tsx`.
+> - **A fork carrying `extraHeaders` or `idleClassName` on `<MicButton>`**
+>   (`components/admin/orchestration/chat/mic-button.tsx`, t-1023) conflicts
+>   there. Sunrise now has both props, so the ledger row for them can go.
+> - **A fork that already moved the tenant, subject or paid-call store onto
+>   `globalThis`** conflicts in `lib/tenancy/context.ts`,
+>   `lib/auth/subject-context.ts`, `lib/orchestration/llm/spend-caps.ts` and
+>   `lib/tenancy/process-state.ts`.
+>
+> **Your type-check will flag:**
+>
+> - a call to `scanOutput()` that uses its result directly: it is now async,
+>   and takes the sent messages and `{ ignoredEntityTypes }`;
+> - a method added to `LlmProvider` without a `PRIVACY_COVERAGE` entry.
+>
+> **Your tests will flag:**
+>
+> - a `User` relation without `onDelete` (the new
+>   `user-relation-on-delete.test.ts`);
+> - a fork line outside its zone on `Org` or `User` (`back-relation-zones.test.ts`);
+> - fork models in a `prisma/schema` subfolder, which the export, org-export
+>   and classification guards now read for the first time;
+> - a `defaults.test.ts` that pins `lib/app/*`: it gains the three new
+>   scaffolds' rows. Pin them; don't delete them.
+>
+> **Changes a build will not catch:**
+>
+> - **Forms:** a form gets the "N fields need fixing" fix only once it passes
+>   `errors` to `useSaveFailure()`. UI shown only while `!save.failure` now
+>   comes back without a press, because the summary clears itself.
+> - **Chat clients:** handling `privacy_blocked` means also handling
+>   `privacy_blocked_earlier`, `privacy_blocked_setup` and
+>   `privacy_blocked_memory`.
+> - **Code that resends a conversation to a provider** skips rows for which
+>   `isLeftOutOfHistory(metadata)` is true. Code that reads the built messages
+>   finds the user's memories as one message each, under a heading.
+> - **The output guard's labels** are `pii_<type>`: `pii_credit_card` is now
+>   `pii_card_number`, and a US SSN is no longer flagged.
+> - **Invitations:**
+>   - `POST /api/v1/orgs/[id]/invitations` now invites an existing account
+>     where it answered `409 EMAIL_TAKEN`. So does `POST /api/v1/users/invite`,
+>     for an invitation into an org other than the install org at the default
+>     `USER` role. A client branching on that answer should drop the branch.
+>   - `POST /api/auth/accept-invite` answers `409 EMAIL_TAKEN` for an address
+>     with an account, where it gave a 500.
+>   - A template override should use the invitation email's new `hasAccount`.
+> - **Ownership:**
+>   - A platform admin added to an empty org with no role now lands as
+>     `MEMBER`.
+>   - An `OWNER` invitation whose issuer has since lost owner standing lands
+>     the invitee as `MEMBER`.
+> - **Admin audit log:** a fork route that changes an org other than the one
+>   it runs in passes `actingOrgId` to `logAdminAction()`.
+> - **Hook deliveries:** `nextRetryAt` on a hook delivery no longer means "has
+>   failed"; check `status` too.
+>
+> Each is explained under its entry below.
+>
+> **§127's deployed-build check was not run.** Its done-when asks for a
+> privacy-mode call to be checked on a deployed build; that was not done before
+> this release. What was run is the suite and `npm run smoke:privacy`, which
+> passed locally: a chat turn and a workflow step under `pseudonymise`, against
+> the dev database, through fake providers that record what they are sent. So
+> no deployed build or real vendor has yet seen a masked call. Check one on your
+> own deployment before turning on `pseudonymise` or stricter for real users.
+>
+> **Known gap:** the agent and capability forms build their own tab-aware
+> summary, so after a blocked save their "N fields need fixing" still keeps
+> the count from the press. That is t-1029, for the next release.
+>
+> **Dependency alerts:** none open at the cut. The five accepted at 0.18.0,
+> and `fast-xml-parser`, opened since, are all cleared; see Security below. Dependabot's newer PR #1258 (nine production
+> minor and patch bumps) is not in this release.
+
+### Added
+
+- **Config health: the admin area says when an optional setting has quietly
+  switched a feature off (#865, t-1025).** Before, a missing LLM provider key,
+  email setup or serverless pooler showed only as a log line.
+  - `GET /api/v1/admin/config-health` (platform admins): a report of each
+    check, presence only, never a value.
+  - A card on `/admin/overview` listing unmet checks with their fix, and a
+    critical-only strip on every admin page for platform admins.
+  - Sunrise's checks: `llm_provider` (critical; an active provider can be
+    reached, with a key or as a local provider), `email` (warning),
+    `db_pooler` (warning; on Vercel only). A check that throws is reported
+    `failed`, counted apart in `summary.failed`, and does not take the
+    report down.
+  - New fork-owned scaffold `lib/app/config-health.ts` →
+    `appConfigHealthChecks`, with the `ConfigHealthCheck` type in
+    `lib/config-health/types.ts`. Ships empty and is pinned in
+    `defaults.test.ts`. A fork's checks run after Sunrise's.
+
+  **A fork that built its own** at these paths (ConQuest's shape) takes
+  Sunrise's files and keeps its checks in `lib/app/config-health.ts`.
+- **Admin breadcrumb labels and a header slot (#1201, t-1024).** The admin
+  breadcrumb no longer shows a fork's slugs and record ids as typed:
+  - New fork-owned scaffold `lib/app/admin-breadcrumbs.ts` →
+    `appSegmentLabels`: names for the fork's admin URL segments (it can also
+    rename a core one). Ships empty and is pinned in `defaults.test.ts`.
+  - `BreadcrumbProvider`, `BreadcrumbLabel` and `useBreadcrumbLabels` in
+    `components/admin/breadcrumb-context.tsx`: a page names its record-id
+    segment with `<BreadcrumbLabel segment={id} label={name} />`. The admin
+    layout wraps the shell in the provider.
+  - A segment nobody names is now title-cased (`some-section` →
+    `Some Section`) instead of shown as typed, unless it has a digit (almost
+    always a record id, still shown as typed). The page title still uses only
+    a known label and otherwise says "Admin".
+  - An empty `#admin-header-slot` beside the user actions, for a page to
+    render into with `createPortal`.
+
+  **A fork that edited `components/admin/admin-header.tsx` or
+  `app/admin/layout.tsx` for this** takes Sunrise's and moves its segment
+  names into `appSegmentLabels`.
+- **`providerSetupMessage` on `GET /api/v1/admin/orchestration/knowledge/embedding-status`,
+  and `EmbeddingSetupError` (§127 t-1011).** When embedding is set up but
+  cannot run yet, the status names the step left to take, and the knowledge
+  and learn pages' banner shows it in place of "add an embedding provider".
+  Examples are a local provider whose model is not picked, or a picked model
+  that cannot be used. `EmbeddingSetupError`, exported from
+  `lib/orchestration/knowledge/embedder.ts`, is a `NoProviderConfiguredError`, so
+  existing handlers still catch it; `resolveEmbeddingStatus()` gains
+  `setupMessage`.
+
+- **LLM privacy layer: a turn refused under `block` is left out of later
+  history (§127, t-1014).** A refused turn's rows get the new
+  `MessageMetadata.excludedFromHistory` (`'privacy_blocked'`):
+  - its user message;
+  - any tool-call and tool-result rows written before the refusal.
+
+  The chat handler's history reads, the summariser and the `chat_turn` step
+  leave those rows out, so the conversation can go on. They stay in the
+  transcript. `chat_turn` now also leaves out error markers, as the chat
+  handler always has.
+
+  **A fork that resends a conversation's messages to a provider itself**
+  should skip rows for which `isLeftOutOfHistory(metadata)`
+  (`lib/orchestration/chat/message-builder.ts`) is true: error markers, and
+  a refused turn's rows. Otherwise it resends the refused details and is
+  refused again.
+- **LLM privacy layer: a `block` caused by an earlier message, the summary
+  or the assistant's setup no longer refuses every turn after it (§127,
+  t-1017).**
+  - `PrivacyRefusedError.found` (`PrivacyFindingLocation`:
+    `{ messageCount, messageIndices }`) on a `content_blocked` refusal of a
+    chat call: which messages held personal details, never what.
+  - Two new chat `error` event codes, each with its own words in
+    `getUserFacingError()`: `privacy_blocked_earlier` (an earlier message or
+    the stored summary held them, and has been left out: ask again) and
+    `privacy_blocked_setup` (the system prompt or entity context: ask an
+    administrator; the user's memories are t-1018's, below). **A client
+    that handles `privacy_blocked` should handle both.** `judge_call` never
+    retries `privacy_blocked_setup`.
+  - When only something earlier held them, the chat handler also marks with
+    `excludedFromHistory` every row of each earlier exchange that held them,
+    and replaces a stored summary that held them with its gap note alone,
+    keeping `summaryUpToMessageId`, so the rows it covered are not read
+    again.
+  - `buildMessagesAndBreakdown()` also returns `sources`, where each message
+    came from.
+- **Message-embedding backfill: a reply whose embedding fails, or that the
+  LLM privacy layer refuses, no longer holds the backfill back (§127,
+  t-1016).** **Migration:** `AiMessage` gains `embeddingRetryAt` (nullable)
+  and `embeddingFailures` (default 0). Any failed or refused attempt sets
+  them: a 15-minute wait after the first, doubling each time, at
+  most a week (`embeddingRetryDelayMs()`). `backfillMissingEmbeddings()`
+  reads replies that never failed first, then due ones, and no longer leaves
+  out in SQL the agents it expected the privacy stage to refuse. The
+  maintenance tick counts a backfill run as work only when it embedded
+  something or filled its batch: `BackfillResult` gains `filledBatch`.
+- **LLM privacy layer: a memory that holds personal details no longer locks
+  its user out of an agent under `block` (§127, t-1018).**
+  - The memory is deleted, and the turn ends with a new chat `error` event
+    code, `privacy_blocked_memory`, whose words in `getUserFacingError()`
+    tell the reader to ask again. **A client that handles `privacy_blocked`
+    should handle it too.**
+  - **Detector contract:** `DetectedSpan` gains an optional `learned`, true
+    when a detector matched a span only because it learned the value from
+    elsewhere in the same text (tier C sets it on a surname or company short
+    form after the full name). It is masked and refused as before; the
+    location on a `block` refusal leaves it out, so a message is blamed only
+    for details of its own. **A fork's detector** that learns values this
+    way should set it; one that does not behaves as before.
+  - `buildMessagesAndBreakdown()` sends the user's memories as a heading and
+    then one system message per memory, not one message, with a new
+    `memory` source (`{ kind: 'memory', memoryIndex }`) for each. **A fork
+    that reads the built messages** and looks for the `[User memories]`
+    block finds only the heading in that message.
+- **LLM privacy layer: an agent's own mode, an org's floor and protected
+  terms (§127, t-1010).** **Migration:** `AiAgent` gains `privacyMode`
+  (nullable, `null` for every existing agent: inherit), a core field-registry
+  field on the agent form, in config backups and agent export, and
+  org-owned on a platform agent. `Org.settings` gains a platform-owned
+  `privacy` slice, `{ minimumMode, protectedTerms }`, read and written with
+  `readOrgPrivacy()` / `writeOrgPrivacy()` (`lib/tenancy/org-settings.ts`)
+  and through the new `GET`/`PUT /api/v1/admin/orgs/[id]/privacy`
+  (platform admins), with a form on the org page. Both modes only tighten:
+  a call runs under the strictest of the install's mode, the agent's and the
+  org's, and `off` is not a value either takes. Protected terms (people and
+  organisations) reach tier B as known values. Both reach a call through
+  core's first policy resolver, **`core.scope-settings`** (timeout 5 s),
+  registered like every core adapter. **A fork that registers resolvers**
+  gets it beside its own and cannot replace or remove it (the `core.` prefix
+  is reserved and resolvers take no `replace`); its own can only tighten
+  further. The protected terms are not the resolver's: the stage reads them
+  itself, as it reads the user's own name. A stored agent mode or org
+  slice that cannot be read refuses the call (`policy_resolver_failed`). An
+  org that protects names of a type the install ignores has that type
+  scanned for its calls. **What a fork's resolver and observer see
+  changes:** a workflow `agent_call` or `chat_turn` step now runs its
+  agent's calls in a child privacy scope carrying the agent
+  (`agentPrivacyScope()`), so `PolicyInput.agentId` is set on them; at
+  `single`, a call with no org in context (an admin API key's request) now
+  carries the install org as `PolicyInput.orgId` and `PrivacyEvent.orgId`,
+  where it carried none; and resolvers run inside the call's privacy scope,
+  an unscoped call's ephemeral one included. `orgIdForCall()`
+  (`lib/tenancy/context.ts`) is the org a call is governed by, shared by
+  the spend caps and the privacy stage. A reply's embedding runs under its
+  agent's mode, and `backfillMissingEmbeddings()` returns `skipped`, the
+  replies the privacy layer refused.
+- **LLM privacy layer: `pseudonymise`, `redact` and `block`, and the
+  embeddings policy (§127, t-992).** The settings API, the settings page and
+  a config restore now accept all five privacy modes. Under `pseudonymise`
+  a chat call's message text and tool-call arguments go to the provider with
+  placeholders such as `[PERSON_1]`, and the reply, streamed text and
+  tool-call arguments come back from `getProvider()` restored, so callers
+  and capabilities see real values and need no change. `redact` masks and
+  never restores. `block` refuses a chat call with anything found, with the
+  new request-fault code `privacy_blocked` (`PRIVACY_BLOCKED`, apart from
+  `privacy_refused` because its remedy differs: the reader asks again
+  without the details). Under `pseudonymise`, `redact` and `block` a required
+  detector that fails or times out refuses a chat call rather than send
+  what it missed, and a chat call made outside
+  any scope is always scanned (an unscoped embedding call no longer is,
+  when nothing reads the result). A call its caller abandons while the
+  stage runs now throws `ProviderError` code `aborted` in every mode,
+  rather than being handed back unfinished. Every exact copy of a found
+  value is masked, and a token session now lives for the privacy
+  scope (a chat turn, a workflow step), not one call: **a fork's
+  `PrivacyTokenStrategy`** gets one `createSession()` per scope, and its
+  session must keep issuing the same placeholder for a value across the
+  scope's calls. **Migration:** `AiOrchestrationSettings` gains
+  `privacyEmbeddingsPolicy` (`allow`, the default for every row, or
+  `local_only`): under `local_only` and a mode of `pseudonymise` or
+  stricter, an embedding call to a provider not marked local is refused
+  (`isLocalOnlyEmbeddingRefusal()`): a reply's embedding is skipped,
+  `search_knowledge_base` returns the tool error `embeddings_local_only`,
+  and an upload fails with a message naming the setting. The settings page
+  warns when protection is on and embeddings still go to a provider that is
+  not local, or that `local_only` will refuse every embedding;
+  `GET …/knowledge/embedding-status` now returns `providerIsLocal`, and
+  with `?providerOnly=true` only the provider fields, without the chunk
+  counts. `PrivacySummary` gains `refused` and `unresolved`. The
+  output guard's identifier check now uses the privacy layer's UK rules
+  (through the registry, so an app's replacement of `core.rules` applies)
+  in place of its four US-centric patterns, ignores identifiers the
+  conversation itself supplied (per message, standing on its own), never
+  runs an `external` replacement of `core.rules`, and is async:
+  `scanOutput()` returns a promise and takes the sent messages as a third
+  argument and `{ ignoredEntityTypes }` as a fourth. Its labels are
+  `pii_<type>` (`pii_credit_card` is now `pii_card_number`; a US SSN is no
+  longer flagged). `runPrivacyDetectors()` takes `detectorIds`. See
+  `.context/privacy/llm-privacy-layer.md`.
+
+- **LLM privacy layer: the stage on every vendor call, in `detect` mode
+  (§127, t-991).** **Migration:** `AiOrchestrationSettings` gains
+  `privacyMode`, `privacyIgnoredEntityTypes` and
+  `privacyProtectLocalProviders`. An existing install reads `off`, so
+  nothing changes until an operator turns it on in the orchestration
+  settings; a new install starts in `detect`. In `detect`, a `chat`,
+  `chatStream`, `embed` or `embedMany` call through `getProvider`, made in a
+  chat turn or a workflow run to a provider not marked local, is scanned
+  locally and sent unchanged; in `detect`, a call outside both is scanned only when an observer is registered or the policy blocks on a failed detector. Per-type counts, never values, are recorded on the
+  assistant message that ends the turn (`metadata.privacy`) and on each
+  workflow step's trace entry (`privacy`), and shown on both traces. The
+  stage refuses a call with `PrivacyRefusedError` (code `privacy_refused`, a
+  request fault, with a message safe to show anyone) when it cannot say
+  what the policy is: while `initAppPrivacyAdapters()` or a core adapter has
+  failed (mode `off` included), the stored mode is unreadable, a policy
+  resolver fails, or the stage itself throws. It also refuses when the
+  policy says `block` on a failed detector. (The stricter modes are t-992's,
+  above.) A method added to `LlmProvider` must now be
+  classified in `PRIVACY_COVERAGE` as well as `METHOD_DISPOSITION`. A fork's
+  own long-running work can enter a privacy scope with `withPrivacyScope()`
+  (`lib/orchestration/privacy/scope.ts`) so its calls are counted together.
+  The config backup carries the three settings. See
+  `.context/privacy/llm-privacy-layer.md`.
+
+- **LLM privacy layer: placeholders (§127, t-990).** Core now registers a
+  default token strategy, `core.stateless`, which an app can replace with
+  `registerPrivacyTokenStrategy()`. It issues typed, numbered placeholders
+  (`[PERSON_1]`) from a fresh map per call that nothing stores; a
+  replacement must write placeholders in the same `[TYPE_n]` form. New in
+  `lib/privacy/pii/`: `maskText()` (which takes the declared entity types),
+  `restoreText()`, `restoreValue()` (for tool-call arguments) and
+  `StreamRestorer`. Nothing calls them yet, so
+  behaviour is unchanged. See `.context/privacy/llm-privacy-layer.md`
+  (*Placeholders*).
+
+- **LLM privacy layer: local detection (§127, t-989).** Core now registers
+  three default privacy detectors, all in-process and required:
+  `core.rules` (UK and international identifiers, checksum-validated where
+  the identifier has one), `core.known-values` (what the stage already knows
+  about the people in a call, with variants) and `core.lists` (names,
+  street addresses and companies, from bundled name lists and cues). An app
+  turns one off or swaps it with
+  `registerPrivacyDetector(mine, { replace: '<id>' })`, so the three ids are
+  part of the seam. Nothing calls the detectors yet, so behaviour is
+  unchanged. The bundled ONS name list is used under the Open Government
+  Licence v3.0; its attribution, and the measured precision and recall, are
+  in `.context/privacy/llm-privacy-layer.md`.
+
+- **LLM privacy layer: the adapter seam (§127, t-988).** A new fork seam,
+  `lib/app/privacy-adapters.ts` → `initAppPrivacyAdapters()`, ships empty.
+  From it an app registers its own privacy adapters with
+  `registerPrivacyDetector()` (with `required`, `timeoutMs` and
+  `replace: 'core.<id>'`), `registerPrivacyTokenStrategy()`,
+  `registerPrivacyPolicyResolver()` and `registerPrivacyObserver()`, all in
+  `lib/privacy/adapters/registry.ts`; the contracts are in
+  `lib/privacy/adapters/types.ts`. Nothing reads the registry yet, so
+  behaviour is unchanged: the privacy stage that uses it lands in later
+  §127 tasks. Unlike most seams, a throwing init is remembered as well as
+  rolled back, and the stage will refuse every call until it is fixed, so
+  an app's required detector or stricter policy cannot go missing
+  silently. Policy resolvers get an abort signal and an optional
+  `timeoutMs`.
+  Offsets in a detector's spans are UTF-16 code units; an adapter wrapping
+  a service that counts code points must convert. See
+  `.context/privacy/llm-privacy-layer.md`.
+
+- **`emitHookEventDurably()` in `lib/orchestration/hooks/registry.ts`
+  (t-1012, #834).** It emits a hook event as `emitHookEvent()` does, and
+  returns a promise that resolves once every matching hook's
+  `AiEventHookDelivery` row has been written, without waiting on any delivery
+  attempt. It rejects when the event was not queued for every matching hook:
+  the hooks could not be loaded, a row could not be written, or the call ran
+  outside an org scope. A hook deleted since this instance cached it is
+  skipped, not counted as a failure. An outbox drainer marks its row sent only once the
+  promise resolves, and leaves it for the next pass on a rejection. Delivery is
+  at least once, so put an id in `data` a receiver can de-duplicate on.
+  `emitHookEvent()` is unchanged and stays `void`. See
+  `.context/orchestration/hooks.md`.
+
+- **Fork zones for back-relations on `Org` and `User` (t-1009, #859).**
+  `Org` (`prisma/schema/tenancy.prisma`) and `User`
+  (`prisma/schema/auth.prisma`) now end with two fixed markers, a framework
+  zone and an app zone, empty in Sunrise. A fork's back-relation lines go
+  below its own tier's marker, and Sunrise never edits below the first one.
+  Core's edits and a fork's are always separated by unchanged lines, so a
+  sync merges without a conflict, and filling a zone is not a
+  divergence-ledger row. `prisma format` already places a leaf's missing
+  back-relations in the app zone. The new
+  `tests/unit/prisma/back-relation-zones.test.ts` fails on a core field or
+  block attribute below a marker, a fork line outside its zone, a missing
+  blank line before the `@@` attributes, or a reworded marker. **On the sync
+  that brings this in**, a fork that carries a block of back-relations
+  resolves one conflict: keep both markers and move its block below its
+  tier's marker (a framework fork's below the framework marker). Then retire
+  the ledger row for it. A fork model can now relate to `User` with a Prisma
+  `@relation`, its line in `User`'s app zone, in place of a plain `userId`
+  with a hand-written foreign key (CUSTOMIZATION.md §5). Existing plain-FK
+  models keep working.
+
+- **A guard for `onDelete` on every relation to `User` (t-1009).**
+  `tests/unit/prisma/user-relation-on-delete.test.ts` fails on a `User`
+  relation, in core or any fork schema file, without `onDelete: Cascade`,
+  or `SetNull` on an optional relation. Left out, Prisma uses `Restrict` on
+  a required relation, which makes erasing that user throw `P2003`, and
+  `SetNull` on an optional one, which keeps the rows when they may be
+  personal data. The rule was a manual checklist step in
+  `.context/privacy/data-erasure.md` until now. **On the sync that brings
+  this in**, a fork with a `User` relation that leaves `onDelete` out, or uses
+  `Restrict` or `NoAction`, sees it fail and names the relation. Pick the
+  policy the failure describes.
+
+- **An org can be shown its own admin history (t-1005, #1181).**
+  `AiAdminAuditLog` gains `actingOrgId`, nullable and indexed: the org whose
+  data each action changed. `logAdminAction()` sets it, in order, from a new
+  optional `actingOrgId` on the entry, which a route passes when it changes
+  an org it may be outside of (`/api/v1/admin/orgs/[id]` quotas and
+  providers, the support-grant routes, backup export and import); then from
+  the support stamp; then from the tenant context (the install org when there
+  is none, as an unbound admin API key acts). A fork route that changes an org other than
+  the one it runs in passes `actingOrgId`; no other fork route needs a
+  change. The new
+  `GET /api/v1/orgs/[id]/audit-log` and its reader
+  `listOrgAuditLog(orgId, { page, limit, userId?, entityTypes? })`
+  (`lib/orchestration/audit/org-audit-log.ts`) return that org's rows,
+  without the IP, to its OWNER/ADMIN or a platform admin, browser session
+  only. A fork's own org-tier view reads an org's history through
+  `listOrgAuditLog()`, not a `runAsSystem` query. The model stays a system
+  model: the column is deliberately not `orgId`, which would put it under row
+  isolation. Erasing an org keeps the column (no FK). Earlier support rows
+  are backfilled from `supportOrgId`, and on an install with one org every
+  earlier row is backfilled to it; with more than one org, other earlier rows
+  name no org. The
+  support stamp (`supportGrantId`, `supportOrgId`) is unchanged.
+
+- **An org can invite someone who already has an account, and they accept
+  while signed in (t-1006, #1199).** New: `POST /api/v1/invitations/accept`
+  (`{ token, email }`, a browser session signed in as the invited, verified
+  address) and `POST /api/v1/invitations/decline` (token only), with their
+  rules in `lib/tenancy/accept-invitation.ts`.
+  `GET /api/v1/invitations/metadata` also returns `orgName`, `accountExists`,
+  `accountVerified` and `newAccountOnly`. `DELETE /api/v1/admin/invitations/[email]` takes an
+  optional `?orgId=<id|install>` to revoke only that org's invitation. The
+  admin list items (`InvitationListItem`) gain `orgId` and `orgRole`. The `invitation` email props gain optional `orgName` and
+  `hasAccount`. A fork that overrides that template should use `hasAccount` to
+  ask an existing account to sign in rather than set a password.
+  `checkInvitationInto()` now returns the org instead of `void`.
+
+- **`CI_DOCKER`: a repo variable that switches off the `docker` CI job**
+  (t-1019, #802). Docker Build + Stack Smoke is the slowest CI job, and until
+  now a fork could only stop it by editing `ci.yml`. Unset, the job runs as
+  before. **Forks:** if you deploy by other means and never ship the image,
+  run `gh variable set CI_DOCKER --body off`. If you carry this clause as a fork
+  edit today, take upstream's version and drop yours. See
+  `.context/architecture/ci.md` Knob 7.
+
+- **`npm run validate:changed`: `validate` with ESLint and Prettier scoped to
+  the branch's changed files, now what `/pre-pr` runs** (t-1021, #863). A gate
+  re-run after every review fix no longer lints and formats the whole tree.
+  Every other step, the whole-program type-check included, is unchanged. The
+  scope is the diff against the merge base with `origin/main` plus staged,
+  unstaged and untracked files. It fails closed when it cannot resolve the base.
+  A change to a lint or format config, a root `tsconfig*.json` or
+  `package-lock.json` widens that tool to the whole tree. CI's `Lint & format`
+  job still lints everything. Run whole-tree `validate` after a merge from main
+  or upstream and before a release cut. **Forks:** if you carry your own
+  `validate:changed` script or edit `/pre-pr` to call one, take upstream's and
+  drop yours. Lint a file by hand only with `--cache`: a bare `eslint <file>`
+  deletes `.eslintcache`, and on a large fork the next cold whole-tree lint can
+  abort with exit 134.
+
+- **Production CSP: the no-eval rule is documented and tested on the built
+  header, and `server-only` modules load in unit tests** (t-1020, #864). An
+  eval-using client dependency passes in development and fails only in
+  production. `.context/security/overview.md` now says why, where it usually
+  comes from, how to find the chunk with `npx next analyze`, and to fix the
+  import rather than the policy. `vitest.config.ts` aliases `server-only` to an
+  empty stub, so marking a module `import 'server-only'` no longer costs its
+  tests. New tests assert the built production header, with and without a
+  nonce, never contains `unsafe-eval`, and a fork listing it in
+  `lib/app/csp.ts` is dropped. **Forks:** if you carry the `server-only` alias,
+  its stub or the built-string test as edits, take upstream's and drop yours.
+  If you carry an `ANALYZE=true` `@next/bundle-analyzer` wrap in
+  `next.config.js`, it does not analyse a Turbopack build. Use
+  `npx next analyze`.
+
+### Changed
+
+- **`@hookform/resolvers` 7** (t-1027). This is a major, but its one
+  breaking change is in the typebox resolver, which now needs `typebox` 1.x.
+  No zod resolver file changed between 6.0.0 and 7.0.6, so forms on
+  `@hookform/resolvers/zod` behave as before. A fork using another resolver
+  should read its release notes.
+- **`check:lockfile` accepts a platform-metadata loss the registry made, given
+  a reason; Tailwind moves to 4.3.5** (t-1028). From 4.3.4,
+  `@tailwindcss/oxide-wasm32-wasi` no longer declares `cpu: ["wasm32"]`.
+  Upstream did this on purpose: the WASI build is now the fallback for
+  platforms with no native binary (tailwindcss#20685). So npm installs it,
+  about 6.5 MB, on every platform. `check:lockfile` read the lost `cpu` as npm
+  stripping metadata (#571) and failed. A loss now passes when the package's
+  entry in the new `package.json` `lockfileMetadataReasons` block moves in the
+  same diff, the same rule as `overrideReasons`. Entries are keyed per lost
+  key, `<package name>:<key>`, so a reason for a dropped `cpu` can't also pass
+  a stripped `libc`. An unexplained loss still fails, and an explained one is
+  still printed with its reason. Sunrise carries one entry,
+  `@tailwindcss/oxide-wasm32-wasi:cpu`. **Forks:** keep that block when you
+  merge, or your Lockfile metadata job fails on the Tailwind bump. A fork
+  still holding Tailwind below 4.3.4 when it merges keeps the entry, then
+  edits it in the PR that finally bumps Tailwind, since a reason answers the
+  diff that makes the loss.
+- **The embedding provider chain no longer picks a local provider (§127
+  t-1011).** With no active embedding model picked, `resolveProvider()` in
+  `lib/orchestration/knowledge/embedder.ts` tries Voyage, then an
+  OpenAI-compatible provider that is not `isLocal`. A local provider such as
+  Ollama is used for embeddings only once one of its models is picked as the
+  active embedding model and `npm run embeddings:reset` has sized the columns
+  for it. Before, adding Ollama for chat made the chain embed with it at an
+  assumed 1536 dimensions, which no local model makes, and every upload and
+  search failed. An install whose only provider is local now gets
+  `EmbeddingSetupError` saying to pick its model.
+- **A picked embedding model that cannot be used no longer falls back when it
+  is not 1536 wide (t-1011).** The columns were sized for it, so the chain's
+  1536-dimension vectors could not be stored, and the text went to the chain's
+  provider for nothing. One with no active provider of its slug, or whose
+  provider has no base URL, now throws `EmbeddingSetupError`, naming it and the
+  missing step. A 1536-wide pick still falls back, and so does an inactive one
+  or one without the `embedding` capability, which `embeddings:reset` sizes the
+  columns to 1536 for.
+- **The seeded Ollama embedding models are filed under `ollama-local`**, the
+  slug the provider form and setup wizard give an Ollama provider (t-1011).
+  They were under `ollama`, so a picked model was silently ignored through a
+  provider made by the form. `db:seed` moves rows an admin has not edited. An
+  install that named its Ollama provider `ollama` by hand and picked one of
+  these models renames the provider to `ollama-local`, or edits the model's
+  provider slug.
+
+- **`POST /api/v1/orgs/[id]/invitations` no longer answers `409 EMAIL_TAKEN`
+  for an address with an account (t-1006, #1199).** It stores and sends the
+  invitation, and answers the same whether or not the account exists. An
+  existing member of the org gets `409 ALREADY_MEMBER`. A pending invitation
+  into another org no longer refuses it. A pending platform invitation, or one
+  that cannot be read, still does. A fork client that branched on
+  `EMAIL_TAKEN` from this route should drop that branch.
+- **Pending invitations are kept one per (email, org)** under the same
+  `invitation:<email>` identifier (no migration). `validateInvitationToken()`
+  and `getInvitationMetadata()` match the token's own row rather than the
+  newest. `updateInvitationToken()` replaces only the same org's row.
+  `POST /api/v1/users/invite` reads and re-sends the pending invitation in the
+  org it targets (the install org when the body names none), not the newest
+  for the address. It answers `409 CONFLICT` rather than write a platform invitation (a platform
+  role, or the install org) and an org invitation side by side for one
+  address, the mirror of the org route's refusal. Its org invitations' emails
+  name the org. Acceptance, by password or
+  OAuth, deletes only the row it redeemed. `deleteInvitationToken()` still
+  deletes every row for the address. New helpers: `findInvitationByToken()`,
+  `consumeInvitation()`, `deleteInvitationByToken()`,
+  `deleteInvitationsInOrg()`, `pendingInvitationsFor()`, `invitationOrgSlot()`
+  and `isPlatformInvitation()`. `InvitationRecord` gains an optional `id`.
+  `POST /api/auth/accept-invite` answers `409 EMAIL_TAKEN` for an address that
+  already has an account, instead of a 500 from the failed sign-up.
+- **`POST /api/v1/users/invite` invites an address with an account into an
+  org (t-1008).** An invitation into an org other than the install org, at
+  the default `USER` role, is now stored and sent rather than refused with
+  `409 EMAIL_TAKEN`, so the admin invitations table can re-send one the org
+  route wrote. The email asks them to sign in, and the answer is the same
+  whether or not the account exists. An existing member of that org gets
+  `409 ALREADY_MEMBER`. A platform invitation (a platform role, or the
+  install org) to an address with an account is still `409 EMAIL_TAKEN`.
+  The org and the policy are checked before the address's membership of it
+  is answered. An `OWNER` org invitation, or a resend of one, needs a platform
+  admin (`403 OWNER_STANDING`), and a pending invitation the route cannot
+  read refuses a new org invitation (`409 CONFLICT`), as on the org route.
+
+### Fixed
+
+- **`<SaveError>` no longer leaves focus on the page when a tab switch lands
+  late (t-997).** After a failed save it asks a tabbed form to reveal the field
+  at fault, then looks for that field over the next few frames. A field found
+  in those frames can be on the tab being left. If the switch then committed
+  after the last look, as on a slow device or under a busy scheduler, it
+  unmounted the focused field, and focus fell to `<body>`. For two seconds
+  after the reveal, `<SaveError>` now watches the form: when the field it
+  focused unmounts and focus falls to the page with it, focus moves to the
+  revealed field, or to the error box. Focus the person moved stays put, and
+  nothing changes for a form whose switch commits in time. See
+  `.context/ui/form-errors.md`, "A field on a hidden tab".
+- **"N fields need fixing" now follows the fields as they are fixed (t-1013).**
+  After a save the form's own validation blocked, the summary by Save kept the
+  count from the press. Once every field was fixed, the field messages went
+  and the summary stayed until Save was pressed again. `useSaveFailure()` takes
+  a new `errors` option, the form's live `formState.errors`. With it, the count
+  drops as fields are fixed and the summary goes when none are left. Each such
+  update is marked with the new optional `SaveFailure.updated`, and
+  `<SaveError>` doesn't move focus for it, so the field being typed in keeps
+  focus. A server's failure, one from `show()` or `block()`, and an
+  unreadable number still stay until the next Save. All 22 Sunrise forms that report a blocked save this
+  way now pass it; the orchestration settings and webhook-subscription forms,
+  which held their failure themselves, move onto `useSaveFailure` to get it. **A fork's own forms
+  wired that way get the fix only once they pass `errors`.** The sign-up,
+  login and both reset-password forms now call `useForm` before
+  `useSaveFailure`; a fork that edited them should take that order. **Check
+  any UI you show only while `!save.failure`**: a blocked save's summary now
+  clears itself, so that UI comes back with no press. On sign-up, login and
+  accept-invite, an earlier OAuth error did exactly that; it is now cleared or
+  hidden on the first press. See
+  `.context/ui/form-errors.md`, "Recipe: a react-hook-form form".
+- **An embedding model whose vectors are not the expected width is refused
+  with a message that names it (t-1011).** `embedText()` and `embedBatch()` throw a
+  `ProviderError` with code `embedding_dimension_mismatch`, naming the model,
+  both widths and the remedy, where pgvector used to refuse the insert with
+  `expected 1536 dimensions, not 768`.
+
+- **An org's first member who isn't platform staff now becomes its `OWNER`,
+  whoever is in it already (t-1001, #1178).** The per-org bootstrap fired only
+  for an org with no members at all, so an org a vendor's staff had joined as
+  `ADMIN` gave its first real person the invitation's role (usually `MEMBER`)
+  and nobody owned it. Members who are platform staff (a platform `ADMIN`, by
+  account or by the role the invitation grants, or a SERVICE account) no
+  longer count, and never take the bootstrap themselves. It applies on both
+  ways in: an accepted invitation (`membershipForNewUser`) and `addMember`
+  with no role chosen, through one rule, the new `takesFirstOwnership()` in
+  `lib/tenancy/membership.ts`. Whoever grants it must hold owner standing, as
+  for an explicit `OWNER`: the `addMember` actor, or an invitation's issuer
+  when it is accepted (`hasOwnerStandingIn()`). The trigger is deliberately
+  not "no `OWNER` yet": an org ADMIN in an org whose last owner was erased
+  could then choose its next owner. Behaviour changes for a fork: a
+  platform admin added to an empty org with no role now lands as `MEMBER`
+  (give `OWNER` explicitly, as `POST /api/v1/admin/orgs`' `ownerUserId` does),
+  and an org whose only owner is staff makes its first non-staff member an
+  `OWNER` too. An explicit role on `addMember` is still honoured; whether an
+  invitation's explicit `orgRole` should win is #1156.
+- **An `OWNER` invitation no longer confers `OWNER` once its issuer has lost
+  owner standing (t-1015, #1235).** The issuer's standing was checked only
+  when the invitation was sent (`checkInvitationInto`), so an owner who
+  invited a second account of theirs as `OWNER`, then was demoted or removed,
+  could still have it accepted as `OWNER`. `membershipForNewUser` now asks
+  the issuer's (`invitedBy`) standing again at acceptance, on both the
+  existing-account and new-account paths, and a lapsed one lands the invitee
+  as `MEMBER`; the invitation is still accepted. So does one whose standing
+  could not be read (`undecidedMembershipsForNewUser`). A fork that issues
+  `OWNER` invitations sees no change while the issuer stays an owner or a
+  platform admin.
+- **An event-hook delivery whose process ended before its first attempt is
+  now sent (t-1012, #834).** A new `AiEventHookDelivery` row was written
+  `pending` with no `nextRetryAt`, and `processPendingHookRetries()` read only
+  rows that had failed once, so a serverless instance frozen or recycled
+  between the write and the attempt lost the event for good. A row is now
+  written holding a claim lease (`nextRetryAt` five minutes on), its first
+  attempt claims it before posting, and the tick sends a `pending` row whose
+  lease has run out. A manual retry's reset takes a lease too. A fork that
+  reads `nextRetryAt` as "has failed and will be retried" should check
+  `status` as well. Rows written before this release are not swept up.
+
+- **Schema guards read every subfolder of `prisma/schema` and share one tier
+  rule (t-1009).** Prisma loads `.prisma` files from subfolders, but the
+  schema guards (subject-access and org export, stale writers, tenancy and
+  owner classification, and others) only read the top level. A fork model in
+  `prisma/schema/app/widgets.prisma` was never checked, so a `User`-linked
+  model there could ship missing from the subject-access export with the
+  suite green. Every guard now reads the schema through
+  `scripts/ci/schema-files.ts`, which walks the whole tree and holds the one
+  tier rule: `CORE_SCHEMA_FILES` is core, a top-level file or folder named
+  `framework` or `framework-*` is the framework tier, and any other file is
+  the app tier.
+  **On the sync that brings this in**, a fork keeping models in a subfolder may
+  see the export, org-export or classification guards fail on them for the
+  first time. Declare them the way the failure says.
+
+- **A capability sees the org its chat turn runs in, at `TENANCY_MODE=multi`
+  (#1138).** The capability dispatcher is one `globalThis` instance, built in
+  the instrumentation module graph at boot, but the tenant context it read was
+  a module-level `AsyncLocalStorage`, one per graph. So a capability's queries
+  read an empty store and threw "No tenant context". The tenant context, the
+  subject context and the paid-call hold now each live on `globalThis`
+  (`sunriseTenantContext`, `sunriseSubjectContext`, `sunrisePaidCallHold`),
+  with their exports unchanged. All three move together: sharing only the
+  tenant store would have left the subject store answering `none` in the
+  dispatcher's graph, an over-wide read in place of a loud failure. If your
+  fork already patched these stores onto `globalThis` under the same keys,
+  resolve the store declarations in `lib/tenancy/context.ts`,
+  `lib/auth/subject-context.ts` and `lib/orchestration/llm/spend-caps.ts` by
+  taking upstream's, and take upstream's rows for those three files in
+  `lib/tenancy/process-state.ts`, whose holder names its test checks.
+  `tests/unit/lib/tenancy/context-shared-store.test.ts` loads each module
+  twice to prove it.
+
+### Security
+
+- **All six open Dependabot alerts cleared** (t-1027). Four needed a new
+  `overrides` entry, because the latest release of the package that brings
+  them in still pins the vulnerable copy. Each entry's `overrideReasons` says
+  when it can go. If your fork has its own `overrides` block, keep these four
+  when you merge.
+  - **GHSA-mrhx-c7xc-m3w5** (high, zod memory exhaustion). An old zod 4.1.11
+    arrives through `@vercel/blob` → `@vercel/oidc` 3 → `@vercel/cli-config`
+    0.2.0. The override `@vercel/cli-config` → `zod: "$zod"` gives it the app's
+    zod, which is the same major.
+  - **GHSA-rj75-hqrm-r3gf** (medium, postcss-selector-parser).
+    `@tailwindcss/typography` pins 6.0.10 exactly; it is overridden to
+    `^6.1.5`. The parser only runs at build time, on the app's own CSS.
+  - **GHSA-gcqx-w48m-w2h4** (low, deepmerge, which has no fixed release). It
+    came in through `@react-email/components`' exact pin of
+    `@react-email/render` 2.0.6. The override hands components the app's own
+    `@react-email/render` (now `^2.3.1`), whose `html-to-text` 10 no longer
+    uses deepmerge.
+  - **GHSA-g3hv-75wg-m249** (medium, minimatch). `typescript-eslint`'s copy is
+    overridden to `^11.0.1`. It is used by the linter only.
+  - **GHSA-3g3m-2fjr-6pw4** (medium, glob): fixed by `react-email` 6.11.8.
+  - **GHSA-474x-hrwr-fgx4** (low, fast-xml-parser): fixed by 5.12, which
+    arrives through `epub`.
+
 ## [0.18.0] — 2026-11-09
 
 > **Alpha release.** Twenty-fifth tagged Sunrise release. **MINOR bump**: one
@@ -179,9 +921,12 @@ release process.
   animation frame isn't covered**, such as a field on a hidden tab: a test of
   that still needs `waitFor`. With React's scheduler slowed by 30ms, 70 focus
   tests failed before the fix and 1 after, `follows a tab switch that lands
-  after its first look` in `tests/unit/components/forms/save-error.test.tsx`,
-  which is built on exact frame timing. CPU load alone never reproduced the
-  failure, so the slowed scheduler stands in for what CI hit. `<SaveError>`
+  after its first look` in `tests/unit/components/forms/save-error.test.tsx`.
+  *Corrected in 0.19.0:* this note first called that test "built on exact
+  frame timing". It was exposing a real defect: a tab switch that commits
+  after `<SaveError>`'s last look left focus on `<body>`, which 0.19.0 fixes
+  (t-997). CPU load alone never reproduced the failure, so the slowed
+  scheduler stands in for what CI hit. `<SaveError>`
   itself is unchanged: **don't move its focus to a layout effect**, which loses
   focus to a closing dialog's trap (`.context/ui/form-errors.md`).
 
@@ -10822,7 +11567,8 @@ Sunrise safe to fork and to merge upstream releases into.
 
 ---
 
-[Unreleased]: https://github.com/human-centric-engineering/sunrise/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/human-centric-engineering/sunrise/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/human-centric-engineering/sunrise/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/human-centric-engineering/sunrise/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/human-centric-engineering/sunrise/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/human-centric-engineering/sunrise/compare/v0.16.0...v0.17.0

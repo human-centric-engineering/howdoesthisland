@@ -108,6 +108,72 @@ describe('GET /api/v1/admin/orchestration/knowledge/embedding-status', () => {
     expect(body.data.embedded).toBe(80);
     expect(body.data.pending).toBe(20);
     expect(body.data.hasActiveProvider).toBe(true);
+    expect(body.data.providerState).toBe('ok');
+    expect(body.data.providerIsLocal).toBe(false);
+  });
+
+  it('reports providerIsLocal true when the resolved provider is local', async () => {
+    // A local provider is used only through a picked model (t-1011).
+    vi.mocked(prisma.aiOrchestrationSettings.findFirst).mockResolvedValue({
+      activeEmbeddingModelId: 'm-local',
+    } as never);
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue({
+      providerSlug: 'ollama-local',
+      modelId: 'nomic-embed-text',
+      dimensions: 768,
+      schemaCompatible: false,
+      capabilities: ['embedding'],
+      isActive: true,
+    } as never);
+    vi.mocked(prisma.aiProviderConfig.findFirst).mockResolvedValue({
+      id: 'prov-2',
+      slug: 'ollama-local',
+      providerType: 'openai-compatible',
+      baseUrl: 'http://localhost:11434/v1',
+      apiKeyEnvVar: null,
+      isLocal: true,
+      isActive: true,
+    } as never);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(body.data.hasActiveProvider).toBe(true);
+    expect(body.data.providerIsLocal).toBe(true);
+  });
+
+  it('passes on the step left to take when the only provider is local and no model is picked', async () => {
+    // t-1011: the banner shows this in place of "add a provider", which would
+    // send the operator to a cloud vendor.
+    vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([
+      {
+        id: 'prov-3',
+        slug: 'ollama-local',
+        providerType: 'openai-compatible',
+        baseUrl: 'http://localhost:11434/v1',
+        apiKeyEnvVar: null,
+        isLocal: true,
+        isActive: true,
+      },
+    ] as never);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(body.data.providerState).toBe('none_configured');
+    expect(body.data.providerSetupMessage).toContain(
+      'The local provider "ollama-local" is used for embeddings only once one of its models is picked'
+    );
+  });
+
+  it('reports providerIsLocal null when no provider resolves', async () => {
+    vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([] as never);
+
+    const res = await GET(makeRequest());
+    const body = await res.json();
+
+    expect(body.data.hasActiveProvider).toBe(false);
+    expect(body.data.providerIsLocal).toBeNull();
   });
 
   it('reports no provider when only OPENAI_API_KEY is set — the bare key no longer embeds (t-740)', async () => {
@@ -211,5 +277,25 @@ describe('GET /api/v1/admin/orchestration/knowledge/embedding-status', () => {
 
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);
+  });
+
+  it('answers ?providerOnly=true with the provider fields alone, without counting chunks', async () => {
+    const res = await GET(
+      new NextRequest(
+        'http://localhost:3000/api/v1/admin/orchestration/knowledge/embedding-status?providerOnly=true',
+        { method: 'GET' }
+      )
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      hasActiveProvider: true,
+      providerState: 'ok',
+      providerIsLocal: false,
+      providerSetupMessage: null,
+    });
+    expect(prisma.aiKnowledgeChunk.count).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 });

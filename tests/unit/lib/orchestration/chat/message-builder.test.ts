@@ -12,7 +12,8 @@ vi.mock('@/lib/logging', () => ({
 }));
 
 const { logger } = await import('@/lib/logging');
-const { buildMessages } = await import('@/lib/orchestration/chat/message-builder');
+const { buildMessages, buildMessagesAndBreakdown, isLeftOutOfHistory } =
+  await import('@/lib/orchestration/chat/message-builder');
 const { MAX_HISTORY_MESSAGES } = await import('@/lib/orchestration/chat/types');
 const { getTextContent } = await import('@/lib/orchestration/llm/types');
 
@@ -20,6 +21,123 @@ const loggerWarn = logger.warn as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('isLeftOutOfHistory', () => {
+  it('leaves out an error marker', () => {
+    expect(isLeftOutOfHistory({ error: true, errorCode: 'truncated_no_output' })).toBe(true);
+  });
+
+  it('leaves out a row a privacy refusal marked (§127 t-1014)', () => {
+    expect(isLeftOutOfHistory({ excludedFromHistory: 'privacy_blocked' })).toBe(true);
+    // A reason a later version adds is left out too, not let back in.
+    expect(isLeftOutOfHistory({ excludedFromHistory: 'some_later_reason' })).toBe(true);
+  });
+
+  it('keeps every other row, including the many with no metadata', () => {
+    for (const metadata of [
+      null,
+      undefined,
+      {},
+      { error: false },
+      { excludedFromHistory: null },
+      [],
+    ]) {
+      expect(isLeftOutOfHistory(metadata)).toBe(false);
+    }
+  });
+});
+
+describe('buildMessagesAndBreakdown sources (t-1017)', () => {
+  it('names where every message came from, and each history row by its index in what it was given', () => {
+    const history = [
+      { role: 'user', content: 'dropped by the cap' },
+      { role: 'assistant', content: '' }, // a UI marker: skipped
+      { role: 'tool', content: 'orphan', toolCallId: 'gone' }, // no call before it: dropped
+      { role: 'user', content: 'kept' },
+      { role: 'assistant', content: 'reply' },
+    ];
+    const { messages, sources } = buildMessagesAndBreakdown({
+      systemInstructions: 'sys',
+      contextBlock: 'context',
+      userMemories: [
+        { key: 'k', value: 'v' },
+        { key: 'k2', value: 'v2' },
+      ],
+      conversationSummary: 'summary',
+      omittedBeforeHistory: 3,
+      history,
+      maxHistoryMessages: 4,
+      newUserMessage: 'new',
+    });
+
+    expect(sources).toEqual([
+      { kind: 'system_prompt' },
+      { kind: 'context' },
+      { kind: 'memories' },
+      { kind: 'memory', memoryIndex: 0 },
+      { kind: 'memory', memoryIndex: 1 },
+      { kind: 'summary' },
+      { kind: 'note' },
+      { kind: 'history', historyIndex: 3 },
+      { kind: 'history', historyIndex: 4 },
+      { kind: 'user_message' },
+    ]);
+    expect(sources).toHaveLength(messages.length);
+    sources.forEach((source, i) => {
+      if (source.kind === 'history') {
+        expect(messages[i].content).toBe(history[source.historyIndex].content);
+      }
+    });
+  });
+
+  it('names a tool row and the call before it, and the unsummarised-rows note', () => {
+    const history = [
+      { role: 'user', content: 'old' },
+      { role: 'user', content: 'q' },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'c1', name: 'f', arguments: {} }],
+      },
+      { role: 'tool', content: 'result', toolCallId: 'c1' },
+    ];
+    const { sources } = buildMessagesAndBreakdown({
+      systemInstructions: 'sys',
+      contextBlock: null,
+      history,
+      maxHistoryMessages: 3,
+      newUserMessage: 'new',
+    });
+    expect(sources).toEqual([
+      { kind: 'system_prompt' },
+      { kind: 'note' },
+      { kind: 'history', historyIndex: 1 },
+      { kind: 'history', historyIndex: 2 },
+      { kind: 'history', historyIndex: 3 },
+      { kind: 'user_message' },
+    ]);
+  });
+
+  it('names an opening turn, and a message with attachments', () => {
+    const opening = buildMessagesAndBreakdown({
+      systemInstructions: 'sys',
+      contextBlock: null,
+      history: [],
+      newUserMessage: '',
+      openingTurn: 'Greet them.',
+    });
+    expect(opening.sources).toEqual([{ kind: 'system_prompt' }, { kind: 'opening_turn' }]);
+
+    const attached = buildMessagesAndBreakdown({
+      systemInstructions: 'sys',
+      contextBlock: null,
+      history: [],
+      newUserMessage: 'look',
+      attachments: [{ name: 'a.png', mediaType: 'image/png', data: 'x' }],
+    });
+    expect(attached.sources).toEqual([{ kind: 'system_prompt' }, { kind: 'user_message' }]);
+  });
 });
 
 describe('buildMessages', () => {
@@ -575,7 +693,7 @@ describe('buildMessages', () => {
 
   // ── userMemories injection ────────────────────────────────────────────────
 
-  it('injects user memories as a system message after the context block', () => {
+  it('injects user memories after the context block: a heading, then one system message each (t-1018)', () => {
     const messages = buildMessages({
       systemInstructions: 'System.',
       contextBlock: '=== LOCKED CONTEXT ===\nfoo\n=== END LOCKED CONTEXT ===',
@@ -592,13 +710,35 @@ describe('buildMessages', () => {
     expect(messages[1].role).toBe('system'); // context block
     expect(messages[1].content).toContain('LOCKED CONTEXT');
 
-    const memMsg = messages[2];
-    expect(memMsg.role).toBe('system');
-    expect(memMsg.content).toContain('[User memories]');
-    expect(memMsg.content).toContain('- language: TypeScript');
-    expect(memMsg.content).toContain('- topic: agents');
+    // One message per memory, so a refusal can say which held details.
+    expect(messages.slice(2, 5)).toEqual([
+      {
+        role: 'system',
+        content:
+          '[User memories]\nThe following are things you have previously remembered about this user:',
+      },
+      { role: 'system', content: '- language: TypeScript' },
+      { role: 'system', content: '- topic: agents' },
+    ]);
 
-    expect(messages[3]).toEqual({ role: 'user', content: 'Hi' });
+    expect(messages[5]).toEqual({ role: 'user', content: 'Hi' });
+  });
+
+  it('counts the memories in the breakdown as the one block they read as joined (t-1018)', () => {
+    const userMemories = [
+      { key: 'language', value: 'TypeScript' },
+      { key: 'topic', value: 'agents' },
+    ];
+    const { breakdown } = buildMessagesAndBreakdown({
+      systemInstructions: 'sys',
+      contextBlock: null,
+      history: [],
+      newUserMessage: 'hi',
+      userMemories,
+    });
+    const block =
+      '[User memories]\nThe following are things you have previously remembered about this user:\n- language: TypeScript\n- topic: agents';
+    expect(breakdown.userMemories).toMatchObject({ content: block, chars: block.length, count: 2 });
   });
 
   it('formats each memory as a "- key: value" bullet', () => {
@@ -613,10 +753,9 @@ describe('buildMessages', () => {
       ],
     });
 
-    const memMsg = messages.find((m) => getTextContent(m.content).includes('[User memories]'));
-    expect(memMsg).toBeDefined();
-    expect(memMsg?.content).toContain('- preferred_language: Python');
-    expect(memMsg?.content).toContain('- project_name: sunrise');
+    const texts = messages.map((m) => getTextContent(m.content));
+    expect(texts).toContain('- preferred_language: Python');
+    expect(texts).toContain('- project_name: sunrise');
   });
 
   it('does not inject a memory message when userMemories is undefined', () => {

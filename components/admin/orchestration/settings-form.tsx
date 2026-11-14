@@ -26,6 +26,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FieldHelp } from '@/components/ui/field-help';
 import { isSafeProviderUrl } from '@/lib/security/safe-url';
 import { costLogsOutliveExecutions } from '@/lib/validations/orchestration';
+import { CORE_ENTITY_TYPES, type CoreEntityType } from '@/lib/privacy/adapters/types';
+import {
+  EMBEDDINGS_POLICIES,
+  type EmbeddingsPolicy,
+  parseEmbeddingsPolicy,
+  parsePrivacyMode,
+  PRIVACY_MODE_LABELS,
+  PRIVACY_MODES_AVAILABLE,
+  protectsContent,
+} from '@/lib/orchestration/privacy/settings-policy';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -36,13 +46,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { apiClient } from '@/lib/api/client';
-import {
-  applyFieldErrors,
-  invalidSave,
-  readSaveError,
-  unreadableNumbers,
-  type SaveFailure,
-} from '@/lib/errors/save-error';
+import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { API } from '@/lib/api/endpoints';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -95,10 +99,21 @@ export interface OrchestrationSettings {
   voiceInputGloballyEnabled?: boolean;
   imageInputGloballyEnabled?: boolean;
   documentInputGloballyEnabled?: boolean;
+  /** LLM privacy layer (§127). `null` when the stored mode is not one this version knows. */
+  privacyMode?: string | null;
+  privacyIgnoredEntityTypes?: string[];
+  privacyProtectLocalProviders?: boolean;
+  privacyEmbeddingsPolicy?: string;
 }
 
 export interface SettingsFormProps {
   initialSettings: OrchestrationSettings;
+  /**
+   * Whether the provider knowledge embedding would use is marked local, from
+   * the embedding-status endpoint; `null` when none resolves or it could not
+   * be read. The privacy card warns when protection is on and it is `false`.
+   */
+  embeddingProviderIsLocal?: boolean | null;
   /**
    * Mirrors `ESCALATION_WEBHOOK_ALLOW_PRIVATE`, passed down because the form
    * cannot read a server-only env var. Without it the client guard below would
@@ -110,6 +125,59 @@ export interface SettingsFormProps {
 // ─── Client-side validation schema ──────────────────────────────────────────
 
 const GUARD_MODES = ['none', 'log_only', 'warn_and_continue', 'block'] as const;
+
+/** What each core entity type is called on the page (§127). */
+const ENTITY_TYPE_LABELS: Record<CoreEntityType, string> = {
+  PERSON: 'Names of people',
+  ORG: 'Company names',
+  EMAIL: 'Email addresses',
+  PHONE: 'Phone numbers',
+  ADDRESS: 'Street addresses',
+  POSTCODE: 'Postcodes',
+  UK_NINO: 'National Insurance numbers',
+  NHS_NUMBER: 'NHS numbers',
+  SORT_CODE: 'Sort codes',
+  BANK_ACCOUNT: 'Bank account numbers',
+  IBAN: 'IBANs',
+  CARD_NUMBER: 'Card numbers',
+  UK_UTR: 'Tax references (UTR)',
+  UK_VAT: 'VAT numbers',
+  UK_PASSPORT: 'Passport numbers',
+  UK_DRIVING_LICENCE: 'Driving licence numbers',
+  IP_ADDRESS: 'IP addresses',
+  SECRET: 'Passwords, keys and tokens',
+  DATE_OF_BIRTH: 'Dates of birth',
+  DATE: 'Other dates',
+  LOCATION: 'Place names',
+};
+
+const EMBEDDINGS_POLICY_LABELS: Record<EmbeddingsPolicy, string> = {
+  allow: 'Allow any provider',
+  local_only: 'Local providers only',
+};
+
+/**
+ * Whether `mode` protects what is sent (`pseudonymise` or stricter), so
+ * embeddings sent as they are become a gap: `protectsContent()`, the same test
+ * the stage uses for the `local_only` refusal.
+ */
+function protects(mode: string): boolean {
+  const known = parsePrivacyMode(mode);
+  return known !== null && protectsContent(known);
+}
+
+/**
+ * The select's value when the stored mode is one this page cannot show (a
+ * mode a later version wrote, or an unreadable one): keep it. Every real mode
+ * is then a choice the admin made, Off included, and is sent.
+ */
+const KEEP_STORED_MODE = 'keep';
+
+function isAvailablePrivacyMode(
+  v: string | null | undefined
+): v is (typeof PRIVACY_MODES_AVAILABLE)[number] {
+  return PRIVACY_MODES_AVAILABLE.some((m) => m === v);
+}
 const APPROVAL_ACTIONS = ['deny', 'allow'] as const;
 const ESCALATION_PRIORITY_FILTERS = ['all', 'medium_and_above', 'high'] as const;
 
@@ -123,6 +191,12 @@ const settingsFormSchema = z
     inputGuardMode: z.enum(GUARD_MODES),
     outputGuardMode: z.enum(GUARD_MODES),
     citationGuardMode: z.enum(GUARD_MODES),
+    // LLM privacy (§127). The page holds the types to PROTECT; the API stores
+    // the ones to leave alone.
+    privacyMode: z.enum([...PRIVACY_MODES_AVAILABLE, KEEP_STORED_MODE]),
+    privacyProtectedTypes: z.array(z.string()),
+    privacyProtectLocalProviders: z.boolean(),
+    privacyEmbeddingsPolicy: z.enum(EMBEDDINGS_POLICIES),
     // Limits
     globalMonthlyBudgetUsd: nullableNumber.pipe(z.number().nonnegative().max(1_000_000).nullable()),
     // Per-execution / per-turn defaults (improvement #39 runaway-loop
@@ -208,6 +282,18 @@ function guardModeToApi(v: string): string | null {
 }
 
 /**
+ * The types to leave alone, from the core types the page has unticked. Types
+ * the page does not list (a fork detector's own) keep whatever the row had.
+ */
+function ignoredTypesFrom(protectedTypes: readonly string[], stored: readonly string[]): string[] {
+  const core: readonly string[] = CORE_ENTITY_TYPES;
+  return [
+    ...stored.filter((t) => !core.includes(t)),
+    ...CORE_ENTITY_TYPES.filter((t) => !protectedTypes.includes(t)),
+  ];
+}
+
+/**
  * Server path → the field that shows its error, for the fields that render
  * one. Every other path (the selects and switches, which render no message,
  * and the escalation addresses, which live outside the form) joins the
@@ -253,9 +339,9 @@ function escalationConfigFrom(
 export function SettingsForm({
   initialSettings,
   allowPrivateEscalationWebhook = false,
+  embeddingProviderIsLocal = null,
 }: SettingsFormProps) {
   const readOnly = useSharedSettingsReadOnly();
-  const [saveFailure, setSaveFailure] = React.useState<SaveFailure | null>(null);
   const [savedAt, setSavedAt] = React.useState<Date | null>(null);
   const [savedEmails, setSavedEmails] = React.useState<string[]>(
     initialSettings.escalationConfig?.emailAddresses ?? []
@@ -357,11 +443,28 @@ export function SettingsForm({
     clearErrors('escalationEnabled');
   };
 
+  // Whether the stored mode is one the select can show. A save that writes a
+  // mode makes it so; new settings from the page start the question again.
+  const [storedPrivacyModeShown, setStoredPrivacyModeShown] = React.useState(() =>
+    isAvailablePrivacyMode(initialSettings.privacyMode)
+  );
+  React.useEffect(() => {
+    setStoredPrivacyModeShown(isAvailablePrivacyMode(initialSettings.privacyMode));
+  }, [initialSettings.privacyMode]);
+
   const defaults: SettingsFormData = React.useMemo(
     () => ({
       inputGuardMode: guardModeToForm(initialSettings.inputGuardMode),
       outputGuardMode: guardModeToForm(initialSettings.outputGuardMode),
       citationGuardMode: guardModeToForm(initialSettings.citationGuardMode),
+      privacyMode: isAvailablePrivacyMode(initialSettings.privacyMode)
+        ? initialSettings.privacyMode
+        : KEEP_STORED_MODE,
+      privacyProtectedTypes: CORE_ENTITY_TYPES.filter(
+        (t) => !(initialSettings.privacyIgnoredEntityTypes ?? []).includes(t)
+      ),
+      privacyProtectLocalProviders: initialSettings.privacyProtectLocalProviders === true,
+      privacyEmbeddingsPolicy: parseEmbeddingsPolicy(initialSettings.privacyEmbeddingsPolicy),
       globalMonthlyBudgetUsd: toStr(initialSettings.globalMonthlyBudgetUsd),
       defaultMaxCostPerExecutionUsd: toStr(initialSettings.defaultMaxCostPerExecutionUsd),
       defaultMaxCostPerTurnUsd: toStr(initialSettings.defaultMaxCostPerTurnUsd),
@@ -403,8 +506,31 @@ export function SettingsForm({
     resolver: zodResolver(formSchema),
     defaultValues: defaults,
   });
+  const save = useSaveFailure({
+    fallback: 'Could not save settings. Try again in a moment.',
+    fields: SERVER_FIELDS,
+    setError,
+    errors,
+  });
 
   const watchedHybrid = watch('hybridEnabled');
+  const watchedPrivacyMode = watch('privacyMode');
+  const watchedEmbeddingsPolicy = watch('privacyEmbeddingsPolicy');
+  // The mode in force once saved: the chosen one, or the stored one kept.
+  const effectivePrivacyMode =
+    watchedPrivacyMode === KEEP_STORED_MODE
+      ? (initialSettings.privacyMode ?? '')
+      : watchedPrivacyMode;
+  const embeddingsLeak =
+    protects(effectivePrivacyMode) &&
+    watchedEmbeddingsPolicy === 'allow' &&
+    embeddingProviderIsLocal === false;
+  // The other way round: local only, and the model that would embed is not
+  // local, so every embedding is refused.
+  const embeddingsRefused =
+    protects(effectivePrivacyMode) &&
+    watchedEmbeddingsPolicy === 'local_only' &&
+    embeddingProviderIsLocal === false;
 
   React.useEffect(() => {
     reset(defaults);
@@ -461,6 +587,16 @@ export function SettingsForm({
             inputGuardMode: guardModeToApi(values.inputGuardMode),
             outputGuardMode: guardModeToApi(values.outputGuardMode),
             citationGuardMode: guardModeToApi(values.citationGuardMode),
+            // A stored mode this page cannot show (one a later version wrote,
+            // or an unreadable one) is kept unless the admin chose a mode: a
+            // save of anything else must not quietly replace it.
+            ...(values.privacyMode !== KEEP_STORED_MODE ? { privacyMode: values.privacyMode } : {}),
+            privacyIgnoredEntityTypes: ignoredTypesFrom(
+              values.privacyProtectedTypes,
+              initialSettings.privacyIgnoredEntityTypes ?? []
+            ),
+            privacyProtectLocalProviders: values.privacyProtectLocalProviders,
+            privacyEmbeddingsPolicy: values.privacyEmbeddingsPolicy,
             globalMonthlyBudgetUsd: values.globalMonthlyBudgetUsd,
             defaultMaxCostPerExecutionUsd: values.defaultMaxCostPerExecutionUsd,
             defaultMaxCostPerTurnUsd: values.defaultMaxCostPerTurnUsd,
@@ -489,6 +625,7 @@ export function SettingsForm({
         }
       );
       reset(undefined, { keepValues: true });
+      if (values.privacyMode !== KEEP_STORED_MODE) setStoredPrivacyModeShown(true);
       setSavedEmails([...escalationEmails]);
       // Only a save that wrote the list moves this page's copy of it on. One
       // that left it alone returns the list's current version, which may
@@ -499,12 +636,7 @@ export function SettingsForm({
       }
       setSavedAt(new Date());
     } catch (err) {
-      const failure = readSaveError(err, {
-        fallback: 'Could not save settings. Try again in a moment.',
-        fields: SERVER_FIELDS,
-      });
-      applyFieldErrors(failure, setError);
-      setSaveFailure(failure);
+      save.report(err);
     }
   };
 
@@ -512,20 +644,9 @@ export function SettingsForm({
     <form
       method="post"
       noValidate
-      onSubmit={(e) => {
-        // A number the browser can't read would save as blank: block it first.
-        const unreadable = unreadableNumbers(e.currentTarget);
-        if (unreadable) {
-          e.preventDefault();
-          setSaveFailure(unreadable);
-          return;
-        }
-        // Cleared on every press: one client validation blocks never reaches onSubmit.
-        setSaveFailure(null);
-        void handleSubmit(onSubmit as Parameters<typeof handleSubmit>[0], (errors) =>
-          setSaveFailure(invalidSave(errors))
-        )(e);
-      }}
+      onSubmit={save.submit(async (e) => {
+        await handleSubmit(onSubmit as Parameters<typeof handleSubmit>[0], save.invalid)(e);
+      })}
       className="max-w-3xl space-y-6"
     >
       {/* ── Safety ──────────────────────────────────────────────────────── */}
@@ -620,6 +741,194 @@ export function SettingsForm({
               )}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── LLM privacy ─────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">LLM privacy</CardTitle>
+          <p className="text-muted-foreground text-xs">
+            Finds personal data in what agents send to external LLM providers, locally, before each
+            call. This lowers exposure; it is not anonymisation, so the providers&apos; data
+            processing agreements are still needed.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5 sm:max-w-xs">
+            <Label htmlFor="privacyMode" className="flex items-center gap-1">
+              Privacy mode
+              <FieldHelp title="What the privacy layer does">
+                <p>
+                  <strong>Off</strong> sends every call as it is. <strong>Detect</strong> also sends
+                  every call unchanged, and counts what it finds by type — names, email addresses,
+                  NI numbers and so on — on each conversation and workflow step, so you can see what
+                  agents meet before anything is changed.
+                </p>
+                <p className="mt-2">
+                  <strong>Pseudonymise</strong> replaces what it finds with placeholders such as
+                  [PERSON_1] before the call, and puts the real values back in the reply and in what
+                  tools are given, so answers read normally. <strong>Redact</strong> replaces them
+                  and never puts them back. <strong>Block</strong> refuses any call that contains
+                  them. Under pseudonymise and redact, a call that cannot be fully scanned (very
+                  large, or a detector failed) is refused rather than sent part-masked.
+                </p>
+                <p className="mt-2">
+                  Default: off on an install that was upgraded, detect on a new one. Values are
+                  never stored or logged, only counts. Embedding calls are counted, never altered;
+                  transcription is not covered.
+                </p>
+              </FieldHelp>
+            </Label>
+            <Controller
+              name="privacyMode"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="privacyMode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!storedPrivacyModeShown && (
+                      <SelectItem value={KEEP_STORED_MODE}>
+                        Keep the stored mode
+                        {initialSettings.privacyMode ? ` (${initialSettings.privacyMode})` : ''}
+                      </SelectItem>
+                    )}
+                    {PRIVACY_MODES_AVAILABLE.map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {PRIVACY_MODE_LABELS[mode]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {!storedPrivacyModeShown && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                The stored mode
+                {initialSettings.privacyMode ? ` (${initialSettings.privacyMode})` : ''} is not one
+                this page can show. Choose a mode to replace it, or keep it to leave it as it is.
+              </p>
+            )}
+          </div>
+
+          <fieldset className="space-y-2">
+            <legend className="flex items-center gap-1 text-sm font-medium">
+              What to look for
+              <FieldHelp title="Types of personal data">
+                Ticked types are looked for, then counted, replaced or refused as the mode says.
+                Unticked ones are left alone. Default: everything except other dates and place
+                names, which are common in ordinary text and rarely identify anyone on their own. A
+                type a new detector adds is looked for until you untick it here.
+              </FieldHelp>
+            </legend>
+            <Controller
+              name="privacyProtectedTypes"
+              control={control}
+              render={({ field }) => (
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {CORE_ENTITY_TYPES.map((type) => (
+                    <label key={type} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={field.value.includes(type)}
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.checked
+                              ? [...field.value, type]
+                              : field.value.filter((t) => t !== type)
+                          )
+                        }
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      {ENTITY_TYPE_LABELS[type]}
+                    </label>
+                  ))}
+                </div>
+              )}
+            />
+          </fieldset>
+
+          <div className="flex items-center gap-2">
+            <Controller
+              name="privacyProtectLocalProviders"
+              control={control}
+              render={({ field }) => (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={field.value}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Apply to local providers too
+                  <FieldHelp title="Local providers">
+                    Default: off. A provider marked local runs on infrastructure you control, so the
+                    text never leaves it and the layer skips it. Turn this on to apply the mode to
+                    local models as well.
+                  </FieldHelp>
+                </label>
+              )}
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:max-w-xs">
+            <Label htmlFor="privacyEmbeddingsPolicy" className="flex items-center gap-1">
+              Embeddings
+              <FieldHelp title="Embedding calls">
+                <p>
+                  Embedding turns text into vectors for knowledge search: uploaded documents, search
+                  queries and chat replies. Its input is counted but never masked, because a name
+                  replaced by a placeholder could not be searched for.
+                </p>
+                <p className="mt-2">
+                  <strong>Local providers only</strong> refuses embedding with a provider that is
+                  not marked local while the mode is pseudonymise, redact or block: uploads fail,
+                  knowledge search is unavailable and replies are not indexed until a local
+                  embedding model is active. Default: allow any provider.
+                </p>
+              </FieldHelp>
+            </Label>
+            <Controller
+              name="privacyEmbeddingsPolicy"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="privacyEmbeddingsPolicy">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMBEDDINGS_POLICIES.map((policy) => (
+                      <SelectItem key={policy} value={policy}>
+                        {EMBEDDINGS_POLICY_LABELS[policy]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+          {embeddingsLeak && (
+            <p
+              className="text-xs text-amber-700 dark:text-amber-400"
+              data-testid="privacy-embeddings-warning"
+            >
+              Embeddings still go to a provider that is not local. Uploaded documents, knowledge
+              search queries and chat replies reach it as written, names included. Choose a local
+              embedding model, or set embeddings to local providers only.
+            </p>
+          )}
+          {embeddingsRefused && (
+            <p
+              className="text-xs text-amber-700 dark:text-amber-400"
+              data-testid="privacy-embeddings-refused"
+            >
+              The active embedding model is not local, so with local providers only every embedding
+              is refused: document uploads fail, knowledge search is unavailable and chat replies
+              are not indexed. Choose a local embedding model to use them.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -1399,7 +1708,7 @@ export function SettingsForm({
       {/* ── Submit ─────────────────────────────────────────────────────── */}
       <div className="sticky bottom-4 space-y-2">
         {/* Only the escalation list is versioned here, so a stale save is always it (§122). */}
-        <SaveError failure={saveFailure} stale={{ what: 'The escalation list' }} />
+        <SaveError failure={save.failure} stale={{ what: 'The escalation list' }} />
         <div className="flex items-center gap-3">
           <SharedSettingsSaveHint />
           <Button type="submit" disabled={readOnly || isSubmitting || !hasChanges}>

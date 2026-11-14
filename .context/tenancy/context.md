@@ -77,8 +77,31 @@ interface TenantContext {
     | 'job'
     | 'implicit';
   role?: OrgRole | null; // the caller's role in orgId, when the entering code looked it up
+  support?: SupportEntry; // the grant a 'support' entry was admitted under (§121)
 }
 ```
+
+**One store per process, not per module graph (#1138).** Next evaluates a
+module once per module graph: the route handlers in one, `instrumentation.ts`
+in another. A `globalThis` singleton built at boot, such as the capability
+dispatcher, runs the instrumentation graph's code, so a module-level store
+would leave it reading an empty copy while the route that called it is inside
+an org, and at `multi` its queries throw "No tenant context". So the store
+lives on `globalThis` (`sunriseTenantContext`), and so do the two others such
+a singleton reads: the subject context (`sunriseSubjectContext`,
+`lib/auth/subject-context.ts`) and the paid-call hold (`sunrisePaidCallHold`,
+`lib/orchestration/llm/spend-caps.ts`). They are shared together on purpose.
+With only the tenant store shared, the dispatcher's reads would run in the
+right org, but the subject store would answer `none`, which is not narrowed by
+owner. A loud failure would become a quiet, over-wide read. Sharing the handle
+shares no contents: a scope still covers only its own call stack.
+`txScope` (`lib/db/tenancy-extension.ts`) and `invitedSignupContext`
+(`lib/auth/signup-mode.ts`) stay per graph, because each is written and read
+in one graph. Their docblocks and the
+[`process-state.ts`](../../lib/tenancy/process-state.ts) rows say why.
+[`context-shared-store.test.ts`](../../tests/unit/lib/tenancy/context-shared-store.test.ts)
+loads each shared module twice and fails if any of them goes back to module
+level.
 
 - **`getTenantContext()`** — the scope, or `null` when none was entered.
 - **`requireTenantContext()`** — the scope; at `multi` **throws** when none
@@ -86,6 +109,10 @@ interface TenantContext {
   before a query runs wide is the only safe answer); at `single` answers the
   install org marked `implicit`, the eighth source, so a log line can tell it
   from a real entry.
+- **`orgIdForCall()`** — the org a provider call is charged to or governed
+  by, for a per-org control on it (the spend caps, the LLM privacy floor):
+  the entered org, or at `single` the install org; `null` at `multi` with no
+  org, which the eligibility gate has already refused. It never throws.
 - **`requireOrgId()`** — the entered org, for a lookup that has to name it: a
   per-org unique key (`orgId_slug` on an agent, a knowledge base or a
   document, t-708) cannot be asked without saying whose `support` is meant.

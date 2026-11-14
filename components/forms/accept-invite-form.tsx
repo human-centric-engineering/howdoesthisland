@@ -21,6 +21,11 @@ import { OAuthButtons } from '@/components/forms/oauth-buttons';
 import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 import { useTimeout } from '@/lib/hooks/use-timeout';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
+import { AcceptInviteExistingAccount } from '@/components/forms/accept-invite-existing-account';
+import {
+  DeclineInvitationButton,
+  InvitationDeclined,
+} from '@/components/forms/decline-invitation-button';
 
 /** Server path → the field that shows it: every field here renders its message. */
 // No `email`: its input is read-only (the invitation's address), so a message
@@ -102,7 +107,14 @@ export function AcceptInviteForm() {
   // Build error callback URL to return here with token/email preserved
   const errorCallbackUrl = `/accept-invite?token=${encodeURIComponent(token)}&email=${encodeURIComponent(emailFromUrl)}`;
   const [success, setSuccess] = useState(false);
+  const [declined, setDeclined] = useState(false);
   const [invitationName, setInvitationName] = useState<string>('');
+  // The address already has an account: it signs in and accepts, with no
+  // password to set (#1199).
+  const [existingAccount, setExistingAccount] = useState<{
+    orgName: string | null;
+    verified: boolean;
+  } | null>(null);
 
   const {
     register,
@@ -126,6 +138,7 @@ export function AcceptInviteForm() {
     fallback: 'Failed to accept invitation. Please try again.',
     fields: SERVER_FIELDS,
     setError,
+    errors,
   });
 
   // Watch password field for strength meter
@@ -143,12 +156,34 @@ export function AcceptInviteForm() {
       try {
         setInvitationStatus('loading');
         // Fetch invitation metadata
-        const response = await apiClient.get<{ name: string; role: string }>(
+        const response = await apiClient.get<{
+          name: string;
+          role: string;
+          orgName?: string | null;
+          accountExists?: boolean;
+          accountVerified?: boolean;
+          newAccountOnly?: boolean;
+        }>(
           `${API.INVITATIONS.METADATA}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(emailFromUrl)}`
         );
 
+        // An invitation that only creates an account, for an address that
+        // already has one: nothing on this page can redeem it (#1199).
+        if (response.accountExists && response.newAccountOnly) {
+          setInvitationStatus('invalid');
+          setLoadError(
+            'You already have an account with this address, so this invitation cannot be used. Sign in to your account, or ask the person who invited you to send an invitation to your existing account.'
+          );
+          return;
+        }
+
         // Store invitation name and mark as valid
         setInvitationName(response.name);
+        setExistingAccount(
+          response.accountExists
+            ? { orgName: response.orgName ?? null, verified: response.accountVerified ?? true }
+            : null
+        );
         setInvitationStatus('valid');
         // Don't clear error if it came from OAuth redirect (preserve URL error)
         if (!oauthError) {
@@ -192,8 +227,6 @@ export function AcceptInviteForm() {
   const onSubmit = async (data: AcceptInvitationInput) => {
     try {
       setIsLoading(true);
-      // A new attempt answers an earlier OAuth failure.
-      setLoadError(null);
 
       // Submit to accept-invite endpoint (creates user, verifies email, sets role)
       await apiClient.post('/api/auth/accept-invite', {
@@ -290,6 +323,22 @@ export function AcceptInviteForm() {
     );
   }
 
+  // Declined from the form below: nothing on it can succeed any more.
+  if (declined) return <InvitationDeclined />;
+
+  // Valid invitation for an address that already has an account: sign in
+  // and accept, rather than set a password.
+  if (existingAccount) {
+    return (
+      <AcceptInviteExistingAccount
+        token={token}
+        email={emailFromUrl}
+        orgName={existingAccount.orgName}
+        accountVerified={existingAccount.verified}
+      />
+    );
+  }
+
   // Valid invitation - show the form
   return (
     <>
@@ -315,7 +364,13 @@ export function AcceptInviteForm() {
           <form
             method="post"
             noValidate
-            onSubmit={save.submit(handleSubmit(onSubmit, save.invalid))}
+            onSubmit={(e) => {
+              // A new attempt answers an earlier OAuth failure, blocked or not:
+              // a blocked save's summary clears itself as fields are fixed
+              // (t-1013), and the old OAuth error must not come back then.
+              setLoadError(null);
+              save.submit(handleSubmit(onSubmit, save.invalid))(e);
+            }}
             className="space-y-4"
           >
             {/* Hidden Token Field */}
@@ -400,6 +455,16 @@ export function AcceptInviteForm() {
           <a href="/login" className="text-primary font-medium hover:underline">
             Sign in
           </a>
+        </div>
+      )}
+
+      {!success && (
+        <div className="mt-2">
+          <DeclineInvitationButton
+            token={token}
+            email={emailFromUrl}
+            onDeclined={() => setDeclined(true)}
+          />
         </div>
       )}
     </>

@@ -36,6 +36,12 @@ import { reviewSchemaSchema } from '@/lib/orchestration/review-schema/types';
 import { provenanceItemArraySchema } from '@/lib/orchestration/provenance/types';
 import { validateScopes, listValidApiKeyScopes } from '@/lib/auth/api-key-scopes';
 import { jurisdictionSchema, orgIdSchema } from '@/lib/validations/tenancy';
+import { ENTITY_TYPE_PATTERN, PRIVACY_MODES_BY_STRICTNESS } from '@/lib/privacy/adapters/types';
+import {
+  EMBEDDINGS_POLICIES,
+  PRIVACY_MODES_AVAILABLE,
+  PRIVACY_TIGHTENING_MODES,
+} from '@/lib/orchestration/privacy/settings-policy';
 
 // ============================================================================
 // Shared Schemas
@@ -214,6 +220,7 @@ export const createAgentObjectSchema = z.object({
   inputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
+  privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
   maxHistoryTokens: z
     .number()
     .int('Max history tokens must be an integer')
@@ -415,6 +422,7 @@ export const updateAgentObjectSchema = z.object({
   inputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
+  privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
   maxHistoryTokens: z
     .number()
     .int('Max history tokens must be an integer')
@@ -1350,6 +1358,7 @@ export const bundledAgentSchema = z.object({
   inputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
+  privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
   maxHistoryTokens: z.number().int().min(1000).max(2000000).nullable().optional(),
   maxHistoryMessages: z.number().int().min(0).max(500).nullable().optional(),
   retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
@@ -3109,6 +3118,17 @@ export const updateOrchestrationSettingsSchema = z
       .min(1, 'Stuck threshold must be at least 1 minute')
       .max(1440, 'Stuck threshold must be at most 1440 minutes (24h)')
       .optional(),
+    // LLM privacy layer (§127). Only the modes this version builds: a mode
+    // chosen before the stage could apply it would refuse every call.
+    privacyMode: z.enum(PRIVACY_MODES_AVAILABLE).optional(),
+    // Exclusions. Deduplicated; an entity type name or nothing.
+    privacyIgnoredEntityTypes: z
+      .array(z.string().regex(ENTITY_TYPE_PATTERN, 'Not an entity type name'))
+      .max(100)
+      .transform((types) => [...new Set(types)])
+      .optional(),
+    privacyProtectLocalProviders: z.boolean().optional(),
+    privacyEmbeddingsPolicy: z.enum(EMBEDDINGS_POLICIES).optional(),
     // Write path: the refined variant, so an unsafe target is rejected at the
     // API boundary rather than only when the stored value is next used (#553).
     escalationConfig: escalationConfigWriteSchema.nullable().optional(),
@@ -3194,7 +3214,11 @@ export const updateOrchestrationSettingsSchema = z
       v.documentInputGloballyEnabled !== undefined ||
       v.activeEmbeddingModelId !== undefined ||
       v.defaultMaxCostPerExecutionUsd !== undefined ||
-      v.defaultMaxCostPerTurnUsd !== undefined,
+      v.defaultMaxCostPerTurnUsd !== undefined ||
+      v.privacyMode !== undefined ||
+      v.privacyIgnoredEntityTypes !== undefined ||
+      v.privacyProtectLocalProviders !== undefined ||
+      v.privacyEmbeddingsPolicy !== undefined,
     {
       message: 'At least one field must be provided',
     }
@@ -3438,6 +3462,23 @@ export const turnEntriesSchema = z.array(turnEntrySchema);
  */
 export const workflowScopeSchema = capabilityScopeSchema;
 
+/**
+ * The LLM privacy layer's per-turn or per-step counts (`PrivacySummary`).
+ * Read surfaces parse it with `.catch(() => undefined)`, so a malformed one
+ * never hides the rest of the row.
+ */
+export const privacySummarySchema = z.object({
+  mode: z.enum(PRIVACY_MODES_BY_STRICTNESS),
+  calls: z.number().int().nonnegative(),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  embeddingCalls: z.number().int().nonnegative(),
+  embeddingCounts: z.record(z.string(), z.number().int().nonnegative()),
+  degraded: z.literal(true).optional(),
+  failedAdapters: z.array(z.string()).optional(),
+  refused: z.array(z.string()).optional(),
+  unresolved: z.number().int().nonnegative().optional(),
+});
+
 export const executionTraceEntrySchema = z
   .object({
     stepId: z.string(),
@@ -3517,6 +3558,9 @@ export const executionTraceEntrySchema = z
     // resume / visited-set seeding. `.catch(() => undefined)` mirrors
     // the `turns` defence above.
     provenance: provenanceItemArraySchema.optional().catch(() => undefined),
+    // The privacy layer's counts for the step (§127). Observability only, so
+    // a malformed one is dropped rather than failing the entry.
+    privacy: privacySummarySchema.optional().catch(() => undefined),
   })
   // Forward-compat: keep unknown fields on the parsed entry so a future
   // engine version that adds a field, persists it, and is then read by
@@ -4352,6 +4396,7 @@ export const messageMetadataSchema = z.object({
   costUsd: z.number().optional(),
   pendingApproval: pendingApprovalSchema.optional(),
   reasoningSummary: z.string().optional(),
+  privacy: privacySummarySchema.optional().catch(() => undefined),
 });
 
 // ============================================================================

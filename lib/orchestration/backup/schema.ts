@@ -9,6 +9,8 @@ import { z } from 'zod';
 
 import { REASONING_EFFORTS } from '@/lib/orchestration/llm/types';
 import { agentProviderToolsField, modelParamFields } from '@/lib/validations/orchestration';
+import { EMBEDDINGS_POLICIES } from '@/lib/orchestration/privacy/settings-policy';
+import { ENTITY_TYPE_PATTERN, PRIVACY_MODES_BY_STRICTNESS } from '@/lib/privacy/adapters/types';
 
 export const agentBackupSchema = z.object({
   name: z.string(),
@@ -101,6 +103,13 @@ export const agentBackupSchema = z.object({
   inputGuardMode: z.string().nullable().optional().default(null),
   outputGuardMode: z.string().nullable().optional().default(null),
   citationGuardMode: z.string().nullable().optional().default(null),
+  // Any stored string, as a version restore takes it: one agent holding a
+  // mode this release does not know must not make the whole restore fail,
+  // and restored, that agent refuses every call until a mode is chosen,
+  // which is where it was. Absent on a backup from before t-1010, and then
+  // left absent: the restore keeps the agent's current mode, as the
+  // settings' mode is kept, rather than loosen a protection by omission.
+  privacyMode: z.string().max(64).nullable().optional(),
   maxHistoryTokens: z.number().nullable().optional().default(null),
   maxHistoryMessages: z.number().nullable().optional().default(null),
   retentionDays: z.number().nullable().optional().default(null),
@@ -185,6 +194,12 @@ const settingsBackupSchema = z.object({
   maxConversationsPerUser: z.number().nullable(),
   maxMessagesPerConversation: z.number().nullable(),
   escalationConfig: z.unknown().nullable(),
+  // LLM privacy layer (§127). Absent on a backup from before them, and then
+  // left alone on restore rather than reset.
+  privacyMode: z.enum(PRIVACY_MODES_BY_STRICTNESS).optional(),
+  privacyIgnoredEntityTypes: z.array(z.string().regex(ENTITY_TYPE_PATTERN)).max(100).optional(),
+  privacyProtectLocalProviders: z.boolean().optional(),
+  privacyEmbeddingsPolicy: z.enum(EMBEDDINGS_POLICIES).optional(),
 });
 
 /**

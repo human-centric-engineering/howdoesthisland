@@ -7,8 +7,9 @@
  * signup joins the install org, exactly as before.
  *
  * Set it to a function, and `userCreateBeforeHook` treats an uninvited signup
- * as an invitation into the org it returns. The first member of an org becomes
- * its `OWNER`, and the first session starts in it. Invited signups and the
+ * as an invitation into the org it returns. The first member who is not
+ * platform staff becomes its `OWNER` (the resolver stands as the grantor,
+ * `resolvedSignupMemberships`), and the first session starts in it. Invited signups and the
  * first human on a fresh database (a platform admin) are never asked, nor is a
  * signup whose first-admin bootstrap check failed before it could rule out the
  * first human: that signup takes the install-org default.
@@ -24,10 +25,13 @@
  *   join. A password signup's address is not verified yet (`emailVerified` is
  *   `false`), so never place one by email domain alone: anyone can type
  *   `x@acme.com`.
- * - The first member of an org becomes its `OWNER`, with no admin in the loop.
- *   Never name an org that could have no members but still holds data (one
- *   whose members all left), or that two concurrent signups could both find
- *   empty: both would be recorded as `OWNER`. And if reading the org's member
+ * - The first member who is not platform staff becomes its `OWNER`, with no
+ *   admin in the loop. Staff already in the org (a platform `ADMIN`, a SERVICE
+ *   account) do not count, so an org staff prepared still makes the signup its
+ *   `OWNER`. Never name an org that could have no non-staff members but still
+ *   holds data (one whose members all left), or that two concurrent signups
+ *   could both find empty: both would be recorded as `OWNER`. The install org
+ *   is never bootstrapped. And if reading the org's member
  *   count fails, the signup is recorded as `MEMBER`, so a new org can end up
  *   with no `OWNER` until a platform admin promotes one.
  * - It runs inside the signup request, so keep it cheap. `createOrg` also runs

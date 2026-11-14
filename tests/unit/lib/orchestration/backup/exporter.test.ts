@@ -325,6 +325,64 @@ describe('exportOrchestrationConfig', () => {
     expect(payload.data.settings?.webhookDlqRetentionDays).toBe(120);
   });
 
+  it('reads and exports the LLM privacy settings (§127)', async () => {
+    mockFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    mockFindMany.mockResolvedValueOnce([]); // knowledgeTags
+    mockFindUnique.mockResolvedValue({
+      ...settingsRow,
+      privacyMode: 'off',
+      privacyIgnoredEntityTypes: ['DATE'],
+      privacyProtectLocalProviders: true,
+      privacyEmbeddingsPolicy: 'local_only',
+    });
+
+    const payload = await exportOrchestrationConfig(SHARED_SCOPE);
+
+    expect(mockFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          privacyMode: true,
+          privacyIgnoredEntityTypes: true,
+          privacyProtectLocalProviders: true,
+          privacyEmbeddingsPolicy: true,
+        }),
+      })
+    );
+    expect(payload.data.settings).toMatchObject({
+      privacyMode: 'off',
+      privacyIgnoredEntityTypes: ['DATE'],
+      privacyProtectLocalProviders: true,
+      privacyEmbeddingsPolicy: 'local_only',
+    });
+  });
+
+  it('leaves out a stored privacy mode that is not one, so a restore keeps the target mode', async () => {
+    mockFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    mockFindMany.mockResolvedValueOnce([]); // knowledgeTags
+    mockFindUnique.mockResolvedValue({
+      ...settingsRow,
+      privacyMode: 'pseudonymize',
+      privacyIgnoredEntityTypes: 'DATE',
+      privacyProtectLocalProviders: false,
+      privacyEmbeddingsPolicy: 'local-only',
+    });
+
+    const payload = await exportOrchestrationConfig(SHARED_SCOPE);
+
+    expect(payload.data.settings).not.toHaveProperty('privacyMode');
+    expect(payload.data.settings?.privacyIgnoredEntityTypes).toEqual([]);
+    // An unreadable policy exports as the stricter one, as the layer reads it.
+    expect(payload.data.settings?.privacyEmbeddingsPolicy).toBe('local_only');
+  });
+
   it('webhook entries do not have a secret field (secrets are never exported)', async () => {
     // The Prisma select excludes secret — the row never has it
     mockFindMany
@@ -538,6 +596,27 @@ describe('exportOrchestrationConfig', () => {
     const payload = await exportOrchestrationConfig(SHARED_SCOPE);
 
     expect(payload.data.agents[0].knowledgeAccessMode).toBe('restricted');
+  });
+
+  it.each([
+    ['its mode', 'redact', 'redact'],
+    ['none for no mode', null, null],
+    // Left out, as a settings mode that is not one is: a restore then keeps
+    // the target agent's own mode rather than read none and loosen it.
+    ['absent for a stored value that is not a mode', 'off', undefined],
+  ])("exports an agent's LLM privacy mode as %s", async (_label, stored, exported) => {
+    mockFindMany
+      .mockResolvedValueOnce([{ ...agentRow, privacyMode: stored }]) // agents
+      .mockResolvedValueOnce([]) // capabilities
+      .mockResolvedValueOnce([]) // workflows
+      .mockResolvedValueOnce([]); // webhooks
+    mockFindMany.mockResolvedValueOnce([]); // knowledgeTags
+    mockFindUnique.mockResolvedValue(null);
+
+    const payload = await exportOrchestrationConfig(SHARED_SCOPE);
+
+    expect(payload.data.agents[0].privacyMode).toBe(exported);
+    expect('privacyMode' in payload.data.agents[0]).toBe(exported !== undefined);
   });
 
   it('emits knowledgeAccessMode as "full" for any non-restricted value', async () => {

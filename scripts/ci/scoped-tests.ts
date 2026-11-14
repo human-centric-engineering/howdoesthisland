@@ -120,6 +120,13 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       'an edit that removes a crossing changes no import this test follows.',
   },
   {
+    path: 'tests/unit/lib/privacy/erase-org.test.ts',
+    reason:
+      'parses `prisma/schema/orchestration-ops.prisma` to prove `AiAdminAuditLog.actingOrgId` ' +
+      'carries no relation, so erasing an org keeps its audit rows naming it (t-1005). ' +
+      'A schema-only edit adding that FK reaches this test through no import.',
+  },
+  {
     path: 'tests/unit/lib/privacy/export-sources.test.ts',
     reason:
       'parses `prisma/schema/*.prisma` and fails until every model with a ' +
@@ -166,6 +173,15 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       '`lib/tenancy/process-state.ts`. The change it exists to catch — a new ' +
       '`Map` cache in some far-off module — is one whose import graph never ' +
       'reaches this test, and an undeclared holder is a cross-org cache at multi.',
+  },
+  {
+    path: 'tests/unit/lib/privacy/pii/registry-only.test.ts',
+    reason:
+      'scans lib/, app/, components/ and scripts/ for any module other than ' +
+      'core-defaults.ts importing a core privacy detector, and any call to a ' +
+      "detector's detect method outside the runner. A direct caller would skip the timeout, " +
+      'validation and an app’s replacement, and it lives in a module whose ' +
+      'import graph never reaches this test.',
   },
   {
     path: 'tests/unit/lib/tenancy/roles.test.ts',
@@ -233,6 +249,30 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       'imports the access helper or is declared in OWNERLESS_SURFACE_EXCEPTIONS. A ' +
       'new route querying the table directly is exactly the change no import chain ' +
       'connects to this test.',
+  },
+  {
+    path: 'tests/unit/prisma/back-relation-zones.test.ts',
+    reason:
+      'parses every `prisma/schema` file off disk, at any depth, and fails when a back-relation on `Org` or ' +
+      "`User` sits outside its tier's zone, or a zone marker changed (#859). The change " +
+      'that breaks it is a schema edit, often `prisma format` appending a core line into ' +
+      'the app zone, and a `.prisma` file reaches no test through the module graph.',
+  },
+  {
+    path: 'tests/unit/scripts/ci/schema-files.test.ts',
+    reason:
+      'holds that every file in `CORE_SCHEMA_FILES` is on disk. A core `.prisma` file renamed ' +
+      'without updating the list reaches no test through the module graph, and every schema ' +
+      "guard would then treat its models as a fork's and drop them out of core's rules.",
+  },
+  {
+    path: 'tests/unit/prisma/user-relation-on-delete.test.ts',
+    reason:
+      'parses every `prisma/schema` file off disk, at any depth, and fails naming any ' +
+      'relation to `User` without `onDelete: Cascade`, or `SetNull` on an optional ' +
+      "relation. Prisma's default is Restrict, which makes erasing that user throw. The " +
+      'change that breaks it is a schema edit, and a `.prisma` file reaches no test ' +
+      'through the module graph.',
   },
   {
     path: 'tests/unit/prisma/auth-schema-parity.test.ts',
@@ -403,6 +443,15 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       'lint into a workflow of its own — should delete this entry and keep its ' +
       'own version of the guard, rather than carry a red suite about a file it ' +
       'no longer shares.',
+  },
+  {
+    path: 'tests/unit/scripts/ci/validate-changed.test.ts',
+    reason:
+      'reads `package.json` as text to hold `validate:changed` equal to ' +
+      '`validate` with only the lint and Prettier steps swapped, and its cache ' +
+      'flags equal to `lint` and `format:check`. A step added to `validate` ' +
+      'alone is a `package.json`-only edit that no import chain connects to ' +
+      'this test, and it would leave `/pre-pr` silently skipping that step.',
   },
   {
     path: 'tests/unit/app/app-icons.test.ts',

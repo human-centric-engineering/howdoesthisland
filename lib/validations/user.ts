@@ -209,7 +209,7 @@ export const inviteUserSchema = z.object({
    */
   orgId: z.string().min(1).max(200).optional(),
 
-  /** Their role in that org. Absent ⇒ MEMBER (OWNER for the first member of a new org). */
+  /** Their role in that org. Absent ⇒ MEMBER (OWNER for the org's first non-staff member). */
   orgRole: z.enum(ORG_ROLES).optional(),
 });
 
@@ -240,6 +240,18 @@ export const acceptInvitationSchema = z
   });
 
 /**
+ * An invitation link's two halves — what accepting as an existing account
+ * and declining take (#1199). No password: an existing account signs in
+ * instead, and declining needs none.
+ */
+export const invitationLinkSchema = z.object({
+  /** Invitation token from email */
+  token: z.string().min(1, 'Token is required'),
+  /** The address the invitation was sent to */
+  email: emailSchema,
+});
+
+/**
  * TypeScript types inferred from schemas
  * Use these for type-safe API handling
  */
@@ -248,6 +260,7 @@ export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type UserIdParam = z.infer<typeof userIdSchema>;
 export type InviteUserInput = z.infer<typeof inviteUserSchema>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
+export type InvitationLinkInput = z.infer<typeof invitationLinkSchema>;
 
 // Phase 3.2 additions
 export type EmailPreferencesInput = z.infer<typeof emailPreferencesSchema>;

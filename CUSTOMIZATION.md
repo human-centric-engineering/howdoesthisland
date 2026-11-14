@@ -454,6 +454,8 @@ small and conflict-free.)
 | `lib/app/capabilities.ts`                  | agent capabilities (tools)                                             | the capability registry (server route-handler)                                                                        |
 | `lib/app/context-contributors.ts`          | prompt-context loaders (`buildContext` types)                          | the chat context builder (server route-handler)                                                                       |
 | `lib/app/admin-nav.ts`                     | admin sidebar sections                                                 | `admin-sidebar.tsx` (client)                                                                                          |
+| `lib/app/admin-breadcrumbs.ts`             | names for your admin URL segments in the breadcrumb and page title     | `admin-header.tsx` (client)                                                                                           |
+| `lib/app/config-health.ts`                 | settings your app needs that the env schema leaves optional            | `runConfigHealthChecks()` → the admin overview card and critical banner (server)                                      |
 | `lib/app/admin-tier.ts`                    | the fork's admin pages an org admin may open                           | `orgTierAdminPages()` → the admin layout (server), which hands the list to `<AdminTierGate>`                          |
 | `lib/app/admin-tier-routes.ts`             | the fork's admin API routes an org admin may call (`path#NAME`)        | `tests/unit/scripts/ci/admin-tier-roster.test.ts` (CI / `/pre-pr`); the guard reads the call site                     |
 | `lib/app/admin-landing.ts`                 | where an org admin lands at `/admin`                                   | `orgAdminLanding()` → `app/admin/page.tsx` (server)                                                                   |
@@ -494,6 +496,7 @@ small and conflict-free.)
 | `lib/app/authorization.ts`                 | who may administer, and over whose data                                | `withAuth` / `withAdminAuth` / the admin layout (server)                                                              |
 | `lib/app/tenant-resolver.ts`               | which org a request is acting in (`registerAppTenantResolver`)         | `proxy.ts` at module load → the `x-sunrise-org` header (proxy runtime)                                                |
 | `lib/app/platform-agents.ts`               | agents every org gets its own instance of (`initAppPlatformAgents`)    | the platform-agent registry → its reconcile (org creation, seed, maintenance tick)                                    |
+| `lib/app/privacy-adapters.ts`              | how the LLM privacy layer finds and replaces personal data             | `getPrivacyAdapters()` → the privacy stage, before every protected provider call (server)                             |
 | `lib/app/provider-credentials.ts`          | where a provider's API key comes from (`initAppProviderCredentials`)   | the provider manager, every time a provider is fetched (server)                                                       |
 
 > **Filling a seam is expected to fail one row of a core test.**
@@ -806,6 +809,41 @@ at `multi`, or one of your named tiers, which also shows it to that tier's
 holders (see named tiers below). Mark it only when the page and the routes behind it are org-tier
 too (see [Authorization → Admin tiers](./.context/auth/authorization.md#admin-tiers)).
 
+**Admin breadcrumb labels — `lib/app/admin-breadcrumbs.ts`.** The admin
+breadcrumb is built from the URL. Name your own segments in `appSegmentLabels`;
+an entry also renames a core segment. A segment nobody names is title-cased
+(`some-section` → `Some Section`); one with a digit in it, almost always a
+record id, is left as typed. Either way the page title then falls back to
+"Admin" rather than show a guess. A page names a record id in its own URL with
+`<BreadcrumbLabel>` from `components/admin/breadcrumb-context.tsx`:
+
+```tsx
+// lib/app/admin-breadcrumbs.ts — yours to edit (ships empty)
+export const appSegmentLabels: Readonly<Record<string, string>> = {
+  'settings-profiles': 'Settings library',
+};
+
+// app/admin/widgets/[id]/page.tsx — a client child of the page
+<BreadcrumbLabel segment={widget.id} label={widget.name} />;
+```
+
+The order is: what the page registered, then this map, then core's labels, then
+the title-cased segment. The header also has an empty `#admin-header-slot`
+beside the user actions; a page can render into it with `createPortal`, for a
+brand mark or page actions. Look the node up after mount (in an effect), not
+during render: it does not exist on the server or before the header commits.
+Use one `<BreadcrumbLabel>` per segment where you can: with two (a layout's
+and a page's), the most recently registered wins, and on first mount that is
+the layout's, since React runs a child's effects first.
+
+**Config health — `lib/app/config-health.ts`.** A platform admin sees a card on
+the admin overview listing settings that are missing, and a banner on every
+admin page while a critical one is. Sunrise checks the LLM provider key, email
+and a pooled database on serverless. Add the settings your own app needs to
+`appConfigHealthChecks`; each check's `detect()` returns whether the setting is
+present, never its value. Fields and an example:
+[`.context/admin/config-health.md`](./.context/admin/config-health.md).
+
 **Org-tier admin pages — `lib/app/admin-tier.ts`.** Every admin page is the
 platform admins' alone unless it is listed as org-tier. Core lists its own in
 `ORG_TIER_ADMIN_PAGES`; list yours in the auto-wired
@@ -1099,8 +1137,9 @@ them alongside Sunrise's own. Prisma can't see these objects, so without a probe
 future `migrate dev` can silently `DROP` one and nothing notices. Fill in the
 auto-wired `registerAppDriftProbes()` with `registerAppDriftProbe({ … })` calls
 using the probe factories from `@/lib/db/drift-probes` (`indexExists`,
-`constraintExists`, `columnExists`). The single most common case is the satellite
-`User`-table FK below in §5. Full reference:
+`constraintExists`, `columnExists`). A model related to `User` or `Org` with a
+Prisma `@relation` needs none, since Prisma models its FK. The usual case is a
+model built before the zones with the plain-FK pattern in §5. Full reference:
 [`.context/database/prisma-unmodelled-objects.md`](./.context/database/prisma-unmodelled-objects.md#forks-registering-your-own-unmodelled-objects).
 
 **Per-user scheduled runs — ownership lives in `scope`, not `userId`.** A
@@ -1168,19 +1207,82 @@ upgrade rather than only new ones.
 > a versioned, reviewable migration. See
 > [`.context/database/migrations.md`](./.context/database/migrations.md).
 
+### Relating your models to `Org` and `User`
+
+Prisma relations are two-sided: a model of yours with an `org` relation (every
+tenant-owned model needs one) or a `user` relation needs a back-relation line
+on `Org` or `User`, which are core models. Both end with two zones for those
+lines (#859):
+
+```prisma
+model Org {
+  // …core's fields and back-relations…
+
+  // ── Framework zone: back-relations to framework-tier models. Sunrise never edits below here. ──
+  modules FrameworkModule[]        // a framework fork (e.g. Daybreak) writes here
+
+  // ── App zone: back-relations to app-tier models. Sunrise never edits below here. ──
+  widgets AppWidget[]              // a leaf app writes here
+
+  @@map("org")
+}
+```
+
+- **Write below your own tier's marker.** A leaf app writes in the app zone.
+  `prisma format` does that for you, since it appends a missing back-relation at
+  the end of the model. A framework fork writes in the framework zone by hand.
+- **It is not a divergence.** Sunrise never edits below the first marker, so
+  your lines and core's never touch, and a sync merges cleanly. Filling the zone
+  needs no [ledger](#the-divergence-ledger) row.
+- **Don't reword or move the markers.** They are the unchanged lines the
+  merge relies on. `tests/unit/prisma/back-relation-zones.test.ts` fails on a
+  core field or block attribute below a marker, a fork line outside its zone,
+  a marker that changed, or a missing blank line before the `@@` attributes. The tier comes
+  from the file the model is in, by the rule every schema guard shares
+  (`scripts/ci/schema-files.ts`): Sunrise's own files are core; a file or
+  folder directly in `prisma/schema` named `framework` or `framework-*` is
+  the framework tier, with everything under it; any other file, at any depth,
+  is the app tier. So `billing.prisma`, `app/widgets.prisma` and
+  `app/framework-adapters/sync.prisma` are all your app's.
+- **Adopting the zones** (a fork that carried a block in `Org` or `User` before
+  them): the sync that brings them in conflicts once where your block sits. Keep
+  both markers and move your block below your tier's marker. Then retire your
+  ledger row for it. The test above names every line still in core's list.
+
 **Adding user-related data — use a satellite table, don't edit `User`:**
 
 Resist adding columns to the core `User` model. It's the most central, most
 merge-prone platform model (better-auth and Sunrise both evolve it) — editing it
 is exactly the fork-and-edit trap that turns every upstream merge into a fight.
 Keep app-specific user data in **its own satellite table** in
-`prisma/schema/app.prisma`, linked by a plain `String` FK to `User.id`:
+`prisma/schema/app.prisma`, related to `User` with a Prisma `@relation`. Its
+back-relation goes in `User`'s app zone, as above:
 
 ```prisma
 // prisma/schema/app.prisma
 model AppUserProfile {
   id     String @id @default(cuid())
-  userId String @unique // FK to User.id — no @relation (that needs a field ON User)
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade) // personal data; SetNull (nullable FK) for retained config/audit
+  // …your app fields…
+}
+```
+
+The `onDelete` is checked by `tests/unit/prisma/user-relation-on-delete.test.ts`, which fails on a
+`User` relation without `Cascade` (or `SetNull` on an optional one). Prisma writes and
+keeps the foreign key, so there is nothing to add to the migration by hand.
+
+**The plain-FK pattern still works.** Before the zones, adding a relation
+meant editing `User`, so forks were told to use a plain `String` FK with no
+`@relation` instead. Models already built that way need no change. A new one
+should use the relation above. For an existing one, the plain FK and its
+drift probe look like this:
+
+```prisma
+// prisma/schema/app.prisma
+model AppUserProfile {
+  id     String @id @default(cuid())
+  userId String @unique // FK to User.id — no @relation
   // …your app fields…
 
   @@index([userId])
@@ -1193,12 +1295,12 @@ an explicit `ON DELETE` — by hand in the generated migration:
 ```sql
 ALTER TABLE "AppUserProfile"
   ADD CONSTRAINT "AppUserProfile_userId_fkey"
-  FOREIGN KEY ("userId") REFERENCES "User"("id")
+  FOREIGN KEY ("userId") REFERENCES "user"("id") -- User is @@map("user")
   ON DELETE CASCADE; -- personal data; SET NULL (nullable FK) for retained config/audit
 ```
 
-> ⚠️ **The schema-level `onDelete` guard does not catch a plain-scalar FK** — it
-> only reviews `@relation onDelete`, and your table has none. Skip the migration
+> ⚠️ **The `onDelete` guard (`tests/unit/prisma/user-relation-on-delete.test.ts`) does not catch a
+> plain-scalar FK** — it only reads `@relation onDelete`, and your table has none. Skip the migration
 > FK and `prisma.user.delete()` either orphans your rows (a silent GDPR retention
 > violation) or throws `P2003` (erasure breaks for every user). For residual-PII
 > scrub or external cleanup the cascade can't reach, register a hook from
@@ -1228,6 +1330,31 @@ export function registerAppDriftProbes(): void {
 `npm run db:drift-check` (CI + `/pre-pr`) now fails if the FK is dropped **or** if
 its `ON DELETE` action drifts from `CASCADE`. See
 [`.context/database/prisma-unmodelled-objects.md`](./.context/database/prisma-unmodelled-objects.md#forks-registering-your-own-unmodelled-objects).
+
+**Moving a plain-FK model to the relation** is optional, and done once per model:
+
+1. Add the `user User @relation(fields: [userId], references: [id], onDelete: …)`
+   field, with the same `onDelete` as your hand-written `ON DELETE`, and its
+   back-relation in `User`'s zone.
+2. Run `npm run db:migrate:dev -- --create-only` and read the migration
+   before applying it. If your FK has Prisma's default name, `AppUserProfile_userId_fkey`
+   as in the recipe above, the migration should drop and re-create it. If it has
+   another name, the migration may add Prisma's beside it, and you add a
+   `DROP CONSTRAINT` for yours to the same migration.
+3. After applying it, confirm exactly one FK is left on the column, with the
+   `ON DELETE` you meant:
+
+   ```sql
+   SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+   WHERE conrelid = '"AppUserProfile"'::regclass AND contype = 'f';
+   ```
+
+   Two FKs with different actions is the failure to catch: a `RESTRICT` one
+   blocks erasure whatever the other says.
+
+4. Only then remove the model's probe from `lib/app/db-drift.ts`. Prisma now owns the FK,
+   and `tests/unit/prisma/user-relation-on-delete.test.ts` fails if its `onDelete` is missing or
+   blocks erasure.
 
 Then surface the table through its own API endpoint (`app/api/v1/<resource>/`)
 and types — don't widen `User`'s public shape for app-only fields.
@@ -1671,8 +1798,9 @@ framework's ledger belongs to the framework, and arrives in your tree with it.
 core `lib/`, `app/api/v1/`, core `components/`, `proxy.ts`, platform tests,
 root config, Sunrise's docs, a deleted platform page. **What does not:**
 filling a `lib/app/*` scaffold your upstream shipped empty, adding a model to
-`prisma/schema/app.prisma`, or any new file of your own. Those ship empty to
-be filled, and merge cleanly. **On a leaf built on a framework, a scaffold the
+`prisma/schema/app.prisma`, a back-relation line in your tier's zone at the
+end of `Org` or `User` ([§5](#relating-your-models-to-org-and-user)), or any
+new file of your own. Those ship empty to be filled, and merge cleanly. **On a leaf built on a framework, a scaffold the
 framework has filled is the framework's file**: fill the hook it gives you
 (Daybreak's are the `lib/app/leaf-*` files), and an edit to the framework's
 copy is a row. Also left out are the edits every fork makes that this guide

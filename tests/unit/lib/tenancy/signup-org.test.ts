@@ -15,7 +15,13 @@ vi.mock('@/lib/db/client', () => ({ prisma: {} }));
 // not change what this file measures.
 vi.mock('@/lib/app/signup-org', () => ({ appSignupOrgResolver: null }));
 
-import { uninvitedSignupAdmission, type SignupOrgResolver } from '@/lib/tenancy/signup-org';
+import {
+  resolvedSignupMemberships,
+  uninvitedSignupAdmission,
+  type SignupOrgResolver,
+} from '@/lib/tenancy/signup-org';
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
+import { DEFAULT_ORG_ROLE, ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 
 const ORG = 'cmorg00000000000000newws1';
 const signup = { email: 'ada@example.com', name: 'Ada', emailVerified: false, role: 'USER' };
@@ -88,4 +94,53 @@ describe('uninvitedSignupAdmission', () => {
       expect(rest.at(-1)).toMatchObject({ email: 'ada@example.com' });
     }
   );
+});
+
+describe('resolvedSignupMemberships', () => {
+  // The resolver's admission names no issuer, so core's own decision lands
+  // the newcomer as MEMBER (#1235); these cases pin the fork's adaptation.
+  function membershipDb(nonStaffMembers: number) {
+    return {
+      orgMembership: { count: vi.fn(() => Promise.resolve(nonStaffMembers)) },
+      user: { findUnique: vi.fn(() => Promise.resolve(null)) },
+    } as unknown as Parameters<typeof resolvedSignupMemberships>[2];
+  }
+
+  it('makes the first person in a fresh workspace its OWNER', async () => {
+    const result = await resolvedSignupMemberships(signup, { orgId: ORG }, membershipDb(0));
+
+    expect(result.membership).toEqual({ orgId: ORG, role: ORG_OWNER_ROLE });
+  });
+
+  it('leaves a newcomer MEMBER when the org already has a non-staff member', async () => {
+    const result = await resolvedSignupMemberships(signup, { orgId: ORG }, membershipDb(1));
+
+    expect(result.membership).toEqual({ orgId: ORG, role: DEFAULT_ORG_ROLE });
+  });
+
+  it('never bootstraps the install org, whose owner follows the platform role', async () => {
+    const result = await resolvedSignupMemberships(
+      signup,
+      { orgId: INSTALL_ORG_ID },
+      membershipDb(0)
+    );
+
+    expect(result.membership).toEqual({ orgId: INSTALL_ORG_ID, role: DEFAULT_ORG_ROLE });
+  });
+
+  it('never makes a SERVICE account the owner, even of an empty org', async () => {
+    const service = { ...signup, accountType: 'SERVICE' };
+
+    const result = await resolvedSignupMemberships(service, { orgId: ORG }, membershipDb(0));
+
+    expect(result.membership.role).not.toBe(ORG_OWNER_ROLE);
+  });
+
+  it('never makes platform staff the owner, even of an empty org', async () => {
+    const admin = { ...signup, role: 'ADMIN' };
+
+    const result = await resolvedSignupMemberships(admin, { orgId: ORG }, membershipDb(0));
+
+    expect(result.membership.role).not.toBe(ORG_OWNER_ROLE);
+  });
 });

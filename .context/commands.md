@@ -15,13 +15,14 @@ npm run format           # Format code with Prettier
 npm run format:check     # Check formatting
 npm run type-check       # Run TypeScript compiler
 npm run validate         # CHANGELOG + Node version + type-check + lint + format (Prettier + Prisma) — use before commits
+npm run validate:changed # validate, but ESLint + Prettier on this branch's changed files only — what /pre-pr runs
 npm run check:changelog  # CHANGELOG.md structure only (also runs inside validate)
 npm run format:prisma:check  # Prisma schema formatting only (also runs inside validate)
 npm run format:prisma    # rewrite prisma/schema with the pinned Prisma formatter
 
 # Pre-PR checks — NOT in validate. All four compare against a base revision and
 # are run by /pre-pr; each falls back to the merge base with origin/main.
-npm run check:lockfile        # lost libc/os/cpu, and an unexplained overrides change
+npm run check:lockfile        # an unexplained lost libc/os/cpu or overrides change
 npm run check:exports         # symbols added/removed/renamed on a lib/**/index.ts barrel
 npm run check:changelog-drift # an [Unreleased] bullet a later commit on the branch made untrue
 npm run check:missing-tests   # changed files with no test (add --verbose for why; --self-test to prove it reports)

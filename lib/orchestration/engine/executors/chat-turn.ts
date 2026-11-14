@@ -44,6 +44,7 @@ import { getProviderWithFallbacks } from '@/lib/orchestration/llm/provider-manag
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { calculateCost, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { chatTurnConfigSchema } from '@/lib/validations/orchestration';
+import { agentPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import type { ExecutionContext } from '@/lib/orchestration/engine/context';
 import { ExecutorError } from '@/lib/orchestration/engine/errors';
 import { isRequestFault, ProviderError } from '@/lib/orchestration/llm/provider';
@@ -56,6 +57,7 @@ import { registerStepType } from '@/lib/orchestration/engine/executor-registry';
 import { narrowReasoningEffort } from '@/lib/orchestration/llm/model-heuristics';
 import { modelParamOptions } from '@/lib/orchestration/llm/model-params';
 import { platformSlugWhere } from '@/lib/orchestration/agents/platform-agent-guard';
+import { isLeftOutOfHistory } from '@/lib/orchestration/chat/message-builder';
 import {
   LATEST_AGENT_VERSION_ID_INCLUDE,
   readAgentConsistently,
@@ -109,7 +111,9 @@ export async function executeChatTurn(
           where: { role: { in: [...ROLES_TO_LOAD] } },
           orderBy: { createdAt: 'desc' },
           take: historyLimit,
-          select: { role: true, content: true },
+          // `metadata` for the rows left out of history (error markers, a
+          // privacy-refused turn's).
+          select: { role: true, content: true, metadata: true },
         },
       },
     }),
@@ -207,8 +211,13 @@ export async function executeChatTurn(
   const systemPrompt = composeSystemPromptString(resolvedPrompt);
 
   // 5. Prior messages, read with the conversation in step 2.
-  //    Newest-first to honour `take`; flip to chronological.
-  const priorMessagesAsc = [...conversation.messages].reverse();
+  //    Newest-first to honour `take`; flip to chronological. Without the
+  //    rows left out of history (`isLeftOutOfHistory`): error markers, and
+  //    a turn the privacy layer refused under `block` (§127 t-1014), which
+  //    resent would be refused again, every step.
+  const priorMessagesAsc = conversation.messages
+    .filter((m) => !isLeftOutOfHistory(m.metadata))
+    .reverse();
 
   // 6. Build the messages array.
   const messages: LlmMessage[] = [];
@@ -231,22 +240,26 @@ export async function executeChatTurn(
   const started = Date.now();
   let response;
   try {
-    response = await provider.chat(messages, {
-      model,
-      ...(config.temperature !== undefined
-        ? { temperature: config.temperature }
-        : agent.temperature !== null
-          ? { temperature: agent.temperature }
-          : {}),
-      ...(config.maxTokens !== undefined
-        ? { maxTokens: config.maxTokens }
-        : agent.maxTokens !== null
-          ? { maxTokens: agent.maxTokens }
-          : {}),
-      ...(effectiveReasoning !== undefined ? { reasoningEffort: effectiveReasoning } : {}),
-      ...modelParamOptions(agent),
-      signal: ctx.signal,
-    });
+    // The call is for this agent, so its own privacy mode applies (§127,
+    // t-1010), in a scope of its own inside the step's.
+    response = await runInPrivacyScope(agentPrivacyScope(agent.id), () =>
+      provider.chat(messages, {
+        model,
+        ...(config.temperature !== undefined
+          ? { temperature: config.temperature }
+          : agent.temperature !== null
+            ? { temperature: agent.temperature }
+            : {}),
+        ...(config.maxTokens !== undefined
+          ? { maxTokens: config.maxTokens }
+          : agent.maxTokens !== null
+            ? { maxTokens: agent.maxTokens }
+            : {}),
+        ...(effectiveReasoning !== undefined ? { reasoningEffort: effectiveReasoning } : {}),
+        ...modelParamOptions(agent),
+        signal: ctx.signal,
+      })
+    );
   } catch (err) {
     const billedOnFailure = err instanceof ProviderError ? err.usage : undefined;
     throw new ExecutorError(
