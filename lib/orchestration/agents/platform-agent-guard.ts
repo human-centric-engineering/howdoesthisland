@@ -313,3 +313,31 @@ export function bindingOwnerForPatch(
   }
   return requested;
 }
+
+/**
+ * Refuse a write that binds a platform agent to a provider and model its
+ * definition does not allow (`PlatformAgentDefinition.bindingRule`), as a
+ * validation error on `model`.
+ *
+ * Only a write that CHANGES provider or model is asked, compared by value like
+ * every rule here, so a client echoing the agent back, or a stranded agent
+ * being edited for something else, is not refused for the binding it already
+ * holds. An agent with no rule — an org's own, or a platform agent whose
+ * definition sets none — is never refused.
+ */
+export function assertBindingAllowed(
+  current: { isSystem: boolean; slug: string; provider: string; model: string },
+  next: { provider?: string; model?: string }
+): void {
+  if (!current.isSystem) return;
+  const rule = getPlatformAgent(current.slug)?.bindingRule;
+  if (!rule) return;
+  const binding = {
+    provider: next.provider ?? current.provider,
+    model: next.model ?? current.model,
+  };
+  if (binding.provider === current.provider && binding.model === current.model) return;
+  const refused = rule(binding);
+  if (refused === null) return;
+  throw new ValidationError(refused, { model: [refused] });
+}

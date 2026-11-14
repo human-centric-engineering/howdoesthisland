@@ -45,6 +45,7 @@ import {
 } from '@/lib/orchestration/agents/agent-versioning';
 import {
   assertAgentSlugNotReserved,
+  assertBindingAllowed,
   assertPlatformOwnedFieldsUnchanged,
   bindingOwnerForPatch,
   platformAgentEditPolicy,
@@ -175,6 +176,9 @@ export const PATCH = withAdminAuth<{ id: string }>(
       },
       body
     );
+
+    // A platform agent may limit what it is bound to (its `bindingRule`).
+    assertBindingAllowed(current, body);
 
     // No agent of the org's may take a platform agent's slug.
     if (body.slug !== undefined && body.slug !== current.slug) {
