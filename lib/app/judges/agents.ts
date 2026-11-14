@@ -122,9 +122,10 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  * These are ceilings. A call sizes its own `maxTokens` under them (§8.3: per
  * judge slot in j2, from the text's length for rewrites in rw1), and k3
  * measures it. A judge call's timeout is the approved entry's, not the
- * slot's, so a slower reasoning model is not cut short (`runJudge`, j4). Reasoning effort is left to the provider's default
- * (medium on OpenAI's reasoning models, none on Claude) until k3 chooses it;
- * these ceilings hold the reply at that default.
+ * slot's, so a slower reasoning model is not cut short (`runJudge`, j4).
+ * Reasoning effort is left to the provider's default (medium on OpenAI's
+ * reasoning models, none on Claude) until k3 chooses it; these ceilings hold
+ * the reply at that default.
  */
 const JUDGE_MAX_TOKENS = 16_384;
 const INFLUENCE_MAX_TOKENS = 32_768;

@@ -217,4 +217,15 @@ describe('JudgeModels', () => {
       body: { model: null },
     });
   });
+  it('lets an unchosen agent be put back as it was, leaving nothing to save', async () => {
+    const { user } = setup([agent({ current: null, followsDefault: false })]);
+
+    await user.click(trigger('Alpha Judge'));
+    await user.click(screen.getByRole('option', { name: 'Deep One' }));
+    expect(saveButton()).toBeEnabled();
+    await user.click(trigger('Alpha Judge'));
+    await user.click(screen.getByRole('option', { name: 'No model chosen' }));
+
+    expect(saveButton()).toBeDisabled();
+  });
 });

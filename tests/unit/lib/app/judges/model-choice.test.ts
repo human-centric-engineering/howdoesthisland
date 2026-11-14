@@ -72,6 +72,7 @@ function agentRow(over: Record<string, unknown> = {}) {
     provider: 'openai',
     model: 'gpt-4.1',
     providerConfig: null,
+    fallbackProviders: [],
     bindingOwner: 'platform',
     isSystem: true,
     grantedTags: [],
@@ -264,6 +265,23 @@ describe('chooseJudgeModel on an approved, available model', () => {
       fallbackProviders: ['groq'],
     });
     expect(db.versionCreate.mock.calls[0][0].data.changeSummary).toMatch(/Fallback/i);
+  });
+
+  it('audits the fallbacks it drops', async () => {
+    db.findFirst.mockResolvedValue(agentRow({ fallbackProviders: ['anthropic', 'groq'] }));
+    const both = () =>
+      Promise.resolve([...OPENAI, { provider: 'anthropic', model: 'claude-sonnet-4' }]);
+    await chooseJudgeModel({
+      orgId: ORG,
+      key: 'judge_ethos',
+      model: 'claude-sonnet-4',
+      userId: 'user-1',
+      availability: both,
+    });
+    expect(mockAudit.mock.calls[0][0].changes.fallbackProviders).toEqual({
+      from: ['anthropic', 'groq'],
+      to: ['groq'],
+    });
   });
 
   it('keeps the fallbacks when the provider stays the same', async () => {

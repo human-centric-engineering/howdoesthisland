@@ -77,7 +77,6 @@ import { prisma } from '@/lib/db/client';
 import { judgeAgentSlug } from '@/lib/app/judges/agents';
 import { CHOOSABLE_AGENTS } from '@/lib/app/judges/model-choice';
 import { createMockAuthSession } from '@/tests/helpers/auth';
-import { getTenantContext } from '@/lib/tenancy/context';
 
 const WS = 'cmorg000000000000000team1';
 const ETHOS = judgeAgentSlug('judge_ethos');
@@ -146,6 +145,7 @@ const ethosRow = {
   provider: 'openai',
   model: 'gpt-4.1',
   providerConfig: null,
+  fallbackProviders: [],
   bindingOwner: 'platform',
   isSystem: true,
   grantedTags: [],
@@ -209,20 +209,27 @@ describe('GET /api/v1/workspaces/[id]/judges', () => {
     expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
   });
 
-  it('reads a platform admin’s target workspace in its own tenant context', async () => {
+  it('refuses a platform admin acting in another workspace, reading nothing', async () => {
     const OTHER = 'cmorg0000000000000000org2';
     mockGetSession.mockResolvedValue({
       ...session(OTHER),
       user: { ...session(OTHER).user, role: 'ADMIN' },
     });
-    let readIn: string | null | undefined;
-    vi.mocked(prisma.aiAgent.findMany).mockImplementation((() => {
-      readIn = getTenantContext()?.orgId;
-      return Promise.resolve([]);
-    }) as never);
 
+    const res = await get();
+    expect(res.status).toBe(403);
+    expect((await json(res)).error.message).toContain('Switch to this workspace');
+    expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
+    expect((await patch('judge_ethos', { model: 'gpt-5' })).status).toBe(403);
+    expect(prisma.aiAgent.update).not.toHaveBeenCalled();
+  });
+
+  it('serves a platform admin who entered the workspace', async () => {
+    mockGetSession.mockResolvedValue({
+      ...session(WS),
+      user: { ...session(WS).user, role: 'ADMIN' },
+    });
     expect((await get()).status).toBe(200);
-    expect(readIn).toBe(WS);
   });
 
   it('refuses an API-key caller at the guard', async () => {

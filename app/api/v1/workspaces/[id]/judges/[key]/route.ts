@@ -13,7 +13,7 @@
  * - 400 `WORKSPACES_UNAVAILABLE` — `TENANCY_MODE=single`.
  * - 401 `UNAUTHORIZED` — no session.
  * - 403 `FORBIDDEN` — an API key, a `MEMBER`, someone outside the workspace,
- *   or a workspace that does not exist (the policy's one answer).
+ *   a caller acting in another workspace, or a workspace that does not exist.
  * - 404 `NOT_FOUND` — no such judge, or the workspace has no agent for it.
  * - 409 `CONFLICT` — the agent changed at the same moment elsewhere.
  *
@@ -27,7 +27,7 @@ import { getClientIP } from '@/lib/security/ip';
 import { chooseJudgeModel } from '@/lib/app/judges/model-choice';
 import {
   WORKSPACE_JUDGES_RESOURCE,
-  inWorkspace,
+  requireEnteredWorkspace,
   refuseJudgesRequest,
 } from '@/lib/app/judges/route-access';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
@@ -42,15 +42,14 @@ export const PATCH = withAuth<{ id: string; key: string }>(async (request, sessi
   );
   const body = await validateRequestBody(request, chooseJudgeModelSchema);
 
-  const choice = await inWorkspace(id, () =>
-    chooseJudgeModel({
-      orgId: id,
-      key,
-      model: body.model,
-      userId: session.user.id,
-      clientIp: getClientIP(request),
-    })
-  );
+  requireEnteredWorkspace(id);
+  const choice = await chooseJudgeModel({
+    orgId: id,
+    key,
+    model: body.model,
+    userId: session.user.id,
+    clientIp: getClientIP(request),
+  });
   log.info('Judge model chosen', { orgId: id, key, model: body.model, userId: session.user.id });
   return successResponse(choice);
 }, WORKSPACE_JUDGES_RESOURCE);

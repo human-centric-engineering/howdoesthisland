@@ -162,10 +162,8 @@ export function JudgeModels({ orgId, agents: initial }: JudgeModelsProps) {
                           {o.label}
                         </SelectItem>
                       ))}
-                      {pick === UNCHOSEN_VALUE ? (
-                        <SelectItem value={UNCHOSEN_VALUE} disabled>
-                          No model chosen
-                        </SelectItem>
+                      {selectedValue(agent) === UNCHOSEN_VALUE ? (
+                        <SelectItem value={UNCHOSEN_VALUE}>No model chosen</SelectItem>
                       ) : null}
                       {offPick ? (
                         <SelectItem value={offPick.model} disabled>

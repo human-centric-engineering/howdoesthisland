@@ -104,6 +104,11 @@ function offered(
   );
 }
 
+/** The one agent row a choice reads and writes: live, the workspace's, by slug. */
+function agentWhere(orgId: string, agent: ChoosableAgent) {
+  return { orgId, slug: agent.slug, isSystem: true, deletedAt: null };
+}
+
 function agentByKey(key: string): ChoosableAgent {
   const agent = CHOOSABLE_AGENTS.find((a) => a.key === key);
   if (!agent) throw new NotFoundError(`No judge or editor called "${key}"`);
@@ -185,15 +190,17 @@ export interface ChooseJudgeModelInput {
  */
 export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<JudgeModelChoice> {
   const agent = agentByKey(input.key);
-  const current = await prisma.aiAgent.findFirst({
-    where: { orgId: input.orgId, slug: agent.slug, isSystem: true, deletedAt: null },
-    include: {
-      grantedTags: { select: { tagId: true } },
-      grantedDocuments: { select: { documentId: true } },
-    },
-  });
+  const [current, available] = await Promise.all([
+    prisma.aiAgent.findFirst({
+      where: agentWhere(input.orgId, agent),
+      include: {
+        grantedTags: { select: { tagId: true } },
+        grantedDocuments: { select: { documentId: true } },
+      },
+    }),
+    (input.availability ?? grantedCatalogueAvailability)(),
+  ]);
   if (!current) throw new NotFoundError(`This workspace has no agent for "${input.key}"`);
-  const available = await (input.availability ?? grantedCatalogueAvailability)();
 
   if (input.model === null) {
     if (current.bindingOwner !== 'platform') {
@@ -218,9 +225,10 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
   }
 
   // The request names a model, not a provider: it is matched against what
-  // this workspace is offered, so the entry is the one on an available
-  // provider.
-  const entry = offered(agent, available).find((e) => e.model === input.model);
+  // this workspace is offered, on the agent's current provider first, so a
+  // re-save never moves it to another provider offering the same model.
+  const matches = offered(agent, available).filter((e) => e.model === input.model);
+  const entry = matches.find((e) => e.provider === current.provider) ?? matches[0];
   if (!entry) {
     const listed = APPROVED_MODELS[agent.role].find((e) => e.model === input.model);
     const message = listed
@@ -238,9 +246,10 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
   // `providerConfig` stays, as it does when the agent PATCH or the platform's
   // reconcile moves the provider: it is the workspace's to set.
   const providerChanged = current.provider !== entry.provider;
-  const currentFallbacks = current.fallbackProviders ?? [];
-  const fallbacks = currentFallbacks.filter((slug) => slug !== entry.provider);
-  const fallbacksChanged = fallbacks.length !== currentFallbacks.length;
+  const fallbacks = providerChanged
+    ? current.fallbackProviders.filter((slug) => slug !== entry.provider)
+    : current.fallbackProviders;
+  const fallbacksChanged = fallbacks.length !== current.fallbackProviders.length;
   const data = {
     provider: entry.provider,
     model: entry.model,
@@ -305,8 +314,18 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
     entityId: current.id,
     entityName: current.name,
     changes: computeChanges(
-      { provider: current.provider, model: current.model, bindingOwner: current.bindingOwner },
-      { provider: updated.provider, model: updated.model, bindingOwner: updated.bindingOwner }
+      {
+        provider: current.provider,
+        model: current.model,
+        bindingOwner: current.bindingOwner,
+        fallbackProviders: current.fallbackProviders,
+      },
+      {
+        provider: updated.provider,
+        model: updated.model,
+        bindingOwner: updated.bindingOwner,
+        fallbackProviders: updated.fallbackProviders,
+      }
     ),
     clientIp: input.clientIp ?? null,
   });
@@ -321,7 +340,7 @@ async function choiceFor(
   available: readonly AvailableModel[]
 ): Promise<JudgeModelChoice> {
   const row = await prisma.aiAgent.findFirst({
-    where: { orgId, slug: agent.slug, isSystem: true, deletedAt: null },
+    where: agentWhere(orgId, agent),
     select: { name: true, provider: true, model: true, bindingOwner: true },
   });
   if (!row) throw new NotFoundError(`This workspace has no agent for "${agent.key}"`);
