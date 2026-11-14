@@ -226,6 +226,14 @@ describe('reserved fork tiers', () => {
       'enum FrameworkVersionStatus {',
       'model FrameworkNode {',
       'model FrameworkLink {',
+      // FORK (HowDoesThisLand): assessments (t-22).
+      'model Content {',
+      'enum ContentSourceKind {',
+      'model Assessment {',
+      'enum AssessmentStatus {',
+      'enum AssessmentVia {',
+      'model JudgeRun {',
+      'enum JudgeRunStatus {',
     ]);
   });
 

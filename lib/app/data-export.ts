@@ -114,6 +114,18 @@ export function initAppSubjectSources(): void {
         description:
           'Invitations into a workspace that were sent to you, and the ones you sent (without who they went to).',
       },
+      {
+        model: 'Content',
+        section: 'contents',
+        disposition: 'export',
+        description: 'Texts you added to a workspace to be assessed, with where each came from.',
+      },
+      {
+        model: 'Assessment',
+        section: 'assessments',
+        disposition: 'export',
+        description: 'Assessments you asked for, with their scores and results.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -121,6 +133,11 @@ export function initAppSubjectSources(): void {
         model,
         reason: 'Shared model records (the persuasion framework), with no user column.',
       })),
+      {
+        model: 'JudgeRun',
+        reason:
+          'One judge’s part of an assessment, with no user column; what it found is in the assessment’s result, which is exported.',
+      },
     ],
   });
 }
@@ -135,7 +152,7 @@ export function initAppSubjectSources(): void {
  * change the signature just to add one.
  */
 export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
-  const [received, sent] = await Promise.all([
+  const [received, sent, contents, assessments] = await Promise.all([
     // The ones to them, without the inviter's id (their name is in the
     // invitation email, and the id is someone else's data).
     prisma.workspaceInvitation.findMany({
@@ -149,11 +166,22 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       omit: { userId: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // What they added and asked for (t-22). The workspace keeps these rows
+    // after they leave; this is their copy of what they created.
+    prisma.content.findMany({ where: { createdByUserId: userId }, orderBy: { createdAt: 'asc' } }),
+    prisma.assessment.findMany({
+      where: { createdByUserId: userId },
+      // The lease is the job's bookkeeping, not data about anyone.
+      omit: { leaseToken: true, leaseExpiresAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
   return {
     workspaceInvitations: [
       ...received.map((row) => ({ ...row, yourPart: 'invitee' as const })),
       ...sent.map((row) => ({ ...row, yourPart: 'inviter' as const })),
     ],
+    contents,
+    assessments,
   };
 }

@@ -102,6 +102,35 @@ export function initAppOrgSources(): void {
             orderBy: { createdAt: 'asc' },
           }),
       },
+      {
+        model: 'Content',
+        section: 'contents',
+        disposition: 'export',
+        description: 'Texts added to the workspace to be assessed, with where each came from.',
+        fetch: ({ orgId }) =>
+          prisma.content.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
+      {
+        model: 'Assessment',
+        section: 'assessments',
+        disposition: 'export',
+        description: 'Assessments run in the workspace, with their scores and results.',
+        fetch: ({ orgId }) =>
+          prisma.assessment.findMany({
+            where: ownedBy(orgId),
+            // The lease is the job's bookkeeping.
+            omit: { leaseToken: true, leaseExpiresAt: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+      },
+      {
+        model: 'JudgeRun',
+        section: 'judgeRuns',
+        disposition: 'export',
+        description: 'Each judge’s part of an assessment: its model, cost, reply and any failure.',
+        fetch: ({ orgId }) =>
+          prisma.judgeRun.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
     ],
     excluded: [],
   });

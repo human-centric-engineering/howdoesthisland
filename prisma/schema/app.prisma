@@ -90,6 +90,7 @@ model FrameworkVersion {
   updatedAt      DateTime               @updatedAt
   nodes          FrameworkNode[]
   links          FrameworkLink[]
+  assessments    Assessment[]
 
   @@unique([frameworkId, version])
   @@map("app_framework_version")
@@ -140,4 +141,145 @@ model FrameworkLink {
   @@unique([versionId, fromNodeId, toNodeId, relation])
   @@index([toNodeId])
   @@map("app_framework_link")
+}
+
+// ─── Assessments (t-22, f-assessments) ───────────────────────────────────────
+//
+// A text, the assessments run on it, and each judge's run. Design:
+// .context/app/planning/app-plan.md §8.2, §9; .context/app/assessments.md.
+// All three are tenant-owned (`orgId`, cascade, `org_isolation`): they are the
+// workspace's, so a member's erasure clears the user columns and leaves the
+// rows. User and API-key columns are plain strings with hand-written FKs in the
+// migration, so core's `User` and `AiApiKey` are not edited.
+
+/// A text an assessment judged, as intake produced it. Kept so a run can be
+/// re-driven, and purged by the workspace's retention window (t-26).
+model Content {
+  id              String            @id @default(cuid())
+  orgId           String?
+  org             Org?              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// The project it belongs to (f-projects). No FK until that model exists.
+  projectId       String?
+  title           String?
+  sourceKind      ContentSourceKind
+  sourceUrl       String?
+  fileName        String?
+  text            String
+  textSha256      String
+  wordCount       Int
+  /// Who added it. FK → user, ON DELETE SET NULL (the workspace keeps it).
+  createdByUserId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  assessments     Assessment[]
+
+  @@index([orgId, createdAt])
+  @@map("app_content")
+}
+
+enum ContentSourceKind {
+  TEXT
+  FILE
+  URL
+}
+
+/// One assessment of a content row against one framework version: the quick
+/// scan, then the judges its profile chose, assembled. Runs as a job under a
+/// lease (`lib/app/assessments/run.ts`).
+model Assessment {
+  id                 String           @id @default(cuid())
+  orgId              String?
+  org                Org?             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contentId          String
+  content            Content          @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  projectId          String?
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
+  /// The profile asked for (`quick`, `full`, a catalogue group), or `custom`
+  /// for an explicit list of judges.
+  profile            String
+  /// The judge slots the profile resolved to when it was asked for, in order.
+  judges             String[]
+  /// Who the text is for (the engine's context), as validated at intake.
+  context            Json
+  status             AssessmentStatus @default(QUEUED)
+  /// The engine's `assemble()` output, once the run is final.
+  result             Json?
+  overall            Float?
+  band               String?
+  /// What every judge run cost, summed.
+  costUsd            Float            @default(0)
+  /// Why the run failed, for `FAILED`. A partial run's reasons are on its judge runs.
+  error              String?
+  /// Runs started on it. The recovery job gives up after three.
+  attempts           Int              @default(0)
+  leaseToken         String?
+  leaseExpiresAt     DateTime?
+  requestedVia       AssessmentVia
+  /// The API key it came through. FK → ai_api_key, ON DELETE SET NULL.
+  apiKeyId           String?
+  /// Who asked for it. FK → user, ON DELETE SET NULL.
+  createdByUserId    String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  judgeRuns          JudgeRun[]
+
+  @@index([orgId, status])
+  @@index([status, leaseExpiresAt])
+  @@index([contentId])
+  @@map("app_assessment")
+}
+
+enum AssessmentStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum AssessmentVia {
+  APP
+  API
+}
+
+/// One judge's run within an assessment, saved as it lands. A failed judge's
+/// dimensions fall back to the quick scan, and its row says why.
+model JudgeRun {
+  id           String         @id @default(cuid())
+  orgId        String?
+  org          Org?           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assessmentId String
+  assessment   Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  judge        String
+  status       JudgeRunStatus
+  provider     String?
+  modelName    String?
+  /// Provider attempts billed (the runner's one retry makes two).
+  attempts     Int            @default(0)
+  costUsd      Float          @default(0)
+  /// `{ input, output }` tokens across the attempts.
+  tokens       Json?
+  latencyMs    Int?
+  /// The engine's post-validated reply, which `assemble()` reads.
+  output       Json?
+  /// What post-validation dropped or changed in the reply.
+  dropped      Json?
+  /// For `FAILED`: the `JudgeRunError` code, and its message.
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([assessmentId, judge])
+  @@index([orgId])
+  @@map("app_judge_run")
+}
+
+enum JudgeRunStatus {
+  SUCCEEDED
+  FAILED
 }

@@ -73,6 +73,15 @@ export function initAppOwnerClassification(): void {
         because:
           'The workspace’s record of who it invited; its owners and admins manage it. `userId` is the invitee, who reads their own through a system-scope read filtered by their id.',
       },
+      // t-22: the workspace's, read by every member; `createdByUserId` is who added or asked.
+      Content: {
+        kind: 'not-personal',
+        because: 'A text the workspace assessed; `createdByUserId` is who added it.',
+      },
+      Assessment: {
+        kind: 'not-personal',
+        because: 'An assessment the workspace ran; `createdByUserId` is who asked for it.',
+      },
     },
   });
 }
