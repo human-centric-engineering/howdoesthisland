@@ -16,7 +16,7 @@
  * The ETag of a version response is computed from the version's identity, not
  * its body: a published version cannot change, so a 304 costs no materialise.
  */
-import { z } from 'zod';
+import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
 import { withheldSections } from '@/lib/app/frameworks/culture';
 import { isJsonObject } from '@/lib/app/frameworks/codec';
 import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
@@ -55,22 +55,15 @@ const defaultDeps: FrameworkApiDeps = {
   repo: prismaFrameworkRepo,
 };
 
-// Path segments are checked before any query: anything else cannot name a
-// record, so it is the same 404 a well-formed unknown value gets.
-const slugParam = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
-const versionParam = z
-  .string()
-  .max(64)
-  .regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
-const kindParam = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
-
-export interface VersionSummary {
+// A type, not an interface, so the meta types built on it stay assignable to
+// the `Record<string, unknown>` a success envelope's `meta` takes.
+export type VersionSummary = {
   version: string;
   schemaVersion: string;
   status: 'published' | 'retired';
   publishedAt: string | null;
   sourceSha256: string;
-}
+};
 
 export interface FrameworkSummary {
   slug: string;
@@ -190,7 +183,22 @@ export function versionETagSource(resolved: ResolvedVersion, kind?: string): unk
   };
 }
 
-function versionMeta(resolved: ResolvedVersion): Record<string, unknown> {
+/** The `meta` of a version response. */
+export type VersionMeta = VersionSummary & {
+  framework: string;
+  /** Sections a switch withholds; absent when none is. */
+  omitted?: string[];
+};
+
+/** The `meta` of a kind response. `parentKind` and `parents` only for a nested kind. */
+export type KindMeta = VersionMeta & {
+  kind: string;
+  count: number;
+  parentKind?: string | null;
+  parents?: Record<string, string>;
+};
+
+function versionMeta(resolved: ResolvedVersion): VersionMeta {
   const { framework, version, omitted } = resolved;
   return {
     framework: framework.slug,
@@ -203,7 +211,7 @@ function versionMeta(resolved: ResolvedVersion): Record<string, unknown> {
 export async function versionDocument(
   resolved: ResolvedVersion,
   deps = defaultDeps
-): Promise<{ data: JsonObject; meta: Record<string, unknown> }> {
+): Promise<{ data: JsonObject; meta: VersionMeta }> {
   const model = await materialise(deps.repo, resolved.def, resolved.version.id);
   const data = resolved.omitted.length
     ? Object.fromEntries(Object.entries(model).filter(([key]) => !resolved.omitted.includes(key)))
@@ -236,7 +244,7 @@ export async function kindRecords(
   resolved: ResolvedVersion,
   kind: string,
   deps = defaultDeps
-): Promise<{ data: JsonObject[]; meta: Record<string, unknown> }> {
+): Promise<{ data: JsonObject[]; meta: KindMeta }> {
   const { def } = resolved;
   assertServedKind(resolved, kind);
   const model = await materialise(deps.repo, def, resolved.version.id);

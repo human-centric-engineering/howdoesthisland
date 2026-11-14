@@ -70,4 +70,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/judges/',
   // Assessments as a durable job: enqueue, run, recovery (t-22).
   'lib/app/assessments/',
+  // The route registry: the contract of every app route (t-23).
+  'lib/app/api/',
 ];
