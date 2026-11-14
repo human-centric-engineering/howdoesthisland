@@ -20,51 +20,37 @@
  * Who may call it: as `GET …/judges`.
  */
 import { withAuth } from '@/lib/auth/guards';
-import { isApiKeySession } from '@/lib/auth/api-keys';
-import { successResponse, errorResponse } from '@/lib/api/responses';
-import { ForbiddenError } from '@/lib/api/errors';
+import { successResponse } from '@/lib/api/responses';
 import { validateQueryParams, validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
-import { resolveOrgResource } from '@/lib/tenancy/lifecycle';
-import { isMultiTenant } from '@/lib/tenancy/context';
 import { getClientIP } from '@/lib/security/ip';
 import { chooseJudgeModel } from '@/lib/app/judges/model-choice';
+import {
+  WORKSPACE_JUDGES_RESOURCE,
+  inWorkspace,
+  refuseJudgesRequest,
+} from '@/lib/app/judges/route-access';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
-
-const RESOURCE = {
-  resource: async (_request: unknown, context?: { params: Promise<{ id: string }> }) =>
-    resolveOrgResource(await context?.params),
-  ownership: {
-    decidedBy: 'resource',
-    because:
-      "The policy admitted the caller to the workspace the URL names; only that resolved org's agent is written.",
-  },
-} as const;
 
 export const PATCH = withAuth<{ id: string; key: string }>(async (request, session, { params }) => {
   const log = await getRouteLogger(request);
-  if (isApiKeySession(session)) {
-    throw new ForbiddenError('Choosing judge models requires a browser session');
-  }
-  if (!isMultiTenant()) {
-    return errorResponse('Workspaces are not available on this install', {
-      code: 'WORKSPACES_UNAVAILABLE',
-      status: 400,
-    });
-  }
+  const refused = refuseJudgesRequest(session);
+  if (refused) return refused;
   const { id, key } = validateQueryParams(
     new URLSearchParams(await params),
     judgeModelParamsSchema
   );
   const body = await validateRequestBody(request, chooseJudgeModelSchema);
 
-  const choice = await chooseJudgeModel({
-    orgId: id,
-    key,
-    model: body.model,
-    userId: session.user.id,
-    clientIp: getClientIP(request),
-  });
+  const choice = await inWorkspace(id, () =>
+    chooseJudgeModel({
+      orgId: id,
+      key,
+      model: body.model,
+      userId: session.user.id,
+      clientIp: getClientIP(request),
+    })
+  );
   log.info('Judge model chosen', { orgId: id, key, model: body.model, userId: session.user.id });
   return successResponse(choice);
-}, RESOURCE);
+}, WORKSPACE_JUDGES_RESOURCE);

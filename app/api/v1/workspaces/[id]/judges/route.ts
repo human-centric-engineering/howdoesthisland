@@ -19,35 +19,20 @@
  * while acting in it, or a platform admin.
  */
 import { withAuth } from '@/lib/auth/guards';
-import { isApiKeySession } from '@/lib/auth/api-keys';
-import { successResponse, errorResponse } from '@/lib/api/responses';
-import { ForbiddenError } from '@/lib/api/errors';
+import { successResponse } from '@/lib/api/responses';
 import { validateQueryParams } from '@/lib/api/validation';
 import { orgIdParamSchema } from '@/lib/validations/tenancy';
-import { resolveOrgResource } from '@/lib/tenancy/lifecycle';
-import { isMultiTenant } from '@/lib/tenancy/context';
 import { listJudgeModels } from '@/lib/app/judges/model-choice';
-
-const RESOURCE = {
-  resource: async (_request: unknown, context?: { params: Promise<{ id: string }> }) =>
-    resolveOrgResource(await context?.params),
-  ownership: {
-    decidedBy: 'resource',
-    because:
-      "The policy admitted the caller to the workspace the URL names; only that resolved org's agents are read.",
-  },
-} as const;
+import {
+  WORKSPACE_JUDGES_RESOURCE,
+  inWorkspace,
+  refuseJudgesRequest,
+} from '@/lib/app/judges/route-access';
 
 export const GET = withAuth<{ id: string }>(async (_request, session, { params }) => {
-  if (isApiKeySession(session)) {
-    throw new ForbiddenError('Choosing judge models requires a browser session');
-  }
-  if (!isMultiTenant()) {
-    return errorResponse('Workspaces are not available on this install', {
-      code: 'WORKSPACES_UNAVAILABLE',
-      status: 400,
-    });
-  }
+  const refused = refuseJudgesRequest(session);
+  if (refused) return refused;
   const { id } = validateQueryParams(new URLSearchParams(await params), orgIdParamSchema);
-  return successResponse({ agents: await listJudgeModels(id) });
-}, RESOURCE);
+  const agents = await inWorkspace(id, () => listJudgeModels(id));
+  return successResponse({ agents });
+}, WORKSPACE_JUDGES_RESOURCE);

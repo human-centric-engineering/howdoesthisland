@@ -77,6 +77,7 @@ import { prisma } from '@/lib/db/client';
 import { judgeAgentSlug } from '@/lib/app/judges/agents';
 import { CHOOSABLE_AGENTS } from '@/lib/app/judges/model-choice';
 import { createMockAuthSession } from '@/tests/helpers/auth';
+import { getTenantContext } from '@/lib/tenancy/context';
 
 const WS = 'cmorg000000000000000team1';
 const ETHOS = judgeAgentSlug('judge_ethos');
@@ -206,6 +207,22 @@ describe('GET /api/v1/workspaces/[id]/judges', () => {
     mockGetSession.mockResolvedValue(session('cmorg0000000000000000org2'));
     expect((await get()).status).toBe(403);
     expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
+  });
+
+  it('reads a platform admin’s target workspace in its own tenant context', async () => {
+    const OTHER = 'cmorg0000000000000000org2';
+    mockGetSession.mockResolvedValue({
+      ...session(OTHER),
+      user: { ...session(OTHER).user, role: 'ADMIN' },
+    });
+    let readIn: string | null | undefined;
+    vi.mocked(prisma.aiAgent.findMany).mockImplementation((() => {
+      readIn = getTenantContext()?.orgId;
+      return Promise.resolve([]);
+    }) as never);
+
+    expect((await get()).status).toBe(200);
+    expect(readIn).toBe(WS);
   });
 
   it('refuses an API-key caller at the guard', async () => {

@@ -110,6 +110,40 @@ function agentByKey(key: string): ChoosableAgent {
   return agent;
 }
 
+/** The columns a choice is shown from. */
+interface ChoiceRow {
+  name: string;
+  provider: string;
+  model: string;
+  bindingOwner: string | null;
+}
+
+function choiceOf(
+  agent: ChoosableAgent,
+  row: ChoiceRow,
+  available: readonly AvailableModel[]
+): JudgeModelChoice {
+  const entry =
+    row.provider && row.model
+      ? approvedEntry(agent.role, { provider: row.provider, model: row.model })
+      : undefined;
+  return {
+    key: agent.key,
+    name: row.name,
+    role: agent.role,
+    current: row.model
+      ? { model: row.model, label: entry?.label ?? row.model, approved: entry !== undefined }
+      : null,
+    followsDefault: row.bindingOwner === 'platform',
+    options: offered(agent, available).map((e) => ({
+      model: e.model,
+      label: e.label,
+      tradeoff: e.tradeoff,
+      isDefault: e.model === agent.defaultModel,
+    })),
+  };
+}
+
 /** Each judge and the editor in `orgId`, with what it runs on and what it may. */
 export async function listJudgeModels(
   orgId: string,
@@ -117,7 +151,12 @@ export async function listJudgeModels(
 ): Promise<JudgeModelChoice[]> {
   const [rows, available] = await Promise.all([
     prisma.aiAgent.findMany({
-      where: { orgId, isSystem: true, slug: { in: CHOOSABLE_AGENTS.map((a) => a.slug) } },
+      where: {
+        orgId,
+        isSystem: true,
+        deletedAt: null,
+        slug: { in: CHOOSABLE_AGENTS.map((a) => a.slug) },
+      },
       select: { slug: true, name: true, provider: true, model: true, bindingOwner: true },
     }),
     availability(),
@@ -125,28 +164,7 @@ export async function listJudgeModels(
   const bySlug = new Map(rows.map((row) => [row.slug, row]));
   return CHOOSABLE_AGENTS.flatMap((agent) => {
     const row = bySlug.get(agent.slug);
-    if (!row) return [];
-    const entry =
-      row.provider && row.model
-        ? approvedEntry(agent.role, { provider: row.provider, model: row.model })
-        : undefined;
-    return [
-      {
-        key: agent.key,
-        name: row.name,
-        role: agent.role,
-        current: row.model
-          ? { model: row.model, label: entry?.label ?? row.model, approved: entry !== undefined }
-          : null,
-        followsDefault: row.bindingOwner === 'platform',
-        options: offered(agent, available).map((e) => ({
-          model: e.model,
-          label: e.label,
-          tradeoff: e.tradeoff,
-          isDefault: e.model === agent.defaultModel,
-        })),
-      },
-    ];
+    return row ? [choiceOf(agent, row, available)] : [];
   });
 }
 
@@ -175,6 +193,7 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
     },
   });
   if (!current) throw new NotFoundError(`This workspace has no agent for "${input.key}"`);
+  const available = await (input.availability ?? grantedCatalogueAvailability)();
 
   if (input.model === null) {
     if (current.bindingOwner !== 'platform') {
@@ -195,26 +214,39 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
       // pass, which remains the guarantee. Never throws.
       await tryReconcilePlatformAgents(input.orgId, 'agent.bindingOwner');
     }
-    return choiceFor(input.orgId, agent, input.availability);
+    return choiceFor(input.orgId, agent, available);
   }
 
-  const entry = APPROVED_MODELS[agent.role].find((e) => e.model === input.model);
+  // The request names a model, not a provider: it is matched against what
+  // this workspace is offered, so the entry is the one on an available
+  // provider.
+  const entry = offered(agent, available).find((e) => e.model === input.model);
   if (!entry) {
-    const message = `"${input.model}" is not one of the models approved for this job.`;
-    throw new ValidationError(message, { model: [message] });
-  }
-  const available = await (input.availability ?? grantedCatalogueAvailability)();
-  if (!offered(agent, available).includes(entry)) {
-    const message = `${entry.label} is not available in this workspace.`;
+    const listed = APPROVED_MODELS[agent.role].find((e) => e.model === input.model);
+    const message = listed
+      ? `${listed.label} is not available in this workspace.`
+      : `"${input.model}" is not one of the models approved for this job.`;
     throw new ValidationError(message, { model: [message] });
   }
 
   const sameBinding = current.provider === entry.provider && current.model === entry.model;
   if (sameBinding && current.bindingOwner === 'org') {
-    return choiceFor(input.orgId, agent, input.availability);
+    return choiceOf(agent, current, available);
   }
 
-  const data = { provider: entry.provider, model: entry.model, bindingOwner: 'org' };
+  // A new primary provider is not also its own fallback, as on a restore.
+  // `providerConfig` stays, as it does when the agent PATCH or the platform's
+  // reconcile moves the provider: it is the workspace's to set.
+  const providerChanged = current.provider !== entry.provider;
+  const currentFallbacks = current.fallbackProviders ?? [];
+  const fallbacks = currentFallbacks.filter((slug) => slug !== entry.provider);
+  const fallbacksChanged = fallbacks.length !== currentFallbacks.length;
+  const data = {
+    provider: entry.provider,
+    model: entry.model,
+    bindingOwner: 'org',
+    ...(fallbacksChanged ? { fallbackProviders: fallbacks } : {}),
+  };
   const grants = {
     grantedTagIds: current.grantedTags.map((g) => g.tagId),
     grantedDocumentIds: current.grantedDocuments.map((g) => g.documentId),
@@ -222,8 +254,9 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
   const changedFields = sameBinding
     ? []
     : [
-        ...(current.provider !== entry.provider ? ['provider'] : []),
+        ...(providerChanged ? ['provider'] : []),
         ...(current.model !== entry.model ? ['model'] : []),
+        ...(fallbacksChanged ? ['fallbackProviders'] : []),
       ];
 
   let updated;
@@ -278,16 +311,19 @@ export async function chooseJudgeModel(input: ChooseJudgeModelInput): Promise<Ju
     clientIp: input.clientIp ?? null,
   });
 
-  return choiceFor(input.orgId, agent, input.availability);
+  return choiceOf(agent, updated, available);
 }
 
+/** One agent's choice, re-read after the reconcile may have moved it. */
 async function choiceFor(
   orgId: string,
   agent: ChoosableAgent,
-  availability?: ModelAvailability
+  available: readonly AvailableModel[]
 ): Promise<JudgeModelChoice> {
-  const all = await listJudgeModels(orgId, availability);
-  const choice = all.find((c) => c.key === agent.key);
-  if (!choice) throw new NotFoundError(`This workspace has no agent for "${agent.key}"`);
-  return choice;
+  const row = await prisma.aiAgent.findFirst({
+    where: { orgId, slug: agent.slug, isSystem: true, deletedAt: null },
+    select: { name: true, provider: true, model: true, bindingOwner: true },
+  });
+  if (!row) throw new NotFoundError(`This workspace has no agent for "${agent.key}"`);
+  return choiceOf(agent, row, available);
 }

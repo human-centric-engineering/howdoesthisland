@@ -124,9 +124,13 @@ describe('listJudgeModels', () => {
     expect(JSON.stringify(ethos)).not.toMatch(/maxTokens|temperature|reasoningEffort|timeout/);
   });
 
-  it('reads only this workspace’s platform agents', async () => {
+  it('reads only this workspace’s platform agents, leaving out deleted ones', async () => {
     await listJudgeModels(ORG, availableOpenAi);
-    expect(db.findMany.mock.calls[0][0].where).toMatchObject({ orgId: ORG, isSystem: true });
+    expect(db.findMany.mock.calls[0][0].where).toMatchObject({
+      orgId: ORG,
+      isSystem: true,
+      deletedAt: null,
+    });
   });
 
   it('marks a binding off the list as not approved, and whether the default is followed', async () => {
@@ -234,6 +238,57 @@ describe('chooseJudgeModel on an approved, available model', () => {
     db.findFirst.mockResolvedValue(agentRow({ model: 'gpt-5', bindingOwner: 'org' }));
     await choose('gpt-5');
     expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('on a new provider, drops the new primary from the fallbacks', async () => {
+    db.findFirst.mockResolvedValue(
+      agentRow({
+        providerConfig: { organization: 'org-x' },
+        fallbackProviders: ['anthropic', 'groq'],
+      })
+    );
+    const both = () =>
+      Promise.resolve([...OPENAI, { provider: 'anthropic', model: 'claude-sonnet-4' }]);
+    await chooseJudgeModel({
+      orgId: ORG,
+      key: 'judge_ethos',
+      model: 'claude-sonnet-4',
+      userId: 'user-1',
+      availability: both,
+    });
+
+    expect(db.update.mock.calls[0][0].data).toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4',
+      bindingOwner: 'org',
+      fallbackProviders: ['groq'],
+    });
+    expect(db.versionCreate.mock.calls[0][0].data.changeSummary).toMatch(/Fallback/i);
+  });
+
+  it('keeps the fallbacks when the provider stays the same', async () => {
+    db.findFirst.mockResolvedValue(
+      agentRow({ providerConfig: { organization: 'org-x' }, fallbackProviders: ['anthropic'] })
+    );
+    await choose('gpt-5');
+    expect(db.update.mock.calls[0][0].data).toEqual({
+      provider: 'openai',
+      model: 'gpt-5',
+      bindingOwner: 'org',
+    });
+  });
+
+  it('asks the availability source once, and reads no other agent, per choice', async () => {
+    const availability = vi.fn(availableOpenAi);
+    await chooseJudgeModel({
+      orgId: ORG,
+      key: 'judge_ethos',
+      model: 'gpt-5',
+      userId: 'user-1',
+      availability,
+    });
+    expect(availability).toHaveBeenCalledTimes(1);
+    expect(db.findMany).not.toHaveBeenCalled();
   });
 
   it('on the influence judge, offers and binds the 16,384-token model', async () => {

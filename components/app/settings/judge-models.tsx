@@ -37,10 +37,16 @@ import {
 
 /** The select's value for "follow the default". Not a model id. */
 const DEFAULT_VALUE = '__default__';
+/**
+ * The select's value for an agent the workspace owns that has no model of its
+ * own (it inherits one at run time). Not a model id, and never sent: it is
+ * shown so that choosing Default is a change that can be saved.
+ */
+const UNCHOSEN_VALUE = '__unchosen__';
 
 function selectedValue(agent: JudgeModelChoiceView): string {
   if (agent.followsDefault) return DEFAULT_VALUE;
-  return agent.current?.model ?? DEFAULT_VALUE;
+  return agent.current?.model ?? UNCHOSEN_VALUE;
 }
 
 function defaultLabel(agent: JudgeModelChoiceView): string {
@@ -129,7 +135,10 @@ export function JudgeModels({ orgId, agents: initial }: JudgeModelsProps) {
               const pick = picks[agent.key] ?? DEFAULT_VALUE;
               const option = agent.options.find((o) => o.model === pick);
               const offPick =
-                pick !== DEFAULT_VALUE && !option && agent.current?.model === pick
+                pick !== DEFAULT_VALUE &&
+                pick !== UNCHOSEN_VALUE &&
+                !option &&
+                agent.current?.model === pick
                   ? agent.current
                   : null;
               const id = `judge-model-${agent.key}`;
@@ -153,6 +162,11 @@ export function JudgeModels({ orgId, agents: initial }: JudgeModelsProps) {
                           {o.label}
                         </SelectItem>
                       ))}
+                      {pick === UNCHOSEN_VALUE ? (
+                        <SelectItem value={UNCHOSEN_VALUE} disabled>
+                          No model chosen
+                        </SelectItem>
+                      ) : null}
                       {offPick ? (
                         <SelectItem value={offPick.model} disabled>
                           {offPick.label} (no longer offered)
@@ -163,7 +177,9 @@ export function JudgeModels({ orgId, agents: initial }: JudgeModelsProps) {
                   <p className="text-muted-foreground text-sm">
                     {pick === DEFAULT_VALUE
                       ? 'Our recommended model for this job.'
-                      : (option?.tradeoff ?? 'Not approved for this job: choose another.')}
+                      : pick === UNCHOSEN_VALUE
+                        ? 'Choose a model, or Default to follow our recommendation.'
+                        : (option?.tradeoff ?? 'Not approved for this job: choose another.')}
                   </p>
                 </div>
               );

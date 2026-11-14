@@ -198,4 +198,23 @@ describe('JudgeModels', () => {
     expect(screen.getByText('Not approved for this job: choose another.')).toBeInTheDocument();
     expect(saveButton()).toBeDisabled();
   });
+
+  it('shows a workspace-owned agent with no model as unchosen, and lets Default be saved', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue(agent());
+    const { user } = setup([agent({ current: null, followsDefault: false })]);
+
+    expect(trigger('Alpha Judge')).toHaveTextContent('No model chosen');
+    expect(trigger('Alpha Judge')).not.toHaveTextContent('Default');
+    expect(saveButton()).toBeDisabled();
+
+    await user.click(trigger('Alpha Judge'));
+    await user.click(screen.getByRole('option', { name: 'Default (Fast One)' }));
+    expect(saveButton()).toBeEnabled();
+    await user.click(saveButton());
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/workspaces/org-1/judges/judge-a', {
+      body: { model: null },
+    });
+  });
 });

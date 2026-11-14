@@ -119,9 +119,10 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  *   only from an approved list per role (`approved-models.ts`, j4), and the
  *   judge call takes its ceiling from the entry, within that model's limit.
  *
- * These are ceilings. A call sizes its own `maxTokens` and timeout under them
- * (§8.3: per judge slot in j2, from the text's length for rewrites in rw1),
- * and k3 measures both. Reasoning effort is left to the provider's default
+ * These are ceilings. A call sizes its own `maxTokens` under them (§8.3: per
+ * judge slot in j2, from the text's length for rewrites in rw1), and k3
+ * measures it. A judge call's timeout is the approved entry's, not the
+ * slot's, so a slower reasoning model is not cut short (`runJudge`, j4). Reasoning effort is left to the provider's default
  * (medium on OpenAI's reasoning models, none on Claude) until k3 chooses it;
  * these ceilings hold the reply at that default.
  */
