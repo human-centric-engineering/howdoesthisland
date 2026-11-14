@@ -56,13 +56,14 @@ const defaultDeps: FrameworkApiDeps = {
 };
 
 // Path segments are checked before any query: anything else cannot name a
-// record, so it is the same 404 a well-formed unknown value gets.
-const slugParam = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
-const versionParam = z
+// record, so it is the same 404 a well-formed unknown value gets. Exported
+// for the route registry (`lib/app/api/registry.ts`), which declares them.
+export const slugParam = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
+export const versionParam = z
   .string()
   .max(64)
   .regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/);
-const kindParam = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
+export const kindParam = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
 
 export interface VersionSummary {
   version: string;
