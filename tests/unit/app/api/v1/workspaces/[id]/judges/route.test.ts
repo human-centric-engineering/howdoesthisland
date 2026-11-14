@@ -35,6 +35,17 @@ vi.mock('@/lib/db/client', () => ({
     $transaction: vi.fn(),
   },
 }));
+// Real, except where a case stands in for a policy that admitted an API key.
+const mockIsApiKey = vi.hoisted(() => ({ fn: null as null | ((s: unknown) => boolean) }));
+vi.mock('@/lib/auth/api-keys', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/auth/api-keys')>();
+  return {
+    ...actual,
+    isApiKeySession: vi.fn((s: Parameters<typeof actual.isApiKeySession>[0]) =>
+      mockIsApiKey.fn ? mockIsApiKey.fn(s) : actual.isApiKeySession(s)
+    ),
+  };
+});
 vi.mock('@/lib/security/ip', () => ({ getClientIP: vi.fn(() => '127.0.0.1') }));
 const mockLog = vi.hoisted(() => ({
   info: vi.fn(),
@@ -82,17 +93,43 @@ function memberOf(role: string) {
   } as never);
 }
 
-function get(orgId = WS) {
-  const request = new Request(
-    `http://localhost/api/v1/workspaces/${orgId}/judges`
-  ) as unknown as NextRequest;
+const KEY_HEADERS = { authorization: 'Bearer sk_deadbeefdeadbeefdeadbeefdeadbeef' };
+
+/** An API key, with admin scope, owned by the caller and bound to this workspace. */
+function apiKeyCaller() {
+  vi.mocked(prisma.aiApiKey.findFirst).mockResolvedValue({
+    id: 'cmkey000000000000000key1',
+    userId: 'cmjbv4i3x00003wsloputgwul',
+    scopes: ['admin'],
+    rateLimitRpm: null,
+    expiresAt: null,
+    createdAt: new Date(),
+    orgId: WS,
+    user: {
+      id: 'cmjbv4i3x00003wsloputgwul',
+      name: 'Key Owner',
+      email: 'owner@example.com',
+      emailVerified: true,
+      image: null,
+      role: 'ADMIN',
+      accountType: 'HUMAN',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  } as never);
+}
+
+function get(orgId = WS, headers: Record<string, string> = {}) {
+  const request = new Request(`http://localhost/api/v1/workspaces/${orgId}/judges`, {
+    headers,
+  }) as unknown as NextRequest;
   return GET(request, { params: Promise.resolve({ id: orgId }) });
 }
 
-function patch(key: string, body: unknown, orgId = WS) {
+function patch(key: string, body: unknown, orgId = WS, headers: Record<string, string> = {}) {
   const request = new Request(`http://localhost/api/v1/workspaces/${orgId}/judges/${key}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
   return PATCH(request, { params: Promise.resolve({ id: orgId, key }) });
@@ -116,6 +153,7 @@ const ethosRow = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockIsApiKey.fn = null;
   mockEnv.TENANCY_MODE = 'multi';
   vi.mocked(prisma.aiApiKey.findFirst).mockResolvedValue(null);
   vi.mocked(prisma.org.findUnique).mockResolvedValue({
@@ -170,6 +208,20 @@ describe('GET /api/v1/workspaces/[id]/judges', () => {
     expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
   });
 
+  it('refuses an API-key caller at the guard', async () => {
+    apiKeyCaller();
+    expect((await get(WS, KEY_HEADERS)).status).toBe(403);
+    expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
+  });
+
+  it('refuses an API-key session itself, should a policy ever admit one', async () => {
+    mockIsApiKey.fn = () => true;
+    const res = await get();
+    expect(res.status).toBe(403);
+    expect((await json(res)).error.message).toContain('browser session');
+    expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
+  });
+
   it('is not available at single tenancy', async () => {
     mockEnv.TENANCY_MODE = 'single';
     const res = await get();
@@ -213,6 +265,28 @@ describe('PATCH /api/v1/workspaces/[id]/judges/[key]', () => {
   it('refuses a MEMBER', async () => {
     memberOf(DEFAULT_ORG_ROLE);
     expect((await patch('judge_ethos', { model: 'gpt-5' })).status).toBe(403);
+    expect(prisma.aiAgent.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses an API-key caller at the guard', async () => {
+    apiKeyCaller();
+    expect((await patch('judge_ethos', { model: 'gpt-5' }, WS, KEY_HEADERS)).status).toBe(403);
+    expect(prisma.aiAgent.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses an API-key session itself, should a policy ever admit one', async () => {
+    mockIsApiKey.fn = () => true;
+    const res = await patch('judge_ethos', { model: 'gpt-5' });
+    expect(res.status).toBe(403);
+    expect((await json(res)).error.message).toContain('browser session');
+    expect(prisma.aiAgent.update).not.toHaveBeenCalled();
+  });
+
+  it('is not available at single tenancy', async () => {
+    mockEnv.TENANCY_MODE = 'single';
+    const res = await patch('judge_ethos', { model: 'gpt-5' });
+    expect(res.status).toBe(400);
+    expect((await json(res)).error.code).toBe('WORKSPACES_UNAVAILABLE');
     expect(prisma.aiAgent.update).not.toHaveBeenCalled();
   });
 });
