@@ -96,7 +96,19 @@ export function JudgeModels({ orgId, agents: initial }: JudgeModelsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Judge models</CardTitle>
+        <CardTitle className="flex items-center gap-1 text-lg">
+          Judge models{' '}
+          <FieldHelp title="Choosing a model">
+            <p>
+              Default follows our recommended model for each job, and moves with it when that
+              changes. Choosing a model keeps it until you change it here.
+            </p>
+            <p className="mt-2">
+              Each model is set up for the job it is listed for, so a judge cannot be given a model
+              that would cut its answers short.
+            </p>
+          </FieldHelp>
+        </CardTitle>
         <CardDescription>
           The AI model each judge and the editor uses in this workspace. Only models approved for
           each job, and available to this workspace, are listed.
@@ -123,24 +135,7 @@ export function JudgeModels({ orgId, agents: initial }: JudgeModelsProps) {
               const id = `judge-model-${agent.key}`;
               return (
                 <div key={agent.key} className="space-y-2">
-                  <Label htmlFor={id} className="flex items-center gap-1">
-                    {agent.name}
-                    {agent.key === agents[0]?.key ? (
-                      <>
-                        {' '}
-                        <FieldHelp title="Choosing a model">
-                          <p>
-                            Default follows our recommended model for this job, and moves with it
-                            when that changes. Choosing a model keeps it until you change it here.
-                          </p>
-                          <p className="mt-2">
-                            Each model is set up for the job it is listed for, so a judge cannot be
-                            given a model that would cut its answers short.
-                          </p>
-                        </FieldHelp>
-                      </>
-                    ) : null}
-                  </Label>
+                  <Label htmlFor={id}>{agent.name}</Label>
                   <Select
                     value={pick}
                     onValueChange={(value) => {
