@@ -42,5 +42,12 @@
  * Full guide: CUSTOMIZATION.md §4 · .context/orchestration/api-keys.md
  */
 
-/** Extra scope names this app can mint and enforce. Empty = core scopes only. */
-export const APP_API_KEY_SCOPES: readonly string[] = [];
+/**
+ * Extra scope names this app can mint and enforce. Empty = core scopes only.
+ *
+ * HowDoesThisLand (t-24): `assess`, enforced by every `assessments` route
+ * (`lib/app/assessments/api/route-auth.ts`). `projects` and `reports` arrive
+ * with the routes that enforce them (f-projects, f-sharing), so no key can be
+ * minted with a scope nothing checks.
+ */
+export const APP_API_KEY_SCOPES: readonly string[] = ['assess'];

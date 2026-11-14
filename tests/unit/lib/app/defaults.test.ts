@@ -230,10 +230,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/rate-limit.ts',
     risk: 'a stray tier or rule would re-cap every install',
+    // FORK (HowDoesThisLand): pinned to our one rule, the free quick scan's
+    // per-IP cap (t-24). Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
       registerAppRateLimits();
-      // No app rules → the effective policy is the base policy BY IDENTITY.
-      expect(getEffectiveRateLimitPolicy()).toBe(RATE_LIMIT_POLICY);
+      const added = getEffectiveRateLimitPolicy().filter((r) => !RATE_LIMIT_POLICY.includes(r));
+      expect(added.map((r) => [String(r.match), r.tier, r.key])).toEqual([
+        [String(/^\/api\/v1\/scan\/?$/), 'scan', 'ip'],
+      ]);
     },
   },
   {
@@ -699,10 +703,12 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/api-key-scopes.ts',
     risk: 'a stray scope would be mintable on every install \u2014 and a name colliding with a core scope would change what an existing key satisfies',
+    // FORK (HowDoesThisLand): pinned to `assess` (t-24). Ledger:
+    // .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(APP_API_KEY_SCOPES).toEqual([]);
-      // …and the union it feeds is exactly core, by value not just by length.
-      expect(listValidApiKeyScopes()).toEqual([...CORE_API_KEY_SCOPES]);
+      expect(APP_API_KEY_SCOPES).toEqual(['assess']);
+      // …and the union it feeds is core plus ours, by value not just by length.
+      expect(listValidApiKeyScopes()).toEqual([...CORE_API_KEY_SCOPES, 'assess']);
     },
   },
   {
