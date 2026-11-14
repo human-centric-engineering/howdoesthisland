@@ -51,6 +51,7 @@
  */
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
+import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { engineForVersion } from '@/lib/app/assessments/engine';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { runJudges, type LandedJudge } from '@/lib/app/assessments/fan-out';
@@ -120,6 +121,7 @@ export async function beginAssessment(assessmentId: string): Promise<StartedRun 
 
 async function execute(assessmentId: string, orgId: string, token: string): Promise<RunOutcome> {
   const lease = holdLease(assessmentId, token);
+  let outcome: RunOutcome;
   try {
     const row = await prisma.assessment.findUnique({
       where: { id: assessmentId, orgId },
@@ -133,22 +135,23 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         judgeRuns: true,
       },
     });
-    if (!row) return 'lease_lost';
+    if (!row) {
+      lease.release();
+      return 'lease_lost';
+    }
 
     const scope = createPrivacyScope({
       scopeId: `assessment:${row.id}`,
       orgId,
       ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
     });
-    const outcome = await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
-    if (outcome === 'cancelled') await freePlace(assessmentId, token);
-    return outcome;
+    outcome = await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
   } catch (err) {
     // Not the judges' and not final (the database, most likely): back to the
     // queue for the recovery job, which re-drives it until it is out of
     // attempts. If this write fails too, the lease runs out to the same end.
     logger.error('Assessment run stopped on an error; queued again', err, { assessmentId });
-    await prisma.assessment
+    const requeued = await prisma.assessment
       .updateMany({
         where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
         data: {
@@ -159,11 +162,44 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
           error: 'Its run stopped on an error that was not a judge’s.',
         },
       })
-      .catch(() => undefined);
-    return 'requeued';
-  } finally {
-    lease.release();
+      .then(({ count }) => count === 1)
+      .catch(() => false);
+    // Not requeued: it was cancelled under the run, or its lease went elsewhere.
+    outcome = requeued ? 'requeued' : await lostTo(assessmentId).catch(() => 'lease_lost' as const);
   }
+  lease.release();
+  if (outcome === 'cancelled') await freePlace(assessmentId, token).catch(() => undefined);
+  startNextQueued(orgId, assessmentId);
+  return outcome;
+}
+
+/**
+ * Start the workspace's oldest queued assessment, now that this run's place
+ * is free, without waiting for it. This is what picks up an assessment that
+ * was queued while the workspace was at its limit; the recovery job is the
+ * backstop. Never throws.
+ */
+function startNextQueued(orgId: string, finished: string): void {
+  keepRunningAfterResponse(
+    async () => {
+      const next = await prisma.assessment.findFirst({
+        where: {
+          orgId,
+          status: 'QUEUED',
+          attempts: { lt: MAX_ATTEMPTS },
+          id: { not: finished },
+          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (!next) return;
+      const run = await beginAssessment(next.id);
+      if (run) await run.done;
+    },
+    'app: next queued assessment',
+    { orgId }
+  );
 }
 
 type AssessmentRow = {
@@ -201,11 +237,11 @@ async function drive(
 ): Promise<RunOutcome> {
   const loaded = await engineForVersion(row.frameworkVersionId);
   if (!loaded) {
-    await finish(row.id, token, {
+    const written = await finish(row.id, token, {
       status: 'FAILED',
       error: 'Its framework version can no longer be run.',
     });
-    return 'failed';
+    return written ? 'failed' : await lostTo(row.id);
   }
   const { engine, label } = loaded;
   const { text, sourceUrl } = row.content;
@@ -271,7 +307,7 @@ async function drive(
     },
   });
   if (fan.stopped || !(await stillOurs(row.id, token, lease))) {
-    return (await statusOf(row.id)) === 'CANCELLED' ? 'cancelled' : 'lease_lost';
+    return await lostTo(row.id);
   }
 
   let result: unknown;
@@ -290,15 +326,15 @@ async function drive(
     band: scores.success ? scores.data.scores.band : null,
     error: null,
   });
-  if (!written) return (await statusOf(row.id)) === 'CANCELLED' ? 'cancelled' : 'lease_lost';
+  if (!written) return await lostTo(row.id);
   return status === 'PARTIAL' ? 'partial' : 'completed';
 }
 
 /** Record that the engine could not score the text: final, since it would throw again. */
 async function notScorable(assessmentId: string, token: string, err: unknown) {
   logger.error('Assessment could not be scored', err, { assessmentId });
-  await finish(assessmentId, token, { status: 'FAILED', error: NOT_SCORABLE });
-  return 'failed' as const;
+  const written = await finish(assessmentId, token, { status: 'FAILED', error: NOT_SCORABLE });
+  return written ? ('failed' as const) : await lostTo(assessmentId);
 }
 
 /**
@@ -474,12 +510,13 @@ async function stillOurs(assessmentId: string, token: string, lease: Lease): Pro
   return row?.status === 'RUNNING' && row.leaseToken === token;
 }
 
-async function statusOf(assessmentId: string) {
+/** Why a write under the lease matched nothing: the assessment was cancelled, or another run has it. */
+async function lostTo(assessmentId: string): Promise<'cancelled' | 'lease_lost'> {
   const row = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     select: { status: true },
   });
-  return row?.status ?? null;
+  return row?.status === 'CANCELLED' ? 'cancelled' : 'lease_lost';
 }
 
 /** Write the final state, if the lease is still ours. Answers whether it was. */

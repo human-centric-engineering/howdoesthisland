@@ -59,7 +59,11 @@ export function initAppJobs(): void {
   // only its own rows, and counts its own running limit.
   registerAppJob({
     name: ASSESSMENT_RECOVERY_JOB,
-    intervalMs: 60 * 1000,
+    // The backstop, not the queue's driver: a run that ends starts the
+    // workspace's next queued assessment itself (`runAssessment`). At the
+    // signup sweep's 15 minutes it keeps the idle gate (#442) where that job
+    // already holds it, so a scale-to-zero database can still suspend.
+    intervalMs: 15 * 60 * 1000,
     scope: 'per-org',
     run: () => recoverAssessments(),
   });

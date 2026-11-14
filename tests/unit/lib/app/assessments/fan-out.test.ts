@@ -113,6 +113,26 @@ describe('runJudges', () => {
     expect(landed[0]).toMatchObject({ ok: false, code: 'malformed', spend });
   });
 
+  it('is not stopped when the check says no after the last judge was taken', async () => {
+    let asks = 0;
+    const { landed, stopped } = await runJudges(
+      input({
+        slots: ['judge_a', 'judge_b'],
+        concurrency: 2,
+        // The second worker's first check is slow and says no; by then the
+        // first worker has taken both judges, so none was left unstarted.
+        shouldContinue: async () => {
+          asks += 1;
+          if (asks !== 2) return true;
+          await new Promise((r) => setTimeout(r, 20));
+          return false;
+        },
+      })
+    );
+    expect(landed.map((l) => l.slot)).toEqual(['judge_a', 'judge_b']);
+    expect(stopped).toBe(false);
+  });
+
   it('starts no judge once shouldContinue says no', async () => {
     const { landed, stopped } = await runJudges(
       input({ concurrency: 1, shouldContinue: async () => mocks.runJudge.mock.calls.length < 1 })

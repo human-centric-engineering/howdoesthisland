@@ -108,7 +108,9 @@ export async function runJudges(input: RunJudgesInput): Promise<RunJudgesResult>
       // fan-out's failure like any other, raised once the others settle.
       try {
         if (input.shouldContinue && !(await input.shouldContinue())) {
-          state.stopped = true;
+          // Stopped only if a judge is left: another worker may have taken
+          // the last one while this one asked.
+          if (queue.length > 0) state.stopped = true;
           return;
         }
         // Taken after the check, so a judge is never claimed by a worker

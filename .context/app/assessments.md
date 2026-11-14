@@ -59,7 +59,8 @@ from either of the first two.
 - **The claim** succeeds only for this workspace's `QUEUED` or `RUNNING` assessment with no
   live lease, fewer than three attempts, and fewer than three other live runs
   in the workspace. The count and the claim are one serializable transaction.
-  A fourth assessment stays `QUEUED` for the recovery job.
+  A fourth assessment stays `QUEUED`. When a run ends, however it ends, it
+  starts the workspace's oldest queued assessment itself.
 - **Judges** run at most four at once. Each `JudgeRun` row is written as the
   judge lands, in one transaction with an update of the assessment under the
   run's token. A run that lost its lease therefore stores nothing over its
@@ -97,8 +98,12 @@ The limits are constants in `limits.ts` until f-usage measures them.
 
 ## The recovery job
 
-`app:assessment-recovery` runs every minute, once per workspace
-(`lib/app/jobs.ts`). It finds `QUEUED` and `RUNNING` assessments with no live
+`app:assessment-recovery` runs every 15 minutes, once per workspace
+(`lib/app/jobs.ts`). It is the backstop, not what drives the queue: a request
+starts its own run, and a run that ends starts the next. The 15 minutes match
+the signup sweep's, so the job does not shorten how long the maintenance
+tick's idle gate (#442) lets a scale-to-zero database sleep. A run whose
+process died is therefore taken over within about 15 minutes. It finds `QUEUED` and `RUNNING` assessments with no live
 lease. Those that have had three runs are marked `FAILED`. Up to three of the
 rest are claimed one at a time (`beginAssessment`), so their claims do not
 conflict, and run as described above.

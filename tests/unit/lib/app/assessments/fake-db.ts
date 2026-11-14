@@ -76,6 +76,13 @@ export function createFakeDb() {
         const rows = assessments.filter((a) => matches(a, where));
         return rows.slice(0, take ?? rows.length).map((r) => ({ ...r }));
       }),
+      /** The first match, oldest first (the only order the code under test asks for). */
+      findFirst: vi.fn(async ({ where }: { where?: Row }) => {
+        const rows = assessments
+          .filter((a) => matches(a, where))
+          .sort((x, y) => (x.createdAt as Date).getTime() - (y.createdAt as Date).getTime());
+        return rows[0] ? { ...rows[0] } : null;
+      }),
       count: vi.fn(
         async ({ where }: { where?: Row }) => assessments.filter((a) => matches(a, where)).length
       ),

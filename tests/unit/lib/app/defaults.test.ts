@@ -508,7 +508,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
           15 * 60 * 1000,
           { system: 'signup workspaces span orgs; Org is a system model' },
         ],
-        ['app:assessment-recovery', 60 * 1000, 'per-org'],
+        ['app:assessment-recovery', 15 * 60 * 1000, 'per-org'],
       ]);
     },
   },

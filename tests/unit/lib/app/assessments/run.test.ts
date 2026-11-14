@@ -406,6 +406,28 @@ describe('cancel', () => {
     expect(await inOrg(() => runAssessment(String(waiting.id)))).toBe('completed');
   });
 
+  it('answers cancelled, and frees its place, when an error follows the cancel', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockImplementation(async () => {
+      await inOrg(() => cancelAssessment(String(a.id)));
+      throw new Error('connection reset');
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
+    expect(a).toMatchObject({ status: 'CANCELLED', leaseExpiresAt: null });
+  });
+
+  it('answers cancelled when the engine fails to score a text cancelled under it', async () => {
+    const a = fake.seed({ judges: [] });
+    engine.quickScan.mockImplementationOnce(() => {
+      Object.assign(a, { status: 'CANCELLED' });
+      throw new Error('bad text');
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
+    expect(a).toMatchObject({ status: 'CANCELLED', error: null, leaseExpiresAt: null });
+  });
+
   it('refuses to cancel a final assessment, or another workspace’s', async () => {
     const done = fake.seed({ status: 'COMPLETED' });
     const theirs = fake.seed({ orgId: 'org-b' });
@@ -523,6 +545,29 @@ describe('the concurrency limits', () => {
 
     expect(await inOrg(() => runAssessment(String(fourth.id)))).toBe('not_claimed');
     expect(fourth).toMatchObject({ status: 'QUEUED', attempts: 0 });
+  });
+
+  it('starts the next queued assessment when a run ends, without the recovery job', async () => {
+    const live = { status: 'RUNNING', leaseExpiresAt: new Date(Date.now() + 30_000), attempts: 1 };
+    fake.seed({ ...live, leaseToken: 'run-1' });
+    fake.seed({ ...live, leaseToken: 'run-2' });
+    const first = fake.seed({ judges: ['judge_a'] });
+    const queued = fake.seed({ judges: ['judge_a'] });
+
+    // The first takes the last place; the second is left queued at the limit.
+    const gate = deferred();
+    mocks.runJudge.mockImplementationOnce(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+    const running = inOrg(() => runAssessment(String(first.id)));
+    await flush();
+    expect(await inOrg(() => runAssessment(String(queued.id)))).toBe('not_claimed');
+
+    gate.resolve();
+    expect(await running).toBe('completed');
+    await settle();
+    expect(queued).toMatchObject({ status: 'COMPLETED', attempts: 1 });
   });
 
   it('counts only this workspace’s runs, and only live leases', async () => {

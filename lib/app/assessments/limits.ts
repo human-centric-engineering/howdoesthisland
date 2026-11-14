@@ -10,8 +10,8 @@ export const JUDGES_IN_FLIGHT = 4;
 
 /**
  * Assessments `RUNNING` at once in one workspace, counted from rows. A run
- * that would be the next one stays `QUEUED`, and the recovery job picks it up
- * on a later tick.
+ * that would be the next one stays `QUEUED`, and the next run to end starts
+ * it (the recovery job is the backstop).
  */
 export const RUNNING_PER_WORKSPACE = 3;
 

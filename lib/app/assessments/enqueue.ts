@@ -129,7 +129,7 @@ export async function enqueueAssessment(
 /**
  * Run the assessment after the response is sent, in the caller's tenant
  * context. A run that cannot claim it (the workspace is at its limit) leaves
- * it queued for the recovery job.
+ * it queued, and the next run in the workspace to end starts it.
  */
 export function startAssessmentInBackground(assessmentId: string): void {
   keepRunningAfterResponse(() => runAssessment(assessmentId), 'app: assessment run', {
