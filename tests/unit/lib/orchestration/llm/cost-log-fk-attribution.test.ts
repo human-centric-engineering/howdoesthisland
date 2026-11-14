@@ -332,6 +332,11 @@ const ALLOWED_CALL_SITES: readonly string[] = [
   // callers pass no attribution at all, so they still land NULL, which is what
   // `.context/orchestration/capabilities.md` records.
   'lib/orchestration/knowledge/embedder.ts | agentId=spread((attribution?.agentId ? { agentId: attribution.agentId } : {})) | conversationId=spread((attribution?.conversationId ? { conversationId: attribution.conversationId } : {})) | workflowExecutionId=spread((attribution?.workflowExecutionId ? { workflowExecutionId: attribution.workflowExecutionId } : {})) | userId=spread((attribution?.userId ? { userId: attribution.userId } : {}))',
+  // FORK (HowDoesThisLand): a judge run (t-19). `agent` is the row runJudge
+  // just loaded by the org's slug; `input.userId` is the session's real
+  // `User.id` or nothing, never a synthetic visitor id (its docblock says so).
+  // Ledger: .context/app/platform-divergences.md row 13.
+  'lib/app/judges/run-judge.ts | agentId=agent.id | conversationId=— | workflowExecutionId=— | userId=input.userId ?? null',
   // Keyword enrichment runs post-upload against a document, with no agent,
   // conversation or user in scope. Deliberate — see the doc note above.
   'lib/orchestration/knowledge/keyword-enricher.ts | agentId=— | conversationId=— | workflowExecutionId=— | userId=—',

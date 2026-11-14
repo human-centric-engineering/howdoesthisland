@@ -730,6 +730,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'scripts/app/smoke-signup-workspace.ts',
         // FORK (HowDoesThisLand): and the framework store's smoke and commands (t-10).
         'scripts/app/smoke-framework-store.ts',
+        // FORK (HowDoesThisLand): and the judge smoke (t-19).
+        'scripts/app/smoke-judge.ts',
         'scripts/app/frameworks/*.ts',
         // FORK (HowDoesThisLand): and the engine-baseline recorder (t-12).
         'scripts/app/baseline/record.ts',

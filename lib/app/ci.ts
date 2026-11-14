@@ -123,6 +123,14 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'lib/app/frameworks/, which stays gated and has its own tests.',
   },
   {
+    // HowDoesThisLand (t-19), by name like the ones above.
+    pattern: 'scripts/app/smoke-judge.ts',
+    reason:
+      'a tsx smoke run by hand against real OpenAI and the dev database: one ' +
+      'billed judge call, nothing imports it. The runtime it drives is ' +
+      'lib/app/judges/run-judge.ts, which stays gated and has its own tests.',
+  },
+  {
     // HowDoesThisLand (t-10): the import and publish commands' entry points.
     pattern: 'scripts/app/frameworks/*.ts',
     reason:

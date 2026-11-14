@@ -75,3 +75,54 @@ from an approved list per role, each entry with settings that model accepts (D8)
 timeout under the ceiling (j2 per slot, rw1 from the text's length), and k3
 measures them and chooses reasoning effort, left at the provider's default
 until then.
+
+## Running a judge
+
+`runJudge(slot, input)` (`lib/app/judges/run-judge.ts`) makes the call the
+engine builds (`buildJudgeRequest`). It goes to the provider directly, not
+through chat, so the reply can be held to a strict schema, and so it applies
+the checks the chat routes would have made itself:
+
+1. **Binding**: the agent's provider and model, inherited at run time while
+   either is unset.
+2. **Budget**: `checkBudget` under `withAgentBudgetLock`, as the chat handler
+   does. Over the agent's, the workspace's or the install's monthly cap is
+   refused before any provider call, unless the agent is bound to a local
+   provider: as in chat, a reached cap stops paid calls only.
+3. **Rate limit**: the agent's `rateLimitRpm`, on a limiter of the judges' own
+   keyed by agent id, and only when the workspace has set one. Consumer chat's
+   limiter is keyed per user and falls back to 10 RPM, which means something
+   else; the monthly caps already bound spend.
+4. **Call**: `runStructuredCompletion` in strict mode, with the slot's
+   `maxTokens` (never above the agent's ceiling) and its timeout, which bounds
+   each attempt. A reply that is
+   not JSON, or that the engine's validator refuses whole, gets one retry. A
+   refusal does not: an empty reply (how OpenAI's strict-mode refusal arrives)
+   or a content-filter finish.
+5. **Cost**: one `AiCostLog` row per run, `operation: 'chat'` (one per service
+   tier, in the rare run whose attempts were served at two, since a row is
+   priced at one), with
+   `{ judge, frameworkVersion, assessmentId?, attempts, error? }` in its
+   metadata. It counts every attempt the provider billed, read off the
+   provider's responses: the runner sums both attempts only when it succeeds,
+   so a run that failed after a retry would otherwise log nothing.
+6. **Result**: the validated output and its drop record.
+
+A failure is a `JudgeRunError` with a `code`: `agent_not_found`,
+`agent_inactive`, `over_budget` (with `cap`: `global`, `org` or `agent`),
+`rate_limited`, `malformed` (twice),
+`truncated`, `refused` (an empty reply or a content-filter finish, not
+retried) or `provider_error` (including a binding that cannot be resolved).
+A slot the engine cannot run, such as culture's with the switch off, throws
+the engine's own error before anything is counted, and a database failure
+propagates as it is. A
+`JudgeRunError`'s message never carries the prompt or the reply.
+
+**It runs in the caller's tenant context.** The agent is found by the
+workspace's slug, and at `TENANCY_MODE=multi` the spend gate refuses a call
+with no org, so a request's guard or a job's `runAsOrg` must already be
+entered.
+
+`npm run smoke:judge` runs the ethos judge on a baseline case against real
+OpenAI in a throwaway workspace, and prints the reply and its cost row (about a
+cent).
