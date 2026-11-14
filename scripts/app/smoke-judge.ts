@@ -104,7 +104,7 @@ async function main(): Promise<number> {
       );
 
       check(run.finishReason === 'stop', `finished with '${run.finishReason}'`);
-      const scores = (run.output as { dimension_scores?: unknown[] }).dimension_scores ?? [];
+      const scores = run.output.dimension_scores ?? [];
       check(scores.length > 0, `the reply scores ${scores.length} ethos dimension(s)`);
 
       const row = run.costLogId
