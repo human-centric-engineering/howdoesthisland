@@ -92,7 +92,7 @@ attempt.
 ## Checking it
 
 ```bash
-npx tsx --env-file=.env.local scripts/app/smoke-assessment.ts
+npx tsx --env-file=.env.local scripts/smoke/assessment.ts
 ```
 
 At `TENANCY_MODE=multi` (see [`dev-environment.md`](./dev-environment.md)),

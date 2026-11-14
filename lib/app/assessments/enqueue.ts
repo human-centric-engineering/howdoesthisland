@@ -16,7 +16,7 @@
 import type { JudgeProfile } from '@/lib/app/frameworks/engine';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { sha256 } from '@/lib/app/frameworks/store';
-import type { JsonObject } from '@/lib/app/frameworks/types';
+import type { Prisma } from '@prisma/client';
 import { engineForVersion } from '@/lib/app/assessments/engine';
 import { AssessmentInputError } from '@/lib/app/assessments/errors';
 import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
@@ -39,7 +39,7 @@ export interface EnqueueAssessmentInput {
   frameworkVersionId: string;
   profile: JudgeProfile;
   /** Who the text is for, already validated against the framework's context schema. */
-  context: JsonObject;
+  context: Prisma.InputJsonObject;
   requestedVia: 'APP' | 'API';
   apiKeyId?: string | null;
   /** A real `User.id`, or nothing. */

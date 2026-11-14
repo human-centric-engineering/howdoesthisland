@@ -2,7 +2,7 @@
  * Smoke: an assessment run end to end in a fresh workspace, at
  * `TENANCY_MODE=multi`, against real OpenAI (t-22).
  *
- *   npx tsx --env-file=.env.local scripts/app/smoke-assessment.ts
+ *   npx tsx --env-file=.env.local scripts/smoke/assessment.ts
  *
  * What the unit tests cannot show, because they fake the store and the judges:
  *

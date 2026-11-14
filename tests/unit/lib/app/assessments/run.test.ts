@@ -13,6 +13,7 @@
  * @see lib/app/assessments/run.ts · lib/app/assessments/recover.ts
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { createFakeDb, type FakeDb, type Row } from '@/tests/unit/lib/app/assessments/fake-db';
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ import { JUDGES_IN_FLIGHT, LEASE_MS, LEASE_RENEW_MS } from '@/lib/app/assessment
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { cancelAssessment, runAssessment } from '@/lib/app/assessments/run';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
+import { logger } from '@/lib/logging';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { runAsOrg } from '@/lib/tenancy/context';
 
@@ -464,5 +466,129 @@ describe('the recovery job', () => {
     expect(first.redriven).toBe(3);
     expect(most).toBeLessThanOrEqual(3);
     expect(fake.assessments.filter((a) => a.status === 'QUEUED')).toHaveLength(2);
+  });
+});
+
+describe('edges of the run', () => {
+  const conflict = () =>
+    new Prisma.PrismaClientKnownRequestError('could not serialize access', {
+      code: 'P2034',
+      clientVersion: 'test',
+    });
+
+  it('retries a claim that lost a serialization conflict', async () => {
+    const a = fake.seed({ judges: [] });
+    fake.db.$transaction.mockRejectedValueOnce(conflict());
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+    expect(fake.db.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves the assessment queued after three conflicts in a row', async () => {
+    const a = fake.seed();
+    fake.db.$transaction.mockRejectedValue(conflict());
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('not_claimed');
+    expect(fake.db.$transaction).toHaveBeenCalledTimes(3);
+    expect(a).toMatchObject({ status: 'QUEUED', attempts: 0 });
+  });
+
+  it('lets any other claim error through', async () => {
+    const a = fake.seed();
+    fake.db.$transaction.mockRejectedValueOnce(new Error('connection refused'));
+    await expect(inOrg(() => runAssessment(String(a.id)))).rejects.toThrow('connection refused');
+  });
+
+  it('does not claim an assessment that has had its three runs', async () => {
+    const a = fake.seed({
+      status: 'RUNNING',
+      attempts: 3,
+      leaseExpiresAt: new Date(Date.now() - 1),
+    });
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('not_claimed');
+    expect(a.attempts).toBe(3);
+  });
+
+  it('stores no overall score or band when the result carries none', async () => {
+    const a = fake.seed({ judges: [] });
+    engine.assemble.mockReturnValueOnce({ judged: [], quick: true } as never);
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+    expect(a).toMatchObject({ status: 'COMPLETED', overall: null, band: null });
+  });
+
+  it('enters a privacy scope with no user for an assessment nobody signed in for', async () => {
+    const a = fake.seed({ judges: ['judge_a'], createdByUserId: null });
+    let seen: ReturnType<typeof currentPrivacyScope>;
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      seen = currentPrivacyScope();
+      return reply(slot);
+    });
+    await inOrg(() => runAssessment(String(a.id)));
+    expect(seen).toBeDefined();
+    expect(seen).not.toHaveProperty('userId');
+  });
+
+  it('answers lease_lost when another run takes over while the result is assembled', async () => {
+    const a = fake.seed({ judges: [] });
+    engine.assemble.mockImplementationOnce(() => {
+      Object.assign(a, { leaseToken: 'new-run' });
+      return { scores: { overall: 40, band: 'mixed' }, judged: [], quick: true };
+    });
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
+    expect(a).toMatchObject({ status: 'RUNNING', leaseToken: 'new-run', result: null });
+  });
+
+  it('stops starting judges once a renewal finds the lease gone', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const slots = Array.from({ length: JUDGES_IN_FLIGHT + 2 }, (_, i) => `judge_${i}`);
+    const a = fake.seed({ judges: slots });
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    // Taken over, then put back: only the renewal saw it go.
+    const token = a.leaseToken;
+    Object.assign(a, { leaseToken: 'other' });
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    await flush();
+    Object.assign(a, { leaseToken: token });
+    gate.resolve();
+
+    expect(await running).toBe('lease_lost');
+    expect(mocks.runJudge).toHaveBeenCalledTimes(JUDGES_IN_FLIGHT);
+  });
+
+  it('logs a renewal that fails, and carries on', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const a = fake.seed({ judges: ['judge_a'] });
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    fake.db.assessment.updateMany.mockRejectedValueOnce(new Error('timeout'));
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    await flush();
+    gate.resolve();
+
+    expect(await running).toBe('completed');
+    expect(logger.warn).toHaveBeenCalledWith('Assessment lease renewal failed', {
+      assessmentId: a.id,
+      error: 'timeout',
+    });
+  });
+
+  it('answers lease_lost when the row is gone after the claim', async () => {
+    const a = fake.seed();
+    const real = fake.db.assessment.findUnique.getMockImplementation();
+    // The claim's read sees it; the run's read does not.
+    fake.db.assessment.findUnique.mockImplementationOnce(real as never).mockResolvedValueOnce(null);
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
+    expect(mocks.runJudge).not.toHaveBeenCalled();
   });
 });
