@@ -1,0 +1,494 @@
+/**
+ * The report, as the page renders it (t-29, app-plan §8.5).
+ *
+ * {@link buildReportView} turns the two API answers into the report's sections:
+ * every id named from the model, notes placed in the copy, recommendations by
+ * impact. It is pure, so the rules are tested here and not in the components:
+ *
+ * - **A section a result does not have is absent**, not empty: no editor's
+ *   summary for a quick or single-judge run, no culture with the switch off,
+ *   no influence perspectives when nothing could score them.
+ * - **Context used** (f-projects) and the version's **calibration status**
+ *   (f-calibration) are not built yet. They have no data, so they are not
+ *   sections at all.
+ * - **A note whose offsets do not fit the copy is listed but not marked.**
+ *   The engine locates every quote, so this means the copy and the result
+ *   disagree. Marking the wrong words would be worse than not marking them.
+ */
+import type {
+  ReportAssessment,
+  ReportModel,
+  ReportRecommendation,
+  ReportResult,
+} from '@/lib/app/reports/input';
+
+export const APPEAL_IDS = ['ethos', 'pathos', 'logos', 'kairos'] as const;
+
+/** The dimension scale's top (model `scoring.dimension_scale`: 0–4). */
+export const DIMENSION_MAX = 4;
+
+export interface ReportNote {
+  /** 1-based, as the margin numbers it. */
+  number: number;
+  polarity: 'strength' | 'weakness';
+  note: string;
+  quote: string;
+  dimensionId: string;
+  dimensionName: string;
+  appealId: string | null;
+  /** The recommendation on the same dimension, by its number, if there is one. */
+  recommendation: number | null;
+  fromQuickScan: boolean;
+  /** The red flag that raised it, named. */
+  flag: string | null;
+  /** Whether the note is marked in the copy (its offsets fit). */
+  placed: boolean;
+}
+
+/** A run of the copy, and the notes (by number) that cover it. */
+export interface CopySegment {
+  text: string;
+  notes: number[];
+}
+
+export interface ReportRecommendationView {
+  /** The recommendation's place in the result, 1-based: the editor names it `rec_<number>`. */
+  number: number;
+  appealId: string;
+  appealName: string;
+  dimensionId: string;
+  dimensionName: string;
+  move: string | null;
+  issue: string;
+  original: string;
+  rewrite: string;
+  impact: string;
+  /** The original is the model's example, not a line of this copy. */
+  example: boolean;
+}
+
+export interface DimensionGroup {
+  id: string;
+  name: string;
+  /** The appeal's or group's score, 0–100, where the result has one. */
+  score: number | null;
+  /** That judge's summary paragraph. */
+  summary: string | null;
+  rows: {
+    id: string;
+    name: string;
+    score: number;
+    rationale: string | null;
+    fromQuickScan: boolean;
+  }[];
+}
+
+export interface ReviewerView {
+  slot: string;
+  name: string;
+  status: 'succeeded' | 'failed' | 'not_run';
+  model: string | null;
+}
+
+export interface ReportView {
+  id: string;
+  status: ReportAssessment['status'];
+  mode: 'full' | 'quick';
+  cover: {
+    title: string | null;
+    typeOfCopy: string;
+    audience: string[];
+    date: string;
+    framework: string;
+    wordCount: number;
+  };
+  verdict: {
+    overall: number;
+    band: string;
+    editor: {
+      verdict: string;
+      changes: { change: string; why: string; recommendation: number | null }[];
+      works: string[];
+    } | null;
+  };
+  lands: {
+    appeals: { id: string; name: string; question: string; score: number; target: number }[];
+    balanceIndex: number;
+    caps: { appealName: string; cap: number; why: string }[];
+    findings: { name: string; message: string }[];
+  };
+  copy: { segments: CopySegment[]; notes: ReportNote[] };
+  recommendations: ReportRecommendationView[];
+  flags: { id: string; name: string; severity: string; quote: string; note: string | null }[];
+  dimensions: DimensionGroup[];
+  lenses: { id: string; name: string; tagline: string; score: number }[];
+  duties: {
+    primary: string;
+    fit: number | null;
+    rows: { id: string; name: string; verb: string; share: number; target: number | null }[];
+  };
+  perspectives: {
+    id: string;
+    name: string;
+    question: string;
+    score: number | null;
+    summary: string;
+    levers: {
+      id: string;
+      name: string;
+      status: string;
+      quote: string | null;
+      note: string | null;
+    }[];
+  }[];
+  craft: { label: string; value: string }[];
+  culture: {
+    reader: string;
+    writer: string | null;
+    style: string;
+    scales: {
+      id: string;
+      name: string;
+      low: string;
+      high: string;
+      position: number;
+      target: number;
+    }[];
+  } | null;
+  method: {
+    reviewers: ReviewerView[];
+    fellBack: string[];
+    editor: { status: 'written' | 'skipped' | 'failed'; model: string | null } | null;
+    framework: string;
+    interpretation: string;
+    limitations: { title: string; detail: string }[];
+    costUsd: number;
+  };
+}
+
+type Names = ReadonlyMap<string, string>;
+
+const namesOf = (items: readonly { id: string; name: string }[]): Names =>
+  new Map(items.map((i) => [i.id, i.name]));
+
+const nameIn = (names: Names, id: string): string => names.get(id) ?? id;
+
+/** How much a recommendation matters, for ordering: unknown impacts go last. */
+const IMPACT_ORDER: Readonly<Record<string, number>> = { high: 0, medium: 1, low: 2 };
+const impactRank = (impact: string): number => IMPACT_ORDER[impact.toLowerCase()] ?? 3;
+
+/** `rec_3` → 3, as the editor names a recommendation (`engine/editor.ts`). */
+export function recommendationNumber(ref: string, count: number): number | null {
+  const match = /^rec_(\d+)$/.exec(ref);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return n >= 1 && n <= count ? n : null;
+}
+
+/** Split the copy at every note boundary, each run carrying the notes that cover it. */
+export function segmentCopy(
+  text: string,
+  marks: readonly { number: number; start: number; end: number }[]
+): CopySegment[] {
+  const cuts = new Set<number>([0, text.length]);
+  for (const m of marks) {
+    cuts.add(m.start);
+    cuts.add(m.end);
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+  const segments: CopySegment[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const from = points[i];
+    const to = points[i + 1];
+    const notes = marks.filter((m) => m.start <= from && m.end >= to).map((m) => m.number);
+    segments.push({ text: text.slice(from, to), notes });
+  }
+  return segments;
+}
+
+const fits = (text: string, start: number, end: number): boolean =>
+  Number.isInteger(start) &&
+  Number.isInteger(end) &&
+  start >= 0 &&
+  start < end &&
+  end <= text.length;
+
+/** The name a judge slot goes by: its appeal's, else its catalogue entry's. */
+function reviewerName(model: ReportModel, appeals: Names, slot: string): string {
+  const appeal = appeals.get(slot);
+  if (appeal) return appeal;
+  const entry = model.judge_catalogue.find((c) => c.judges.length === 1 && c.judges[0] === slot);
+  return entry?.name ?? slot;
+}
+
+function formatSeconds(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+export interface BuildReportInput {
+  assessment: ReportAssessment;
+  result: ReportResult;
+  model: ReportModel;
+}
+
+export function buildReportView({ assessment, result, model }: BuildReportInput): ReportView {
+  const appeals = namesOf(model.appeals);
+  const dims = namesOf([...model.dimensions, ...model.extra_dimensions, ...model.lenses]);
+  const moves = namesOf(model.moves);
+  const flags = namesOf(model.red_flags);
+  const groups = namesOf(model.groups);
+
+  // Cover
+  const audience: string[] = [];
+  const { archetype, role, ...modifiers } = result.audience;
+  if (archetype) audience.push(nameIn(namesOf(model.archetypes), archetype));
+  if (role) audience.push(nameIn(namesOf(model.exec_roles), role));
+  for (const mod of model.audience_modifiers) {
+    const chosen = modifiers[mod.id];
+    const option = chosen ? mod.options.find((o) => o.id === chosen) : undefined;
+    if (option) audience.push(option.label);
+  }
+
+  // Recommendations: numbered in result order (the editor's ids), shown by impact.
+  const recByDimension = new Map<string, number>();
+  const recommendations = result.recommendations.map(
+    (r: ReportRecommendation, i): ReportRecommendationView => {
+      const number = i + 1;
+      if (!recByDimension.has(r.dimension)) recByDimension.set(r.dimension, number);
+      return {
+        number,
+        appealId: r.appeal,
+        appealName: nameIn(appeals, r.appeal),
+        dimensionId: r.dimension,
+        dimensionName: nameIn(dims, r.dimension),
+        move: r.move ? nameIn(moves, r.move) : null,
+        issue: r.issue,
+        original: r.original,
+        rewrite: r.rewrite,
+        impact: r.impact,
+        example: r.example === true,
+      };
+    }
+  );
+  const byImpact = recommendations
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => impactRank(a.r.impact) - impactRank(b.r.impact) || a.i - b.i)
+    .map(({ r }) => r);
+
+  // Notes, placed in the copy
+  const notes: ReportNote[] = result.highlights.map((h, i) => ({
+    number: i + 1,
+    polarity: h.polarity,
+    note: h.note,
+    quote: h.quote,
+    dimensionId: h.dimension,
+    dimensionName: nameIn(dims, h.dimension),
+    appealId: h.appeal,
+    recommendation: recByDimension.get(h.dimension) ?? null,
+    fromQuickScan: h.source === 'quick',
+    flag: h.flag ? nameIn(flags, h.flag) : null,
+    placed: fits(assessment.text, h.start, h.end),
+  }));
+  const marks = result.highlights
+    .map((h, i) => ({ number: i + 1, start: h.start, end: h.end }))
+    .filter((m) => notes[m.number - 1].placed);
+
+  // Editor
+  const editorRecord = result.editor;
+  const editor =
+    editorRecord?.status === 'written'
+      ? {
+          verdict: editorRecord.summary.verdict,
+          changes: editorRecord.summary.changes.map((c) => ({
+            change: c.change,
+            why: c.why,
+            recommendation: recommendationNumber(c.recommendation, recommendations.length),
+          })),
+          works: editorRecord.summary.works,
+        }
+      : null;
+
+  // How it lands
+  const landsAppeals = APPEAL_IDS.map((id) => {
+    const def = model.appeals.find((a) => a.id === id);
+    return {
+      id,
+      name: def?.name ?? id,
+      question: def?.question ?? '',
+      score: result.scores[id],
+      target: Math.round(result.effective_weights[id] * 100),
+    };
+  });
+  const dimScore = new Map(result.dimensions.map((d) => [d.id, d.score]));
+  const caps = model.scoring.integrity_caps
+    .filter((c) => {
+      const s = dimScore.get(c.dimension);
+      return s !== undefined && s <= c.if_at_most;
+    })
+    .map((c) => ({ appealName: nameIn(appeals, c.appeal), cap: c.cap, why: c.why }));
+
+  // Dimensions, by appeal then group, in the model's order
+  const groupOrder = [...APPEAL_IDS, ...model.groups.map((g) => g.id)];
+  const dimensionGroups: DimensionGroup[] = [];
+  for (const groupId of groupOrder) {
+    const rows = result.dimensions
+      .filter((d) => d.appeal === groupId)
+      .map((d) => ({
+        id: d.id,
+        name: nameIn(dims, d.id),
+        score: d.score,
+        rationale: d.rationale ?? null,
+        fromQuickScan: d.source === 'quick',
+      }));
+    if (rows.length === 0) continue;
+    const isAppeal = (APPEAL_IDS as readonly string[]).includes(groupId);
+    dimensionGroups.push({
+      id: groupId,
+      name: isAppeal ? nameIn(appeals, groupId) : nameIn(groups, groupId),
+      score: isAppeal
+        ? result.scores[groupId as (typeof APPEAL_IDS)[number]]
+        : (result.group_scores[groupId] ?? null),
+      summary: result.judges[groupId] ?? null,
+      rows,
+    });
+  }
+
+  // Lenses and duties
+  const lenses = model.lenses
+    .filter((l) => result.lenses[l.id] !== undefined)
+    .map((l) => ({ id: l.id, name: l.name, tagline: l.tagline, score: result.lenses[l.id] }));
+  const dutyNames = namesOf(model.duties);
+  const duties = {
+    primary: nameIn(dutyNames, result.duties.primary),
+    fit: result.duties.fit,
+    rows: model.duties
+      .filter((d) => result.duties.profile[d.id] !== undefined)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        verb: d.verb,
+        share: result.duties.profile[d.id],
+        target: result.duties.target?.[d.id] ?? null,
+      })),
+  };
+
+  // Influence perspectives: only when at least one could be scored
+  const perspectives = result.perspectives.some((p) => p.score !== null)
+    ? result.perspectives.map((p) => {
+        const def = model.perspectives.find((d) => d.id === p.id);
+        const levers = namesOf(def?.levers ?? []);
+        return {
+          id: p.id,
+          name: def?.name ?? p.id,
+          question: def?.question ?? '',
+          score: p.score,
+          summary: p.summary,
+          levers: p.levers
+            .filter((l) => l.status !== 'unknown' && l.status !== 'not_applicable')
+            .map((l) => ({
+              id: l.id,
+              name: nameIn(levers, l.id),
+              status: l.status,
+              quote: l.quote ?? null,
+              note: l.note ?? null,
+            })),
+        };
+      })
+    : [];
+
+  const c = result.craft;
+  const craft = [
+    { label: 'Word count', value: String(c.words) },
+    { label: 'Sentences', value: String(c.sentences) },
+    { label: 'Average sentence', value: `${c.avg_sentence.toFixed(1)} words` },
+    { label: 'Speaking time', value: formatSeconds(c.speaking_sec) },
+    { label: 'Gunning Fog index', value: c.gunning_fog.toFixed(1) },
+    { label: 'Flesch–Kincaid grade', value: c.fk_grade.toFixed(1) },
+    { label: 'Passive voice', value: `${Math.round(c.passive_pct)}%` },
+    { label: 'Emotional words', value: `${Math.round(c.emotional_pct)}%` },
+  ];
+
+  const culture =
+    result.culture && model.culture
+      ? {
+          reader: result.culture.reader.name,
+          writer: result.culture.writer?.name ?? null,
+          style: result.culture.reader.lewis_label,
+          scales: model.culture.scales
+            .filter((s) => result.culture?.positions[s.id] !== undefined)
+            .map((s) => ({
+              id: s.id,
+              name: s.name,
+              low: s.low,
+              high: s.high,
+              position: result.culture?.positions[s.id] ?? 0,
+              target: result.culture?.reader.targets[s.id] ?? 0,
+            })),
+        }
+      : null;
+
+  // Method
+  const runs = new Map(assessment.judgeRuns.map((r) => [r.judge, r]));
+  const reviewers: ReviewerView[] = assessment.judges.map((slot) => {
+    const run = runs.get(slot);
+    return {
+      slot,
+      name: reviewerName(model, appeals, slot),
+      status: run ? run.status : 'not_run',
+      model: run?.model ?? null,
+    };
+  });
+  const editorMethod = editorRecord
+    ? {
+        status: editorRecord.status,
+        model: editorRecord.status === 'skipped' ? null : editorRecord.model,
+      }
+    : null;
+
+  return {
+    id: assessment.id,
+    status: assessment.status,
+    mode: result.mode,
+    cover: {
+      title: assessment.title,
+      typeOfCopy: nameIn(namesOf(model.content_types), result.content_type),
+      audience,
+      date: assessment.completedAt ?? assessment.createdAt,
+      framework: `${model.meta.name} ${model.meta.version}`,
+      wordCount: assessment.wordCount,
+    },
+    verdict: { overall: result.scores.overall, band: result.scores.band, editor },
+    lands: {
+      appeals: landsAppeals,
+      balanceIndex: result.scores.balance_index,
+      caps,
+      findings: result.balance_findings.map((f) => ({ name: f.name, message: f.message })),
+    },
+    copy: { segments: segmentCopy(assessment.text, marks), notes },
+    recommendations: byImpact,
+    flags: result.red_flags.map((f) => ({
+      id: f.id,
+      name: nameIn(flags, f.id),
+      severity: f.severity,
+      quote: f.quote,
+      note: f.note ?? null,
+    })),
+    dimensions: dimensionGroups,
+    lenses,
+    duties,
+    perspectives,
+    craft,
+    culture,
+    method: {
+      reviewers,
+      fellBack: reviewers.filter((r) => r.status !== 'succeeded').map((r) => r.name),
+      editor: editorMethod,
+      framework: `${model.meta.name} ${model.meta.version}`,
+      interpretation: model.scoring.interpretation,
+      limitations: model.limitations.map((l) => ({ title: l.title, detail: l.detail })),
+      costUsd: assessment.costUsd,
+    },
+  };
+}

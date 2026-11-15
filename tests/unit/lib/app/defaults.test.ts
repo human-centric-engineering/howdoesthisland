@@ -466,9 +466,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/protected-routes.ts',
     risk: 'a stray path would put a public route behind auth on every install',
-    // FORK (HowDoesThisLand): pinned to /home, the signed-in landing.
+    // FORK (HowDoesThisLand): pinned to /home, the signed-in landing, and
+    // /assessments, where a review's report lives (t-29).
     // Ledger: .context/app/platform-divergences.md row 2.
-    assert: () => expect(appProtectedRoutes).toEqual(['/home']),
+    assert: () => expect(appProtectedRoutes).toEqual(['/home', '/assessments']),
   },
   {
     seam: 'lib/app/config-health.ts',

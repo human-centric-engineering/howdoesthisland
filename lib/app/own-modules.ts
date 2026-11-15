@@ -74,4 +74,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/api/',
   // The workspace's retention window and the purge that applies it (t-26).
   'lib/app/retention/',
+  // The report: what it reads from the API and how it is laid out (t-29).
+  'lib/app/reports/',
 ];
