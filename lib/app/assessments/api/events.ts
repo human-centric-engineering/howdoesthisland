@@ -62,12 +62,20 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
  * The events of one of this workspace's assessments. The caller has checked
  * it exists; one deleted since ends the stream with `assessment_gone`.
  */
-export async function* assessmentEvents(
+export function assessmentEvents(
   id: string,
   options: EventOptions = {}
 ): AsyncGenerator<AssessmentEvent> {
-  // Read now, in the request's tenant context, not when the stream is pulled.
-  const orgId = requireOrgId();
+  // Read here, in the request's tenant context. A generator's body runs only
+  // when the stream first pulls it, so the org is not read there.
+  return pollEvents(id, requireOrgId(), options);
+}
+
+async function* pollEvents(
+  id: string,
+  orgId: string,
+  options: EventOptions
+): AsyncGenerator<AssessmentEvent> {
   const pollMs = options.pollMs ?? POLL_MS;
   const deadline = Date.now() + (options.maxMs ?? EVENTS_MAX_MS);
   let lastState: AssessmentState | null = null;
