@@ -270,6 +270,8 @@ export const assessmentSummarySchema = z.object({
  * so open here; `dp2` documents HowDoesThisLand's.
  */
 export const assessmentDetailSchema = assessmentSummarySchema.extend({
+  /** The copy assessed; the result's offsets point into it. */
+  text: z.string(),
   context: z.unknown(),
   result: z.unknown(),
   judgeRuns: z.array(judgeRunViewSchema),

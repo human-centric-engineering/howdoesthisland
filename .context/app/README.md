@@ -18,5 +18,6 @@ domain folders beside this one: start at [`../substrate.md`](../substrate.md).
 | [`judges.md`](./judges.md)                             | Judges: the nine judge agents and the editor, what their instructions hold and what comes from the version, the interim models.              |
 | [`assessments.md`](./assessments.md)                   | Assessments: the stored rows, the job's states and lease, its limits, cancel, the recovery job, and the smoke run.                           |
 | [`api.md`](./api.md)                                   | The API contract: the route registry every app route is declared in, what an entry says, adding a route, and the test that keeps it in step. |
+| [`report.md`](./report.md)                             | The report: where its data comes from, what decides each section, the web, print and shared variants, and the print styles.                  |
 
 Features add their own page here as they land, and a row to this table.

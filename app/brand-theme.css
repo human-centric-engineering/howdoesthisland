@@ -194,3 +194,59 @@
     font-weight: 500;
   }
 }
+
+/* ---------------------------------------------------------------- print */
+
+/* The report prints as a document (t-29; the PDF in x1 is made from this).
+   Ink on white paper whatever the screen's mode, the app's frame left out,
+   and the sheet without its shadow or crop marks. Unlayered tokens, as above,
+   so they beat the dark lightbox's. */
+@media print {
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  [data-surface='consumer'],
+  [data-surface='consumer'].dark {
+    --hd-desk: #ffffff;
+    --hd-paper: #ffffff;
+    --hd-ink: #141414;
+    --hd-muted: #5a5955;
+    --hd-faint: #a9a7a0;
+    --hd-rule: #d6d4cc;
+    --hd-red: #c41f35;
+    --hd-ethos: #1e50c8;
+    --hd-pathos: #c41f35;
+    --hd-logos: #0f7b6c;
+    --hd-kairos: #a85a00;
+    --color-background: #ffffff;
+    --color-foreground: #141414;
+    --color-border: #d6d4cc;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* The platform header and footer are not part of a report. These reach into
+     the platform layout's markup: a change upstream prints the frame again,
+     and nothing else breaks. The cookie banner is hidden by its label. */
+  [data-surface='consumer'] body > div > header,
+  [data-surface='consumer'] body > div > footer,
+  [data-surface='consumer'] [data-print='hide'],
+  [data-surface='consumer'] [role='dialog'][aria-label='Cookie consent'] {
+    display: none !important;
+  }
+
+  [data-surface='consumer'] main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  [data-surface='consumer'] .hd-sheet {
+    box-shadow: none;
+  }
+
+  [data-surface='consumer'] .hd-sheet::before,
+  [data-surface='consumer'] .hd-sheet::after {
+    display: none;
+  }
+}

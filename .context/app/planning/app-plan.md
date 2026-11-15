@@ -352,30 +352,33 @@ a new term is added here in the same PR.
 
 **Settled** (the plan already uses these, or they have no rival):
 
-| Say                                               | Means                                                                                       | Not                                                  |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| **copy**                                          | The words being written or reviewed, as a whole                                             | content, text, input                                 |
-| **draft**, **draft 2**                            | One version of the copy; drafts are numbered in order                                       | version, revision number, iteration                  |
-| **brief**                                         | What the copy must do, for whom, in what voice: a project's brief                           | context, settings, profile                           |
-| **client**                                        | Who the copy is for, when the writer works for someone else                                 | customer, account holder                             |
-| **tone of voice**                                 | How the brand or author sounds (in the brief)                                               | voice settings, style                                |
-| **house style**                                   | A workspace's or client's rules on spelling, punctuation and usage, UK or US English first  | locale, language settings                            |
-| **UK English**, **US English**                    | The two spelling conventions offered (D26)                                                  | en-GB, en-US, British locale                         |
-| **headline**, **subhead**, **body copy**, **CTA** | Parts of a piece, as copywriters name them                                                  | title, heading, paragraph, button                    |
-| **mark-up**, **marked-up copy**                   | The copy with the review's notes marked in place                                            | annotations, highlights, overlay                     |
-| **note**                                          | One point the review makes about a passage                                                  | finding, issue, highlight                            |
-| **edit**                                          | A change the writer makes in their own words (D25)                                          | modification, manual change                          |
-| **revise**, **revision**                          | A passage reworked by the AI, to the writer's **direction** (D24)                           | regenerate, AI rewrite of selection                  |
-| **direction**                                     | What the writer asks of a revision: "warmer", "cut to 20 words", "lead with the saving"     | prompt, instruction, guidance                        |
-| **suggested**, **accept**, **reject**             | A revision waits as suggested until the writer accepts or rejects it, as in tracked changes | apply, approve, discard                              |
-| **changes**, **show changes**                     | The difference between two drafts, shown as tracked changes                                 | diff, delta                                          |
-| **rewrite**                                       | A whole new draft from the review (`f-rewrite`)                                             | regeneration                                         |
-| **word count**, **length**                        | As copywriters count them                                                                   | tokens, characters (unless a limit is in characters) |
-| **placeholder**                                   | A gap for a fact only the writer knows: `[ADD: client name]`                                | variable, slot                                       |
+| Say                                               | Means                                                                                         | Not                                                  |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **copy**                                          | The words being written or reviewed, as a whole                                               | content, text, input                                 |
+| **review**                                        | One run of the AI reviewers (or the quick scan) over a piece of copy, and its report          | assessment, analysis, evaluation                     |
+| **AI reviewers**                                  | The nine AI judges, as people see them named                                                  | judges, agents, models                               |
+| **type of copy**                                  | What kind of piece it is (landing page, cover letter, board paper), which sets the target mix | content type, format, category                       |
+| **draft**, **draft 2**                            | One version of the copy; drafts are numbered in order                                         | version, revision number, iteration                  |
+| **brief**                                         | What the copy must do, for whom, in what voice: a project's brief                             | context, settings, profile                           |
+| **client**                                        | Who the copy is for, when the writer works for someone else                                   | customer, account holder                             |
+| **tone of voice**                                 | How the brand or author sounds (in the brief)                                                 | voice settings, style                                |
+| **house style**                                   | A workspace's or client's rules on spelling, punctuation and usage, UK or US English first    | locale, language settings                            |
+| **UK English**, **US English**                    | The two spelling conventions offered (D26)                                                    | en-GB, en-US, British locale                         |
+| **headline**, **subhead**, **body copy**, **CTA** | Parts of a piece, as copywriters name them                                                    | title, heading, paragraph, button                    |
+| **mark-up**, **marked-up copy**                   | The copy with the review's notes marked in place                                              | annotations, highlights, overlay                     |
+| **note**                                          | One point the review makes about a passage                                                    | finding, issue, highlight                            |
+| **edit**                                          | A change the writer makes in their own words (D25)                                            | modification, manual change                          |
+| **revise**, **revision**                          | A passage reworked by the AI, to the writer's **direction** (D24)                             | regenerate, AI rewrite of selection                  |
+| **direction**                                     | What the writer asks of a revision: "warmer", "cut to 20 words", "lead with the saving"       | prompt, instruction, guidance                        |
+| **suggested**, **accept**, **reject**             | A revision waits as suggested until the writer accepts or rejects it, as in tracked changes   | apply, approve, discard                              |
+| **changes**, **show changes**                     | The difference between two drafts, shown as tracked changes                                   | diff, delta                                          |
+| **rewrite**                                       | A whole new draft from the review (`f-rewrite`)                                               | regeneration                                         |
+| **word count**, **length**                        | As copywriters count them                                                                     | tokens, characters (unless a limit is in characters) |
+| **placeholder**                                   | A gap for a fact only the writer knows: `[ADD: client name]`                                  | variable, slot                                       |
 
-**Proposed, for the owner to settle** (open question 5): what to call an
-_assessment_ (review? copy review? critique?), the _judges_ (reviewers? the panel?), the
-_report_ (it stays "report" unless the first changes), _content type_ (format?), and one
+**Settled by the owner on 2026-11-15** (open question 5): _assessment_ is **review**, the
+_judges_ are **AI reviewers**, _content type_ is **type of copy**, and the _report_ stays
+"report". The visible words live in `lib/app/reports/words.ts`. **Still to settle:** one
 piece of work in a project (job? assignment?).
 
 **Where this applies.** Everything a person reads: the interface, reports, PDFs, emails,
@@ -1739,10 +1742,9 @@ take the profession's word. The terms the owner has not yet chosen are open ques
    `l2`.
 4. **CHANGELOG.** This fork publishes no releases. Proposal: no entries, and the CLAUDE.md
    rule is updated to say so. A Housekeeping task if accepted.
-5. **The copywriting names still to choose** (D27): what people see in place of
-   _assessment_, _judges_, _content type_, and one piece of work in a project (job or
-   assignment), listed under "Proposed" in §4. Needed by `r1` and `b1`, the first pages
-   that show them; the API names stay either way.
+5. **The copywriting names still to choose** (D27): one piece of work in a project (job or
+   assignment). Needed by `b1`. The rest were settled on 2026-11-15 (§4); the API names
+   stay either way.
 
 ---
 

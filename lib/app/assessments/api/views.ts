@@ -47,6 +47,12 @@ export type AssessmentSummary = {
 };
 
 export type AssessmentDetail = AssessmentSummary & {
+  /**
+   * The copy that was assessed, as intake stored it. The result's highlights
+   * and red flags are character offsets into it, so a reader of the result
+   * needs it to place them (the report, t-29).
+   */
+  text: string;
   /** Who the text is for, defaults applied. */
   context: unknown;
   /** The framework's assembled result, once final; `null` before. */
@@ -128,6 +134,7 @@ const summarySelect = {
 
 const detailSelect = {
   ...summarySelect,
+  content: { select: { ...summarySelect.content.select, text: true } },
   context: true,
   result: true,
   judgeRuns: {
@@ -200,6 +207,7 @@ export function inJudgeOrder<T extends { judge: string }>(
 function detailView(row: DetailRow): AssessmentDetail {
   return {
     ...summaryView(row),
+    text: row.content.text,
     context: row.context,
     result: row.result,
     judgeRuns: inJudgeOrder(row.judges, row.judgeRuns).map(judgeRunView),
