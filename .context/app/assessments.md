@@ -201,20 +201,25 @@ Replies stored before the `app_judge_reply` table were copied into it dated at
 the migration, so each gets the full window from deploy rather than being
 purged on the first boot.
 
+An assessment's cached report PDFs (t-31) go before its row, and the row stays
+for the next pass if storage refuses (`report.md`, "A PDF must not outlive its
+review").
+
 Shares, rewrites and comparison sets do not exist yet. Each task that adds
 one says what purging an assessment does to it.
 
 ## The API
 
-| Route                                  | Who                           | What                                                                                       |
-| -------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `POST /api/v1/scan`                    | anyone, 30/min per IP         | The quick scan of pasted text. Deterministic, no AI, nothing stored.                       |
-| `POST /api/v1/assessments`             | session, or key with `assess` | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                              |
-| `GET /api/v1/assessments`              | same                          | The workspace's assessments, newest first; `page`, `limit`, `status`.                      |
-| `GET /api/v1/assessments/{id}`         | same                          | One assessment: its copy (`text`), its judges and, once final, its result.                 |
-| `GET /api/v1/assessments/{id}/events`  | same                          | Progress as Server-Sent Events.                                                            |
-| `POST /api/v1/assessments/{id}/cancel` | same                          | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                       |
-| `DELETE /api/v1/assessments/{id}`      | same                          | Delete it, its judge runs and replies, and its text (unless another assessment shares it). |
+| Route                                     | Who                            | What                                                                                                     |
+| ----------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/scan`                       | anyone, 30/min per IP          | The quick scan of pasted text. Deterministic, no AI, nothing stored.                                     |
+| `POST /api/v1/assessments`                | session, or key with `assess`  | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                            |
+| `GET /api/v1/assessments`                 | same                           | The workspace's assessments, newest first; `page`, `limit`, `status`.                                    |
+| `GET /api/v1/assessments/{id}`            | same                           | One assessment: its copy (`text`), its judges and, once final, its result.                               |
+| `GET /api/v1/assessments/{id}/events`     | same                           | Progress as Server-Sent Events.                                                                          |
+| `POST /api/v1/assessments/{id}/cancel`    | same                           | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                     |
+| `DELETE /api/v1/assessments/{id}`         | same                           | Delete it, its judge runs and replies, and its text (unless another assessment shares it).               |
+| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports` | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`. |
 
 Each route's docblock lists its error codes. A few rules hold across them:
 

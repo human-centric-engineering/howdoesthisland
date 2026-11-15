@@ -89,6 +89,22 @@ const fakePrisma = vi.hoisted(() => {
       (a.leaseExpiresAt === null || (a.completedAt !== null && a.completedAt < ended))
     );
   };
+  /**
+   * The assessments the purge's `where` names: past the cutoff and settled,
+   * in one org, and (on the delete) among the ids whose PDFs were cleared.
+   */
+  const expired = (where: Record<string, unknown>) => {
+    allowed(where, ['orgId', 'createdAt', 'status', 'OR', 'id']);
+    const { orgId, createdAt, id, ...rest } = where;
+    const ids = id === undefined ? null : (id as { in: string[] }).in;
+    return db.assessments.filter(
+      (a) =>
+        a.orgId === orgId &&
+        before(a.createdAt, createdAt) &&
+        settled(a, rest) &&
+        (ids === null || ids.includes(a.id))
+    );
+  };
   /** Delete assessments, cascading to their judge runs and replies. */
   const dropAssessments = (ids: Set<string>) => {
     db.assessments = db.assessments.filter((a) => !ids.has(a.id));
@@ -103,12 +119,11 @@ const fakePrisma = vi.hoisted(() => {
       ),
     },
     assessment: {
+      findMany: vi.fn(({ where }: { where: Record<string, unknown> }) =>
+        Promise.resolve(expired(where).map((a) => ({ id: a.id })))
+      ),
       deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
-        allowed(where, ['orgId', 'createdAt', 'status', 'OR']);
-        const { orgId, createdAt, ...rest } = where;
-        const hit = db.assessments.filter(
-          (a) => a.orgId === orgId && before(a.createdAt, createdAt) && settled(a, rest)
-        );
+        const hit = expired(where);
         dropAssessments(new Set(hit.map((a) => a.id)));
         return Promise.resolve({ count: hit.length });
       }),
@@ -163,6 +178,30 @@ const fakePrisma = vi.hoisted(() => {
   };
 });
 vi.mock('@/lib/db/client', () => ({ prisma: fakePrisma }));
+/** The report PDFs storage holds, by assessment; `refuse` makes deleting one's fail. */
+const pdfs = vi.hoisted(() => ({
+  held: new Set<string>(),
+  refuse: new Set<string>(),
+  deletes: [] as string[],
+}));
+vi.mock('@/lib/app/reports/pdf/cache', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/app/reports/pdf/cache')>();
+  const deleteReportPdfs = vi.fn((orgId: string, id: string) => {
+    pdfs.deletes.push(id);
+    if (pdfs.refuse.has(id)) {
+      return Promise.reject(new real.ReportPdfCleanupError(real.reportPdfFolder(orgId, id)));
+    }
+    pdfs.held.delete(id);
+    return Promise.resolve();
+  });
+  return {
+    ...real,
+    deleteReportPdfs,
+    sweepReportPdfs: vi.fn(async (orgId: string, ids: string[]) => {
+      for (const id of ids) await deleteReportPdfs(orgId, id).catch(() => undefined);
+    }),
+  };
+});
 vi.mock('@/lib/tenancy/context', () => ({
   requireOrgId: () => {
     if (!db.orgId) throw new Error('no tenant context');
@@ -219,6 +258,9 @@ beforeEach(() => {
   db.judgeRuns = [];
   db.replies = [];
   db.orgId = WS;
+  pdfs.held.clear();
+  pdfs.refuse.clear();
+  pdfs.deletes = [];
 });
 
 describe('with a content window', () => {
@@ -304,6 +346,39 @@ describe('with a content window', () => {
     expect(ids(db.assessments)).toEqual([recent.assessment.id]);
     expect(ids(db.contents)).toEqual([recent.content.id]);
     expect(ids(db.replies)).toEqual([recent.reply.id]);
+  });
+
+  it("deletes a purged assessment's cached report PDFs, and only those", async () => {
+    const old = piece(WS, 120);
+    const recent = piece(WS, 10);
+    pdfs.held.add(old.assessment.id);
+    pdfs.held.add(recent.assessment.id);
+
+    await purgeExpiredContent(NOW);
+
+    expect([...pdfs.held]).toEqual([recent.assessment.id]);
+    // Before the row and swept once more after it (a render may have raced the purge).
+    expect(pdfs.deletes).toEqual([old.assessment.id, old.assessment.id]);
+  });
+
+  it('keeps an assessment whose PDFs storage would not delete, for the next pass', async () => {
+    const stuck = piece(WS, 120);
+    piece(WS, 200);
+    pdfs.held.add(stuck.assessment.id);
+    pdfs.refuse.add(stuck.assessment.id);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result.assessments).toBe(1);
+    expect(ids(db.assessments)).toEqual([stuck.assessment.id]);
+    // Its text stays too: the assessment still uses it.
+    expect(ids(db.contents)).toEqual([stuck.content.id]);
+
+    // Once storage recovers, the next pass finishes it.
+    pdfs.refuse.clear();
+    await purgeExpiredContent(NOW);
+    expect(db.assessments).toEqual([]);
+    expect(pdfs.held.size).toBe(0);
   });
 
   it('touches no other workspace', async () => {

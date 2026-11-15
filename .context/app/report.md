@@ -1,8 +1,8 @@
 # The report
 
 What `/assessments/[id]` shows: a finished review read top to bottom, as
-app-plan §8.5 orders it. Built in t-29 (f-report). The PDF (x1) and share links
-(x2) render the same component.
+app-plan §8.5 orders it. Built in t-29 (f-report). The PDF (t-31, below) and
+share links (x2) render the same component.
 
 ## Where the data comes from
 
@@ -19,6 +19,14 @@ renders the not-found page. Any other failure goes to the route's error boundary
 While both reads are in flight the route's `loading.tsx` shows a skeleton. A
 stale session cookie is cleared and the reader is sent back to this report after
 signing in, not to `/home`, because the report is the link people are sent.
+
+**One loader, two sources.** `loadReport(id, source)` takes where the two
+answers come from. The web page passes `apiReportSource`, the API above, as the
+signed-in reader. The PDF's print page has no session, so it passes
+`printReportSource` (`lib/app/reports/pdf/print-source.ts`), which calls the
+services those two routes answer from and round-trips each answer through JSON.
+Parsing and building are the same for both, so the PDF cannot drift from the
+page.
 
 **Nothing is cast.** `result` and `context` are `unknown` in the API contract,
 because each framework has its own shapes. `lib/app/reports/input.ts` parses
@@ -90,6 +98,64 @@ the sheet's shadow and crop marks. Sections avoid breaking inside a
 recommendation, a red flag or a limitation. The header and footer rule reaches
 into the platform layout's markup: if upstream changes it, the frame prints again
 and nothing else breaks.
+
+Two things t-34 learned from the first real PDF:
+
+- **Print must reset `color-scheme`, not just the colour tokens.** The page
+  canvas, margins included, is painted from the root's `color-scheme`. With the
+  screen in dark mode it stayed `dark`, so the white sheet printed on a black
+  page.
+- **A section's number and title are one block** (`break-inside: avoid`,
+  `break-after: avoid`). As two blocks, Chrome broke between them and left
+  "§ 05" alone at the foot of a page. A label above a chart needs the same
+  `break-after: avoid`.
+
+## The PDF
+
+`GET /api/v1/assessments/{id}/report.pdf` (t-31, f-sharing) is the `print`
+variant printed by headless Chromium, so it is the page's layout and print
+stylesheet rather than a second design. It needs a session or an API key with
+the `reports` scope, and answers 409 `REPORT_NOT_READY` for a review that has
+no report (still running, failed or cancelled).
+
+1. **The route** (`lib/app/reports/pdf/service.ts`) looks for a cached file,
+   and otherwise mints a render token and has `renderReportPdf`
+   (`lib/app/reports/pdf/render.ts`) open `/print/assessments/{id}` in a
+   browser it launches.
+2. **The token** (`render-token.ts`) is HMAC-signed like the approval and
+   storage tokens, with its own `typ` (`report-render`), so none of the three
+   accepts another's. It names the assessment and the org, and lives 60
+   seconds. It goes in a request header (`x-report-render-token`), only on the
+   document request, and never leaves the server. Every request to another
+   origin is aborted, so the token cannot leak and analytics do not fire.
+3. **The print page** (`app/(print)/print/assessments/[id]/page.tsx`) enters
+   the assessment's org from the row (`runAsReportOrg`, `report-org.ts`): the
+   one read under `runAsCredentialLookup`, the org through
+   `resolveCredentialOrg`, then `runAsOrg`. The source is `'approval-token'`,
+   whose documented meaning ("an HMAC token over a row id, the org the row's")
+   fits exactly, and which nothing downstream reads as meaning an approval. A
+   token for another assessment or org, or a suspended workspace, is not found.
+   The page sets `data-pdf-ready` only when the report rendered, and the
+   renderer refuses to print without it.
+4. **The cache** (`cache.ts`) keeps the file in the workspace's private storage
+   at `orgs/{orgId}/reports/{assessmentId}/{completedAt ms}.pdf`. A final
+   review never changes, so a file is reused until the review goes. Without
+   storage that keeps private files and reads them back, every request renders.
+
+**A PDF must not outlive its review.** Deleting a review and the retention
+purge delete its folder before the row. If storage refuses, the row stays and
+the next attempt finishes it. Both sweep the folder again after the row,
+because a render that wrote between the two deletes would otherwise leave a
+file. A render also checks its review still exists after writing, and removes
+its file if not. Org erasure deletes the whole `orgs/{orgId}/` tree.
+
+**Cost.** Each render is a whole browser: at most two per process at once, and
+10 per caller per minute (`limiter.ts`). A cache hit counts towards neither. The
+Docker image installs Alpine's `chromium` (ledger row 15) and sets
+`PDF_CHROMIUM_PATH`. In development the Mac's Google Chrome is used. The
+browser runs without its sandbox, which needs privileges the image does not
+have. That is acceptable only because it loads nothing but this app's own
+print page.
 
 ## Words
 

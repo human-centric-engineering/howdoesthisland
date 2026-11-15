@@ -79,7 +79,7 @@ export async function runAsReportOrg<T>(
   // The row's org, as resolved, must be the one the token was minted in.
   if (org.orgId !== claimedOrg) return refuse({ refused: 'wrong-org' }, id);
 
-  const value = await runAsOrg(org.orgId, fn, { source: org.source });
+  const value = await runAsOrg(org.orgId, fn, { source: org.source, role: org.role });
   return { ok: true, value };
 }
 
