@@ -187,8 +187,10 @@ sooner, which is harmless. Each pass:
 
 `QUEUED` and `RUNNING` assessments are skipped, and so are their judges'
 replies, because a re-driven run reads its finished judges' replies back. So is
-a `CANCELLED` one whose lease has not run out, since its judges in flight can
-still land on it. A succeeded run found with no reply on a re-drive is counted
+a `CANCELLED` one that may still have judges in flight, since they can land on
+it after the cancel. Its lease is no guide (a cancelled run stops renewing it),
+so one is taken once its judges have all landed (the lease cleared) or an hour
+after the cancel (`CANCEL_GRACE_MS`, past any judge's timeout and retries). A succeeded run found with no reply on a re-drive is counted
 as a failed judge rather than called again, so the workspace is not billed
 twice. A window that does not parse is never purged on: for content that is no
 window, and for replies `GET` answers `judgeReplyRetention: null` and no reply

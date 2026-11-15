@@ -16,10 +16,13 @@
  *
  * Assessments still `QUEUED` or `RUNNING` are left alone, and so are their
  * judges' replies: a run re-driven by the recovery job reads its finished
- * judges' replies back. So is a `CANCELLED` one whose lease has not run out:
- * its judges in flight can still land on it (`saveJudgeRun`). The recovery
- * job finishes or fails them, the lease frees or expires, and a later pass
- * takes them.
+ * judges' replies back. So is a `CANCELLED` one that may still have judges
+ * in flight: they can land on it after the cancel (`saveJudgeRun`). Its lease
+ * is no guide, because a cancelled run stops renewing it, so it lapses while
+ * judges are still out. One is taken once its judges have all landed
+ * (`freePlace` clears the lease) or {@link CANCEL_GRACE_MS} after the cancel,
+ * past any judge's timeout and retries. The recovery job finishes or fails
+ * the live ones, and a later pass takes them.
  *
  * An unreadable stored window purges nothing on it (`./settings.ts`).
  *
@@ -36,12 +39,22 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const LIVE = ['QUEUED', 'RUNNING'] as const;
 
 /**
- * An assessment no run can still write to: not live, and holding no lease
- * (a cancelled run keeps its lease until its judges in flight have landed).
+ * How long after a cancel its judges in flight may still land. The longest
+ * judge timeout is five minutes; an hour covers that with its retries.
+ */
+export const CANCEL_GRACE_MS = 60 * 60 * 1000;
+
+/**
+ * An assessment no run can still write to: not live, and either holding no
+ * lease (every final state but a cancel with judges out clears it) or ended
+ * (`completedAt`, which a cancel sets) more than {@link CANCEL_GRACE_MS} ago.
  */
 const settled = (now: Date) => ({
   status: { notIn: [...LIVE] },
-  OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }],
+  OR: [
+    { leaseExpiresAt: null },
+    { completedAt: { lt: new Date(now.getTime() - CANCEL_GRACE_MS) } },
+  ],
 });
 
 export interface PurgeResult {
