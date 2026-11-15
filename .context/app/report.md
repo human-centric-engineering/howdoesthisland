@@ -16,6 +16,9 @@ The page reads two API answers and nothing else (`lib/app/reports/load.ts`):
 
 Both go through `requireServerData`. A 404, including another workspace's id,
 renders the not-found page. Any other failure goes to the route's error boundary.
+While both reads are in flight the route's `loading.tsx` shows a skeleton. A
+stale session cookie is cleared and the reader is sent back to this report after
+signing in, not to `/home`, because the report is the link people are sent.
 
 **Nothing is cast.** `result` and `context` are `unknown` in the API contract,
 because each framework has its own shapes. `lib/app/reports/input.ts` parses

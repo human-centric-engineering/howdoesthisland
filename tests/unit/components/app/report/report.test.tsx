@@ -22,7 +22,13 @@ import {
   type ReportAssessment,
 } from '@/lib/app/reports/input';
 import { buildReportView } from '@/lib/app/reports/view';
-import { apiAssessment, engineResult, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
+import {
+  apiAssessment,
+  degraded,
+  emptySections,
+  engineResult,
+  modelDocument,
+} from '@/tests/unit/lib/app/reports/fixtures';
 
 function viewOf(a: ReportAssessment, culture = true) {
   return buildReportView({
@@ -114,6 +120,31 @@ describe('Report — sections a result lacks are left out', () => {
     };
     render(<Report view={viewOf(a)} variant="web" />);
     expect(screen.getByText(/This review is partial: Logos fell back/)).toBeInTheDocument();
+  });
+});
+
+describe('Report — names and fields the model or result lacks', () => {
+  it('falls back to ids and placeholders, never printing undefined', () => {
+    const view = buildReportView(degraded());
+    const { container } = render(<Report view={view} variant="web" />);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Untitled copy');
+    expect(screen.getByText(/model not recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/did not run; its dimensions use the quick scan/)).toBeInTheDocument();
+    expect(screen.getByText(/persp_unknown/)).toBeInTheDocument();
+    expect(screen.getByText(/Duties · mostly/).textContent).not.toMatch(/fit/);
+    expect(container.textContent).not.toMatch(/written from/);
+    expect(container.textContent).not.toMatch(/undefined|null|NaN/);
+  });
+
+  it('leaves out every list section that has nothing in it', () => {
+    render(<Report view={buildReportView(emptySections())} variant="web" />);
+    expect(headings()).toEqual([
+      'Verdict',
+      'How it lands',
+      'Craft metrics',
+      'Culture',
+      'Method and limitations',
+    ]);
   });
 });
 

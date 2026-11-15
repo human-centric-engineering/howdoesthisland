@@ -6,7 +6,12 @@
  */
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import type { JudgeOutputs } from '@/lib/app/frameworks/howdoesthisland/engine/types';
-import type { ReportAssessment } from '@/lib/app/reports/input';
+import {
+  reportModelSchema,
+  reportResultSchema,
+  type ReportAssessment,
+} from '@/lib/app/reports/input';
+import type { BuildReportInput } from '@/lib/app/reports/view';
 import {
   loadCases,
   loadModel,
@@ -105,5 +110,65 @@ export function apiAssessment(over: Partial<ReportAssessment> = {}): ReportAsses
       errorCode: null,
     })),
     ...over,
+  };
+}
+
+/**
+ * A review whose model names nothing it is asked for and whose result leaves
+ * every optional field out — the report must fall back to ids, not throw or
+ * render "undefined". Built on the real result so only the degraded parts are
+ * synthetic.
+ */
+export function degraded(): BuildReportInput {
+  const base = apiAssessment();
+  const result = reportResultSchema.parse(base.result);
+  const model = reportModelSchema.parse(modelDocument(true));
+  const [firstRun, ...otherRuns] = base.judgeRuns;
+  return {
+    assessment: {
+      ...base,
+      title: null,
+      completedAt: null,
+      // One reviewer never ran; another's model was not recorded.
+      judgeRuns: [{ ...firstRun, model: null }, ...otherRuns.slice(1)],
+    },
+    result: {
+      ...result,
+      audience: { archetype: 'arch_unknown', role: 'role_unknown' },
+      recommendations: result.recommendations.map((r) => ({ ...r, impact: 'urgent' })),
+      highlights: result.highlights.map((h) => ({ ...h, flag: 'flag_unknown' })),
+      red_flags: [{ id: 'flag_unknown', quote: 'q', severity: 'high', source: 'ai' }],
+      dimensions: result.dimensions.map(({ rationale: _r, ...d }) => d),
+      duties: { ...result.duties, target: null, fit: null },
+      group_scores: {},
+      perspectives: [
+        {
+          id: 'persp_unknown',
+          score: 50,
+          summary: 'Summary.',
+          levers: [{ id: 'lever_unknown', status: 'present' }],
+        },
+      ],
+      culture: result.culture ? { ...result.culture, writer: null } : null,
+    },
+    model: { ...model, appeals: [], judge_catalogue: [], perspectives: [], red_flags: [] },
+  };
+}
+
+/** A review with nothing in any list section: no recommendations, dimensions, lenses, duties or scored perspectives. */
+export function emptySections(): BuildReportInput {
+  const d = degraded();
+  return {
+    ...d,
+    result: {
+      ...d.result,
+      recommendations: [],
+      highlights: [],
+      red_flags: [],
+      dimensions: [],
+      lenses: {},
+      duties: { ...d.result.duties, profile: {} },
+      perspectives: [{ id: 'persp_unknown', score: null, summary: '', levers: [] }],
+    },
   };
 }

@@ -19,6 +19,8 @@ import {
 } from '@/lib/app/reports/view';
 import {
   apiAssessment,
+  degraded,
+  emptySections,
   engineResult,
   modelDocument,
   TEXT,
@@ -247,3 +249,82 @@ describe('recommendationNumber', () => {
     expect(recommendationNumber('dimension', 3)).toBeNull();
   });
 });
+
+describe('buildReportView — names and fields the model or result lacks', () => {
+  const v = buildReportView(degraded());
+
+  it('names by id when the model has no entry, and leaves a missing question blank', () => {
+    expect(v.cover.audience).toEqual(['arch_unknown', 'role_unknown']);
+    expect(v.lands.appeals.map((a) => [a.name, a.question])).toEqual([
+      ['ethos', ''],
+      ['pathos', ''],
+      ['logos', ''],
+      ['kairos', ''],
+    ]);
+    expect(v.flags[0]).toMatchObject({ name: 'flag_unknown', note: null });
+    expect(v.copy.notes[0].flag).toBe('flag_unknown');
+    expect(v.perspectives).toEqual([
+      {
+        id: 'persp_unknown',
+        name: 'persp_unknown',
+        question: '',
+        score: 50,
+        summary: 'Summary.',
+        levers: [
+          {
+            id: 'lever_unknown',
+            name: 'lever_unknown',
+            status: 'present',
+            quote: null,
+            note: null,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('a reviewer with no appeal or catalogue entry goes by its slot', () => {
+    expect(v.method.reviewers[0].name).toBe(v.method.reviewers[0].slot);
+  });
+
+  it('a reviewer with no run is not_run and counts as fallen back; an unrecorded model is null', () => {
+    const [first, second] = v.method.reviewers;
+    expect(first).toMatchObject({ status: 'succeeded', model: null });
+    expect(second.status).toBe('not_run');
+    expect(v.method.fellBack).toEqual([second.name]);
+  });
+
+  it('dates an unfinished review by its creation, and keeps a missing title null', () => {
+    expect(v.cover.date).toBe('2026-11-15T09:00:00.000Z');
+    expect(v.cover.title).toBeNull();
+  });
+
+  it('a missing rationale, duty target, group score or writer is null, not undefined', () => {
+    expect(v.dimensions.flatMap((g) => g.rows).every((r) => r.rationale === null)).toBe(true);
+    expect(v.duties.fit).toBeNull();
+    expect(v.duties.rows.every((r) => r.target === null)).toBe(true);
+    expect(v.dimensions.filter((g) => !APPEALS.has(g.id)).every((g) => g.score === null)).toBe(
+      true
+    );
+    expect(v.culture?.writer).toBeNull();
+  });
+
+  it('keeps an unknown impact, after the known ones', () => {
+    const d = degraded();
+    const [first, ...rest] = d.result.recommendations;
+    const mixed = buildReportView({
+      ...d,
+      result: {
+        ...d.result,
+        recommendations: [first, ...rest.map((r) => ({ ...r, impact: 'High' }))],
+      },
+    });
+    expect(mixed.recommendations.at(-1)?.impact).toBe('urgent');
+  });
+
+  it('leaves perspectives out when none could be scored', () => {
+    expect(buildReportView(emptySections()).perspectives).toEqual([]);
+  });
+});
+
+const APPEALS = new Set(['ethos', 'pathos', 'logos', 'kairos']);

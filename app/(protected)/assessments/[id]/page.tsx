@@ -19,10 +19,11 @@ export const metadata: Metadata = { title: 'Report' };
  * renders the not-found page, the same as an id that does not exist.
  */
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession();
-  if (!session) clearInvalidSession('/home');
-
   const { id } = await params;
+  // Back to this report after signing in: it is the link people are sent.
+  const session = await getServerSession();
+  if (!session) clearInvalidSession(`/assessments/${encodeURIComponent(id)}`);
+
   const load = await loadReport(id);
   switch (load.kind) {
     case 'ready':
