@@ -12,7 +12,10 @@
  * so no method is ever a stub (B31). f-judges added one §8.2 did not list,
  * `validateJudgeReply`: the post-validation a reply needs is the framework's,
  * since only it knows the ids and scales. f-assessments added `parseContext`,
- * for the same reason: a context's ids are the version's.
+ * for the same reason: a context's ids are the version's, and the editor's
+ * pair (`buildEditorRequest`, `validateEditorReply`, t-25), because what the
+ * editor is shown of a result, and which of its recommendations it may name,
+ * are the framework's.
  *
  * The slots themselves are not the engine's: they are the definition's static
  * `judges.slots` (`types.ts`), because each is a platform agent that exists
@@ -52,6 +55,26 @@ export interface JudgeRequest {
    */
   maxTokens: number;
   timeoutMs: number;
+}
+
+/**
+ * The editor's call for a summary (t-25), as the engine builds it: a
+ * {@link JudgeRequest} without a slot, since the editor is one agent.
+ */
+export type EditorRequest = Omit<JudgeRequest, 'slot'>;
+
+/**
+ * The editor's summary of an assembled result (t-25): what to do first, in a
+ * few sentences. Each change names one of the result's recommendations by the
+ * id the framework gave it in the editor's request.
+ */
+export interface EditorSummary {
+  /** Two or three sentences: how the text lands, overall. */
+  verdict: string;
+  /** The changes that matter most, most important first; at most three. */
+  changes: { recommendation: string; change: string; why: string }[];
+  /** What already works, to keep. */
+  works: string[];
 }
 
 /** One thing post-validation dropped or changed in a reply, by path. */
@@ -118,4 +141,19 @@ export interface FrameworkEngine<
   outputSchema(slot: string): Record<string, unknown>;
   /** A slot's reply (parsed, untrusted) checked against the version and the judged text. */
   validateJudgeReply(slot: string, reply: unknown, text: string): JudgeReplyValidation<JudgeOutput>;
+  /**
+   * The editor's call for a summary of `result`, which this engine assembled
+   * from the same text and context. Added in f-assessments (t-25).
+   */
+  buildEditorRequest(
+    text: string,
+    ctx: Ctx,
+    result: Result,
+    projectContext?: string | null
+  ): EditorRequest;
+  /**
+   * The editor's reply (parsed, untrusted) checked against `result`: a
+   * change naming a recommendation the result does not have is dropped.
+   */
+  validateEditorReply(reply: unknown, result: Result): JudgeReplyValidation<EditorSummary>;
 }
