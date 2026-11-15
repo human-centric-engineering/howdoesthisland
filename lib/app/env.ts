@@ -55,4 +55,12 @@ export const appEnvSchema = z.object({
     .optional()
     .transform((val) => (val === undefined ? undefined : val === 'true'))
     .describe('Serve the culture module (defaults to on outside production, off in production)'),
+  PDF_CHROMIUM_PATH: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'The Chromium (or Chrome) binary report PDFs are rendered with (t-31). Unset: ' +
+        '/usr/bin/chromium-browser in the Docker image, and the usual Chrome install on macOS.'
+    ),
 });

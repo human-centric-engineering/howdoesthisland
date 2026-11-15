@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
-import { loadReport } from '@/lib/app/reports/load';
+import { apiReportSource, loadReport } from '@/lib/app/reports/load';
 import { Report } from '@/components/app/report/report';
+import { ReportActions } from '@/components/app/report/report-actions';
 import {
   ReportNoResult,
   ReportPending,
@@ -17,6 +18,8 @@ export const metadata: Metadata = { title: 'Report' };
  * Read through the API (`lib/app/reports/load.ts`): the assessment, then the
  * model version it ran on. Another workspace's id is a 404 from the API, so it
  * renders the not-found page, the same as an id that does not exist.
+ *
+ * A ready report offers its PDF (t-31).
  */
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,10 +27,15 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const session = await getServerSession();
   if (!session) clearInvalidSession(`/assessments/${encodeURIComponent(id)}`);
 
-  const load = await loadReport(id);
+  const load = await loadReport(id, apiReportSource);
   switch (load.kind) {
     case 'ready':
-      return <Report view={load.view} variant="web" />;
+      return (
+        <>
+          <ReportActions assessmentId={id} />
+          <Report view={load.view} variant="web" />
+        </>
+      );
     case 'pending':
       return <ReportPending assessment={load.assessment} />;
     case 'no_result':

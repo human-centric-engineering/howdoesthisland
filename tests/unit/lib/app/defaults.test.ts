@@ -484,11 +484,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/env.ts',
     risk: 'a stray key would make an unset env var fail boot on every install',
-    // FORK (HowDoesThisLand): pinned to our one key, the culture switch (D11),
-    // which is optional, so an unset env still parses. From t-11.
-    // Ledger: .context/app/platform-divergences.md row 2.
+    // FORK (HowDoesThisLand): pinned to our keys, the culture switch (D11,
+    // t-11) and the PDF renderer's Chromium path (t-31), both optional, so an
+    // unset env still parses. Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(Object.keys(appEnvSchema.shape)).toEqual(['CULTURE_MODULE_ENABLED']);
+      expect(Object.keys(appEnvSchema.shape)).toEqual([
+        'CULTURE_MODULE_ENABLED',
+        'PDF_CHROMIUM_PATH',
+      ]);
       expect(appEnvSchema.parse({})).toEqual({});
     },
   },
@@ -709,12 +712,12 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/api-key-scopes.ts',
     risk: 'a stray scope would be mintable on every install \u2014 and a name colliding with a core scope would change what an existing key satisfies',
-    // FORK (HowDoesThisLand): pinned to `assess` (t-24). Ledger:
-    // .context/app/platform-divergences.md row 2.
+    // FORK (HowDoesThisLand): pinned to `assess` (t-24) and `reports` (t-31).
+    // Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(APP_API_KEY_SCOPES).toEqual(['assess']);
+      expect(APP_API_KEY_SCOPES).toEqual(['assess', 'reports']);
       // …and the union it feeds is core plus ours, by value not just by length.
-      expect(listValidApiKeyScopes()).toEqual([...CORE_API_KEY_SCOPES, 'assess']);
+      expect(listValidApiKeyScopes()).toEqual([...CORE_API_KEY_SCOPES, 'assess', 'reports']);
     },
   },
   {

@@ -11,6 +11,12 @@
  * Each answer is parsed with Zod. A result the schema rejects is an
  * `unreadable` report: logged, and shown as an error rather than a page with
  * gaps.
+ *
+ * **Where the answers come from is a {@link ReportSource}** (t-31). The web
+ * page reads through the API ({@link apiReportSource}). The PDF's print page
+ * has no session to call the API with, so it reads the same services the API
+ * routes answer from (`lib/app/reports/pdf/print-source.ts`). Both go through
+ * the parsing and building below, so the PDF cannot drift from the page.
  */
 import { loadServerData, requireServerData, ServerLoadError } from '@/lib/api/server-load';
 import { logger } from '@/lib/logging';
@@ -38,9 +44,39 @@ export const assessmentPath = (id: string): string =>
 export const modelPath = (slug: string, version: string): string =>
   `/api/v1/frameworks/${encodeURIComponent(slug)}/versions/${encodeURIComponent(version)}`;
 
-export async function loadReport(id: string): Promise<ReportLoad> {
-  const { data } = await requireServerData<unknown>(assessmentPath(id), { notFound: true });
-  const assessment = reportAssessmentSchema.safeParse(data);
+/**
+ * Where a report's two answers come from, each as the API would send it.
+ *
+ * - `assessment`: the `GET /api/v1/assessments/{id}` data. An id that is not
+ *   found never returns: the API source renders the not-found page, and the
+ *   print source throws `NotFoundError`, which the print page answers the
+ *   same way.
+ * - `model`: the `GET /api/v1/frameworks/{slug}/versions/{version}` data, or
+ *   `null` when that version is not found. Any other failure throws.
+ */
+export interface ReportSource {
+  assessment(id: string): Promise<unknown>;
+  model(slug: string, version: string): Promise<unknown>;
+}
+
+/** The web page's source: the API, as the signed-in caller. */
+export const apiReportSource: ReportSource = {
+  async assessment(id) {
+    const { data } = await requireServerData<unknown>(assessmentPath(id), { notFound: true });
+    return data;
+  },
+  async model(slug, version) {
+    const path = modelPath(slug, version);
+    // 404 is expected here, and logged by `loadReport` with the assessment it belongs to.
+    const loaded = await loadServerData<unknown>(path, { expected: [404] });
+    if (loaded.ok) return loaded.data;
+    if (loaded.failure.kind !== 'not_found') throw new ServerLoadError(path, loaded.failure);
+    return null;
+  },
+};
+
+export async function loadReport(id: string, source: ReportSource): Promise<ReportLoad> {
+  const assessment = reportAssessmentSchema.safeParse(await source.assessment(id));
   if (!assessment.success) {
     logger.error('Report: the assessment did not parse', undefined, {
       assessmentId: id,
@@ -63,19 +99,16 @@ export async function loadReport(id: string): Promise<ReportLoad> {
   }
 
   // The version a stored result ran on no longer resolving is not something
-  // "Try again" fixes, so a 404 here is an unreadable report, not a throw.
-  const path = modelPath(a.framework.slug, a.framework.version);
-  // 404 is expected here, and logged below with the assessment it belongs to.
-  const loaded = await loadServerData<unknown>(path, { expected: [404] });
-  if (!loaded.ok) {
-    if (loaded.failure.kind !== 'not_found') throw new ServerLoadError(path, loaded.failure);
+  // "Try again" fixes, so a missing one is an unreadable report, not a throw.
+  const modelData = await source.model(a.framework.slug, a.framework.version);
+  if (modelData === null) {
     logger.error('Report: the model version it ran on was not found', undefined, {
       assessmentId: id,
       framework: a.framework,
     });
     return { kind: 'unreadable' };
   }
-  const model = reportModelSchema.safeParse(loaded.data);
+  const model = reportModelSchema.safeParse(modelData);
   if (!model.success) {
     logger.error('Report: the model did not parse', undefined, {
       assessmentId: id,

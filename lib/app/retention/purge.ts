@@ -24,6 +24,12 @@
  * past any judge's timeout and retries. The recovery job finishes or fails
  * the live ones, and a later pass takes them.
  *
+ * An assessment's cached report PDFs (t-31, `lib/app/reports/pdf/cache.ts`)
+ * are deleted before its row. One whose files storage would not delete is
+ * kept for the next pass, so a PDF never outlives its window with nothing
+ * left to find it by. They are swept once more after the rows go, for a
+ * render that raced the purge (`sweepReportPdfs`).
+ *
  * An unreadable stored window purges nothing on it (`./settings.ts`).
  *
  * Idempotent: a second pass finds nothing older than either window, and
@@ -31,7 +37,9 @@
  */
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
+import { logger } from '@/lib/logging';
 import { readWorkspaceSettings } from '@/lib/app/retention/settings';
+import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -77,9 +85,17 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
   let contents = 0;
   if (windows.retention) {
     const cutoff = before(windows.retention.days);
-    ({ count: assessments } = await prisma.assessment.deleteMany({
-      where: { orgId, createdAt: { lt: cutoff }, ...settled(now) },
-    }));
+    const expired = { orgId, createdAt: { lt: cutoff }, ...settled(now) };
+    const ids = await withoutReportPdfs(
+      orgId,
+      await prisma.assessment.findMany({ where: expired, select: { id: true } })
+    );
+    if (ids.length > 0) {
+      ({ count: assessments } = await prisma.assessment.deleteMany({
+        where: { ...expired, id: { in: ids } },
+      }));
+      await sweepReportPdfs(orgId, ids);
+    }
     ({ count: contents } = await prisma.content.deleteMany({
       where: { orgId, createdAt: { lt: cutoff }, assessments: { none: {} } },
     }));
@@ -97,4 +113,25 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
   }
 
   return { assessments, contents, replies };
+}
+
+/**
+ * Delete each assessment's cached report PDFs, and return the ids whose files
+ * are gone. One storage refused is left out and logged, so its row stays for
+ * the next pass.
+ */
+async function withoutReportPdfs(orgId: string, rows: { id: string }[]): Promise<string[]> {
+  const cleared: string[] = [];
+  for (const { id } of rows) {
+    try {
+      await deleteReportPdfs(orgId, id);
+      cleared.push(id);
+    } catch (err) {
+      logger.warn('Retention purge: kept an assessment whose report PDFs could not be deleted', {
+        assessmentId: id,
+        err,
+      });
+    }
+  }
+  return cleared;
 }

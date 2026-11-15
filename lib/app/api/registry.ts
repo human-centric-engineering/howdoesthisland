@@ -40,7 +40,7 @@ import {
   listAssessmentsQuerySchema,
   scanRequestSchema,
 } from '@/lib/app/assessments/api/validations';
-import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
+import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import {
   appRetentionSchema,
   judgeReplyRetentionSchema,
@@ -121,6 +121,11 @@ export interface RouteContract {
      * envelope. Each event is `event: <type>` and `data: <payload>`.
      */
     stream?: 'sse';
+    /**
+     * The response is a file of this media type, sent as an attachment, not
+     * the envelope; `data` describes its bytes. Errors are still the envelope.
+     */
+    file?: 'application/pdf';
   };
 }
 
@@ -331,6 +336,9 @@ export const assessmentEventSchema = z.discriminatedUnion('type', [
 /** What `remove()` in `lib/app/assessments/api/service.ts` returns. */
 export const assessmentDeletedSchema = z.object({ deleted: z.literal(true) });
 
+/** The report PDF's body: the document's bytes (`file: 'application/pdf'`). */
+export const reportPdfSchema = z.instanceof(Uint8Array).describe('The report, as a PDF document');
+
 // --- The routes ------------------------------------------------------------
 
 const frameworkParams = z.object({ slug: slugParam });
@@ -453,6 +461,15 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: ASSESS,
     request: { params: assessmentParams },
     response: { status: 200, data: assessmentEventSchema, stream: 'sse' },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/assessments/{id}/report.pdf',
+    summary:
+      "Download a finished review's report as a PDF, rendered once and then served from the workspace's storage.",
+    auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
+    request: { params: assessmentParams },
+    response: { status: 200, data: reportPdfSchema, file: 'application/pdf' },
   },
   {
     method: 'POST',
