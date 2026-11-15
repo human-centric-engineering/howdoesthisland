@@ -76,7 +76,8 @@ describe('Report — a full review', () => {
   it("shows the run's cost on the web, and not in print or shared", () => {
     const view = viewOf(apiAssessment());
     const { rerender } = render(<Report view={view} variant="web" />);
-    expect(screen.getByText('Cost of this review: $0.1234.')).toBeInTheDocument();
+    // Marked so the print stylesheet drops it if the web page itself is printed.
+    expect(screen.getByText('Cost of this review: $0.1234.')).toHaveAttribute('data-print', 'hide');
     rerender(<Report view={view} variant="print" />);
     expect(screen.queryByText(/Cost of this review/)).not.toBeInTheDocument();
     rerender(<Report view={view} variant="shared" />);
@@ -184,5 +185,61 @@ describe('report states', () => {
   it('unreadable says it was logged', () => {
     render(<ReportUnreadable />);
     expect(screen.getByText(/logged/)).toBeInTheDocument();
+  });
+});
+
+describe('Report — round 2 review', () => {
+  it('says so in Method when the editor failed', () => {
+    const a = apiAssessment();
+    const result = reportResultSchema.parse(a.result);
+    const view = buildReportView({
+      assessment: a,
+      result: {
+        ...result,
+        editor: { status: 'failed', errorCode: 'timeout', model: 'gpt-editor' },
+      },
+      model: reportModelSchema.parse(modelDocument(true)),
+    });
+    render(<Report view={view} variant="web" />);
+    expect(screen.getByText(/The editor did not answer/)).toBeInTheDocument();
+    expect(screen.queryByText(/The verdict was written by the editor/)).not.toBeInTheDocument();
+  });
+
+  it("shows the judges' paragraphs, a lever's quote and a note from the quick scan", () => {
+    const view = viewOf(apiAssessment());
+    const [note, ...notes] = view.copy.notes;
+    const [p, ...ps] = view.perspectives.length
+      ? view.perspectives
+      : [{ id: 'p', name: 'P', question: '', score: 2, summary: '', levers: [] }];
+    render(
+      <Report
+        view={{
+          ...view,
+          summaries: { lenses: 'Lenses para.', influence: 'Influence para.' },
+          copy: { ...view.copy, notes: [{ ...note, fromQuickScan: true }, ...notes] },
+          perspectives: [
+            {
+              ...p,
+              levers: [
+                { id: 'l', name: 'Lever', status: 'present', quote: 'Lever quote.', note: null },
+              ],
+            },
+            ...ps,
+          ],
+        }}
+        variant="web"
+      />
+    );
+    expect(screen.getByText('Lenses para.')).toBeInTheDocument();
+    expect(screen.getByText('Influence para.')).toBeInTheDocument();
+    expect(screen.getByText(/Lever quote\./)).toBeInTheDocument();
+    expect(document.getElementById(`note-${note.number}`)).toHaveTextContent('quick scan');
+  });
+
+  it('a cancelled review does not claim no reviewer answered', () => {
+    render(<ReportNoResult assessment={apiAssessment({ status: 'cancelled', result: null })} />);
+    expect(
+      screen.getByText('It was cancelled before it finished, so there is no report.')
+    ).toBeInTheDocument();
   });
 });

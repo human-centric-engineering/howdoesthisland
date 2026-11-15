@@ -37,7 +37,6 @@ export interface ReportNote {
   dimensionName: string;
   /** Whether the report shows that dimension, so a link to it lands somewhere. */
   dimensionShown: boolean;
-  appealId: string | null;
   /** The recommendation on the same dimension, by its number, if there is one. */
   recommendation: number | null;
   fromQuickScan: boolean;
@@ -129,6 +128,8 @@ export interface ReportView {
     fit: number | null;
     rows: { id: string; name: string; verb: string; share: number; target: number | null }[];
   };
+  /** The lenses and influence judges' own paragraphs, when they answered. */
+  summaries: { lenses: string | null; influence: string | null };
   perspectives: {
     id: string;
     name: string;
@@ -209,11 +210,7 @@ export function segmentCopy(
 }
 
 const fits = (text: string, start: number, end: number): boolean =>
-  Number.isInteger(start) &&
-  Number.isInteger(end) &&
-  start >= 0 &&
-  start < end &&
-  end <= text.length;
+  start >= 0 && start < end && end <= text.length;
 
 /** The name a judge slot goes by: its appeal's, else its catalogue entry's. */
 function reviewerName(model: ReportModel, appeals: Names, slot: string): string {
@@ -241,6 +238,10 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
   const moves = namesOf(model.moves);
   const flags = namesOf(model.red_flags);
   const groups = namesOf(model.groups);
+  // A recommendation's `appeal` is an appeal, a group, or a judge's own slot
+  // (lenses, influence): name it from whichever the model has.
+  const groupName = (id: string): string =>
+    appeals.get(id) ?? groups.get(id) ?? reviewerName(model, appeals, id);
 
   // Cover
   const audience: string[] = [];
@@ -262,7 +263,7 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
       return {
         number,
         appealId: r.appeal,
-        appealName: nameIn(appeals, r.appeal),
+        appealName: groupName(r.appeal),
         dimensionId: r.dimension,
         dimensionName: nameIn(dims, r.dimension),
         move: r.move ? nameIn(moves, r.move) : null,
@@ -287,7 +288,6 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     quote: h.quote,
     dimensionId: h.dimension,
     dimensionName: nameIn(dims, h.dimension),
-    appealId: h.appeal,
     recommendation: recByDimension.get(h.dimension) ?? null,
     fromQuickScan: h.source === 'quick',
     flag: h.flag ? nameIn(flags, h.flag) : null,
@@ -408,14 +408,15 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
 
   const c = result.craft;
   const craft = [
-    { label: 'Word count', value: String(c.words) },
+    // Counted by the engine's tokeniser, which can differ from intake's count on the cover.
+    { label: 'Words scored', value: String(c.words) },
     { label: 'Sentences', value: String(c.sentences) },
     { label: 'Average sentence', value: `${c.avg_sentence.toFixed(1)} words` },
     { label: 'Speaking time', value: formatSeconds(c.speaking_sec) },
     { label: 'Gunning Fog index', value: c.gunning_fog.toFixed(1) },
     { label: 'Flesch–Kincaid grade', value: c.fk_grade.toFixed(1) },
     { label: 'Passive voice', value: `${Math.round(c.passive_pct)}%` },
-    { label: 'Emotional words', value: `${Math.round(c.emotional_pct)}%` },
+    { label: 'Emotional words', value: `${c.emotional_pct.toFixed(1)}%` },
   ];
 
   const culture =
@@ -495,6 +496,7 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     dimensions: dimensionGroups,
     lenses,
     duties,
+    summaries: { lenses: result.judges.lenses ?? null, influence: result.judges.influence ?? null },
     perspectives,
     craft,
     culture,

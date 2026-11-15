@@ -298,7 +298,7 @@ function RedFlags({ view }: { view: ReportView }) {
   return (
     <ul className="grid gap-4">
       {view.flags.map((f, i) => (
-        <li key={i} className="break-inside-avoid border-l-2 border-(--hd-red) pl-3">
+        <li key={`${f.id}-${i}`} className="break-inside-avoid border-l-2 border-(--hd-red) pl-3">
           <p className="font-mono text-xs uppercase">
             {f.name} · {f.severity}
           </p>
@@ -353,6 +353,7 @@ function DutiesAndLenses({ view }: { view: ReportView }) {
   const { duties, lenses } = view;
   return (
     <div className="grid gap-8 md:grid-cols-2">
+      {view.summaries.lenses ? <p className="md:col-span-2">{view.summaries.lenses}</p> : null}
       {duties.rows.length > 0 ? (
         <div>
           <h3 className="font-mono text-xs text-(--hd-muted) uppercase">
@@ -413,6 +414,9 @@ const LEVER_STATUS: Readonly<Record<string, string>> = {
 function Perspectives({ view }: { view: ReportView }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
+      {view.summaries.influence ? (
+        <p className="md:col-span-2">{view.summaries.influence}</p>
+      ) : null}
       {view.perspectives.map((p) => (
         <div key={p.id} className="break-inside-avoid">
           <h3 className="flex justify-between font-semibold">
@@ -430,6 +434,9 @@ function Perspectives({ view }: { view: ReportView }) {
                   </span>{' '}
                   {l.name}
                   {l.note ? <span className="text-(--hd-muted)">: {l.note}</span> : null}
+                  {l.quote ? (
+                    <span className="block text-(--hd-muted) italic">&ldquo;{l.quote}&rdquo;</span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -521,9 +528,15 @@ function Method({ view, variant }: { view: ReportView; variant: ReportVariant })
       {method.editor?.status === 'written' ? (
         <p className="text-sm">The verdict was written by the editor ({method.editor.model}).</p>
       ) : null}
+      {method.editor?.status === 'failed' ? (
+        <p className="text-sm">
+          The editor did not answer, so this {WORDS.review} has no verdict paragraph.
+        </p>
+      ) : null}
       <p className="text-sm">Model: {method.framework}.</p>
       {variant === 'web' ? (
-        <p className="text-sm">
+        // Printing the web page from the browser must not carry the cost either.
+        <p className="text-sm" data-print="hide">
           Cost of this {WORDS.review}: {formatUsd(method.costUsd)}.
         </p>
       ) : null}

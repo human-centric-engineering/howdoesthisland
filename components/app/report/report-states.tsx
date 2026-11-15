@@ -49,7 +49,7 @@ export function ReportNoResult({ assessment }: { assessment: ReportAssessment })
     >
       <p>
         {cancelled
-          ? `It was cancelled before any of the ${WORDS.aiReviewers} answered, so there is no report.`
+          ? 'It was cancelled before it finished, so there is no report.'
           : 'Something went wrong while scoring it, so there is no report. Run the review again.'}
       </p>
       {!cancelled && assessment.error ? (

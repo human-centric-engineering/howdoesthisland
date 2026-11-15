@@ -59,6 +59,7 @@ export function MarkedUpCopy({ copy }: { copy: ReportView['copy'] }) {
                 n.dimensionName
               )}
               {n.flag ? ` · ${n.flag}` : null}
+              {n.fromQuickScan ? ' · quick scan' : null}
             </p>
             <p className="mt-1">{n.note}</p>
             {!n.placed ? (

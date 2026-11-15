@@ -27,7 +27,7 @@ export type ReportLoad =
   | { kind: 'ready'; view: ReportView }
   /** Still queued or running. */
   | { kind: 'pending'; assessment: ReportAssessment }
-  /** Final with no result: failed, or cancelled before any judge landed. */
+  /** Final with no result: failed, or cancelled (a cancel never stores one). */
   | { kind: 'no_result'; assessment: ReportAssessment }
   /** The API answered, and the answer is not one the report can read. */
   | { kind: 'unreadable' };
@@ -65,7 +65,8 @@ export async function loadReport(id: string): Promise<ReportLoad> {
   // The version a stored result ran on no longer resolving is not something
   // "Try again" fixes, so a 404 here is an unreadable report, not a throw.
   const path = modelPath(a.framework.slug, a.framework.version);
-  const loaded = await loadServerData<unknown>(path);
+  // 404 is expected here, and logged below with the assessment it belongs to.
+  const loaded = await loadServerData<unknown>(path, { expected: [404] });
   if (!loaded.ok) {
     if (loaded.failure.kind !== 'not_found') throw new ServerLoadError(path, loaded.failure);
     logger.error('Report: the model version it ran on was not found', undefined, {

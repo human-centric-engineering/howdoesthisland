@@ -43,7 +43,10 @@ describe('loadReport', () => {
     const load = await loadReport('asm_1');
     expect(load.kind).toBe('ready');
     expect(m.require).toHaveBeenNthCalledWith(1, '/api/v1/assessments/asm_1', { notFound: true });
-    expect(m.load).toHaveBeenCalledWith('/api/v1/frameworks/howdoesthisland/versions/0.5.1');
+    // 404 is expected so the loader logs it once, with the assessment, rather than twice.
+    expect(m.load).toHaveBeenCalledWith('/api/v1/frameworks/howdoesthisland/versions/0.5.1', {
+      expected: [404],
+    });
     if (load.kind === 'ready') expect(load.view.cover.title).toBe('Q3 board briefing');
   });
 

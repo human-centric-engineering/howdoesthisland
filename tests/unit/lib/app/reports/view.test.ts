@@ -346,3 +346,62 @@ describe('buildReportView — names and fields the model or result lacks', () =>
 });
 
 const APPEALS = new Set(['ethos', 'pathos', 'logos', 'kairos']);
+
+describe('buildReportView — round 2 review', () => {
+  const parsed = () => reportResultSchema.parse(engineResult({ editor: WRITTEN_EDITOR }));
+  const model = () => reportModelSchema.parse(modelDocument(true));
+
+  it("names a recommendation's group or judge slot from the model, not by id", () => {
+    const r = parsed();
+    const rec = r.recommendations[0];
+    const v = buildReportView({
+      assessment: apiAssessment(),
+      result: {
+        ...r,
+        recommendations: [
+          { ...rec, appeal: 'craft' },
+          { ...rec, appeal: 'influence' },
+          { ...rec, appeal: 'ethos' },
+        ],
+      },
+      model: model(),
+    });
+    expect(v.recommendations.map((x) => x.appealName)).toEqual([
+      'Craft',
+      'Influence panel',
+      'Ethos',
+    ]);
+  });
+
+  it("carries the lenses and influence judges' paragraphs, and null when they did not answer", () => {
+    const r = parsed();
+    const withThem = buildReportView({
+      assessment: apiAssessment(),
+      result: {
+        ...r,
+        judges: { ...r.judges, lenses: 'Lenses para.', influence: 'Influence para.' },
+      },
+      model: model(),
+    });
+    expect(withThem.summaries).toEqual({ lenses: 'Lenses para.', influence: 'Influence para.' });
+    const { lenses: _l, influence: _i, ...rest } = r.judges;
+    const without = buildReportView({
+      assessment: apiAssessment(),
+      result: { ...r, judges: rest },
+      model: model(),
+    });
+    expect(without.summaries).toEqual({ lenses: null, influence: null });
+  });
+
+  it('keeps the one decimal the engine stores for emotional words, and labels its word count apart from the cover', () => {
+    const r = parsed();
+    const v = buildReportView({
+      assessment: apiAssessment(),
+      result: { ...r, craft: { ...r.craft, emotional_pct: 0.4 } },
+      model: model(),
+    });
+    expect(v.craft.find((c) => c.label === 'Emotional words')?.value).toBe('0.4%');
+    expect(v.craft.find((c) => c.label === 'Words scored')?.value).toBe(String(r.craft.words));
+    expect(v.craft.some((c) => c.label === 'Word count')).toBe(false);
+  });
+});
