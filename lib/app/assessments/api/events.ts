@@ -23,7 +23,13 @@ import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { EVENTS_MAX_MS, POLL_MS } from '@/lib/app/assessments/limits';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
-import { isFinal, judgeRunView, stateOf, type JudgeRunView } from '@/lib/app/assessments/api/views';
+import {
+  inJudgeOrder,
+  isFinal,
+  judgeRunView,
+  stateOf,
+  type JudgeRunView,
+} from '@/lib/app/assessments/api/views';
 
 export type AssessmentEvent =
   | { type: 'assessment_status'; id: string; status: AssessmentState }
@@ -146,11 +152,7 @@ async function* pollEvents(
       lastState = state;
       yield { type: 'assessment_status', id, status: state };
     }
-    const order = new Map(row.judges.map((slot, i) => [slot, i]));
-    const runs = [...row.judgeRuns].sort(
-      (a, b) => (order.get(a.judge) ?? 0) - (order.get(b.judge) ?? 0)
-    );
-    for (const run of runs) {
+    for (const run of inJudgeOrder(row.judges, row.judgeRuns)) {
       const written = run.updatedAt.getTime();
       if (sent.get(run.judge) === written) continue;
       sent.set(run.judge, written);

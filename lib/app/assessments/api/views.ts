@@ -188,15 +188,21 @@ function summaryView(row: SummaryRow): AssessmentSummary {
   };
 }
 
+/** An assessment's judge runs in its version's order of judges. */
+export function inJudgeOrder<T extends { judge: string }>(
+  judges: readonly string[],
+  runs: readonly T[]
+): T[] {
+  const order = new Map(judges.map((slot, i) => [slot, i]));
+  return [...runs].sort((a, b) => (order.get(a.judge) ?? 0) - (order.get(b.judge) ?? 0));
+}
+
 function detailView(row: DetailRow): AssessmentDetail {
-  const order = new Map(row.judges.map((slot, i) => [slot, i]));
   return {
     ...summaryView(row),
     context: row.context,
     result: row.result,
-    judgeRuns: [...row.judgeRuns]
-      .sort((a, b) => (order.get(a.judge) ?? 0) - (order.get(b.judge) ?? 0))
-      .map(judgeRunView),
+    judgeRuns: inJudgeOrder(row.judges, row.judgeRuns).map(judgeRunView),
   };
 }
 

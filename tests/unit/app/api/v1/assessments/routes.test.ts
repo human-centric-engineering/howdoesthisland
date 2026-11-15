@@ -99,6 +99,7 @@ import { createMockAuthSession } from '@/tests/helpers/auth';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import { runAssessment } from '@/lib/app/assessments/run';
 import { runAsOrg } from '@/lib/tenancy/context';
+import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { assessmentDetailSchema, ephemeralAssessmentSchema } from '@/lib/app/api/registry';
@@ -468,6 +469,23 @@ describe('POST /api/v1/assessments — store: false', () => {
     quickScan.mockRestore();
   });
 
+  it('runs its judges in a privacy scope naming the workspace and the user, as a stored run does', async () => {
+    const scopes: unknown[] = [];
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      scopes.push(currentPrivacyScope());
+      return reply(slot);
+    });
+    expect((await post({ source: { text: TEXT }, judges: TWO, store: false })).status).toBe(200);
+    expect(scopes).toHaveLength(2);
+    for (const scope of scopes) {
+      expect(scope).toMatchObject({
+        scopeId: expect.stringMatching(/^assessment:ephemeral:/),
+        orgId: WS_A,
+        userId: ALICE,
+      });
+    }
+  });
+
   it('starts no judge once the caller has gone away', async () => {
     const gone = new AbortController();
     gone.abort();
@@ -564,6 +582,16 @@ describe('POST /api/v1/assessments — refusals', () => {
     for (let i = 0; i < 3; i += 1) {
       const res = await post({ source: { text: TEXT }, judges: ['judge_nobody'] });
       expect(await code(res)).toEqual({ status: 400, code: 'PROFILE_UNKNOWN' });
+    }
+    expect((await post({ source: { text: TEXT }, judges: TWO })).status).toBe(202);
+  });
+
+  it('does not count pasted text refused as empty or too long against the cap', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(await code(await post({ source: { text: '   ' }, judges: TWO }))).toEqual({
+        status: 400,
+        code: 'CONTENT_EMPTY',
+      });
     }
     expect((await post({ source: { text: TEXT }, judges: TWO })).status).toBe(202);
   });
@@ -793,6 +821,17 @@ describe('DELETE /api/v1/assessments/{id}', () => {
 
     expect(await code(await del(String(a.id)))).toEqual({ status: 404, code: 'NOT_FOUND' });
     expect(await code(await getOne(String(a.id)))).toEqual({ status: 404, code: 'NOT_FOUND' });
+  });
+
+  it('404, not 500, for a delete that lost a race with another', async () => {
+    const a = fake.seed({ status: 'COMPLETED' });
+    // The other delete lands between this one's read and its write.
+    fake.db.assessment.findUnique.mockImplementationOnce(async () => {
+      const row = { contentId: a.contentId };
+      fake.assessments.splice(fake.assessments.indexOf(a), 1);
+      return row;
+    });
+    expect(await code(await del(String(a.id)))).toEqual({ status: 404, code: 'NOT_FOUND' });
   });
 
   it('keeps the text while another assessment still uses it', async () => {

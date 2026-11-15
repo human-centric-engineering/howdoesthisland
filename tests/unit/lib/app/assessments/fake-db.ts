@@ -130,6 +130,16 @@ export function createFakeDb() {
         for (const row of rows) apply(row, data);
         return { count: rows.length };
       }),
+      deleteMany: vi.fn(async ({ where }: { where: Row }) => {
+        const gone = assessments.filter((a) => matches(a, where));
+        for (const row of gone) {
+          assessments.splice(assessments.indexOf(row), 1);
+          for (let i = judgeRuns.length - 1; i >= 0; i -= 1) {
+            if (judgeRuns[i]?.assessmentId === row.id) judgeRuns.splice(i, 1);
+          }
+        }
+        return { count: gone.length };
+      }),
       delete: vi.fn(async ({ where }: { where: Row }) => {
         const index = assessments.findIndex((a) => matches(a, where));
         if (index < 0) throw new Error('record not found');

@@ -47,7 +47,7 @@ import { withAuth } from '@/lib/auth/guards';
 import { paginatedResponse, successResponse } from '@/lib/api/responses';
 import { validateQueryParams, validateRequestBody } from '@/lib/api/validation';
 import { createRateLimitResponse } from '@/lib/security/rate-limit';
-import { aiAssessmentLimiter, callsJudges } from '@/lib/app/assessments/api/limiter';
+import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import { apiKeyIdOf, assessRoute } from '@/lib/app/assessments/api/route-auth';
 import { createAssessment, prepareAssessment } from '@/lib/app/assessments/api/service';
 import {
@@ -61,10 +61,11 @@ export const maxDuration = 300;
 
 export const POST = withAuth(async (request: NextRequest, session) => {
   const body = await validateRequestBody(request, createAssessmentSchema);
-  // A request refused for its version, context or profile spent nothing, so
-  // it is not counted; one that gets past them is, before anything is fetched.
+  // A request refused for its version, context, profile or pasted text spent
+  // nothing, so it is not counted; one that gets past them is, before
+  // anything is fetched. Only one whose judges resolve to some calls a model.
   const prepared = await prepareAssessment(body);
-  if (callsJudges(body)) {
+  if (prepared.judges.length > 0) {
     const limit = aiAssessmentLimiter.check(`user:${session.user.id}`);
     if (!limit.success) return createRateLimitResponse(limit);
   }

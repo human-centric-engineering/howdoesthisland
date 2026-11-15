@@ -170,8 +170,8 @@ Each route's docblock lists its error codes. A few rules hold across them:
   outsider. Within a workspace, any member may read, cancel or delete.
 - **Limits.** `AI_ASSESSMENTS_PER_MINUTE` (10) assessments that call judges per
   user, whatever the way in, `store: false` included; `quick` is not counted,
-  nor is a request refused for its version, context or profile
-  (`prepareAssessment` runs first). A `store: false` caller that goes away
+  nor is a request refused for its version, context, profile or pasted text
+  (`prepareAssessment` runs first), nor one whose judges resolve to none. A `store: false` caller that goes away
   starts no further judge.
   A handler-level limiter (`api/limiter.ts`) under the proxy's section cap. The
   scan's 30/min per IP is the `scan` rule in `lib/app/rate-limit.ts`.

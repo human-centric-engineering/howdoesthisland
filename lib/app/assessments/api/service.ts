@@ -37,6 +37,7 @@ import {
   scoresOf,
 } from '@/lib/app/assessments/run';
 import { logger } from '@/lib/logging';
+import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
 import { POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
@@ -156,14 +157,20 @@ export interface PreparedAssessment {
 
 /**
  * Everything that can be refused before anything is fetched, read or spent:
- * the version, the context and the profile. The route counts a request
+ * the version, the context, the profile, and pasted text. The route counts a request
  * against the per-user cap only once this has passed.
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
   const resolved = await versionToScore(body);
   const ctx = contextFor(resolved, body.context);
   const profile: JudgeProfile = body.judges ?? body.profile ?? 'full';
-  return { resolved, ctx, profile, judges: judgesFor(resolved, profile) };
+  const judges = judgesFor(resolved, profile);
+  // Pasted text can be refused now; a page or a file only once it is read.
+  if ('text' in body.source) {
+    const { text } = body.source;
+    await refusingAsApi(() => assessableText(text));
+  }
+  return { resolved, ctx, profile, judges };
 }
 
 export async function createAssessment(
@@ -203,7 +210,7 @@ export async function createAssessment(
   );
 
   if (body.wait === true) {
-    await waitForRun(assessmentId, options.boundMs ?? WAIT_BOUND_MS);
+    await waitForRun(assessmentId, options.boundMs ?? WAIT_BOUND_MS, options.signal);
   } else {
     startAssessmentInBackground(assessmentId);
   }
@@ -221,21 +228,27 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * workspace could not start yet is watched for the bound instead: the next
  * run in the workspace to end starts it.
  */
-async function waitForRun(assessmentId: string, boundMs: number): Promise<void> {
+async function waitForRun(
+  assessmentId: string,
+  boundMs: number,
+  signal?: AbortSignal
+): Promise<void> {
   const deadline = Date.now() + boundMs;
   const run = await beginAssessment(assessmentId);
   if (run) {
     keepRunningAfterResponse(run.done, 'app: assessment run', { assessmentId });
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // The bound, or the caller going away: either way the run carries on.
     const bound = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+      signal?.addEventListener('abort', () => resolve(), { once: true });
     });
     await Promise.race([run.done.then(() => undefined), bound]);
     clearTimeout(timer);
     return;
   }
   const orgId = requireOrgId();
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !signal?.aborted) {
     const row = await prisma.assessment.findUnique({
       where: { id: assessmentId, orgId },
       select: { status: true },
@@ -259,17 +272,26 @@ async function runEphemeral(
   const { engine, label } = resolved;
   // Nothing has been spent yet: the same text would throw again, so refuse it.
   const quick = notScorable(() => engine.quickScan(text, ctx), 0);
-  const fan = await runJudges({
-    engine,
-    frameworkVersion: label,
-    text,
-    ctx,
-    slots: judges,
+  // Who the calls are for, as the stored run says it (`run.ts`), so the
+  // privacy layer applies the same policy and the user's own known values.
+  const scope = createPrivacyScope({
+    scopeId: `assessment:ephemeral:${crypto.randomUUID()}`,
+    orgId: requireOrgId(),
     userId: caller.userId,
-    ephemeral: true,
-    // A caller gone away starts no further judge: nobody is left to answer.
-    shouldContinue: () => Promise.resolve(!signal?.aborted),
   });
+  const fan = await runInPrivacyScope(scope, () =>
+    runJudges({
+      engine,
+      frameworkVersion: label,
+      text,
+      ctx,
+      slots: judges,
+      userId: caller.userId,
+      ephemeral: true,
+      // A caller gone away starts no further judge: nobody is left to answer.
+      shouldContinue: () => Promise.resolve(!signal?.aborted),
+    })
+  );
   if (fan.stopped) {
     throw new APIError('The request was closed before the judges ran.', 'REQUEST_CLOSED', 499);
   }
@@ -358,7 +380,9 @@ export async function remove(id: string): Promise<{ deleted: true }> {
       select: { contentId: true },
     });
     if (!row) throw new NotFoundError('Assessment not found');
-    await tx.assessment.delete({ where: { id } });
+    // A delete that lost a race with another one has nothing left: 404.
+    const { count } = await tx.assessment.deleteMany({ where: { id, orgId } });
+    if (count === 0) throw new NotFoundError('Assessment not found');
     await tx.content.deleteMany({
       where: { id: row.contentId, orgId, assessments: { none: {} } },
     });
