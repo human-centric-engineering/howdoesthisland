@@ -32,24 +32,22 @@
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { createOrg, OrgLifecycleError, type OrgRecord } from '@/lib/tenancy/lifecycle';
-import {
-  isSettingsWriteConflict,
-  writeOrgProviderPolicy,
-  writeOrgQuotas,
-} from '@/lib/tenancy/org-settings';
+import { writeOrgProviderPolicy, writeOrgQuotas } from '@/lib/tenancy/org-settings';
 import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-policy';
 import { forgetOrgCap } from '@/lib/orchestration/llm/spend-caps';
 import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
 import type { UninvitedSignup } from '@/lib/tenancy/signup-org';
 import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
+import {
+  APP_SETTINGS_KEY,
+  withSettingsConflictRetry as withConflictRetry,
+  writeAppSettings,
+} from '@/lib/app/workspaces/app-settings';
 
-export { WORKSPACE_PROVIDER_SLUG };
+export { APP_SETTINGS_KEY, WORKSPACE_PROVIDER_SLUG };
 
 /** The monthly AI budget every new workspace starts with, in USD (D6). */
 export const WORKSPACE_MONTHLY_BUDGET_USD = 10;
-
-/** The key this app keeps its own org config under, inside `Org.settings`. */
-export const APP_SETTINGS_KEY = 'app';
 
 /** The marker a signup workspace carries until someone has joined it. */
 export const SIGNUP_WORKSPACE_MARKER = 'signupWorkspace';
@@ -59,13 +57,6 @@ const SLUG_STEM_MAX = 40;
 
 /** Attempts at a free slug before giving up. Each retry adds a random suffix. */
 const SLUG_ATTEMPTS = 4;
-
-/**
- * Tries at each settings write. Each is a serializable read-modify-write, and
- * a concurrent write to the same org (the platform-agents marker the reconcile
- * in `createOrg` writes) fails one of them with `P2034`, which a retry clears.
- */
-const SETTINGS_WRITE_ATTEMPTS = 3;
 
 /** Longest part of a person's name used in the workspace name. */
 const NAME_MAX = 150;
@@ -133,31 +124,14 @@ export async function createWorkspaceOrg(
 
 /**
  * Set or clear the signup-workspace marker, preserving every other key in
- * `settings` (the platform's slices and the rest of `app`). A serializable
- * read-modify-write, as the platform's own slice writer is.
+ * `settings` (the platform's slices and the rest of `app`), through the one
+ * writer of the `app` key.
  */
 export async function writeSignupWorkspaceMarker(orgId: string, marked: boolean): Promise<void> {
-  await prisma.$transaction(
-    async (tx) => {
-      const row = await tx.org.findUnique({ where: { id: orgId }, select: { settings: true } });
-      if (!row) return;
-      const settings = isJsonObject(row.settings) ? { ...row.settings } : {};
-      const app = isJsonObject(settings[APP_SETTINGS_KEY]) ? { ...settings[APP_SETTINGS_KEY] } : {};
-      if (marked) app[SIGNUP_WORKSPACE_MARKER] = true;
-      else delete app[SIGNUP_WORKSPACE_MARKER];
-      if (Object.keys(app).length > 0) settings[APP_SETTINGS_KEY] = app;
-      else delete settings[APP_SETTINGS_KEY];
-      await tx.org.update({
-        where: { id: orgId },
-        data: {
-          // Never empty in practice (the grant and the budget sit beside the
-          // marker); `{}` reads as "nothing set" to every slice reader.
-          settings,
-        },
-      });
-    },
-    { isolationLevel: 'Serializable' }
-  );
+  await writeAppSettings(orgId, (app) => {
+    if (marked) app[SIGNUP_WORKSPACE_MARKER] = true;
+    else delete app[SIGNUP_WORKSPACE_MARKER];
+  });
 }
 
 /** Approve the workspace for OpenAI. Returns whether the grant was written. */
@@ -176,17 +150,6 @@ async function grantProvider(orgId: string): Promise<boolean> {
   // No jurisdiction restriction: none is ruled for this app yet.
   await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved: [provider.id] }));
   return true;
-}
-
-/** Run a settings write, retrying it on a serializable clash. */
-async function withConflictRetry<T>(write: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await write();
-    } catch (error) {
-      if (attempt >= SETTINGS_WRITE_ATTEMPTS || !isSettingsWriteConflict(error)) throw error;
-    }
-  }
 }
 
 /**
@@ -263,13 +226,10 @@ export async function provisionSignupWorkspace(
   // The mark goes first: it is what lets the sweep reclaim the org if the
   // signup fails.
   const { granted } = await equipWorkspace(orgId, 'app.signup-workspace', [
-    ['mark', () => withConflictRetry(() => writeSignupWorkspaceMarker(orgId, true))],
+    // The writer retries a serializable clash itself.
+    ['mark', () => writeSignupWorkspaceMarker(orgId, true)],
   ]);
 
   logger.info('Signup workspace created', { orgId, slug: org.slug, granted });
   return orgId;
-}
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
