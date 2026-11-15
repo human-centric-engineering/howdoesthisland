@@ -138,6 +138,11 @@ export function initAppSubjectSources(): void {
         reason:
           'One judge’s part of an assessment, with no user column; what it found is in the assessment’s result, which is exported.',
       },
+      {
+        model: 'JudgeReply',
+        reason:
+          'One judge’s reply within an assessment, with no user column; what it found is in the assessment’s result, which is exported.',
+      },
     ],
   });
 }

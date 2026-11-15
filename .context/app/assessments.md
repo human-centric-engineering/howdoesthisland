@@ -12,14 +12,15 @@ declared in the registry ([`api.md`](./api.md)).
 
 ## The rows
 
-All three are the workspace's: each carries `orgId` and the `org_isolation`
+All four are the workspace's: each carries `orgId` and the `org_isolation`
 policy, and a member's erasure clears their id and leaves the rows.
 
-| Model        | Table            | Holds                                                                                                     |
-| ------------ | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| `Content`    | `app_content`    | The text as intake produced it, its source and checksum. Kept so a run can be re-driven, until retention. |
-| `Assessment` | `app_assessment` | The version, profile, the judges it resolved to, the context, the state, the lease, the result and cost.  |
-| `JudgeRun`   | `app_judge_run`  | One judge's outcome: model, cost, tokens, the validated reply and its drops, or the failure and its code. |
+| Model        | Table             | Holds                                                                                                                 |
+| ------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `Content`    | `app_content`     | The text as intake produced it, its source and checksum. Kept so a run can be re-driven, until retention.             |
+| `Assessment` | `app_assessment`  | The version, profile, the judges it resolved to, the context, the state, the lease, the result and cost.              |
+| `JudgeRun`   | `app_judge_run`   | One judge's outcome: model, cost, tokens, timing, or the failure and its code.                                        |
+| `JudgeReply` | `app_judge_reply` | A succeeded run's validated reply and its drops. Its own row because retention deletes it sooner than the run (t-26). |
 
 `createdByUserId` (both) and `apiKeyId` are plain strings with hand-written
 `SET NULL` FKs and drift probes, so core's `User` and `AiApiKey` are not
@@ -151,48 +152,60 @@ lease.
 
 ## Retention
 
-A workspace may set a window for its content and assessments (D10, t-26):
-`PATCH /api/v1/workspaces/{id}/settings` with `{ "retention": { "days": N } }`
-(1 to 3650), or `{ "retention": null }` to keep everything. It needs a
-browser session as the workspace's `OWNER` or `ADMIN`, or a platform admin.
-It is stored at `Org.settings.app.retention` through the one writer of the
-`app` key (`lib/app/workspaces/app-settings.ts`), which leaves core's slices
-and the signup marker as they were.
+A workspace has two windows (D10, t-26), both stored in `Org.settings.app`
+through the one writer of the `app` key (`lib/app/workspaces/app-settings.ts`),
+which leaves core's slices and the signup marker as they were:
 
-**This is not core's `settings.retention`.** That slice governs core's own
+| Window        | Key                             | Default             | Range  | Deletes                                    |
+| ------------- | ------------------------------- | ------------------- | ------ | ------------------------------------------ |
+| Content       | `retention: { days }`           | none: keep for good | 1–3650 | Content and its assessments (runs cascade) |
+| Judge replies | `judgeReplyRetention: { days }` | 30 days             | 1–365  | `JudgeReply` rows; the runs stay           |
+
+`GET /api/v1/workspaces/{id}/settings` answers both, the reply default filled
+in. `PATCH` takes either key or both: a window sets it, `null` clears it
+(content kept for good, replies back to 30 days), a key left out is
+unchanged. Both need a browser session as the workspace's `OWNER` or `ADMIN`,
+or a platform admin.
+
+**Neither is core's `settings.retention`.** That slice governs core's own
 history (executions, cost logs, evaluations, webhooks) and its sweep knows
 nothing of these tables. A settings page that shows both must say which is
 which.
 
-`app:retention-purge` (`lib/app/retention/purge.ts`) runs hourly, once per
-workspace. Each pass:
+`app:retention-purge` (`lib/app/retention/purge.ts`) runs daily, once per
+workspace: the windows are in days, so a row goes at most a day late. The
+interval is a minimum kept in process memory, so a restart runs it again
+sooner, which is harmless. Each pass:
 
-- with a window, deletes the assessments made before it (their judge runs
-  cascade), then the content made before it that no assessment is left on;
-  content a newer assessment still uses stays until that one ages out;
-- always, clears `output` and `dropped` on judge runs older than 30 days.
-  The assessment's assembled `result` is what is read afterwards, and the
-  run keeps its status, cost, tokens and timing.
+- with a content window, deletes the assessments made before it (their judge
+  runs and replies cascade), then the content made before it that no
+  assessment is left on; content a newer assessment still uses stays until
+  that one ages out;
+- always, deletes judge replies older than the reply window. The assessment's
+  assembled `result` is what is read once it is final, and the run keeps its
+  status, model, cost, tokens and timing.
 
-`QUEUED` and `RUNNING` assessments are skipped, and so are their judge runs,
-because a re-driven run reads its finished judges' replies back. A window
-that does not parse is read as none, so nothing is deleted on a guess. The
-pass is idempotent.
+`QUEUED` and `RUNNING` assessments are skipped, and so are their judges'
+replies, because a re-driven run reads its finished judges' replies back. A
+succeeded run found with no reply on a re-drive is counted as a failed judge
+rather than called again, so the workspace is not billed twice. A window that
+does not parse is read as unset, so nothing is deleted on a guess. The pass is
+idempotent.
 
 Shares, rewrites and comparison sets do not exist yet. Each task that adds
 one says what purging an assessment does to it.
 
 ## The API
 
-| Route                                  | Who                           | What                                                                          |
-| -------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
-| `POST /api/v1/scan`                    | anyone, 30/min per IP         | The quick scan of pasted text. Deterministic, no AI, nothing stored.          |
-| `POST /api/v1/assessments`             | session, or key with `assess` | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                 |
-| `GET /api/v1/assessments`              | same                          | The workspace's assessments, newest first; `page`, `limit`, `status`.         |
-| `GET /api/v1/assessments/{id}`         | same                          | One assessment, its judges and, once final, its result.                       |
-| `GET /api/v1/assessments/{id}/events`  | same                          | Progress as Server-Sent Events.                                               |
-| `POST /api/v1/assessments/{id}/cancel` | same                          | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.          |
-| `DELETE /api/v1/assessments/{id}`      | same                          | Delete it, its judge runs and its text (unless another assessment shares it). |
+| Route                                  | Who                           | What                                                                                       |
+| -------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `POST /api/v1/scan`                    | anyone, 30/min per IP         | The quick scan of pasted text. Deterministic, no AI, nothing stored.                       |
+| `POST /api/v1/assessments`             | session, or key with `assess` | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                              |
+| `GET /api/v1/assessments`              | same                          | The workspace's assessments, newest first; `page`, `limit`, `status`.                      |
+| `GET /api/v1/assessments/{id}`         | same                          | One assessment, its judges and, once final, its result.                                    |
+| `GET /api/v1/assessments/{id}/events`  | same                          | Progress as Server-Sent Events.                                                            |
+| `POST /api/v1/assessments/{id}/cancel` | same                          | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                       |
+| `DELETE /api/v1/assessments/{id}`      | same                          | Delete it, its judge runs and replies, and its text (unless another assessment shares it). |
 
 Each route's docblock lists its error codes. A few rules hold across them:
 

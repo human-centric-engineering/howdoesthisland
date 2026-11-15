@@ -1,5 +1,5 @@
 /**
- * Unit Tests: PATCH /api/v1/workspaces/[id]/settings (t-26)
+ * Unit Tests: GET and PATCH /api/v1/workspaces/[id]/settings (t-26)
  *
  * Runs the REAL `withAuth`, default policy, entry rule and `resolveOrgResource`
  * at `TENANCY_MODE=multi`, with Prisma mocked at the delegates. The write is
@@ -42,10 +42,10 @@ vi.mock('@/lib/logging', () => ({ logger: mockLog }));
 const mockWrite = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/app/retention/settings', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/app/retention/settings')>();
-  return { ...actual, writeAppRetention: mockWrite };
+  return { ...actual, writeWorkspaceSettings: mockWrite };
 });
 
-import { PATCH } from '@/app/api/v1/workspaces/[id]/settings/route';
+import { GET, PATCH } from '@/app/api/v1/workspaces/[id]/settings/route';
 import { prisma } from '@/lib/db/client';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 
@@ -77,7 +77,17 @@ function patch(body: unknown, orgId = WS, headers: Record<string, string> = {}) 
   return PATCH(request, { params: Promise.resolve({ id: orgId }) });
 }
 
+function get(orgId = WS) {
+  const request = new Request(
+    `http://localhost/api/v1/workspaces/${orgId}/settings`
+  ) as unknown as NextRequest;
+  return GET(request, { params: Promise.resolve({ id: orgId }) });
+}
+
 const json = async (res: Response) => JSON.parse(await res.text());
+
+/** What the writer answers: the windows in force after the patch. */
+const DEFAULT_REPLY = { days: 30 };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -88,8 +98,12 @@ beforeEach(() => {
     name: 'Design Team',
     status: 'ACTIVE',
   } as never);
-  mockWrite.mockImplementation((_orgId: string, retention: unknown) =>
-    Promise.resolve({ retention })
+  mockWrite.mockImplementation(
+    (_orgId: string, patch: { retention?: unknown; judgeReplyRetention?: unknown }) =>
+      Promise.resolve({
+        retention: patch.retention ?? null,
+        judgeReplyRetention: patch.judgeReplyRetention ?? DEFAULT_REPLY,
+      })
   );
   mockGetSession.mockResolvedValue(session(WS));
   memberOf(ORG_ADMIN_ROLE);
@@ -100,8 +114,11 @@ describe('PATCH /api/v1/workspaces/[id]/settings — who may set it', () => {
     const res = await patch({ retention: { days: 30 } });
 
     expect(res.status).toBe(200);
-    expect(await json(res)).toEqual({ success: true, data: { retention: { days: 30 } } });
-    expect(mockWrite).toHaveBeenCalledWith(WS, { days: 30 });
+    expect(await json(res)).toEqual({
+      success: true,
+      data: { retention: { days: 30 }, judgeReplyRetention: DEFAULT_REPLY },
+    });
+    expect(mockWrite).toHaveBeenCalledWith(WS, { retention: { days: 30 } });
   });
 
   it('lets an OWNER clear it', async () => {
@@ -110,8 +127,24 @@ describe('PATCH /api/v1/workspaces/[id]/settings — who may set it', () => {
     const res = await patch({ retention: null });
 
     expect(res.status).toBe(200);
-    expect((await json(res)).data).toEqual({ retention: null });
-    expect(mockWrite).toHaveBeenCalledWith(WS, null);
+    expect((await json(res)).data).toEqual({ retention: null, judgeReplyRetention: DEFAULT_REPLY });
+    expect(mockWrite).toHaveBeenCalledWith(WS, { retention: null });
+  });
+
+  it('sets the judge reply window on its own, leaving the content window out of the patch', async () => {
+    const res = await patch({ judgeReplyRetention: { days: 7 } });
+
+    expect(res.status).toBe(200);
+    expect(mockWrite).toHaveBeenCalledWith(WS, { judgeReplyRetention: { days: 7 } });
+  });
+
+  it('sets both in one call', async () => {
+    await patch({ retention: { days: 90 }, judgeReplyRetention: null });
+
+    expect(mockWrite).toHaveBeenCalledWith(WS, {
+      retention: { days: 90 },
+      judgeReplyRetention: null,
+    });
   });
 
   it('refuses an orgId in the body rather than reading it', async () => {
@@ -211,13 +244,15 @@ describe('PATCH /api/v1/workspaces/[id]/settings — who may set it', () => {
 
 describe('PATCH /api/v1/workspaces/[id]/settings — the body', () => {
   it.each([
-    ['no retention key', {}],
+    ['neither key', {}],
     ['zero days', { retention: { days: 0 } }],
     ['a fraction of a day', { retention: { days: 1.5 } }],
     ['more than ten years', { retention: { days: 3651 } }],
     ['a bare number', { retention: 30 }],
     ['an unknown key in the window', { retention: { days: 30, hours: 2 } }],
     ['an unknown top-level key', { retention: null, quotas: { monthlyBudgetUsd: 0 } }],
+    ['a zero-day reply window', { judgeReplyRetention: { days: 0 } }],
+    ['a reply window over a year', { judgeReplyRetention: { days: 366 } }],
   ])('rejects %s with 400 VALIDATION_ERROR before writing', async (_l, bad) => {
     const res = await patch(bad);
 
@@ -229,6 +264,8 @@ describe('PATCH /api/v1/workspaces/[id]/settings — the body', () => {
   it('accepts the edges of the range', async () => {
     expect((await patch({ retention: { days: 1 } })).status).toBe(200);
     expect((await patch({ retention: { days: 3650 } })).status).toBe(200);
+    expect((await patch({ judgeReplyRetention: { days: 1 } })).status).toBe(200);
+    expect((await patch({ judgeReplyRetention: { days: 365 } })).status).toBe(200);
   });
 
   it('answers 404 when the workspace is gone by the time of the write', async () => {
@@ -238,5 +275,55 @@ describe('PATCH /api/v1/workspaces/[id]/settings — the body', () => {
 
     expect(res.status).toBe(404);
     expect((await json(res)).error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('GET /api/v1/workspaces/[id]/settings', () => {
+  it('answers the windows in force for an ADMIN, the reply default filled in', async () => {
+    vi.mocked(prisma.org.findUnique).mockResolvedValue({
+      id: WS,
+      name: 'Design Team',
+      status: 'ACTIVE',
+      settings: { quotas: { monthlyBudgetUsd: 10 }, app: { retention: { days: 90 } } },
+    } as never);
+
+    const res = await get();
+
+    expect(res.status).toBe(200);
+    expect((await json(res)).data).toEqual({
+      retention: { days: 90 },
+      judgeReplyRetention: DEFAULT_REPLY,
+    });
+  });
+
+  it('refuses a plain MEMBER with 403', async () => {
+    memberOf(DEFAULT_ORG_ROLE);
+
+    expect((await get()).status).toBe(403);
+  });
+
+  it('answers 400 WORKSPACES_UNAVAILABLE at single', async () => {
+    mockEnv.TENANCY_MODE = 'single';
+
+    const res = await get();
+
+    expect(res.status).toBe(400);
+    expect((await json(res)).error.code).toBe('WORKSPACES_UNAVAILABLE');
+  });
+
+  it('answers 401 without a session', async () => {
+    mockGetSession.mockResolvedValue(null);
+
+    expect((await get()).status).toBe(401);
+  });
+
+  it('answers 404 when the workspace is gone by the time of the read', async () => {
+    vi.mocked(prisma.org.findUnique)
+      .mockResolvedValueOnce({ id: WS, name: 'Design Team', status: 'ACTIVE' } as never)
+      .mockResolvedValue(null);
+
+    const res = await get();
+
+    expect(res.status).toBe(404);
   });
 });

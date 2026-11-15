@@ -1,17 +1,16 @@
 /**
  * Tests: `purgeExpiredContent` — the per-workspace retention purge (t-26).
  *
- * The database is a small stateful fake of content, assessments and judge
- * runs across two workspaces, with the FK cascades the schema declares
- * (content → assessment → judge run). It reads the `where` clauses the purge
- * sends, so each test asserts on the rows left behind, not on the calls made.
- * Every population holds rows on both sides of each cutoff, so a purge that
- * did nothing, or did everything, fails.
+ * The database is a small stateful fake of content, assessments, judge runs
+ * and judge replies across two workspaces, with the FK cascades the schema
+ * declares (content → assessment → judge run → reply). It reads the `where`
+ * clauses the purge sends, and throws on any it does not model, so each test
+ * asserts on the rows left behind rather than on the calls made. Every
+ * population holds rows on both sides of each cutoff, so a purge that did
+ * nothing, or everything, fails.
  *
- * The reply-clearing step is raw SQL; the fake checks its statement holds
- * the clauses it models. What only a real database can show (that SQL, and
- * the relation filter, behaving as the fake assumes under the tenant scope)
- * was checked by running the purge against the development database.
+ * What only a real database shows (the relation filters, under the tenant
+ * scope) was checked by running the purge against the development database.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -36,9 +35,12 @@ interface JudgeRunRow {
   id: string;
   orgId: string;
   assessmentId: string;
+}
+interface ReplyRow {
+  id: string;
+  orgId: string;
+  judgeRunId: string;
   createdAt: Date;
-  output: unknown;
-  dropped: unknown;
 }
 
 const db = vi.hoisted(() => ({
@@ -46,29 +48,25 @@ const db = vi.hoisted(() => ({
   contents: [] as ContentRow[],
   assessments: [] as AssessmentRow[],
   judgeRuns: [] as JudgeRunRow[],
+  replies: [] as ReplyRow[],
   orgId: '',
 }));
 
-/** The fake's reading of the clauses the purge sends. Unknown keys throw. */
-const fake = vi.hoisted(() => {
+const fakePrisma = vi.hoisted(() => {
   const allowed = (where: Record<string, unknown>, keys: string[]) => {
     for (const k of Object.keys(where)) {
       if (!keys.includes(k)) throw new Error(`fake does not model where.${k}`);
     }
   };
-  const before = (at: Date, clause: unknown) =>
-    clause === undefined || at < (clause as { lt: Date }).lt;
-  const statusOk = (status: string, clause: unknown) =>
-    clause === undefined || !(clause as { notIn: string[] }).notIn.includes(status);
-  return { allowed, before, statusOk };
-});
-
-const fakePrisma = vi.hoisted(() => {
-  const isNull = (v: unknown) => v === null || v === undefined;
-  /** Delete assessments and cascade to their judge runs. */
+  const before = (at: Date, clause: unknown) => at < (clause as { lt: Date }).lt;
+  const notIn = (status: string, clause: unknown) =>
+    !(clause as { notIn: string[] }).notIn.includes(status);
+  /** Delete assessments, cascading to their judge runs and replies. */
   const dropAssessments = (ids: Set<string>) => {
     db.assessments = db.assessments.filter((a) => !ids.has(a.id));
-    db.judgeRuns = db.judgeRuns.filter((r) => !ids.has(r.assessmentId));
+    const runs = new Set(db.judgeRuns.filter((r) => ids.has(r.assessmentId)).map((r) => r.id));
+    db.judgeRuns = db.judgeRuns.filter((r) => !runs.has(r.id));
+    db.replies = db.replies.filter((r) => !runs.has(r.judgeRunId));
   };
   return {
     org: {
@@ -78,12 +76,12 @@ const fakePrisma = vi.hoisted(() => {
     },
     assessment: {
       deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
-        fake.allowed(where, ['orgId', 'createdAt', 'status']);
+        allowed(where, ['orgId', 'createdAt', 'status']);
         const hit = db.assessments.filter(
           (a) =>
             a.orgId === where.orgId &&
-            fake.before(a.createdAt, where.createdAt) &&
-            fake.statusOk(a.status, where.status)
+            before(a.createdAt, where.createdAt) &&
+            notIn(a.status, where.status)
         );
         dropAssessments(new Set(hit.map((a) => a.id)));
         return Promise.resolve({ count: hit.length });
@@ -91,59 +89,51 @@ const fakePrisma = vi.hoisted(() => {
     },
     content: {
       deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
-        fake.allowed(where, ['orgId', 'createdAt', 'assessments']);
+        allowed(where, ['orgId', 'createdAt', 'assessments']);
         if (JSON.stringify(where.assessments) !== JSON.stringify({ none: {} })) {
           throw new Error('fake models only `assessments: { none: {} }`');
         }
         const hit = db.contents.filter(
           (c) =>
             c.orgId === where.orgId &&
-            fake.before(c.createdAt, where.createdAt) &&
+            before(c.createdAt, where.createdAt) &&
             !db.assessments.some((a) => a.contentId === c.id)
         );
         const ids = new Set(hit.map((c) => c.id));
         db.contents = db.contents.filter((c) => !ids.has(c.id));
-        dropAssessments(
-          new Set(db.assessments.filter((a) => ids.has(a.contentId)).map((a) => a.id))
-        );
         return Promise.resolve({ count: hit.length });
       }),
     },
-    /**
-     * The reply-clearing UPDATE. The fake checks the statement says what the
-     * purge relies on, then applies that meaning; the real statement is run
-     * against the development database (see the header).
-     */
-    $executeRaw: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => {
-      const sql = strings.join('?').replace(/\s+/g, ' ');
-      for (const part of [
-        'UPDATE "app_judge_run" AS r',
-        'SET "output" = NULL, "dropped" = NULL',
-        'FROM "app_assessment" AS a WHERE a."id" = r."assessmentId"',
-        'r."orgId" = ?',
-        'r."createdAt" < ?',
-        `a."status"::text NOT IN ('QUEUED', 'RUNNING')`,
-        '(r."output" IS NOT NULL OR r."dropped" IS NOT NULL)',
-      ]) {
-        if (!sql.includes(part)) throw new Error(`fake does not model this statement: ${sql}`);
-      }
-      const [, orgId, cutoff] = values as [Date, string, Date];
-      const hit = db.judgeRuns.filter((r) => {
-        const parent = db.assessments.find((x) => x.id === r.assessmentId);
-        return (
-          r.orgId === orgId &&
-          r.createdAt < cutoff &&
-          parent !== undefined &&
-          !['QUEUED', 'RUNNING'].includes(parent.status) &&
-          !(isNull(r.output) && isNull(r.dropped))
-        );
-      });
-      for (const r of hit) {
-        r.output = null;
-        r.dropped = null;
-      }
-      return Promise.resolve(hit.length);
-    }),
+    judgeReply: {
+      deleteMany: vi.fn(
+        ({
+          where,
+        }: {
+          where: Record<string, unknown> & {
+            judgeRun?: { assessment?: { status?: unknown } };
+          };
+        }) => {
+          allowed(where, ['orgId', 'createdAt', 'judgeRun']);
+          const status = where.judgeRun?.assessment?.status;
+          if (Object.keys(where.judgeRun ?? {}).join() !== 'assessment' || !status) {
+            throw new Error('fake models only `judgeRun: { assessment: { status } }`');
+          }
+          const hit = db.replies.filter((reply) => {
+            const run = db.judgeRuns.find((r) => r.id === reply.judgeRunId);
+            const parent = db.assessments.find((a) => a.id === run?.assessmentId);
+            return (
+              reply.orgId === where.orgId &&
+              before(reply.createdAt, where.createdAt) &&
+              parent !== undefined &&
+              notIn(parent.status, status)
+            );
+          });
+          const ids = new Set(hit.map((r) => r.id));
+          db.replies = db.replies.filter((r) => !ids.has(r.id));
+          return Promise.resolve({ count: hit.length });
+        }
+      ),
+    },
   };
 });
 vi.mock('@/lib/db/client', () => ({ prisma: fakePrisma }));
@@ -160,11 +150,9 @@ const WS = 'cmorg000000000000000team1';
 const OTHER = 'cmorg0000000000000000org2';
 const NOW = new Date('2026-11-15T12:00:00.000Z');
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 24 * 60 * 60 * 1000);
-const REPLY = { dimensions: { ethos: 3 } };
-const DROPS = [{ field: 'quote', reason: 'unlocatable' }];
 
 let seq = 0;
-/** One content row, one assessment on it, and one judge run with a reply. */
+/** One content row, one assessment on it, one judge run and its reply. */
 function piece(orgId: string, ageDays: number, status: Status = 'COMPLETED') {
   const n = ++seq;
   const content = { id: `c${n}`, orgId, createdAt: daysAgo(ageDays) };
@@ -175,22 +163,18 @@ function piece(orgId: string, ageDays: number, status: Status = 'COMPLETED') {
     status,
     createdAt: daysAgo(ageDays),
   };
-  const run: JudgeRunRow = {
-    id: `r${n}`,
-    orgId,
-    assessmentId: assessment.id,
-    createdAt: daysAgo(ageDays),
-    output: structuredClone(REPLY),
-    dropped: structuredClone(DROPS),
-  };
+  const run = { id: `r${n}`, orgId, assessmentId: assessment.id };
+  const reply = { id: `p${n}`, orgId, judgeRunId: run.id, createdAt: daysAgo(ageDays) };
   db.contents.push(content);
   db.assessments.push(assessment);
   db.judgeRuns.push(run);
-  return { content, assessment, run };
+  db.replies.push(reply);
+  return { content, assessment, run, reply };
 }
 
 const ids = (rows: Array<{ id: string }>) => rows.map((r) => r.id).sort();
-const run = (id: string) => db.judgeRuns.find((r) => r.id === id);
+const snapshot = () =>
+  structuredClone({ c: db.contents, a: db.assessments, r: db.judgeRuns, p: db.replies });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -199,18 +183,19 @@ beforeEach(() => {
   db.contents = [];
   db.assessments = [];
   db.judgeRuns = [];
+  db.replies = [];
   db.orgId = WS;
 });
 
-describe('with a retention window', () => {
+describe('with a content window', () => {
   beforeEach(() => {
     db.settings.set(WS, { quotas: { monthlyBudgetUsd: 10 }, app: { retention: { days: 90 } } });
     db.settings.set(OTHER, null);
   });
 
   it('deletes content and assessments past the window, keeping those inside it', async () => {
-    const old = piece(WS, 120);
-    const older = piece(WS, 400, 'FAILED');
+    piece(WS, 120);
+    piece(WS, 400, 'FAILED');
     const recent = piece(WS, 10);
     const edge = piece(WS, 89);
 
@@ -219,9 +204,8 @@ describe('with a retention window', () => {
     expect(result).toMatchObject({ assessments: 2, contents: 2 });
     expect(ids(db.assessments)).toEqual(ids([recent.assessment, edge.assessment]));
     expect(ids(db.contents)).toEqual(ids([recent.content, edge.content]));
-    // Their judge runs went with them (the cascade).
-    expect(run(old.run.id)).toBeUndefined();
-    expect(run(older.run.id)).toBeUndefined();
+    // Their judge runs and replies went with them (the cascade).
+    expect(ids(db.judgeRuns)).toEqual(ids([recent.run, edge.run]));
   });
 
   it('a second pass changes nothing', async () => {
@@ -229,12 +213,12 @@ describe('with a retention window', () => {
     piece(WS, 45);
     piece(WS, 10);
     await purgeExpiredContent(NOW);
-    const after = structuredClone({ c: db.contents, a: db.assessments, r: db.judgeRuns });
+    const after = snapshot();
 
     const second = await purgeExpiredContent(NOW);
 
-    expect(second).toEqual({ assessments: 0, contents: 0, repliesCleared: 0 });
-    expect({ c: db.contents, a: db.assessments, r: db.judgeRuns }).toEqual(after);
+    expect(second).toEqual({ assessments: 0, contents: 0, replies: 0 });
+    expect(snapshot()).toEqual(after);
   });
 
   it('keeps old content that a newer assessment is still on, until that one ages out', async () => {
@@ -255,18 +239,17 @@ describe('with a retention window', () => {
     expect(ids(db.assessments)).toEqual(['a-new']);
   });
 
-  it('leaves a queued or running assessment past the window, and its content', async () => {
+  it('leaves a queued or running assessment past the window, its content and its replies', async () => {
     const queued = piece(WS, 120, 'QUEUED');
     const running = piece(WS, 120, 'RUNNING');
-    const done = piece(WS, 120, 'CANCELLED');
+    piece(WS, 120, 'CANCELLED');
 
     await purgeExpiredContent(NOW);
 
     expect(ids(db.assessments)).toEqual(ids([queued.assessment, running.assessment]));
     expect(ids(db.contents)).toEqual(ids([queued.content, running.content]));
-    expect(run(done.run.id)).toBeUndefined();
-    // A live run's finished judges keep their replies, which a re-drive reads.
-    expect(run(queued.run.id)?.output).toEqual(REPLY);
+    // A re-drive reads its finished judges' replies back.
+    expect(ids(db.replies)).toEqual(ids([queued.reply, running.reply]));
   });
 
   it('touches no other workspace', async () => {
@@ -275,40 +258,45 @@ describe('with a retention window', () => {
 
     await purgeExpiredContent(NOW);
 
-    expect(db.assessments.map((a) => a.id)).toEqual([theirs.assessment.id]);
-    expect(run(theirs.run.id)?.output).toEqual(REPLY);
+    expect(ids(db.assessments)).toEqual([theirs.assessment.id]);
+    expect(ids(db.replies)).toEqual([theirs.reply.id]);
   });
 });
 
-describe('judge runs’ replies', () => {
-  it('are cleared after 30 days even inside the window, keeping the rows', async () => {
+describe('judge replies', () => {
+  it('go after 30 days by default, even inside the content window, keeping the runs', async () => {
     db.settings.set(WS, { app: { retention: { days: 365 } } });
     const month = piece(WS, 45);
     const fresh = piece(WS, 29);
 
     const result = await purgeExpiredContent(NOW);
 
-    expect(result).toEqual({ assessments: 0, contents: 0, repliesCleared: 1 });
-    expect(run(month.run.id)).toMatchObject({ output: null, dropped: null });
-    expect(run(fresh.run.id)).toMatchObject({ output: REPLY, dropped: DROPS });
-    expect(ids(db.assessments)).toHaveLength(2);
+    expect(result).toEqual({ assessments: 0, contents: 0, replies: 1 });
+    expect(ids(db.replies)).toEqual([fresh.reply.id]);
+    expect(ids(db.judgeRuns)).toEqual(ids([month.run, fresh.run]));
+    expect(db.assessments).toHaveLength(2);
   });
 
-  it('a run with only `dropped` left is still cleared, and a cleared one is not counted again', async () => {
-    const half = piece(WS, 45);
-    half.run.output = null;
-    const gone = piece(WS, 45);
-    gone.run.output = null;
-    gone.run.dropped = null;
+  it('follow the workspace’s own reply window', async () => {
+    db.settings.set(WS, { app: { judgeReplyRetention: { days: 7 } } });
+    piece(WS, 10);
+    const week = piece(WS, 3);
 
-    expect((await purgeExpiredContent(NOW)).repliesCleared).toBe(1);
-    expect(run(half.run.id)?.dropped).toBeNull();
-    expect((await purgeExpiredContent(NOW)).repliesCleared).toBe(0);
+    expect((await purgeExpiredContent(NOW)).replies).toBe(1);
+    expect(ids(db.replies)).toEqual([week.reply.id]);
+  });
+
+  it('a longer reply window keeps a reply the default would have taken', async () => {
+    db.settings.set(WS, { app: { judgeReplyRetention: { days: 90 } } });
+    const month = piece(WS, 45);
+
+    expect((await purgeExpiredContent(NOW)).replies).toBe(0);
+    expect(ids(db.replies)).toEqual([month.reply.id]);
   });
 });
 
-describe('with no window', () => {
-  it('keeps every content row and assessment, clearing only replies past 30 days', async () => {
+describe('with no content window', () => {
+  it('keeps every content row and assessment, deleting only replies past 30 days', async () => {
     db.settings.set(WS, { quotas: { monthlyBudgetUsd: 10 } });
     const ancient = piece(WS, 2000);
     const month = piece(WS, 31);
@@ -316,17 +304,15 @@ describe('with no window', () => {
 
     const result = await purgeExpiredContent(NOW);
 
-    expect(result).toEqual({ assessments: 0, contents: 0, repliesCleared: 2 });
+    expect(result).toEqual({ assessments: 0, contents: 0, replies: 2 });
     expect(ids(db.contents)).toEqual(ids([ancient.content, month.content, fresh.content]));
-    expect(ids(db.assessments)).toHaveLength(3);
-    expect(run(ancient.run.id)?.output).toBeNull();
-    expect(run(month.run.id)?.output).toBeNull();
-    expect(run(fresh.run.id)?.output).toEqual(REPLY);
+    expect(db.assessments).toHaveLength(3);
+    expect(ids(db.replies)).toEqual([fresh.reply.id]);
     expect(fakePrisma.assessment.deleteMany).not.toHaveBeenCalled();
     expect(fakePrisma.content.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('reads an unreadable window as none, deleting nothing', async () => {
+  it('reads an unreadable window as none, deleting no content', async () => {
     db.settings.set(WS, { app: { retention: { days: -1 } } });
     piece(WS, 400);
 
@@ -334,5 +320,15 @@ describe('with no window', () => {
 
     expect(db.assessments).toHaveLength(1);
     expect(db.contents).toHaveLength(1);
+  });
+
+  it('a workspace whose org row is gone keeps its content and uses the default reply window', async () => {
+    const old = piece(WS, 400);
+    const fresh = piece(WS, 3);
+
+    await purgeExpiredContent(NOW);
+
+    expect(ids(db.assessments)).toEqual(ids([old.assessment, fresh.assessment]));
+    expect(ids(db.replies)).toEqual([fresh.reply.id]);
   });
 });

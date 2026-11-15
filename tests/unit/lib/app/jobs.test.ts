@@ -57,7 +57,7 @@ describe('initAppJobs', () => {
   });
 
   it('runs the retention purge, returning its counts', async () => {
-    const counts = { assessments: 2, contents: 1, repliesCleared: 3 };
+    const counts = { assessments: 2, contents: 1, replies: 3 };
     mocks.purgeExpiredContent.mockResolvedValue(counts);
     expect(await job(RETENTION_PURGE_JOB).run()).toEqual(counts);
     expect(mocks.purgeExpiredContent).toHaveBeenCalledTimes(1);

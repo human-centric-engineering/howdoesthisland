@@ -1,5 +1,6 @@
 /**
- * An in-memory `assessment` / `judgeRun` store for the assessment job's tests
+ * An in-memory `assessment` / `judgeRun` / `judgeReply` store for the
+ * assessment job's tests
  * (B9: a small stateful fake proves a chain no call-assertion can).
  *
  * Implements only what `lib/app/assessments/` asks of Prisma, with the same
@@ -15,6 +16,11 @@
  * led by it), `skip` and `take`; `assessment.delete` cascades to its judge
  * runs; `content.deleteMany` honours `assessments: { none: {} }`. Every
  * write is a `vi.fn`, so a test can assert that none was made.
+ *
+ * For retention (t-26): a judge run's reply is its own row in `replies`,
+ * attached to the run as `reply` when an assessment is read, and gone with
+ * the run when the run goes. `seed()` takes a run's `output` and `dropped`
+ * and stores them as its reply, as the migration copied existing ones.
  */
 import { vi } from 'vitest';
 
@@ -64,12 +70,27 @@ export function createFakeDb() {
   const assessments: Row[] = [];
   const contents: Row[] = [];
   const judgeRuns: Row[] = [];
+  const replies: Row[] = [];
   let seq = 0;
+
+  /** Remove an assessment's judge runs, and their replies (the cascade). */
+  const dropRunsOf = (assessmentId: unknown) => {
+    for (let i = judgeRuns.length - 1; i >= 0; i -= 1) {
+      const run = judgeRuns[i];
+      if (run?.assessmentId !== assessmentId) continue;
+      judgeRuns.splice(i, 1);
+      for (let j = replies.length - 1; j >= 0; j -= 1) {
+        if (replies[j]?.judgeRunId === run.id) replies.splice(j, 1);
+      }
+    }
+  };
 
   const withRelations = (row: Row): Row => ({
     ...row,
     content: contents.find((c) => c.id === row.contentId) ?? null,
-    judgeRuns: judgeRuns.filter((r) => r.assessmentId === row.id),
+    judgeRuns: judgeRuns
+      .filter((r) => r.assessmentId === row.id)
+      .map((r) => ({ ...r, reply: replies.find((p) => p.judgeRunId === r.id) ?? null })),
     frameworkVersion: { version: '0.5.1', framework: { slug: 'howdoesthisland' } },
   });
 
@@ -134,9 +155,7 @@ export function createFakeDb() {
         const gone = assessments.filter((a) => matches(a, where));
         for (const row of gone) {
           assessments.splice(assessments.indexOf(row), 1);
-          for (let i = judgeRuns.length - 1; i >= 0; i -= 1) {
-            if (judgeRuns[i]?.assessmentId === row.id) judgeRuns.splice(i, 1);
-          }
+          dropRunsOf(row.id);
         }
         return { count: gone.length };
       }),
@@ -144,9 +163,7 @@ export function createFakeDb() {
         const index = assessments.findIndex((a) => matches(a, where));
         if (index < 0) throw new Error('record not found');
         const [row] = assessments.splice(index, 1);
-        for (let i = judgeRuns.length - 1; i >= 0; i -= 1) {
-          if (judgeRuns[i]?.assessmentId === row?.id) judgeRuns.splice(i, 1);
-        }
+        dropRunsOf(row?.id);
         return { ...row };
       }),
       create: vi.fn(async ({ data }: { data: Row }) => {
@@ -222,6 +239,28 @@ export function createFakeDb() {
         }
       ),
     },
+    judgeReply: {
+      upsert: vi.fn(
+        async ({
+          where,
+          create,
+          update,
+        }: {
+          where: { judgeRunId: string };
+          create: Row;
+          update: Row;
+        }) => {
+          const row = replies.find((p) => p.judgeRunId === where.judgeRunId);
+          if (row) {
+            Object.assign(row, update);
+            return { ...row };
+          }
+          const created = { id: `reply-${replies.length + 1}`, ...create, createdAt: new Date() };
+          replies.push(created);
+          return { ...created };
+        }
+      ),
+    },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
   };
 
@@ -263,9 +302,10 @@ export function createFakeDb() {
       ...over,
     };
     assessments.push(row);
-    for (const run of runs) {
+    for (const { output, dropped, ...run } of runs) {
+      const id = `run-${judgeRuns.length + 1}`;
       judgeRuns.push({
-        id: `run-${judgeRuns.length + 1}`,
+        id,
         assessmentId: row.id,
         costUsd: 0,
         modelName: null,
@@ -274,11 +314,27 @@ export function createFakeDb() {
         updatedAt: new Date(),
         ...run,
       });
+      if (output !== undefined) {
+        replies.push({
+          id: `reply-${replies.length + 1}`,
+          orgId: row.orgId,
+          judgeRunId: id,
+          output,
+          dropped: dropped ?? [],
+          createdAt: new Date(),
+        });
+      }
     }
     return row;
   }
 
-  return { db, assessments, contents, judgeRuns, seed };
+  /** A judge run with its reply's `output` and `dropped` beside it, for assertions. */
+  const withReply = (run: Row): Row => {
+    const reply = replies.find((p) => p.judgeRunId === run.id);
+    return reply ? { ...run, output: reply.output, dropped: reply.dropped } : { ...run };
+  };
+
+  return { db, assessments, contents, judgeRuns, replies, withReply, seed };
 }
 
 export type FakeDb = ReturnType<typeof createFakeDb>;

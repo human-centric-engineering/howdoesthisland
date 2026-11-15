@@ -47,7 +47,7 @@ const fakePrisma = vi.hoisted(() => {
 vi.mock('@/lib/db/client', () => ({ prisma: fakePrisma }));
 
 import { readAppSettings, writeAppSettings } from '@/lib/app/workspaces/app-settings';
-import { readAppRetention, writeAppRetention } from '@/lib/app/retention/settings';
+import { readWorkspaceSettings, writeWorkspaceSettings } from '@/lib/app/retention/settings';
 import { writeSignupWorkspaceMarker } from '@/lib/app/workspaces/provision';
 
 const ORG = 'cmorg000000000000000team1';
@@ -73,13 +73,13 @@ beforeEach(() => {
   store.failures = 0;
 });
 
-describe('writeAppRetention', () => {
+describe('writeWorkspaceSettings', () => {
   it('sets the window under `app`, leaving every core slice and the signup marker as they were', async () => {
     store.settings.set(ORG, { ...CORE_SLICES, app: { signupWorkspace: true } });
 
-    const written = await writeAppRetention(ORG, { days: 30 });
+    const written = await writeWorkspaceSettings(ORG, { retention: { days: 30 } });
 
-    expect(written).toEqual({ retention: { days: 30 } });
+    expect(written).toEqual({ retention: { days: 30 }, judgeReplyRetention: { days: 30 } });
     expect(store.settings.get(ORG)).toEqual({
       ...CORE_SLICES,
       app: { signupWorkspace: true, retention: { days: 30 } },
@@ -95,16 +95,16 @@ describe('writeAppRetention', () => {
       app: { signupWorkspace: true, retention: { days: 30 } },
     });
 
-    const written = await writeAppRetention(ORG, null);
+    const written = await writeWorkspaceSettings(ORG, { retention: null });
 
-    expect(written).toEqual({ retention: null });
+    expect(written).toEqual({ retention: null, judgeReplyRetention: { days: 30 } });
     expect(store.settings.get(ORG)).toEqual({ ...CORE_SLICES, app: { signupWorkspace: true } });
   });
 
   it('drops an emptied `app` key, leaving `{}`, which reads as nothing set', async () => {
     store.settings.set(ORG, { app: { retention: { days: 7 } } });
 
-    await writeAppRetention(ORG, null);
+    await writeWorkspaceSettings(ORG, { retention: null });
 
     expect(store.settings.get(ORG)).toEqual({});
     expect(readAppSettings(store.settings.get(ORG))).toEqual({});
@@ -113,14 +113,49 @@ describe('writeAppRetention', () => {
   it('writes into a column that was NULL', async () => {
     store.settings.set(ORG, null);
 
-    await writeAppRetention(ORG, { days: 365 });
+    await writeWorkspaceSettings(ORG, { retention: { days: 365 } });
 
     expect(store.settings.get(ORG)).toEqual({ app: { retention: { days: 365 } } });
   });
 
   it('answers null, writing nothing, for an org that does not exist', async () => {
-    expect(await writeAppRetention('cmorg0000000000000missing', { days: 30 })).toBeNull();
+    expect(
+      await writeWorkspaceSettings('cmorg0000000000000missing', { retention: { days: 30 } })
+    ).toBeNull();
     expect(fakePrisma.org.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('the judge reply window', () => {
+  it('sets it beside the content window, leaving that and every core slice', async () => {
+    store.settings.set(ORG, { ...CORE_SLICES, app: { retention: { days: 90 } } });
+
+    const written = await writeWorkspaceSettings(ORG, { judgeReplyRetention: { days: 7 } });
+
+    expect(written).toEqual({ retention: { days: 90 }, judgeReplyRetention: { days: 7 } });
+    expect(store.settings.get(ORG)).toEqual({
+      ...CORE_SLICES,
+      app: { retention: { days: 90 }, judgeReplyRetention: { days: 7 } },
+    });
+  });
+
+  it('null returns it to the default, 30 days', async () => {
+    store.settings.set(ORG, { app: { judgeReplyRetention: { days: 7 } } });
+
+    const written = await writeWorkspaceSettings(ORG, { judgeReplyRetention: null });
+
+    expect(written).toEqual({ retention: null, judgeReplyRetention: { days: 30 } });
+    expect(store.settings.get(ORG)).toEqual({});
+  });
+
+  it('a key left out of the patch is left as stored', async () => {
+    store.settings.set(ORG, { app: { retention: { days: 90 }, judgeReplyRetention: { days: 7 } } });
+
+    await writeWorkspaceSettings(ORG, { retention: { days: 120 } });
+
+    expect(store.settings.get(ORG)).toEqual({
+      app: { retention: { days: 120 }, judgeReplyRetention: { days: 7 } },
+    });
   });
 });
 
@@ -180,13 +215,24 @@ describe('reading', () => {
     expect(readAppSettings({ app: { a: 1 } })).toEqual({ a: 1 });
   });
 
-  it('readAppRetention reads a stored window, and none for absent or malformed', () => {
-    expect(readAppRetention({ app: { retention: { days: 30 } } })).toEqual({ days: 30 });
-    expect(readAppRetention({ app: {} })).toBeNull();
-    expect(readAppRetention(null)).toBeNull();
-    // Unreadable means keep everything, never purge on a guess.
-    expect(readAppRetention({ app: { retention: { days: 0 } } })).toBeNull();
-    expect(readAppRetention({ app: { retention: 30 } })).toBeNull();
-    expect(readAppRetention({ app: { retention: { days: 1.5 } } })).toBeNull();
+  it('readWorkspaceSettings reads stored windows, filling in the reply default', () => {
+    expect(
+      readWorkspaceSettings({ app: { retention: { days: 30 }, judgeReplyRetention: { days: 7 } } })
+    ).toEqual({ retention: { days: 30 }, judgeReplyRetention: { days: 7 } });
+    expect(readWorkspaceSettings(null)).toEqual({
+      retention: null,
+      judgeReplyRetention: { days: 30 },
+    });
+  });
+
+  it.each([
+    ['zero days', { days: 0 }],
+    ['a bare number', 30],
+    ['a fraction of a day', { days: 1.5 }],
+  ])('reads %s as unset: no content window, the default reply window', (_l, stored) => {
+    // Unreadable means never purge on a guess.
+    expect(
+      readWorkspaceSettings({ app: { retention: stored, judgeReplyRetention: stored } })
+    ).toEqual({ retention: null, judgeReplyRetention: { days: 30 } });
   });
 });

@@ -1,77 +1,143 @@
 /**
- * A workspace's retention window for its content and assessments (t-26, D10).
+ * A workspace's retention windows (t-26, D10).
  *
- * Stored at `Org.settings.app.retention` as `{ days }`; absent means no
- * window, and the workspace keeps what it submits. Set through
- * `PATCH /api/v1/workspaces/{id}/settings` and applied by the purge job
- * (`./purge.ts`).
+ * Two, both in `Org.settings.app` and both set through
+ * `PATCH /api/v1/workspaces/{id}/settings` by an owner or admin:
  *
- * This is not core's `settings.retention` slice. That one governs core's own
+ * - `retention: { days }` — how long content and its assessments are kept.
+ *   Absent means no window: the workspace keeps what it submits.
+ * - `judgeReplyRetention: { days }` — how long each judge's reply
+ *   (`JudgeReply`) is kept. Absent means {@link DEFAULT_JUDGE_REPLY_DAYS}.
+ *   The judge run itself, with its model, cost and timing, stays as long as
+ *   its assessment.
+ *
+ * The purge job (`./purge.ts`) applies both.
+ *
+ * Neither is core's `settings.retention` slice. That one governs core's own
  * history (conversations, executions, cost logs, evaluations, webhooks) and
- * knows nothing of the app's tables; this governs only the app's.
+ * knows nothing of the app's tables.
  */
 import { z } from 'zod';
 import { logger } from '@/lib/logging';
 import { readAppSettings, writeAppSettings } from '@/lib/app/workspaces/app-settings';
 
-/** The key inside the `app` slice. */
+/** The content window's key inside the `app` slice. */
 export const APP_RETENTION_KEY = 'retention';
 
-/** The longest window a workspace may set: ten years, as core's longest. */
+/** The reply window's key inside the `app` slice. */
+export const JUDGE_REPLY_RETENTION_KEY = 'judgeReplyRetention';
+
+/** The longest content window: ten years, as core's longest. */
 export const MAX_RETENTION_DAYS = 3650;
 
+/** How long a judge's reply is kept when the workspace has not said (D10). */
+export const DEFAULT_JUDGE_REPLY_DAYS = 30;
+
 /**
- * How long a judge run's reply is kept, whatever the window (D10). The
- * assembled result on the assessment is what is read afterwards.
+ * The longest reply window. A reply quotes the text, and D10 keeps it for
+ * weeks, not years; a year leaves room for a workspace that audits replies.
  */
-export const JUDGE_REPLY_RETENTION_DAYS = 30;
+export const MAX_JUDGE_REPLY_DAYS = 365;
+
+const days = (max: number, what: string) =>
+  z
+    .number()
+    .int(`${what} must be a whole number of days`)
+    .min(1, `${what} must be at least 1 day`)
+    .max(max, `${what} can be at most ${max} days`);
 
 export const appRetentionSchema = z
-  .object({
-    days: z
-      .number()
-      .int('Retention must be a whole number of days')
-      .min(1, 'Retention must be at least 1 day')
-      .max(MAX_RETENTION_DAYS, `Retention can be at most ${MAX_RETENTION_DAYS} days`),
-  })
+  .object({ days: days(MAX_RETENTION_DAYS, 'Retention') })
+  .strict();
+
+export const judgeReplyRetentionSchema = z
+  .object({ days: days(MAX_JUDGE_REPLY_DAYS, 'Judge reply retention') })
   .strict();
 
 export type AppRetention = z.infer<typeof appRetentionSchema>;
-
-/** `PATCH /api/v1/workspaces/{id}/settings`: a window, or `null` for none. */
-export const updateWorkspaceSettingsSchema = z
-  .object({ retention: appRetentionSchema.nullable() })
-  .strict();
-
-export type WorkspaceSettings = { retention: AppRetention | null };
+export type JudgeReplyRetention = z.infer<typeof judgeReplyRetentionSchema>;
 
 /**
- * The window a stored `settings` column sets, or `null` for none. A stored
- * value that does not parse is read as none and logged: purging on a window
- * nobody can read would delete what the workspace may have meant to keep.
+ * `PATCH /api/v1/workspaces/{id}/settings`. A key left out is unchanged.
+ * `retention: null` keeps content for good; `judgeReplyRetention: null`
+ * returns replies to the default.
  */
-export function readAppRetention(settings: unknown, orgId?: string): AppRetention | null {
-  const stored = readAppSettings(settings)[APP_RETENTION_KEY];
+export const updateWorkspaceSettingsSchema = z
+  .object({
+    retention: appRetentionSchema.nullable().optional(),
+    judgeReplyRetention: judgeReplyRetentionSchema.nullable().optional(),
+  })
+  .strict()
+  .refine((body) => body.retention !== undefined || body.judgeReplyRetention !== undefined, {
+    message: 'Give retention, judgeReplyRetention or both',
+  });
+
+export type WorkspaceSettingsPatch = z.infer<typeof updateWorkspaceSettingsSchema>;
+
+/** The windows in force: the reply window is always one, the default if unset. */
+export type WorkspaceSettings = {
+  retention: AppRetention | null;
+  judgeReplyRetention: JudgeReplyRetention;
+};
+
+/**
+ * One stored window, or `null` when absent. A stored value that does not
+ * parse is read as absent and logged: purging on a window nobody can read
+ * could delete what the workspace meant to keep. For the content window,
+ * absent keeps everything; for the reply window, it is the default, which
+ * is the window D10 set.
+ */
+function readWindow<T>(
+  app: Record<string, unknown>,
+  key: string,
+  schema: z.ZodType<T>,
+  orgId?: string
+): T | null {
+  const stored = app[key];
   if (stored === undefined || stored === null) return null;
-  const parsed = appRetentionSchema.safeParse(stored);
+  const parsed = schema.safeParse(stored);
   if (parsed.success) return parsed.data;
-  logger.warn('Unreadable app retention window; keeping everything', { orgId });
+  logger.warn('Unreadable app retention window; reading it as unset', { orgId, key });
   return null;
 }
 
+/** The windows a stored `settings` column sets, defaults filled in. */
+export function readWorkspaceSettings(settings: unknown, orgId?: string): WorkspaceSettings {
+  return settingsOf(readAppSettings(settings), orgId);
+}
+
+function settingsOf(app: Record<string, unknown>, orgId?: string): WorkspaceSettings {
+  return {
+    retention: readWindow(app, APP_RETENTION_KEY, appRetentionSchema, orgId),
+    judgeReplyRetention: readWindow(
+      app,
+      JUDGE_REPLY_RETENTION_KEY,
+      judgeReplyRetentionSchema,
+      orgId
+    ) ?? { days: DEFAULT_JUDGE_REPLY_DAYS },
+  };
+}
+
 /**
- * Set (`{ days }`) or clear (`null`) a workspace's window.
+ * Apply a settings patch: a window sets its key, `null` removes it, and a
+ * key left out of the patch is left as stored.
  *
- * @returns the settings as written, or `null` when there is no such org.
+ * @returns the windows in force after the write, or `null` when there is no
+ *   such org.
  */
-export async function writeAppRetention(
+export async function writeWorkspaceSettings(
   orgId: string,
-  retention: AppRetention | null
+  patch: WorkspaceSettingsPatch
 ): Promise<WorkspaceSettings | null> {
   const app = await writeAppSettings(orgId, (slice) => {
-    if (retention) slice[APP_RETENTION_KEY] = { days: retention.days };
-    else delete slice[APP_RETENTION_KEY];
+    for (const [key, value] of [
+      [APP_RETENTION_KEY, patch.retention],
+      [JUDGE_REPLY_RETENTION_KEY, patch.judgeReplyRetention],
+    ] as const) {
+      if (value === undefined) continue;
+      if (value === null) delete slice[key];
+      else slice[key] = { days: value.days };
+    }
   });
-  if (!app) return null;
-  return { retention: retention ? { days: retention.days } : null };
+  return app ? settingsOf(app, orgId) : null;
 }

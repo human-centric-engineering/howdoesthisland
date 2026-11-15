@@ -264,10 +264,8 @@ model JudgeRun {
   /// `{ input, output }` tokens across the attempts.
   tokens       Json?
   latencyMs    Int?
-  /// The engine's post-validated reply, which `assemble()` reads.
-  output       Json?
-  /// What post-validation dropped or changed in the reply.
-  dropped      Json?
+  /// The judge's reply, for `SUCCEEDED`, until retention deletes it (t-26).
+  reply        JudgeReply?
   /// For `FAILED`: the `JudgeRunError` code, and its message.
   errorCode    String?
   errorMessage String?
@@ -282,4 +280,25 @@ model JudgeRun {
 enum JudgeRunStatus {
   SUCCEEDED
   FAILED
+}
+
+/// A succeeded judge run's reply, kept apart from the run because it lives
+/// less long (D10, t-26): it quotes the text, and the retention purge deletes
+/// it after the workspace's reply window (30 days unless set). The run keeps
+/// its model, cost, tokens and timing for as long as the assessment lasts,
+/// and the assessment's assembled `result` is what is read once it is final.
+model JudgeReply {
+  id         String   @id @default(cuid())
+  orgId      String?
+  org        Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  judgeRunId String   @unique
+  judgeRun   JudgeRun @relation(fields: [judgeRunId], references: [id], onDelete: Cascade)
+  /// The engine's post-validated reply, which `assemble()` reads.
+  output     Json
+  /// What post-validation dropped or changed in the reply.
+  dropped    Json
+  createdAt  DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@map("app_judge_reply")
 }

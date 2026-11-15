@@ -72,13 +72,13 @@ export function initAppJobs(): void {
     run: () => recoverAssessments(),
   });
 
-  // Delete content and assessments past the workspace's window, and clear
-  // judge runs' replies after 30 days in any case (t-26, D10). Per workspace:
-  // each pass reads its own window and touches only its own rows. Hourly, as
-  // core's own per-org retention sweep; a window is counted in days.
+  // Delete content and assessments past the workspace's window, and judge
+  // replies past theirs (30 days unless set) (t-26, D10). Per workspace: each
+  // pass reads its own windows and touches only its own rows. Daily: the
+  // windows are counted in days, so a row goes at most a day late.
   registerAppJob({
     name: RETENTION_PURGE_JOB,
-    intervalMs: 60 * 60 * 1000,
+    intervalMs: 24 * 60 * 60 * 1000,
     scope: 'per-org',
     run: () => purgeExpiredContent(),
   });

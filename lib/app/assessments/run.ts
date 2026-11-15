@@ -148,7 +148,7 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         context: true,
         createdByUserId: true,
         content: { select: { text: true, sourceUrl: true } },
-        judgeRuns: true,
+        judgeRuns: { include: { reply: { select: { output: true } } } },
       },
     });
     if (!row) {
@@ -245,7 +245,8 @@ type StoredJudgeRun = {
   judge: string;
   status: 'SUCCEEDED' | 'FAILED';
   errorCode: string | null;
-  output: Prisma.JsonValue;
+  /** Its reply (`app_judge_reply`), for a succeeded run. */
+  reply: { output: Prisma.JsonValue } | null;
   costUsd: number;
   attempts: number;
   tokens: Prisma.JsonValue;
@@ -287,8 +288,14 @@ async function drive(
   const prior = new Map<string, StoredJudgeRun>();
   const done = new Set<string>();
   for (const run of row.judgeRuns) {
-    if (run.status === 'SUCCEEDED') {
-      outputs[run.judge] = run.output;
+    if (run.status === 'SUCCEEDED' && run.reply) {
+      outputs[run.judge] = run.reply.output;
+      done.add(run.judge);
+    } else if (run.status === 'SUCCEEDED') {
+      // Its reply is gone, which the retention purge never does to a run
+      // still live. Counted as a failed judge rather than called again: a
+      // second call would bill the workspace twice for one judge.
+      failures += 1;
       done.add(run.judge);
     } else if (run.errorCode && RETRIED_ON_REDRIVE.has(run.errorCode)) {
       prior.set(run.judge, run);
@@ -432,26 +439,39 @@ async function saveJudgeRun(
       : {}),
     latencyMs: landed.latencyMs,
     ...(landed.ok
-      ? {
-          // The engine's post-validated reply and its drop record: plain data.
-          output: landed.reply.output as Prisma.InputJsonValue,
-          dropped: landed.reply.drops as unknown as Prisma.InputJsonValue,
-          errorCode: null,
-          errorMessage: null,
-        }
+      ? { errorCode: null, errorMessage: null }
       : { errorCode: landed.code, errorMessage: landed.message }),
   };
+  // The engine's post-validated reply and its drop record: plain data. Kept
+  // in its own row, which retention deletes sooner than the run (t-26).
+  const reply = landed.ok
+    ? {
+        output: landed.reply.output as Prisma.InputJsonValue,
+        dropped: landed.reply.drops as unknown as Prisma.InputJsonValue,
+      }
+    : null;
   return await prisma.$transaction(async (tx) => {
     const { count } = await tx.assessment.updateMany({
       where: { id: assessmentId, leaseToken: token, status: { in: ['RUNNING', 'CANCELLED'] } },
       data: { costUsd: { increment: spentUsd } },
     });
     if (count === 0) return false;
-    await tx.judgeRun.upsert({
+    const run = await tx.judgeRun.upsert({
       where: { assessmentId_judge: { assessmentId, judge: landed.slot } },
       create: { orgId, assessmentId, judge: landed.slot, ...data },
       update: data,
+      select: { id: true },
     });
+    // Only a failed row is ever replaced, and it has no reply, so a create is
+    // all a succeeded save needs. Upserted all the same, so a second save of
+    // one judge cannot fail on the unique run id.
+    if (reply) {
+      await tx.judgeReply.upsert({
+        where: { judgeRunId: run.id },
+        create: { orgId, judgeRunId: run.id, ...reply },
+        update: reply,
+      });
+    }
     return true;
   });
 }
