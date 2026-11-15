@@ -61,7 +61,9 @@ name, an SVG mark and the figure.
 - **Balance and duties are a bar per part with the target as an upright line**,
   not two stacked wholes, so each gap is read on its own row. An appeal's share
   is its score's share of the four, which is what the balance index compares.
-  Shares are rounded to add to exactly 100 (`sharesOf`).
+  `buildReportView` rounds both mixes, shares and targets, to add to exactly 100
+  (`lib/app/reports/shares.ts`). The bars are on the whole 0–100% scale, never
+  stretched to the largest part.
 - **Colours are the brand's appeal tokens**, which switch for dark and print.
   The dataviz palette validator flags them (Logos's chroma in light, all four
   too light in dark). That is accepted because every mark is named beside it,
