@@ -18,6 +18,7 @@ import {
   type ReportView,
 } from '@/lib/app/reports/view';
 import {
+  ALL_SLOTS,
   apiAssessment,
   degraded,
   emptySections,
@@ -127,7 +128,9 @@ describe('buildReportView — a full review', () => {
 
   it('lists every AI reviewer that ran, and none as fallen back', () => {
     expect(v.method.reviewers.map((r) => r.name)).toContain('Ethos');
-    expect(v.method.reviewers.find((r) => r.slot === 'influence')?.name).toBe('Influence panel');
+    expect(v.method.reviewers.find((r) => r.slot === 'judge_influence')?.name).toBe(
+      'Influence panel'
+    );
     expect(v.method.fellBack).toEqual([]);
     expect(v.method.editor).toEqual({ status: 'written', model: 'gpt-editor' });
     expect(v.method.limitations.length).toBeGreaterThan(0);
@@ -153,7 +156,7 @@ describe('buildReportView — what a result does not have is absent', () => {
   it('a single judge has no verdict paragraph when the editor skipped it', () => {
     const v = view(
       apiAssessment({
-        judges: ['ethos'],
+        judges: ['judge_ethos'],
         result: engineResult({
           judges: ['ethos'],
           editor: { status: 'skipped', reason: 'too_few_judges' },
@@ -162,7 +165,8 @@ describe('buildReportView — what a result does not have is absent', () => {
     );
     expect(v.verdict.editor).toBeNull();
     expect(v.method.editor).toEqual({ status: 'skipped', model: null });
-    expect(v.method.reviewers.map((r) => r.slot)).toEqual(['ethos']);
+    expect(v.method.reviewers.map((r) => r.slot)).toEqual(['judge_ethos']);
+    expect(v.method.reviewers.map((r) => r.name)).toEqual(['Ethos']);
   });
 
   it('culture is absent with the switch off', () => {
@@ -176,11 +180,13 @@ describe('buildReportView — what a result does not have is absent', () => {
       ...base,
       status: 'partial',
       judgeRuns: base.judgeRuns.map((r) =>
-        r.judge === 'logos' ? { ...r, status: 'failed', model: null, errorCode: 'malformed' } : r
+        r.judge === 'judge_logos'
+          ? { ...r, status: 'failed', model: null, errorCode: 'malformed' }
+          : r
       ),
     });
     expect(v.method.fellBack).toEqual(['Logos']);
-    expect(v.method.reviewers.find((r) => r.slot === 'logos')?.status).toBe('failed');
+    expect(v.method.reviewers.find((r) => r.slot === 'judge_logos')?.status).toBe('failed');
   });
 });
 
@@ -403,5 +409,48 @@ describe('buildReportView — round 2 review', () => {
     expect(v.craft.find((c) => c.label === 'Emotional words')?.value).toBe('0.4%');
     expect(v.craft.find((c) => c.label === 'Words scored')?.value).toBe(String(r.craft.words));
     expect(v.craft.some((c) => c.label === 'Word count')).toBe(false);
+  });
+});
+
+describe('buildReportView — round 3 review', () => {
+  it('the fixture stores judges by the real slot ids', async () => {
+    const { HOWDOESTHISLAND_JUDGE_SLOTS } =
+      await import('@/lib/app/frameworks/howdoesthisland/judge-slots');
+    expect([...ALL_SLOTS].sort()).toEqual([...HOWDOESTHISLAND_JUDGE_SLOTS].sort());
+  });
+
+  it('names every stored slot from the model, never by its slot id', () => {
+    const v = view();
+    expect(v.method.reviewers.map((r) => r.name)).toEqual([
+      'Ethos',
+      'Pathos',
+      'Logos',
+      'Kairos',
+      'Lenses and duties',
+      'Influence panel',
+      'Craft editor',
+      'Audience',
+      'Culture',
+    ]);
+  });
+
+  it('links a note to the recommendation on its dimension that is shown first, by impact', () => {
+    const r = reportResultSchema.parse(engineResult({ editor: WRITTEN_EDITOR }));
+    const h = r.highlights[0];
+    const rec = { ...r.recommendations[0], dimension: h.dimension };
+    const v = buildReportView({
+      assessment: apiAssessment(),
+      result: {
+        ...r,
+        highlights: [h],
+        recommendations: [
+          { ...rec, impact: 'low' },
+          { ...rec, impact: 'high' },
+        ],
+      },
+      model: reportModelSchema.parse(modelDocument(true)),
+    });
+    expect(v.recommendations.map((x) => x.number)).toEqual([2, 1]);
+    expect(v.copy.notes[0].recommendation).toBe(2);
   });
 });

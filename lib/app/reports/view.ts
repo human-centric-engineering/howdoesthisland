@@ -212,12 +212,17 @@ export function segmentCopy(
 const fits = (text: string, start: number, end: number): boolean =>
   start >= 0 && start < end && end <= text.length;
 
-/** The name a judge slot goes by: its appeal's, else its catalogue entry's. */
-function reviewerName(model: ReportModel, appeals: Names, slot: string): string {
-  const appeal = appeals.get(slot);
+/**
+ * The name a judge goes by: its appeal's, else its catalogue entry's. Takes a
+ * stored slot (`judge_ethos`, resolved through the model's `judges`) or the
+ * appeal or group it judges (`ethos`, `influence`), as a recommendation names it.
+ */
+function reviewerName(model: ReportModel, appeals: Names, slotOrGroup: string): string {
+  const group = model.judges.find((j) => j.id === slotOrGroup)?.appeal ?? slotOrGroup;
+  const appeal = appeals.get(group);
   if (appeal) return appeal;
-  const entry = model.judge_catalogue.find((c) => c.judges.length === 1 && c.judges[0] === slot);
-  return entry?.name ?? slot;
+  const entry = model.judge_catalogue.find((c) => c.judges.length === 1 && c.judges[0] === group);
+  return entry?.name ?? slotOrGroup;
 }
 
 function formatSeconds(sec: number): string {
@@ -255,11 +260,11 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
   }
 
   // Recommendations: numbered in result order (the editor's ids), shown by impact.
+  // A note links to the recommendation on its dimension that is shown first (by impact).
   const recByDimension = new Map<string, number>();
   const recommendations = result.recommendations.map(
     (r: ReportRecommendation, i): ReportRecommendationView => {
       const number = i + 1;
-      if (!recByDimension.has(r.dimension)) recByDimension.set(r.dimension, number);
       return {
         number,
         appealId: r.appeal,
@@ -279,6 +284,9 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     .map((r, i) => ({ r, i }))
     .sort((a, b) => impactRank(a.r.impact) - impactRank(b.r.impact) || a.i - b.i)
     .map(({ r }) => r);
+  for (const r of byImpact) {
+    if (!recByDimension.has(r.dimensionId)) recByDimension.set(r.dimensionId, r.number);
+  }
 
   // Notes, placed in the copy
   const notes: Omit<ReportNote, 'dimensionShown'>[] = result.highlights.map((h, i) => ({

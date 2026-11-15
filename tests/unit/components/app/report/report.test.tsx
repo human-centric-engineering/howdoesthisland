@@ -116,7 +116,7 @@ describe('Report — sections a result lacks are left out', () => {
       ...base,
       status: 'partial' as const,
       judgeRuns: base.judgeRuns.map((r) =>
-        r.judge === 'logos' ? { ...r, status: 'failed' as const, model: null } : r
+        r.judge === 'judge_logos' ? { ...r, status: 'failed' as const, model: null } : r
       ),
     };
     render(<Report view={viewOf(a)} variant="web" />);

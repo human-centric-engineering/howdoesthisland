@@ -197,6 +197,8 @@ export const reportModelSchema = z.object({
   ),
   groups: z.array(named.extend({ question: z.string() })).default([]),
   judge_catalogue: z.array(named.extend({ judges: z.array(z.string()) })),
+  /** Judge slot (`judge_ethos`, as an assessment stores it) → the appeal or group it judges. */
+  judges: z.array(z.object({ id: z.string(), appeal: z.string() })).default([]),
   scoring: z.object({
     bands: z.array(z.object({ min: z.number(), max: z.number(), label: z.string() })),
     interpretation: z.string(),

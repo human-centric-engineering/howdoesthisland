@@ -78,9 +78,12 @@ export function engineResult(opts: {
   return stored;
 }
 
-/** The assessment as `GET /api/v1/assessments/{id}` answers. */
+/** The slots an assessment stores its judges by (`HOWDOESTHISLAND_JUDGE_SLOTS`). */
+export const ALL_SLOTS = ALL_JUDGES.map((j) => `judge_${j}`);
+
+/** The assessment as `GET /api/v1/assessments/{id}` answers: judges by slot, as stored. */
 export function apiAssessment(over: Partial<ReportAssessment> = {}): ReportAssessment {
-  const judges = over.judges ?? ALL_JUDGES;
+  const judges = over.judges ?? ALL_SLOTS;
   return {
     id: 'asm_1',
     stored: true,
@@ -100,7 +103,10 @@ export function apiAssessment(over: Partial<ReportAssessment> = {}): ReportAsses
     completedAt: '2026-11-15T09:01:00.000Z',
     text: TEXT,
     context: CTX,
-    result: engineResult({ judges, editor: WRITTEN_EDITOR }),
+    result: engineResult({
+      judges: judges.map((s) => s.replace(/^judge_/, '')),
+      editor: WRITTEN_EDITOR,
+    }),
     judgeRuns: judges.map((judge) => ({
       judge,
       status: 'succeeded' as const,
