@@ -215,7 +215,21 @@ export const engineModelSchema = z.object({
   archetypes: z.array(archetypeSchema),
   exec_roles: z.array(execRoleSchema),
   balance_rules: z.array(balanceRuleSchema),
-  judges: z.array(judgeSchema),
+  // One judge per appeal: the engine maps each slot's reply to its appeal
+  // (t-33), so a second judge on one appeal would overwrite the first.
+  judges: z.array(judgeSchema).superRefine((judges, ctx) => {
+    const seen = new Set<string>();
+    judges.forEach((j, i) => {
+      if (seen.has(j.appeal)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [i, 'appeal'],
+          message: `Two judges share the appeal '${j.appeal}'; each judge needs its own`,
+        });
+      }
+      seen.add(j.appeal);
+    });
+  }),
   /** The judge groups a caller may ask for by name; `always` ones run in every group. */
   judge_catalogue: z.array(
     z.object({ id: z.string(), judges: strings, always: z.boolean().optional() })
@@ -293,6 +307,8 @@ export interface EngineModel {
   readonly GROUP: ReadonlyMap<string, { id: string }>;
   /** Judges by their slot id (`judge_ethos`). */
   readonly JUDGE: ReadonlyMap<string, JudgeDef>;
+  /** Every judge's appeal (`ethos`, `lenses`, …), one judge each. */
+  readonly JUDGE_APPEALS: ReadonlySet<string>;
   /** Every reference record (thinker, framework, …) by id. */
   readonly REF: ReadonlyMap<string, { id: string; name: string }>;
 }
@@ -353,6 +369,7 @@ export function indexModel(model: object): EngineModel {
     LEN_TARGET: data.length_targets ?? {},
     GROUP: byId(data.groups),
     JUDGE: byId(data.judges),
+    JUDGE_APPEALS: new Set(data.judges.map((j) => j.appeal)),
     REF: new Map(Object.values(data.knowledge_refs).flatMap((refs) => refs.map((r) => [r.id, r]))),
   };
   indexed.set(model, engineModel);

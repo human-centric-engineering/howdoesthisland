@@ -86,27 +86,25 @@ export interface HowDoesThisLandEngine extends FrameworkEngine<
  * review merged no reply and came back as the quick scan (t-33). A key that
  * is already an appeal passes through, so the baseline still compares; when a
  * slot and its appeal both arrive, the slot's reply wins whatever the order;
- * a null or absent reply counts as none. A key naming no judge is dropped, as
+ * anything but an object (null, a string, an array) counts as no reply. A key naming no judge is dropped, as
  * `assemble()` would ignore it.
  */
-function byAppeal(
-  slotAppeal: ReadonlyMap<string, string>,
-  appeals: ReadonlySet<string>,
-  outputs: JudgeOutputs
-): JudgeOutputs {
+function byAppeal(m: EngineModel, outputs: JudgeOutputs): JudgeOutputs {
   const keyed: Record<string, JudgeOutput | undefined> = {};
   for (const [key, output] of Object.entries(outputs)) {
-    if (output === undefined || output === null) continue;
-    const slotFor = slotAppeal.get(key);
+    // A run's replies come from stored JSON; only an object is a reply.
+    if (typeof output !== 'object' || output === null || Array.isArray(output)) continue;
+    const slotFor = m.JUDGE.get(key)?.appeal;
     if (slotFor !== undefined) keyed[slotFor] = output;
-    else if (appeals.has(key) && keyed[key] === undefined) keyed[key] = output;
+    else if (m.JUDGE_APPEALS.has(key) && keyed[key] === undefined) keyed[key] = output;
   }
   return keyed;
 }
 
 /**
  * An engine over a materialised model. Throws (a `ZodError` naming the field)
- * when the model lacks something the engine reads. The model is never written.
+ * when the model lacks something the engine reads, or gives two judges one
+ * appeal. The model is never written.
  */
 export function createHowDoesThisLandEngine(
   model: object,
@@ -114,19 +112,12 @@ export function createHowDoesThisLandEngine(
 ): HowDoesThisLandEngine {
   const m: EngineModel = indexModel(model);
   const options: EngineOptions = { culture: opts.culture };
-  // One reply per appeal: a second judge on the same appeal would overwrite
-  // the first in `byAppeal`, so a model with one cannot make an engine.
-  const slotAppeal = new Map(m.data.judges.map((j) => [j.id, j.appeal]));
-  const appeals = new Set(slotAppeal.values());
-  if (appeals.size !== slotAppeal.size) {
-    throw new Error('Two judges in the model share an appeal; each judge needs its own');
-  }
   return {
     culture: options.culture,
     parseContext: (input) => parseContext(m, input, options.culture),
     quickScan: (text, ctx) => quickScan(m, text, ctx, options),
     assemble: (text, ctx, quick, outputs = {}, source = null) =>
-      assemble(m, text, ctx, quick, byAppeal(slotAppeal, appeals, outputs), source, options),
+      assemble(m, text, ctx, quick, byAppeal(m, outputs), source, options),
     primaryDuty: (ctx) => primaryDuty(m, ctx),
     activeJudgeSlots: (profile) => activeJudgeSlots(m, profile, options),
     buildJudgeRequest: (slot, text, ctx, projectContext = null) =>

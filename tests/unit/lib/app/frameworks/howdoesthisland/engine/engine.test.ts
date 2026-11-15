@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { ZodError } from 'zod';
 
 const env = vi.hoisted(() => ({
   NODE_ENV: 'test',
@@ -387,16 +388,22 @@ describe('assembling replies keyed by slot (t-33)', () => {
     expect(engine.assemble(text, ctx, quick, appealFirst, null)).toEqual(expected);
   });
 
-  it('lets a null slot reply stand aside for a real appeal reply', () => {
-    const reply = c.judgeOutputs.ethos;
-    const expected = engine.assemble(text, ctx, quick, { ethos: reply }, null);
-    // A run hands the engine its stored replies as unknowns, as the generic
-    // interface types them, so a null can reach it.
-    const asRun: FrameworkEngine = engine;
-    const outputs: Record<string, unknown> = { judge_ethos: null, ethos: reply };
-    expect(asRun.assemble(text, ctx, quick, outputs, null)).toEqual(expected);
-    expect(expected.mode).toBe('full');
-  });
+  it.each([null, false, 0, '', 'text', ['a']])(
+    'lets a slot reply that is not an object (%j) stand aside for a real appeal reply',
+    (bad) => {
+      const reply = c.judgeOutputs.ethos;
+      const expected = engine.assemble(text, ctx, quick, { ethos: reply }, null);
+      // A run hands the engine its stored replies as unknowns, as the generic
+      // interface types them, so a null can reach it.
+      const asRun: FrameworkEngine = engine;
+      const outputs: Record<string, unknown> = { judge_ethos: bad, ethos: reply };
+      expect(asRun.assemble(text, ctx, quick, outputs, null)).toEqual(expected);
+      expect(expected.mode).toBe('full');
+      expect(asRun.assemble(text, ctx, quick, { judge_ethos: bad }, null)).toMatchObject({
+        mode: 'quick',
+      });
+    }
+  );
 
   it('ignores a slot-keyed culture reply on an engine built with culture off', () => {
     const off = createHowDoesThisLandEngine(loadModel(), { culture: false });
@@ -416,7 +423,8 @@ describe('assembling replies keyed by slot (t-33)', () => {
     const judges = indexModel(loadModel()).data.judges;
     const [first, second, ...rest] = judges;
     const clash = { ...loadModel(), judges: [first, { ...second, appeal: first.appeal }, ...rest] };
-    expect(() => createHowDoesThisLandEngine(clash, { culture: true })).toThrow(/share an appeal/);
+    expect(() => createHowDoesThisLandEngine(clash, { culture: true })).toThrow(ZodError);
+    expect(() => createHowDoesThisLandEngine(clash, { culture: true })).toThrow(/share the appeal/);
   });
 
   it('ignores a key that names no judge', () => {
