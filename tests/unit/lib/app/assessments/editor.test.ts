@@ -333,9 +333,27 @@ describe('the judges’ checks, through the shared path, under the editor role',
     expect(chat).toHaveBeenCalledTimes(1);
   });
 
-  it('lets an error that is not the call’s (the agent read failing) propagate', async () => {
+  it('records an error that is not the call’s (the agent read failing) as internal_error', async () => {
     mocks.findUnique.mockRejectedValue(new Error('database gone'));
-    await expect(run()).rejects.toThrow('database gone');
+    await expect(run()).resolves.toMatchObject({
+      status: 'failed',
+      code: 'internal_error',
+      message: 'database gone',
+    });
+    expect(mocks.logCost).not.toHaveBeenCalled();
+  });
+
+  it('records the engine refusing to build the request as internal_error, unbilled', async () => {
+    const failing = {
+      ...engine,
+      buildEditorRequest: () => {
+        throw new TypeError('no such dimension');
+      },
+    };
+    const outcome = await run({ engine: failing });
+    expect(outcome).toMatchObject({ status: 'failed', code: 'internal_error' });
+    expect(editorCostUsd(outcome)).toBe(0);
+    expect(mocks.getProvider).not.toHaveBeenCalled();
   });
 });
 

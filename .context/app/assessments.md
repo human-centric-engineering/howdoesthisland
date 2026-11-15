@@ -117,9 +117,11 @@ from either of the first two.
   ([`judges.md`](./judges.md#running-a-judge)). The result carries it as
   `result.editor`: `{ status: 'written', summary, dropped, model, costUsd }`,
   `{ status: 'skipped', reason }` (`too_few_judges`, `no_judge_answered`), or
-  `{ status: 'failed', errorCode, model, costUsd }`. **A failed editor never
-  changes the status**: the assessment is `COMPLETED` (or `PARTIAL`, from its
-  judges) without a summary. Its spend is added to `costUsd` as it lands, under
+  `{ status: 'failed', errorCode, model, costUsd }`, where `errorCode` is a
+  judge call's code or `internal_error` for anything else the step threw (the
+  engine refusing to build the request, the agent read failing); the message
+  is logged, not stored. **A failed editor never changes the status**: the
+  assessment is `COMPLETED` (or `PARTIAL`, from its judges) without a summary. Its spend is added to `costUsd` as it lands, under
   the same guard as a judge's. A `store: false` run asks no editor yet.
 
 The limits are constants in `limits.ts` until f-usage measures them.

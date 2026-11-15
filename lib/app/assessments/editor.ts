@@ -27,6 +27,7 @@ import {
   type JudgeRunErrorCode,
   type JudgeSpend,
 } from '@/lib/app/judges/run-judge';
+import { logger } from '@/lib/logging';
 
 /** The fewest judges a run asks for before the editor is asked to summarise it. */
 export const EDITOR_MIN_JUDGES = 2;
@@ -37,6 +38,13 @@ export type EditorSkipReason =
   | 'too_few_judges'
   /** Every judge failed: the result is the quick scan. */
   | 'no_judge_answered';
+
+/**
+ * Why the editor's step failed: a call's own code, or `internal_error` for
+ * anything else it threw (the engine refusing to build the request, the
+ * agent or budget read failing).
+ */
+export type EditorErrorCode = JudgeRunErrorCode | 'internal_error';
 
 /** How the editor's step ended. */
 export type EditorOutcome =
@@ -50,7 +58,7 @@ export type EditorOutcome =
   | { status: 'skipped'; reason: EditorSkipReason }
   | {
       status: 'failed';
-      code: JudgeRunErrorCode;
+      code: EditorErrorCode;
       message: string;
       /** What it was billed, when it reached the provider. */
       spend?: JudgeSpend;
@@ -71,7 +79,7 @@ export type EditorRecord =
       costUsd: number;
     }
   | { status: 'skipped'; reason: EditorSkipReason }
-  | { status: 'failed'; errorCode: JudgeRunErrorCode; model: string | null; costUsd: number };
+  | { status: 'failed'; errorCode: EditorErrorCode; model: string | null; costUsd: number };
 
 /** Why the editor is not asked, or `null` when it is. */
 export function editorSkipReason(
@@ -103,10 +111,10 @@ export interface RunEditorInput {
 }
 
 /**
- * Ask the editor for its summary, or skip it. Every outcome a call decides
- * is an {@link EditorOutcome}; as with a judge, the database failing (the
- * agent or budget read) and the engine refusing to build the request
- * propagate as the caller's errors.
+ * Ask the editor for its summary, or skip it. Never throws: unlike a judge's,
+ * the editor's failure is not the assessment's, so anything it throws (the
+ * engine refusing to build the request included, which would throw again on
+ * every re-drive) is a `failed` outcome, logged with its message.
  */
 export async function runEditor(input: RunEditorInput): Promise<EditorOutcome> {
   const reason = editorSkipReason(input.judges, input.answered);
@@ -146,13 +154,31 @@ export async function runEditor(input: RunEditorInput): Promise<EditorOutcome> {
       latencyMs: Date.now() - started,
     };
   } catch (err) {
-    if (!(err instanceof JudgeRunError)) throw err;
+    const latencyMs = Date.now() - started;
+    const where = {
+      ...(input.assessmentId !== undefined ? { assessmentId: input.assessmentId } : {}),
+      frameworkVersion: input.frameworkVersion,
+    };
+    if (!(err instanceof JudgeRunError)) {
+      logger.error('The editor step failed', err, where);
+      return {
+        status: 'failed',
+        code: 'internal_error',
+        message: err instanceof Error ? err.message : String(err),
+        latencyMs,
+      };
+    }
+    logger.warn('The editor did not write a summary', {
+      ...where,
+      code: err.code,
+      message: err.message,
+    });
     return {
       status: 'failed',
       code: err.code,
       message: err.message,
       ...(err.spend ? { spend: err.spend } : {}),
-      latencyMs: Date.now() - started,
+      latencyMs,
     };
   }
 }

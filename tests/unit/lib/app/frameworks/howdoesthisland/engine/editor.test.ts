@@ -11,6 +11,8 @@ import {
   EDITOR_LIMITS,
   EDITOR_SCHEMA_NAME,
   MAX_CHANGES,
+  MAX_SENTENCE_CHARS,
+  MAX_VERDICT_CHARS,
   recommendationId,
 } from '@/lib/app/frameworks/howdoesthisland/engine/editor';
 import type { Assessment } from '@/lib/app/frameworks/howdoesthisland/engine/types';
@@ -70,6 +72,9 @@ describe('buildEditorRequest', () => {
     );
     expect(request.prompt).toContain('<project_context>\nWe sell bicycles.\n</project_context>');
     expect(request.prompt).toContain(`<content>\n${TEXT}\n</content>`);
+    expect(request.prompt).toMatch(
+      /<assessment>\nOverall: [\s\S]*Red flags:[\s\S]*\n<\/assessment>/
+    );
     expect(request.prompt).toContain('Choose the 3 changes that matter most');
   });
 
@@ -172,7 +177,8 @@ describe('validateEditorReply', () => {
 
   it.each([
     ['not an object', ['a list']],
-    ['no verdict', reply({ verdict: '   ' })],
+    ['no verdict, or one too long', reply({ verdict: '   ' })],
+    ['no verdict, or one too long', reply({ verdict: 'x'.repeat(MAX_VERDICT_CHARS + 1) })],
     ['changes is not a list', reply({ changes: 'rec_1' })],
     ['works is not a list', reply({ works: null })],
   ])('refuses a reply whole when it has %s', (detail, bad) => {
@@ -181,6 +187,23 @@ describe('validateEditorReply', () => {
       reason: 'malformed',
       detail,
     });
+  });
+
+  it('drops a change or works entry longer than a sentence should be', () => {
+    const long = 'x'.repeat(MAX_SENTENCE_CHARS + 1);
+    const checked = engine.validateEditorReply(
+      reply({ changes: [change('rec_1'), { ...change('rec_2', 2), why: long }], works: [long] }),
+      RESULT
+    );
+    expect(checked).toMatchObject({ ok: true, output: { works: [] } });
+    if (!checked.ok) return;
+    expect(checked.output.changes.map((c) => c.recommendation)).toEqual(['rec_1']);
+    expect(checked.drops).toEqual(
+      expect.arrayContaining([
+        { at: 'changes[1]', reason: 'malformed' },
+        { at: 'works[0]', reason: 'malformed' },
+      ])
+    );
   });
 
   it('refuses a reply whose every change names an unknown recommendation', () => {
