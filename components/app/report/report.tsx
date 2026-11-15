@@ -50,13 +50,14 @@ function Section({
       aria-labelledby={`${id}-heading`}
       className="border-t px-6 py-10 md:px-10 print:break-inside-auto print:px-0 print:py-6"
     >
-      <p className="hd-slug">§ {String(number).padStart(2, '0')}</p>
-      <h2
-        id={`${id}-heading`}
-        className="mt-2 text-2xl font-bold md:text-3xl print:break-after-avoid"
-      >
-        {title}
-      </h2>
+      {/* The number and the title are one unit on paper: never split, and
+          never left at the foot of a page without what follows. */}
+      <div className="print:break-inside-avoid print:break-after-avoid">
+        <p className="hd-slug">§ {String(number).padStart(2, '0')}</p>
+        <h2 id={`${id}-heading`} className="mt-2 text-2xl font-bold md:text-3xl">
+          {title}
+        </h2>
+      </div>
       <div className="mt-6">{children}</div>
     </section>
   );
@@ -355,7 +356,7 @@ function DutiesAndLenses({ view }: { view: ReportView }) {
       {view.summaries.lenses ? <p className="md:col-span-2">{view.summaries.lenses}</p> : null}
       {duties.rows.length > 0 ? (
         <div>
-          <h3 className="font-mono text-xs text-(--hd-muted) uppercase">
+          <h3 className="font-mono text-xs text-(--hd-muted) uppercase print:break-after-avoid">
             Duties · mostly {duties.primary}
             {duties.fit !== null ? ` · fit ${duties.fit}` : ''}
           </h3>
@@ -377,7 +378,9 @@ function DutiesAndLenses({ view }: { view: ReportView }) {
       ) : null}
       {lenses.length > 0 ? (
         <div>
-          <h3 className="font-mono text-xs text-(--hd-muted) uppercase">Lenses</h3>
+          <h3 className="font-mono text-xs text-(--hd-muted) uppercase print:break-after-avoid">
+            Lenses
+          </h3>
           <ul className="mt-3 grid gap-3">
             {lenses.map((l) => (
               <li key={l.id} id={`dim-${l.id}`}>
