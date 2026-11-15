@@ -3,15 +3,16 @@
  *
  * Two API reads, both through `requireServerData`: the assessment, and the
  * model version it ran on, which names everything the result holds by id.
- * That is one page's worth of data in two calls, never one per row. A 404
- * (another workspace's id included) renders the not-found page. Any other
- * failure throws to the route's error boundary.
+ * That is one page's worth of data in two calls, never one per row. A 404 on
+ * the assessment (another workspace's id included) renders the not-found
+ * page. A 404 on the model version is an `unreadable` report, since retrying
+ * cannot bring it back. Any other failure throws to the route's error boundary.
  *
  * Each answer is parsed with Zod. A result the schema rejects is an
  * `unreadable` report: logged, and shown as an error rather than a page with
  * gaps.
  */
-import { requireServerData } from '@/lib/api/server-load';
+import { loadServerData, requireServerData, ServerLoadError } from '@/lib/api/server-load';
 import { logger } from '@/lib/logging';
 import {
   reportAssessmentSchema,
@@ -61,10 +62,19 @@ export async function loadReport(id: string): Promise<ReportLoad> {
     return { kind: 'unreadable' };
   }
 
-  const { data: modelData } = await requireServerData<unknown>(
-    modelPath(a.framework.slug, a.framework.version)
-  );
-  const model = reportModelSchema.safeParse(modelData);
+  // The version a stored result ran on no longer resolving is not something
+  // "Try again" fixes, so a 404 here is an unreadable report, not a throw.
+  const path = modelPath(a.framework.slug, a.framework.version);
+  const loaded = await loadServerData<unknown>(path);
+  if (!loaded.ok) {
+    if (loaded.failure.kind !== 'not_found') throw new ServerLoadError(path, loaded.failure);
+    logger.error('Report: the model version it ran on was not found', undefined, {
+      assessmentId: id,
+      framework: a.framework,
+    });
+    return { kind: 'unreadable' };
+  }
+  const model = reportModelSchema.safeParse(loaded.data);
   if (!model.success) {
     logger.error('Report: the model did not parse', undefined, {
       assessmentId: id,

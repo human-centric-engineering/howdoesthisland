@@ -35,6 +35,8 @@ export interface ReportNote {
   quote: string;
   dimensionId: string;
   dimensionName: string;
+  /** Whether the report shows that dimension, so a link to it lands somewhere. */
+  dimensionShown: boolean;
   appealId: string | null;
   /** The recommendation on the same dimension, by its number, if there is one. */
   recommendation: number | null;
@@ -278,7 +280,7 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     .map(({ r }) => r);
 
   // Notes, placed in the copy
-  const notes: ReportNote[] = result.highlights.map((h, i) => ({
+  const notes: Omit<ReportNote, 'dimensionShown'>[] = result.highlights.map((h, i) => ({
     number: i + 1,
     polarity: h.polarity,
     note: h.note,
@@ -322,10 +324,16 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     };
   });
   const dimScore = new Map(result.dimensions.map((d) => [d.id, d.score]));
+  const appealScores = new Map<string, number>(landsAppeals.map((a) => [a.id, a.score]));
   const caps = model.scoring.integrity_caps
     .filter((c) => {
       const s = dimScore.get(c.dimension);
-      return s !== undefined && s <= c.if_at_most;
+      // The engine takes min(score, cap), so a cap changed the appeal only
+      // when the appeal sits at it; below it, the cap did nothing.
+      const appealScore = appealScores.get(c.appeal);
+      return (
+        s !== undefined && s <= c.if_at_most && appealScore !== undefined && appealScore >= c.cap
+      );
     })
     .map((c) => ({ appealName: nameIn(appeals, c.appeal), cap: c.cap, why: c.why }));
 
@@ -429,6 +437,12 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
         }
       : null;
 
+  // The dimensions the report has an anchor for: the Dimensions rows and the lenses.
+  const shownDimensions = new Set([
+    ...dimensionGroups.flatMap((g) => g.rows.map((r) => r.id)),
+    ...lenses.map((l) => l.id),
+  ]);
+
   // Method
   const runs = new Map(assessment.judgeRuns.map((r) => [r.judge, r]));
   const reviewers: ReviewerView[] = assessment.judges.map((slot) => {
@@ -466,7 +480,10 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
       caps,
       findings: result.balance_findings.map((f) => ({ name: f.name, message: f.message })),
     },
-    copy: { segments: segmentCopy(assessment.text, marks), notes },
+    copy: {
+      segments: segmentCopy(assessment.text, marks),
+      notes: notes.map((n) => ({ ...n, dimensionShown: shownDimensions.has(n.dimensionId) })),
+    },
     recommendations: byImpact,
     flags: result.red_flags.map((f) => ({
       id: f.id,

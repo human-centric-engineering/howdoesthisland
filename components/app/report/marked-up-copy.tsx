@@ -51,9 +51,13 @@ export function MarkedUpCopy({ copy }: { copy: ReportView['copy'] }) {
           >
             <p className="font-mono text-[0.7rem] text-(--hd-muted) uppercase">
               {n.number} · {n.polarity === 'weakness' ? 'To fix' : 'Works'} ·{' '}
-              <a href={`#dim-${n.dimensionId}`} className="underline">
-                {n.dimensionName}
-              </a>
+              {n.dimensionShown ? (
+                <a href={`#dim-${n.dimensionId}`} className="underline">
+                  {n.dimensionName}
+                </a>
+              ) : (
+                n.dimensionName
+              )}
               {n.flag ? ` · ${n.flag}` : null}
             </p>
             <p className="mt-1">{n.note}</p>

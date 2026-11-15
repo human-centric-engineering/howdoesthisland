@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { MarkedUpCopy } from '@/components/app/report/marked-up-copy';
 import { DIMENSION_MAX, type ReportView } from '@/lib/app/reports/view';
 import { WORDS } from '@/lib/app/reports/words';
+import { formatUsd } from '@/lib/utils/format-currency';
 
 /**
  * Where the report is read. One component renders all three (app-plan §8.5),
@@ -487,12 +488,6 @@ function Culture({ culture }: { culture: NonNullable<ReportView['culture']> }) {
   );
 }
 
-const usd = new Intl.NumberFormat('en-GB', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 4,
-});
-
 function Method({ view, variant }: { view: ReportView; variant: ReportVariant }) {
   const { method } = view;
   return (
@@ -529,7 +524,7 @@ function Method({ view, variant }: { view: ReportView; variant: ReportVariant })
       <p className="text-sm">Model: {method.framework}.</p>
       {variant === 'web' ? (
         <p className="text-sm">
-          Cost of this {WORDS.review}: {usd.format(method.costUsd)}.
+          Cost of this {WORDS.review}: {formatUsd(method.costUsd)}.
         </p>
       ) : null}
       <p className="font-semibold">{method.interpretation}</p>

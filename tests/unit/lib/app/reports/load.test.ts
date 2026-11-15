@@ -5,9 +5,13 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ require: vi.fn(), error: vi.fn() }));
+const m = vi.hoisted(() => ({ require: vi.fn(), load: vi.fn(), error: vi.fn() }));
 
-vi.mock('@/lib/api/server-load', () => ({ requireServerData: m.require }));
+vi.mock('@/lib/api/server-load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/server-load')>()),
+  requireServerData: m.require,
+  loadServerData: m.load,
+}));
 vi.mock('@/lib/logging', () => ({
   logger: { error: m.error, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
@@ -18,14 +22,18 @@ import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtu
 function answer(assessment: unknown, model: unknown = modelDocument(true)) {
   m.require.mockImplementation((path: string) => {
     if (path === assessmentPath('asm_1')) return Promise.resolve({ data: assessment, meta: null });
+    return Promise.reject(new Error(`unexpected path ${path}`));
+  });
+  m.load.mockImplementation((path: string) => {
     if (path === modelPath('howdoesthisland', '0.5.1'))
-      return Promise.resolve({ data: model, meta: null });
+      return Promise.resolve({ ok: true, data: model, meta: null });
     return Promise.reject(new Error(`unexpected path ${path}`));
   });
 }
 
 beforeEach(() => {
   m.require.mockReset();
+  m.load.mockReset();
   m.error.mockReset();
 });
 
@@ -35,10 +43,7 @@ describe('loadReport', () => {
     const load = await loadReport('asm_1');
     expect(load.kind).toBe('ready');
     expect(m.require).toHaveBeenNthCalledWith(1, '/api/v1/assessments/asm_1', { notFound: true });
-    expect(m.require).toHaveBeenNthCalledWith(
-      2,
-      '/api/v1/frameworks/howdoesthisland/versions/0.5.1'
-    );
+    expect(m.load).toHaveBeenCalledWith('/api/v1/frameworks/howdoesthisland/versions/0.5.1');
     if (load.kind === 'ready') expect(load.view.cover.title).toBe('Q3 board briefing');
   });
 
@@ -48,6 +53,7 @@ describe('loadReport', () => {
       expect((await loadReport('asm_1')).kind).toBe('pending');
     }
     expect(m.require).toHaveBeenCalledTimes(2);
+    expect(m.load).not.toHaveBeenCalled();
   });
 
   it('has no result when a final run stored none', async () => {
@@ -82,6 +88,25 @@ describe('loadReport', () => {
       'Report: the model did not parse',
       undefined,
       expect.anything()
+    );
+  });
+
+  it('is unreadable, and logs it, when the model version it ran on is not found', async () => {
+    answer(apiAssessment());
+    m.load.mockResolvedValue({ ok: false, failure: { kind: 'not_found' } });
+    expect((await loadReport('asm_1')).kind).toBe('unreadable');
+    expect(m.error).toHaveBeenCalledWith(
+      'Report: the model version it ran on was not found',
+      undefined,
+      expect.objectContaining({ assessmentId: 'asm_1' })
+    );
+  });
+
+  it('throws to the error boundary when the model read fails otherwise, so a retry can help', async () => {
+    answer(apiAssessment());
+    m.load.mockResolvedValue({ ok: false, failure: { kind: 'failed', status: 503, code: null } });
+    await expect(loadReport('asm_1')).rejects.toThrow(
+      'Could not load /api/v1/frameworks/howdoesthisland/versions/0.5.1 (503)'
     );
   });
 

@@ -201,11 +201,12 @@ describe('buildReportView — notes and caps', () => {
     expect(v.copy.segments).toEqual([{ text: TEXT, notes: [] }]);
   });
 
-  it('shows an integrity cap when its dimension is at or below the line', () => {
+  it('shows an integrity cap when its dimension is at or below the line and the cap held the appeal', () => {
     const parsed = reportResultSchema.parse(engineResult({ editor: WRITTEN_EDITOR }));
     const model = reportModelSchema.parse(modelDocument(true));
     const capped = {
       ...parsed,
+      scores: { ...parsed.scores, kairos: 40 },
       dimensions: parsed.dimensions.map((d) =>
         d.id === 'kai_integrity' ? { ...d, score: 0 } : { ...d, score: 4 }
       ),
@@ -216,6 +217,23 @@ describe('buildReportView — notes and caps', () => {
       { appealName: 'Kairos', cap: 40, why: expect.any(String) },
     ]);
     expect(buildReportView({ assessment: a, result: uncapped, model }).lands.caps).toEqual([]);
+    // Below the cap already, the engine's min() left the score alone: no cap to report.
+    const under = { ...capped, scores: { ...capped.scores, kairos: 22 } };
+    expect(buildReportView({ assessment: a, result: under, model }).lands.caps).toEqual([]);
+  });
+
+  it('links a note to its dimension only when the report shows that dimension', () => {
+    const parsed = reportResultSchema.parse(engineResult({ editor: WRITTEN_EDITOR }));
+    const model = reportModelSchema.parse(modelDocument(true));
+    const shown = buildReportView({ assessment: apiAssessment(), result: parsed, model });
+    expect(shown.copy.notes.length).toBeGreaterThan(0);
+    expect(shown.copy.notes.every((n) => n.dimensionShown)).toBe(true);
+    const hidden = buildReportView({
+      assessment: apiAssessment(),
+      result: { ...parsed, dimensions: [], lenses: {} },
+      model,
+    });
+    expect(hidden.copy.notes.some((n) => n.dimensionShown)).toBe(false);
   });
 });
 

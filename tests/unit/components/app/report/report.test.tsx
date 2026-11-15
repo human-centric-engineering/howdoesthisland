@@ -76,7 +76,7 @@ describe('Report — a full review', () => {
   it("shows the run's cost on the web, and not in print or shared", () => {
     const view = viewOf(apiAssessment());
     const { rerender } = render(<Report view={view} variant="web" />);
-    expect(screen.getByText(/Cost of this review/)).toBeInTheDocument();
+    expect(screen.getByText('Cost of this review: $0.1234.')).toBeInTheDocument();
     rerender(<Report view={view} variant="print" />);
     expect(screen.queryByText(/Cost of this review/)).not.toBeInTheDocument();
     rerender(<Report view={view} variant="shared" />);
@@ -134,6 +134,15 @@ describe('Report — names and fields the model or result lacks', () => {
     expect(screen.getByText(/Duties · mostly/).textContent).not.toMatch(/fit/);
     expect(container.textContent).not.toMatch(/written from/);
     expect(container.textContent).not.toMatch(/undefined|null|NaN/);
+  });
+
+  it("names a note's dimension without a link when the report does not show it", () => {
+    const d = degraded();
+    const view = buildReportView({ ...d, result: { ...d.result, dimensions: [], lenses: {} } });
+    const { container } = render(<Report view={view} variant="web" />);
+    const notes = within(screen.getByRole('list', { name: 'Notes' }));
+    expect(notes.getAllByRole('listitem').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[aria-label="Notes"] a[href^="#dim-"]')).toHaveLength(0);
   });
 
   it('leaves out every list section that has nothing in it', () => {

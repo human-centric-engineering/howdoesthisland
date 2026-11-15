@@ -228,10 +228,11 @@
 
   /* The platform header and footer are not part of a report. These reach into
      the platform layout's markup: a change upstream prints the frame again,
-     and nothing else breaks. */
+     and nothing else breaks. The cookie banner is hidden by its label. */
   [data-surface='consumer'] body > div > header,
   [data-surface='consumer'] body > div > footer,
-  [data-surface='consumer'] [data-print='hide'] {
+  [data-surface='consumer'] [data-print='hide'],
+  [data-surface='consumer'] [role='dialog'][aria-label='Cookie consent'] {
     display: none !important;
   }
 
