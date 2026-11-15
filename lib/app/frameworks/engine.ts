@@ -113,8 +113,10 @@ export interface FrameworkEngine<
   /** The free, deterministic scan: no model call, the same answer every time. */
   quickScan(text: string, ctx: Ctx): Quick;
   /**
-   * Combines a quick scan with whatever judge outputs arrived. With none it is
-   * the quick-scan result, which is also what stands in when a judge fails.
+   * Combines a quick scan with whatever judge outputs arrived, keyed by the
+   * slot each judge ran (as {@link activeJudgeSlots} returns them), which is
+   * how a run stores them. With none it is the quick-scan result, which is
+   * also what stands in when a judge fails.
    * `source` is where the text came from, returned as it is.
    */
   assemble(

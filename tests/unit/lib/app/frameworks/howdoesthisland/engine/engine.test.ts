@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { ZodError } from 'zod';
 
 const env = vi.hoisted(() => ({
   NODE_ENV: 'test',
@@ -22,6 +23,7 @@ import {
   type QuickScan,
 } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
+import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 import {
   HOWDOESTHISLAND_SLUG,
   howDoesThisLand,
@@ -320,5 +322,113 @@ describe('the culture switch', () => {
     expect(offViaDef).toEqual(off.quickScan(c.input.text, c.input.ctx));
     expect(onViaDef).toEqual(on.quickScan(c.input.text, c.input.ctx));
     expect(offViaDef).not.toEqual(onViaDef);
+  });
+});
+
+/*
+ * t-33: a run keys each judge's reply by the slot it ran (`judge_ethos`), as
+ * `activeJudgeSlots()` returns them; `assemble()` reads by appeal. Every
+ * stored review came back as the quick scan until the engine mapped one to
+ * the other. These run the real engine with the keys a run actually uses.
+ */
+describe('assembling replies keyed by slot (t-33)', () => {
+  const engine = createHowDoesThisLandEngine(loadModel(), { culture: true });
+  const found = loadCases().find((c) => c.file === 'corpus/board-briefing-2.json');
+  if (!found) throw new Error('baseline case corpus/board-briefing-2.json is missing');
+  const c = found;
+  const text = c.input.text;
+  const ctx = c.input.ctx;
+  const quick = engine.quickScan(text, ctx);
+  const appealOf = new Map(indexModel(loadModel()).data.judges.map((j) => [j.id, j.appeal]));
+  const keyedBySlot = (slots: readonly string[]): JudgeOutputs =>
+    Object.fromEntries(
+      slots.flatMap((slot) => {
+        const output = c.judgeOutputs[appealOf.get(slot) ?? ''];
+        return output ? [[slot, output]] : [];
+      })
+    );
+
+  it('merges every judge of a full run, keyed as the run keys them', () => {
+    const slots = engine.activeJudgeSlots('full');
+    expect(slots).toContain('judge_ethos');
+    const outputs = keyedBySlot(slots);
+    expect(Object.keys(outputs)).toHaveLength(slots.length);
+
+    const result = engine.assemble(text, ctx, quick, outputs, null);
+    expect(result.mode).toBe('full');
+    expect(Object.keys(result.judges).sort()).toEqual(
+      ['audience', 'craft', 'culture', 'ethos', 'kairos', 'lenses', 'logos', 'pathos'].sort()
+    );
+    expect(result.perspectives_source).toBe('ai');
+    expect(result.dimensions.some((d) => d.source === 'ai')).toBe(true);
+  });
+
+  it('gives the same result as replies keyed by appeal', () => {
+    const slots = engine.activeJudgeSlots('full');
+    const bySlot = engine.assemble(text, ctx, quick, keyedBySlot(slots), null);
+    const byAppealKey = engine.assemble(text, ctx, quick, c.judgeOutputs, null);
+    expect(bySlot).toEqual(byAppealKey);
+  });
+
+  it("merges a single slot's reply", () => {
+    const result = engine.assemble(text, ctx, quick, keyedBySlot(['judge_ethos']), null);
+    expect(result.mode).toBe('full');
+    expect(Object.keys(result.judges)).toEqual(['ethos']);
+  });
+
+  it("prefers a slot's reply over its appeal's, whichever comes first", () => {
+    const slotReply = c.judgeOutputs.ethos;
+    const appealReply = c.judgeOutputs.logos;
+    if (!slotReply || !appealReply) throw new Error('baseline case lacks ethos or logos');
+    const expected = engine.assemble(text, ctx, quick, { judge_ethos: slotReply }, null);
+    expect(engine.assemble(text, ctx, quick, { ethos: appealReply }, null)).not.toEqual(expected);
+    const slotFirst = { judge_ethos: slotReply, ethos: appealReply };
+    const appealFirst = { ethos: appealReply, judge_ethos: slotReply };
+    expect(engine.assemble(text, ctx, quick, slotFirst, null)).toEqual(expected);
+    expect(engine.assemble(text, ctx, quick, appealFirst, null)).toEqual(expected);
+  });
+
+  it.each([null, false, 0, '', 'text', ['a']])(
+    'lets a slot reply that is not an object (%j) stand aside for a real appeal reply',
+    (bad) => {
+      const reply = c.judgeOutputs.ethos;
+      const expected = engine.assemble(text, ctx, quick, { ethos: reply }, null);
+      // A run hands the engine its stored replies as unknowns, as the generic
+      // interface types them, so a null can reach it.
+      const asRun: FrameworkEngine = engine;
+      const outputs: Record<string, unknown> = { judge_ethos: bad, ethos: reply };
+      expect(asRun.assemble(text, ctx, quick, outputs, null)).toEqual(expected);
+      expect(expected.mode).toBe('full');
+      expect(asRun.assemble(text, ctx, quick, { judge_ethos: bad }, null)).toMatchObject({
+        mode: 'quick',
+      });
+    }
+  );
+
+  it('ignores a slot-keyed culture reply on an engine built with culture off', () => {
+    const off = createHowDoesThisLandEngine(loadModel(), { culture: false });
+    const offQuick = off.quickScan(text, ctx);
+    const result = off.assemble(
+      text,
+      ctx,
+      offQuick,
+      { judge_culture: c.judgeOutputs.culture },
+      null
+    );
+    expect(result.judges).not.toHaveProperty('culture');
+    expect(result).toEqual(off.assemble(text, ctx, offQuick, {}, null));
+  });
+
+  it('refuses a model where two judges share an appeal', () => {
+    const judges = indexModel(loadModel()).data.judges;
+    const [first, second, ...rest] = judges;
+    const clash = { ...loadModel(), judges: [first, { ...second, appeal: first.appeal }, ...rest] };
+    expect(() => createHowDoesThisLandEngine(clash, { culture: true })).toThrow(ZodError);
+    expect(() => createHowDoesThisLandEngine(clash, { culture: true })).toThrow(/share the appeal/);
+  });
+
+  it('ignores a key that names no judge', () => {
+    const result = engine.assemble(text, ctx, quick, { judge_nobody: c.judgeOutputs.ethos }, null);
+    expect(result.mode).toBe('quick');
   });
 });
