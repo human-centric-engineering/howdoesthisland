@@ -322,3 +322,62 @@ describe('the culture switch', () => {
     expect(offViaDef).not.toEqual(onViaDef);
   });
 });
+
+/*
+ * t-33: a run keys each judge's reply by the slot it ran (`judge_ethos`), as
+ * `activeJudgeSlots()` returns them; `assemble()` reads by appeal. Every
+ * stored review came back as the quick scan until the engine mapped one to
+ * the other. These run the real engine with the keys a run actually uses.
+ */
+describe('assembling replies keyed by slot (t-33)', () => {
+  const engine = createHowDoesThisLandEngine(loadModel(), { culture: true });
+  const found = loadCases().find((c) => c.file === 'corpus/board-briefing-2.json');
+  if (!found) throw new Error('baseline case corpus/board-briefing-2.json is missing');
+  const c = found;
+  const text = c.input.text;
+  const ctx = c.input.ctx;
+  const quick = engine.quickScan(text, ctx);
+  const appealOf = new Map(
+    (loadModel().judges as { id: string; appeal: string }[]).map((j) => [j.id, j.appeal])
+  );
+  const keyedBySlot = (slots: readonly string[]): JudgeOutputs =>
+    Object.fromEntries(
+      slots.flatMap((slot) => {
+        const output = c.judgeOutputs[appealOf.get(slot) ?? ''];
+        return output ? [[slot, output]] : [];
+      })
+    );
+
+  it('merges every judge of a full run, keyed as the run keys them', () => {
+    const slots = engine.activeJudgeSlots('full');
+    expect(slots).toContain('judge_ethos');
+    const outputs = keyedBySlot(slots);
+    expect(Object.keys(outputs)).toHaveLength(slots.length);
+
+    const result = engine.assemble(text, ctx, quick, outputs, null);
+    expect(result.mode).toBe('full');
+    expect(Object.keys(result.judges).sort()).toEqual(
+      ['audience', 'craft', 'culture', 'ethos', 'kairos', 'lenses', 'logos', 'pathos'].sort()
+    );
+    expect(result.perspectives_source).toBe('ai');
+    expect(result.dimensions.some((d) => d.source === 'ai')).toBe(true);
+  });
+
+  it('gives the same result as replies keyed by appeal', () => {
+    const slots = engine.activeJudgeSlots('full');
+    const bySlot = engine.assemble(text, ctx, quick, keyedBySlot(slots), null);
+    const byAppealKey = engine.assemble(text, ctx, quick, c.judgeOutputs, null);
+    expect(bySlot).toEqual(byAppealKey);
+  });
+
+  it("merges a single slot's reply", () => {
+    const result = engine.assemble(text, ctx, quick, keyedBySlot(['judge_ethos']), null);
+    expect(result.mode).toBe('full');
+    expect(Object.keys(result.judges)).toEqual(['ethos']);
+  });
+
+  it('ignores a key that names no judge', () => {
+    const result = engine.assemble(text, ctx, quick, { judge_nobody: c.judgeOutputs.ethos }, null);
+    expect(result.mode).toBe('quick');
+  });
+});

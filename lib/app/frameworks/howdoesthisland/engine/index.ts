@@ -76,6 +76,29 @@ export interface HowDoesThisLandEngine extends FrameworkEngine<
 }
 
 /**
+ * Judge outputs keyed the way `assemble()` reads them: by the judge's appeal
+ * or group (`ethos`, `lenses`, `craft`, …).
+ *
+ * A run keys each reply by the slot it ran, the judge's id
+ * (`judge_ethos`), which is what `activeJudgeSlots()` hands out and the
+ * framework-generic run stores. `assemble()` is the prototype's and reads by
+ * appeal, as the baseline fixtures do. Without this mapping every stored
+ * review merged no reply and came back as the quick scan (t-33). A key that
+ * is already an appeal passes through unchanged, so the baseline still
+ * compares, and a key naming no judge is dropped, as `assemble()` would
+ * ignore it.
+ */
+function byAppeal(m: EngineModel, outputs: JudgeOutputs): JudgeOutputs {
+  const appeals = new Set(m.data.judges.map((j) => j.appeal));
+  const keyed: Record<string, JudgeOutput | undefined> = {};
+  for (const [key, output] of Object.entries(outputs)) {
+    const appeal = m.JUDGE.get(key)?.appeal ?? (appeals.has(key) ? key : undefined);
+    if (appeal !== undefined && output !== undefined) keyed[appeal] = output;
+  }
+  return keyed;
+}
+
+/**
  * An engine over a materialised model. Throws (a `ZodError` naming the field)
  * when the model lacks something the engine reads. The model is never written.
  */
@@ -90,7 +113,7 @@ export function createHowDoesThisLandEngine(
     parseContext: (input) => parseContext(m, input, options.culture),
     quickScan: (text, ctx) => quickScan(m, text, ctx, options),
     assemble: (text, ctx, quick, outputs = {}, source = null) =>
-      assemble(m, text, ctx, quick, outputs, source, options),
+      assemble(m, text, ctx, quick, byAppeal(m, outputs), source, options),
     primaryDuty: (ctx) => primaryDuty(m, ctx),
     activeJudgeSlots: (profile) => activeJudgeSlots(m, profile, options),
     buildJudgeRequest: (slot, text, ctx, projectContext = null) =>
