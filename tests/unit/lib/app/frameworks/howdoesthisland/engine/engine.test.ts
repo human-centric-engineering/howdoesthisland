@@ -22,6 +22,7 @@ import {
   type QuickScan,
 } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
+import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 import {
   HOWDOESTHISLAND_SLUG,
   howDoesThisLand,
@@ -337,9 +338,7 @@ describe('assembling replies keyed by slot (t-33)', () => {
   const text = c.input.text;
   const ctx = c.input.ctx;
   const quick = engine.quickScan(text, ctx);
-  const appealOf = new Map(
-    (loadModel().judges as { id: string; appeal: string }[]).map((j) => [j.id, j.appeal])
-  );
+  const appealOf = new Map(indexModel(loadModel()).data.judges.map((j) => [j.id, j.appeal]));
   const keyedBySlot = (slots: readonly string[]): JudgeOutputs =>
     Object.fromEntries(
       slots.flatMap((slot) => {
@@ -386,6 +385,38 @@ describe('assembling replies keyed by slot (t-33)', () => {
     const appealFirst = { ethos: appealReply, judge_ethos: slotReply };
     expect(engine.assemble(text, ctx, quick, slotFirst, null)).toEqual(expected);
     expect(engine.assemble(text, ctx, quick, appealFirst, null)).toEqual(expected);
+  });
+
+  it('lets a null slot reply stand aside for a real appeal reply', () => {
+    const reply = c.judgeOutputs.ethos;
+    const expected = engine.assemble(text, ctx, quick, { ethos: reply }, null);
+    // A run hands the engine its stored replies as unknowns, as the generic
+    // interface types them, so a null can reach it.
+    const asRun: FrameworkEngine = engine;
+    const outputs: Record<string, unknown> = { judge_ethos: null, ethos: reply };
+    expect(asRun.assemble(text, ctx, quick, outputs, null)).toEqual(expected);
+    expect(expected.mode).toBe('full');
+  });
+
+  it('ignores a slot-keyed culture reply on an engine built with culture off', () => {
+    const off = createHowDoesThisLandEngine(loadModel(), { culture: false });
+    const offQuick = off.quickScan(text, ctx);
+    const result = off.assemble(
+      text,
+      ctx,
+      offQuick,
+      { judge_culture: c.judgeOutputs.culture },
+      null
+    );
+    expect(result.judges).not.toHaveProperty('culture');
+    expect(result).toEqual(off.assemble(text, ctx, offQuick, {}, null));
+  });
+
+  it('refuses a model where two judges share an appeal', () => {
+    const judges = indexModel(loadModel()).data.judges;
+    const [first, second, ...rest] = judges;
+    const clash = { ...loadModel(), judges: [first, { ...second, appeal: first.appeal }, ...rest] };
+    expect(() => createHowDoesThisLandEngine(clash, { culture: true })).toThrow(/share an appeal/);
   });
 
   it('ignores a key that names no judge', () => {

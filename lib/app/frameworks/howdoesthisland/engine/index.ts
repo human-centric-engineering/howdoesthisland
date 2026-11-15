@@ -85,8 +85,9 @@ export interface HowDoesThisLandEngine extends FrameworkEngine<
  * appeal, as the baseline fixtures do. Without this mapping every stored
  * review merged no reply and came back as the quick scan (t-33). A key that
  * is already an appeal passes through, so the baseline still compares; when a
- * slot and its appeal both arrive, the slot's reply wins whatever the order.
- * A key naming no judge is dropped, as `assemble()` would ignore it.
+ * slot and its appeal both arrive, the slot's reply wins whatever the order;
+ * a null or absent reply counts as none. A key naming no judge is dropped, as
+ * `assemble()` would ignore it.
  */
 function byAppeal(
   slotAppeal: ReadonlyMap<string, string>,
@@ -95,7 +96,7 @@ function byAppeal(
 ): JudgeOutputs {
   const keyed: Record<string, JudgeOutput | undefined> = {};
   for (const [key, output] of Object.entries(outputs)) {
-    if (output === undefined) continue;
+    if (output === undefined || output === null) continue;
     const slotFor = slotAppeal.get(key);
     if (slotFor !== undefined) keyed[slotFor] = output;
     else if (appeals.has(key) && keyed[key] === undefined) keyed[key] = output;
@@ -113,8 +114,13 @@ export function createHowDoesThisLandEngine(
 ): HowDoesThisLandEngine {
   const m: EngineModel = indexModel(model);
   const options: EngineOptions = { culture: opts.culture };
+  // One reply per appeal: a second judge on the same appeal would overwrite
+  // the first in `byAppeal`, so a model with one cannot make an engine.
   const slotAppeal = new Map(m.data.judges.map((j) => [j.id, j.appeal]));
   const appeals = new Set(slotAppeal.values());
+  if (appeals.size !== slotAppeal.size) {
+    throw new Error('Two judges in the model share an appeal; each judge needs its own');
+  }
   return {
     culture: options.culture,
     parseContext: (input) => parseContext(m, input, options.culture),

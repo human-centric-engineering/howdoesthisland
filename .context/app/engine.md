@@ -17,7 +17,7 @@ for (const slot of engine.activeJudgeSlots(profile)) {
   const request = engine.buildJudgeRequest(slot, text, ctx, projectContext);
   // the runtime (t-19) makes the call with request.prompt, request.schema, …
   const checked = engine.validateJudgeReply(slot, JSON.parse(reply), text);
-  if (checked.ok) outputs[group] = checked.output; // and keep checked.drops
+  if (checked.ok) outputs[slot] = checked.output; // keyed by slot; keep checked.drops
 }
 const result = engine.assemble(text, ctx, quick, outputs, source);
 ```
@@ -33,6 +33,10 @@ const result = engine.assemble(text, ctx, quick, outputs, source);
   the fields the engine reads, then indexes it (`engine/model.ts`). It throws a
   `ZodError` naming the field when one is missing. The parsed copy is frozen, and it is
   cached per model object, so a published version is indexed once.
+- **`assemble` reads judge outputs keyed by slot** (`judge_ethos`), as
+  `activeJudgeSlots` hands them out and a run stores them. The HowDoesThisLand engine
+  maps each slot to the appeal the prototype's `assemble` reads (t-33); an appeal key
+  (`ethos`) still passes, for the baseline fixtures, but a slot's reply wins over it.
 - **`assemble` with no judge outputs is the quick-scan result.** That is also what
   stands in when a judge fails. It drops ids the model lacks and coerces a judge's
   score, as the prototype did. A reply from a real judge goes through
