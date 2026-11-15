@@ -61,9 +61,11 @@ name, an SVG mark and the figure.
 - **Balance and duties are a bar per part with the target as an upright line**,
   not two stacked wholes, so each gap is read on its own row. An appeal's share
   is its score's share of the four, which is what the balance index compares.
-  `buildReportView` rounds both mixes, shares and targets, to add to exactly 100
-  (`lib/app/reports/shares.ts`). The bars are on the whole 0–100% scale, never
-  stretched to the largest part.
+  `buildReportView` rounds the appeal mix, shares and targets, to add to
+  exactly 100 (`lib/app/reports/shares.ts`). The duty profile and its target are
+  printed as the engine rounded them, one duty at a time, so they can add to 99
+  or 101. The bars are on the whole 0–100% scale, never stretched to the
+  largest part.
 - **Colours are the brand's appeal tokens**, which switch for dark and print.
   The dataviz palette validator flags them (Logos's chroma in light, all four
   too light in dark). That is accepted because every mark is named beside it,
