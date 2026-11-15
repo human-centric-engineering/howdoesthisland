@@ -84,16 +84,21 @@ export interface HowDoesThisLandEngine extends FrameworkEngine<
  * framework-generic run stores. `assemble()` is the prototype's and reads by
  * appeal, as the baseline fixtures do. Without this mapping every stored
  * review merged no reply and came back as the quick scan (t-33). A key that
- * is already an appeal passes through unchanged, so the baseline still
- * compares, and a key naming no judge is dropped, as `assemble()` would
- * ignore it.
+ * is already an appeal passes through, so the baseline still compares; when a
+ * slot and its appeal both arrive, the slot's reply wins whatever the order.
+ * A key naming no judge is dropped, as `assemble()` would ignore it.
  */
-function byAppeal(m: EngineModel, outputs: JudgeOutputs): JudgeOutputs {
-  const appeals = new Set(m.data.judges.map((j) => j.appeal));
+function byAppeal(
+  slotAppeal: ReadonlyMap<string, string>,
+  appeals: ReadonlySet<string>,
+  outputs: JudgeOutputs
+): JudgeOutputs {
   const keyed: Record<string, JudgeOutput | undefined> = {};
   for (const [key, output] of Object.entries(outputs)) {
-    const appeal = m.JUDGE.get(key)?.appeal ?? (appeals.has(key) ? key : undefined);
-    if (appeal !== undefined && output !== undefined) keyed[appeal] = output;
+    if (output === undefined) continue;
+    const slotFor = slotAppeal.get(key);
+    if (slotFor !== undefined) keyed[slotFor] = output;
+    else if (appeals.has(key) && keyed[key] === undefined) keyed[key] = output;
   }
   return keyed;
 }
@@ -108,12 +113,14 @@ export function createHowDoesThisLandEngine(
 ): HowDoesThisLandEngine {
   const m: EngineModel = indexModel(model);
   const options: EngineOptions = { culture: opts.culture };
+  const slotAppeal = new Map(m.data.judges.map((j) => [j.id, j.appeal]));
+  const appeals = new Set(slotAppeal.values());
   return {
     culture: options.culture,
     parseContext: (input) => parseContext(m, input, options.culture),
     quickScan: (text, ctx) => quickScan(m, text, ctx, options),
     assemble: (text, ctx, quick, outputs = {}, source = null) =>
-      assemble(m, text, ctx, quick, byAppeal(m, outputs), source, options),
+      assemble(m, text, ctx, quick, byAppeal(slotAppeal, appeals, outputs), source, options),
     primaryDuty: (ctx) => primaryDuty(m, ctx),
     activeJudgeSlots: (profile) => activeJudgeSlots(m, profile, options),
     buildJudgeRequest: (slot, text, ctx, projectContext = null) =>

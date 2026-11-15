@@ -376,6 +376,18 @@ describe('assembling replies keyed by slot (t-33)', () => {
     expect(Object.keys(result.judges)).toEqual(['ethos']);
   });
 
+  it("prefers a slot's reply over its appeal's, whichever comes first", () => {
+    const slotReply = c.judgeOutputs.ethos;
+    const appealReply = c.judgeOutputs.logos;
+    if (!slotReply || !appealReply) throw new Error('baseline case lacks ethos or logos');
+    const expected = engine.assemble(text, ctx, quick, { judge_ethos: slotReply }, null);
+    expect(engine.assemble(text, ctx, quick, { ethos: appealReply }, null)).not.toEqual(expected);
+    const slotFirst = { judge_ethos: slotReply, ethos: appealReply };
+    const appealFirst = { ethos: appealReply, judge_ethos: slotReply };
+    expect(engine.assemble(text, ctx, quick, slotFirst, null)).toEqual(expected);
+    expect(engine.assemble(text, ctx, quick, appealFirst, null)).toEqual(expected);
+  });
+
   it('ignores a key that names no judge', () => {
     const result = engine.assemble(text, ctx, quick, { judge_nobody: c.judgeOutputs.ethos }, null);
     expect(result.mode).toBe('quick');
