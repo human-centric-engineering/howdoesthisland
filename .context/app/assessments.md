@@ -169,7 +169,10 @@ Each route's docblock lists its error codes. A few rules hold across them:
   read names the org the guard entered, so an id is not confirmed to an
   outsider. Within a workspace, any member may read, cancel or delete.
 - **Limits.** `AI_ASSESSMENTS_PER_MINUTE` (10) assessments that call judges per
-  user, whatever the way in, `store: false` included; `quick` is not counted.
+  user, whatever the way in, `store: false` included; `quick` is not counted,
+  nor is a request refused for its version, context or profile
+  (`prepareAssessment` runs first). A `store: false` caller that goes away
+  starts no further judge.
   A handler-level limiter (`api/limiter.ts`) under the proxy's section cap. The
   scan's 30/min per IP is the `scan` rule in `lib/app/rate-limit.ts`.
 - **URLs need an account (D14).** The scan takes pasted text only; a `url` or
@@ -193,8 +196,10 @@ late first replays the judges already landed. Each event is the SSE
 | `assessment_gone`    | Deleted while followed. Then it ends.                            |
 | `assessment_timeout` | Still going after `EVENTS_MAX_MS` (5 min). Open it again.        |
 
-A cancelled run's judges that were in flight land after `cancelled`, which
-is final, so the stream does not show them; `GET …/{id}` does.
+A cancelled run's judges that were in flight land after `cancelled`. The
+stream waits for them, until the run gives up its lease (or the lease runs
+out), so their `assessment_judge` events come before `assessment_done`, and
+its `costUsd` includes them.
 
 ## Checking it
 

@@ -54,6 +54,11 @@ export interface EnqueuedAssessment {
   judges: readonly string[];
 }
 
+/** A profile as an assessment records it: its name, or `custom` for a list of judges. */
+export function storedProfileName(profile: JudgeProfile): string {
+  return typeof profile === 'string' ? profile : 'custom';
+}
+
 export async function enqueueAssessment(
   input: EnqueueAssessmentInput
 ): Promise<EnqueuedAssessment> {
@@ -100,7 +105,7 @@ export async function enqueueAssessment(
         contentId: content.id,
         projectId,
         frameworkVersionId: loaded.version.id,
-        profile: typeof input.profile === 'string' ? input.profile : 'custom',
+        profile: storedProfileName(input.profile),
         judges: [...judges],
         context: input.context,
         requestedVia: input.requestedVia,

@@ -25,7 +25,11 @@ import { countWords, extractText } from '@/lib/app/intake/extract-text';
 import { fetchPage } from '@/lib/app/intake/fetch-page';
 import { runJudges } from '@/lib/app/assessments/fan-out';
 import { AssessmentInputError, type AssessmentInputErrorCode } from '@/lib/app/assessments/errors';
-import { enqueueAssessment, startAssessmentInBackground } from '@/lib/app/assessments/enqueue';
+import {
+  enqueueAssessment,
+  startAssessmentInBackground,
+  storedProfileName,
+} from '@/lib/app/assessments/enqueue';
 import {
   beginAssessment,
   cancelAssessment,
@@ -142,23 +146,40 @@ export type CreatedAssessment =
   | { kind: 'stored'; final: boolean; assessment: AssessmentDetail }
   | { kind: 'ephemeral'; assessment: EphemeralAssessment };
 
-export async function createAssessment(
-  body: CreateAssessmentBody,
-  caller: Caller,
-  options: { boundMs?: number } = {}
-): Promise<CreatedAssessment> {
-  // Everything that can be refused without fetching or reading anything first.
+/** A request checked as far as it can be without fetching or reading anything. */
+export interface PreparedAssessment {
+  resolved: VersionToScore;
+  ctx: unknown;
+  profile: JudgeProfile;
+  judges: readonly string[];
+}
+
+/**
+ * Everything that can be refused before anything is fetched, read or spent:
+ * the version, the context and the profile. The route counts a request
+ * against the per-user cap only once this has passed.
+ */
+export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
   const resolved = await versionToScore(body);
   const ctx = contextFor(resolved, body.context);
   const profile: JudgeProfile = body.judges ?? body.profile ?? 'full';
-  const judges = judgesFor(resolved, profile);
+  return { resolved, ctx, profile, judges: judgesFor(resolved, profile) };
+}
+
+export async function createAssessment(
+  body: CreateAssessmentBody,
+  prepared: PreparedAssessment,
+  caller: Caller,
+  options: { boundMs?: number; signal?: AbortSignal } = {}
+): Promise<CreatedAssessment> {
+  const { resolved, ctx, profile, judges } = prepared;
   const source = await intake(body.source);
 
   if (body.store === false) {
     return {
       kind: 'ephemeral',
       assessment: await refusingAsApi(() =>
-        runEphemeral(resolved, source, ctx, profile, judges, caller)
+        runEphemeral(resolved, source, ctx, profile, judges, caller, options.signal)
       ),
     };
   }
@@ -231,7 +252,8 @@ async function runEphemeral(
   ctx: unknown,
   profile: JudgeProfile,
   judges: readonly string[],
-  caller: Caller
+  caller: Caller,
+  signal?: AbortSignal
 ): Promise<EphemeralAssessment> {
   const text = assessableText(source.text);
   const { engine, label } = resolved;
@@ -245,7 +267,12 @@ async function runEphemeral(
     slots: judges,
     userId: caller.userId,
     ephemeral: true,
+    // A caller gone away starts no further judge: nobody is left to answer.
+    shouldContinue: () => Promise.resolve(!signal?.aborted),
   });
+  if (fan.stopped) {
+    throw new APIError('The request was closed before the judges ran.', 'REQUEST_CLOSED', 499);
+  }
   const outputs: Record<string, unknown> = {};
   const runs = new Map<string, JudgeRunView>();
   let costUsd = 0;
@@ -270,7 +297,7 @@ async function runEphemeral(
   return {
     stored: false,
     status: failed ? 'partial' : 'completed',
-    profile: typeof profile === 'string' ? profile : 'custom',
+    profile: storedProfileName(profile),
     judges: [...judges],
     framework: resolved.framework,
     wordCount: countWords(text),
@@ -287,11 +314,11 @@ async function runEphemeral(
  * stored run's `FAILED` (`run.ts`), with no row to record it on. `costUsd`
  * is what the judges had already spent.
  */
-function notScorable<T>(score: () => T, costUsd: number): T {
+export function notScorable<T>(score: () => T, costUsd: number): T {
   try {
     return score();
   } catch (err) {
-    logger.error('Ephemeral assessment could not be scored', err, { costUsd });
+    logger.error('Assessment could not be scored, with no row to record it', err, { costUsd });
     throw new APIError(NOT_SCORABLE, 'NOT_SCORABLE', 422, { costUsd });
   }
 }

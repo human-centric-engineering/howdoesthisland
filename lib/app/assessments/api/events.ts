@@ -12,7 +12,8 @@
  * - `assessment_status` — first, the state the stream found; then each change,
  *   after the judges that brought it about.
  * - `assessment_judge` — a judge landed, or landed again on a re-drive.
- * - `assessment_done` — the run is final; the stream ends after it.
+ * - `assessment_done` — the run is final; the stream ends after it. A run
+ *   cancelled with judges in flight is final once they have landed.
  * - `assessment_gone` — the assessment was deleted; the stream ends.
  * - `assessment_timeout` — still going after {@link EVENTS_MAX_MS}; the
  *   stream ends, and a client opens it again to carry on.
@@ -57,6 +58,16 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener('abort', done, { once: true });
   });
+}
+
+/**
+ * Whether a cancelled run's judges in flight have yet to land. Cancelling
+ * keeps the run's lease, and its judges still save, adding their cost; the
+ * run gives the lease up once they have all landed (`run.ts` `freePlace`).
+ * A lease run out means the run died with them in flight: none will land.
+ */
+function judgesStillLanding(state: AssessmentState, leaseExpiresAt: Date | null): boolean {
+  return state === 'cancelled' && leaseExpiresAt !== null && leaseExpiresAt.getTime() > Date.now();
 }
 
 /**
@@ -109,6 +120,7 @@ async function* pollEvents(
         costUsd: true,
         error: true,
         judges: true,
+        leaseExpiresAt: true,
         judgeRuns: {
           select: {
             judge: true,
@@ -148,7 +160,7 @@ async function* pollEvents(
       lastState = state;
       yield { type: 'assessment_status', id, status: state };
     }
-    if (isFinal(state)) {
+    if (isFinal(state) && !judgesStillLanding(state, row.leaseExpiresAt)) {
       yield {
         type: 'assessment_done',
         id,

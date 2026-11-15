@@ -12,7 +12,7 @@ import { APIError } from '@/lib/api/errors';
 import { countWords } from '@/lib/app/intake/extract-text';
 import { assessableText } from '@/lib/app/assessments/text';
 import { versionToScore } from '@/lib/app/assessments/api/version';
-import { contextFor, refusingAsApi } from '@/lib/app/assessments/api/service';
+import { contextFor, notScorable, refusingAsApi } from '@/lib/app/assessments/api/service';
 import { scoresOf } from '@/lib/app/assessments/run';
 import type { QuickScanView } from '@/lib/app/assessments/api/views';
 import type { scanRequestSchema } from '@/lib/app/assessments/api/validations';
@@ -45,7 +45,11 @@ export async function runQuickScan(
   const ctx = contextFor(resolved, body.context);
   const text = await refusingAsApi(() => assessableText(body.text));
   const { engine } = resolved;
-  const result = engine.assemble(text, ctx, engine.quickScan(text, ctx), {}, null);
+  // Answered as `store: false` answers it: the same text would throw again.
+  const result = notScorable(
+    () => engine.assemble(text, ctx, engine.quickScan(text, ctx), {}, null),
+    0
+  );
   return {
     framework: resolved.framework,
     wordCount: countWords(text),

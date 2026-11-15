@@ -22,7 +22,7 @@
  */
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';
-import { registerRateLimitRule } from '@/lib/security/rate-limit-policy';
+import { registerRateLimitRule, type RateLimitRule } from '@/lib/security/rate-limit-policy';
 import { SCANS_PER_MINUTE } from '@/lib/app/assessments/limits';
 
 /** The tier and the path it covers, for the tests. */
@@ -38,7 +38,11 @@ const scanLimiter = createRateLimiter({
   uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
 });
 
+// The rule too: the registry dedupes rules by reference, so a fresh literal
+// on each call would add another copy.
+const scanRule: RateLimitRule = { match: SCAN_PATH, tier: SCAN_TIER, key: 'ip' };
+
 export function registerAppRateLimits(): void {
   registerRateLimitTier(SCAN_TIER, scanLimiter);
-  registerRateLimitRule({ match: SCAN_PATH, tier: SCAN_TIER, key: 'ip' });
+  registerRateLimitRule(scanRule);
 }

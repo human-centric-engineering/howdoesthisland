@@ -22,6 +22,7 @@
  * - 404 `FRAMEWORK_NOT_FOUND` — no such framework.
  * - 404 `FRAMEWORK_VERSION_NOT_FOUND` — no such published version.
  * - 422 `TEXT_TOO_LONG` — over 40,000 characters (refused, never truncated).
+ * - 422 `NOT_SCORABLE` — the framework could not score the text.
  * - 429 `RATE_LIMIT_EXCEEDED` — over the per-IP cap.
  */
 import type { NextRequest } from 'next/server';

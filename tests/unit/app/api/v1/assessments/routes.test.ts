@@ -452,7 +452,7 @@ describe('POST /api/v1/assessments — store: false', () => {
     const body = await json(res);
     expect(body.error).toMatchObject({ code: 'NOT_SCORABLE', details: { costUsd: 0.02 } });
     expect(log.error).toHaveBeenCalledWith(
-      'Ephemeral assessment could not be scored',
+      'Assessment could not be scored, with no row to record it',
       expect.any(Error),
       { costUsd: 0.02 }
     );
@@ -466,6 +466,21 @@ describe('POST /api/v1/assessments — store: false', () => {
     expect(await code(res)).toEqual({ status: 422, code: 'NOT_SCORABLE' });
     expect(mocks.runJudge).not.toHaveBeenCalled();
     quickScan.mockRestore();
+  });
+
+  it('starts no judge once the caller has gone away', async () => {
+    const gone = new AbortController();
+    gone.abort();
+    const res = await create(
+      new NextRequest(BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: { text: TEXT }, judges: TWO, store: false }),
+        signal: gone.signal,
+      })
+    );
+    expect(await code(res)).toEqual({ status: 499, code: 'REQUEST_CLOSED' });
+    expect(mocks.runJudge).not.toHaveBeenCalled();
   });
 
   it('is refused with wait: false, since it can only be waited for', async () => {
@@ -543,6 +558,14 @@ describe('POST /api/v1/assessments — refusals', () => {
       status: 422,
       code: 'URL_NOT_ALLOWED',
     });
+  });
+
+  it('does not count a request refused for its profile against the cap', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      const res = await post({ source: { text: TEXT }, judges: ['judge_nobody'] });
+      expect(await code(res)).toEqual({ status: 400, code: 'PROFILE_UNKNOWN' });
+    }
+    expect((await post({ source: { text: TEXT }, judges: TWO })).status).toBe(202);
   });
 
   it('429 past the per-user cap on assessments that call judges; quick ones are not counted', async () => {
@@ -688,6 +711,37 @@ describe('GET /api/v1/assessments/{id}/events', () => {
     expect(log.error).toHaveBeenCalledWith('Assessment events stream failed', expect.any(Error), {
       assessmentId: a.id,
     });
+  });
+
+  it('waits for a cancelled run’s judges in flight, so done carries their cost', async () => {
+    const a = fake.seed({
+      status: 'CANCELLED',
+      judges: TWO,
+      leaseToken: 'token-1',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    const received = frames(await stream(String(a.id)));
+    await settle();
+    // The judge in flight lands, and the run gives up its lease.
+    fake.judgeRuns.push({
+      id: 'run-late',
+      assessmentId: a.id,
+      judge: 'judge_ethos',
+      status: 'SUCCEEDED',
+      costUsd: 0.01,
+      modelName: 'gpt-4.1',
+      latencyMs: 5,
+      errorCode: null,
+      updatedAt: new Date(),
+    });
+    Object.assign(a, { costUsd: 0.01, leaseExpiresAt: null });
+    const all = await received;
+    expect(all.map((f) => f.event)).toEqual([
+      'assessment_status',
+      'assessment_judge',
+      'assessment_done',
+    ]);
+    expect(all[2]?.data).toMatchObject({ status: 'cancelled', costUsd: 0.01 });
   });
 
   it('ends with assessment_gone when the assessment is deleted while it is followed', async () => {

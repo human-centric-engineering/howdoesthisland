@@ -19,8 +19,9 @@ export const aiAssessmentLimiter = createRateLimiter({
 
 /**
  * Whether a request will call judges. Only the `quick` profile calls none;
- * an explicit list has at least one. Decided from the body, so a request
- * over the cap is refused before anything is fetched or resolved.
+ * an explicit list has at least one. Decided from the body, and checked
+ * once the version, context and profile have passed (`prepareAssessment`),
+ * so a request over the cap is refused before anything is fetched.
  */
 export const callsJudges = (body: CreateAssessmentBody): boolean =>
   body.judges !== undefined || (body.profile ?? 'full') !== 'quick';

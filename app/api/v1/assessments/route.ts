@@ -49,7 +49,7 @@ import { validateQueryParams, validateRequestBody } from '@/lib/api/validation';
 import { createRateLimitResponse } from '@/lib/security/rate-limit';
 import { aiAssessmentLimiter, callsJudges } from '@/lib/app/assessments/api/limiter';
 import { apiKeyIdOf, assessRoute } from '@/lib/app/assessments/api/route-auth';
-import { createAssessment } from '@/lib/app/assessments/api/service';
+import { createAssessment, prepareAssessment } from '@/lib/app/assessments/api/service';
 import {
   createAssessmentSchema,
   listAssessmentsQuerySchema,
@@ -61,14 +61,19 @@ export const maxDuration = 300;
 
 export const POST = withAuth(async (request: NextRequest, session) => {
   const body = await validateRequestBody(request, createAssessmentSchema);
+  // A request refused for its version, context or profile spent nothing, so
+  // it is not counted; one that gets past them is, before anything is fetched.
+  const prepared = await prepareAssessment(body);
   if (callsJudges(body)) {
     const limit = aiAssessmentLimiter.check(`user:${session.user.id}`);
     if (!limit.success) return createRateLimitResponse(limit);
   }
-  const created = await createAssessment(body, {
-    userId: session.user.id,
-    apiKeyId: apiKeyIdOf(session),
-  });
+  const created = await createAssessment(
+    body,
+    prepared,
+    { userId: session.user.id, apiKeyId: apiKeyIdOf(session) },
+    { signal: request.signal }
+  );
   const done = created.kind === 'ephemeral' || created.final;
   return successResponse(created.assessment, undefined, { status: done ? 200 : 202 });
 }, assessRoute());
