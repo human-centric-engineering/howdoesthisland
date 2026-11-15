@@ -294,7 +294,12 @@ async function drive(
     } else if (run.status === 'SUCCEEDED') {
       // Its reply is gone, which the retention purge never does to a run
       // still live. Counted as a failed judge rather than called again: a
-      // second call would bill the workspace twice for one judge.
+      // second call would bill the workspace twice for one judge. Logged:
+      // reaching here means a reply was lost.
+      logger.warn('Succeeded judge run has no reply; counted as failed', {
+        assessmentId: row.id,
+        judge: run.judge,
+      });
       failures += 1;
       done.add(run.judge);
     } else if (run.errorCode && RETRIED_ON_REDRIVE.has(run.errorCode)) {

@@ -82,7 +82,7 @@ export const GET = withAuth<{ id: string }>(async (_request: NextRequest, sessio
   // `Org` is a system model: this read needs no tenant scope.
   const org = await prisma.org.findUnique({ where: { id }, select: { settings: true } });
   if (!org) throw new NotFoundError('Workspace not found');
-  return successResponse(readWorkspaceSettings(org.settings, id));
+  return successResponse(readWorkspaceSettings(org.settings));
 }, RESOURCE);
 
 export const PATCH = withAuth<{ id: string }>(async (request, session, { params }) => {

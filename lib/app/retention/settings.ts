@@ -95,24 +95,34 @@ function readWindow<T>(
   app: Record<string, unknown>,
   key: string,
   schema: z.ZodType<T>,
-  orgId?: string
+  purgeOrgId?: string
 ): Stored<T> {
   const stored = app[key];
   if (stored === undefined || stored === null) return { state: 'absent' };
   const parsed = schema.safeParse(stored);
   if (parsed.success) return { state: 'set', value: parsed.data };
-  logger.warn('Unreadable app retention window; purging nothing on it', { orgId, key });
+  if (purgeOrgId) {
+    logger.warn('Unreadable app retention window; purging nothing on it', {
+      orgId: purgeOrgId,
+      key,
+    });
+  }
   return { state: 'unreadable' };
 }
 
-/** The windows a stored `settings` column sets, defaults filled in. */
-export function readWorkspaceSettings(settings: unknown, orgId?: string): WorkspaceSettings {
-  return settingsOf(readAppSettings(settings), orgId);
+/**
+ * The windows a stored `settings` column sets, defaults filled in.
+ *
+ * @param purgeOrgId the purge passes its org, to log an unreadable window
+ *   once a pass; a settings read or write does not, and logs nothing.
+ */
+export function readWorkspaceSettings(settings: unknown, purgeOrgId?: string): WorkspaceSettings {
+  return settingsOf(readAppSettings(settings), purgeOrgId);
 }
 
-function settingsOf(app: Record<string, unknown>, orgId?: string): WorkspaceSettings {
-  const content = readWindow(app, APP_RETENTION_KEY, appRetentionSchema, orgId);
-  const reply = readWindow(app, JUDGE_REPLY_RETENTION_KEY, judgeReplyRetentionSchema, orgId);
+function settingsOf(app: Record<string, unknown>, purgeOrgId?: string): WorkspaceSettings {
+  const content = readWindow(app, APP_RETENTION_KEY, appRetentionSchema, purgeOrgId);
+  const reply = readWindow(app, JUDGE_REPLY_RETENTION_KEY, judgeReplyRetentionSchema, purgeOrgId);
   return {
     retention: content.state === 'set' ? content.value : null,
     judgeReplyRetention:
@@ -145,5 +155,5 @@ export async function writeWorkspaceSettings(
       else slice[key] = { days: value.days };
     }
   });
-  return app ? settingsOf(app, orgId) : null;
+  return app ? settingsOf(app) : null;
 }

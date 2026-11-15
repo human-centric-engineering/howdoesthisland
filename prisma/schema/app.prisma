@@ -227,6 +227,8 @@ model Assessment {
   judgeRuns          JudgeRun[]
 
   @@index([orgId, status])
+  /// The retention purge's content-window delete (t-26).
+  @@index([orgId, createdAt])
   @@index([status, leaseExpiresAt])
   @@index([contentId])
   @@map("app_assessment")
