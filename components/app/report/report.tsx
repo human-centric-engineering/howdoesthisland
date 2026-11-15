@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { ScalePositions } from '@/components/app/report/charts/scale-positions';
 import { ScoreBars } from '@/components/app/report/charts/score-bars';
 import { ShareVsTarget } from '@/components/app/report/charts/share-vs-target';
-import { sharesOf } from '@/components/app/report/charts/shares';
 import { MarkedUpCopy } from '@/components/app/report/marked-up-copy';
 import { DIMENSION_MAX, type ReportView } from '@/lib/app/reports/view';
 import { WORDS } from '@/lib/app/reports/words';
@@ -205,7 +204,6 @@ function Verdict({ view }: { view: ReportView }) {
 
 function HowItLands({ view }: { view: ReportView }) {
   const { lands } = view;
-  const shares = sharesOf(lands.appeals.map((a) => a.score));
   return (
     <div className="grid gap-6">
       <div className="grid gap-8 md:grid-cols-2">
@@ -226,10 +224,10 @@ function HowItLands({ view }: { view: ReportView }) {
           title="Balance against the target mix"
           description="Each appeal's share of the four scores, against its weight in the target mix."
           testId="chart-balance"
-          rows={lands.appeals.map((a, i) => ({
+          rows={lands.appeals.map((a) => ({
             id: a.id,
             label: a.name,
-            share: shares[i],
+            share: a.share,
             target: a.target,
             colour: APPEAL_COLOUR[a.id],
           }))}
@@ -422,10 +420,8 @@ function Perspectives({ view }: { view: ReportView }) {
       </div>
       {view.perspectives.map((p) => (
         <div key={p.id} className="break-inside-avoid">
-          <h3 className="flex justify-between font-semibold">
-            <span>{p.name}</span>
-            <span className="font-mono">{p.score !== null ? `${p.score}/4` : '–'}</span>
-          </h3>
+          {/* The score is in the chart above. */}
+          <h3 className="font-semibold">{p.name}</h3>
           <p className="text-xs text-(--hd-muted)">{p.question}</p>
           {p.summary ? <p className="mt-2 text-sm">{p.summary}</p> : null}
           {p.levers.length > 0 ? (

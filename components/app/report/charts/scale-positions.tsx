@@ -1,4 +1,5 @@
 import { ChartFigure, ChartRow, Track } from '@/components/app/report/charts/chart-figure';
+import { INK, PAPER } from '@/components/app/report/charts/marks';
 
 export interface ScaleRow {
   id: string;
@@ -11,9 +12,6 @@ export interface ScaleRow {
   /** Where the reader expects it, 0 to 1. */
   target: number;
 }
-
-const INK = 'var(--hd-ink)';
-const PAPER = 'var(--hd-paper)';
 
 const at = (v: number) => (Number.isFinite(v) ? Math.max(0, Math.min(1, v)) * 100 : 50);
 const figure = (v: number) => Math.round(at(v));

@@ -20,9 +20,3 @@ export function sharesOf(values: readonly number[]): number[] {
   }
   return floors;
 }
-
-/** A value as a percentage of `max`, held to the track. */
-export function percentOf(value: number, max: number): number {
-  if (!Number.isFinite(value) || max <= 0) return 0;
-  return Math.max(0, Math.min(100, (value / max) * 100));
-}

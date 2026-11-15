@@ -1,5 +1,5 @@
 import { ChartFigure, ChartRow, Track } from '@/components/app/report/charts/chart-figure';
-import { percentOf } from '@/components/app/report/charts/shares';
+import { INK, percentOf, trackOf } from '@/components/app/report/charts/marks';
 
 export interface ShareRow {
   id: string;
@@ -12,16 +12,17 @@ export interface ShareRow {
   colour?: string;
 }
 
-const INK = 'var(--hd-ink)';
-const trackOf = (colour: string) => `color-mix(in srgb, ${colour} 16%, var(--hd-paper))`;
-
-/** The key: the bar is this copy, the upright line the target. */
-function Legend() {
+/**
+ * The key: the bar is this copy, the upright line the target. The bar's
+ * swatch is drawn as the rows draw it, on its track, in the first row's colour.
+ */
+function Legend({ colour }: { colour: string }) {
   return (
     <>
       <span className="inline-flex items-center gap-1.5">
-        <svg width="14" height="8" aria-hidden="true" focusable="false">
-          <rect width="14" height="8" style={{ fill: 'var(--hd-muted)' }} />
+        <svg width="20" height="8" aria-hidden="true" focusable="false">
+          <rect width="20" height="8" style={{ fill: trackOf(colour) }} />
+          <rect width="12" height="8" style={{ fill: colour }} />
         </svg>
         This copy
       </span>
@@ -41,6 +42,8 @@ function Legend() {
  * index, and the duty profile against its target. A bar per part on one
  * 0–100% scale, with the target as an upright line across it, so a reader
  * sees each gap at its own row rather than comparing two stacked wholes.
+ * The scale is always the whole, never stretched to the largest part, so a
+ * full bar always means 100%.
  */
 export function ShareVsTarget({
   title,
@@ -54,24 +57,17 @@ export function ShareVsTarget({
   testId?: string;
 }) {
   if (rows.length === 0) return null;
-  // One scale for every row: the largest share or target, so small mixes are not squashed.
-  const max = Math.max(
-    1,
-    ...rows.map((r) => (Number.isFinite(r.share) ? r.share : 0)),
-    ...rows.map((r) => r.target ?? 0)
-  );
-  const scale = Math.min(100, Math.ceil(max / 10) * 10);
   const anyTarget = rows.some((r) => r.target !== null);
   return (
     <ChartFigure
       title={title}
       description={description}
-      legend={anyTarget ? <Legend /> : undefined}
+      legend={anyTarget ? <Legend colour={rows[0].colour ?? INK} /> : undefined}
       testId={testId}
     >
       {rows.map((r) => {
         const colour = r.colour ?? INK;
-        const at = r.target !== null ? percentOf(r.target, scale) : null;
+        const at = r.target !== null ? percentOf(r.target, 100) : null;
         return (
           <ChartRow
             key={r.id}
@@ -93,7 +89,7 @@ export function ShareVsTarget({
                 <rect
                   x="0"
                   y="5"
-                  width={`${percentOf(r.share, scale)}%`}
+                  width={`${percentOf(r.share, 100)}%`}
                   height="8"
                   style={{ fill: colour }}
                   data-mark="share"

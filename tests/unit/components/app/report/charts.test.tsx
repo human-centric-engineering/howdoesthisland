@@ -12,9 +12,10 @@ import { render, screen, within } from '@testing-library/react';
 import { poleName, ScalePositions } from '@/components/app/report/charts/scale-positions';
 import { ScoreBars } from '@/components/app/report/charts/score-bars';
 import { ShareVsTarget } from '@/components/app/report/charts/share-vs-target';
-import { percentOf, sharesOf } from '@/components/app/report/charts/shares';
+import { percentOf } from '@/components/app/report/charts/marks';
 import { Report } from '@/components/app/report/report';
 import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
+import { sharesOf } from '@/lib/app/reports/shares';
 import { buildReportView } from '@/lib/app/reports/view';
 import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
 
@@ -119,10 +120,10 @@ describe('ShareVsTarget', () => {
     const [ethos, logos] = rowsOf('c');
     expect(ethos).toHaveTextContent('Ethosthis copy 30%target 40%');
     expect(logos).toHaveTextContent('Logosthis copy 20%target 10%');
-    // The scale is the largest share or target, rounded up to ten: 40.
-    expect(marks(ethos, 'share')[0]).toHaveAttribute('width', '75%');
-    expect(marks(ethos, 'target')[0].querySelector('line')).toHaveAttribute('x1', '100%');
-    expect(marks(logos, 'target')[0].querySelector('line')).toHaveAttribute('x1', '25%');
+    // The scale is always the whole, 0–100%, never stretched to the largest part.
+    expect(marks(ethos, 'share')[0]).toHaveAttribute('width', '30%');
+    expect(marks(ethos, 'target')[0].querySelector('line')).toHaveAttribute('x1', '40%');
+    expect(marks(logos, 'target')[0].querySelector('line')).toHaveAttribute('x1', '10%');
     expect(screen.getByText('Target')).toBeInTheDocument();
   });
 
@@ -237,6 +238,18 @@ describe('the charts in the report', () => {
     );
     expect(shares.reduce((t, s) => t + s, 0)).toBe(100);
     expect(rowsOf('chart-culture')).toHaveLength(v.culture?.scales.length ?? -1);
+  });
+
+  it('prints each perspective score once, in the chart', () => {
+    const v = view();
+    const p = v.perspectives.find((x) => x.score !== null);
+    if (!p) throw new Error('fixture has no scored perspective');
+    const { container } = render(
+      <Report view={{ ...v, perspectives: [{ ...p, score: 3 }] }} variant="web" />
+    );
+    const section = container.querySelector('#perspectives');
+    expect(section?.textContent?.match(/3\/4/g)).toHaveLength(1);
+    expect(within(screen.getByTestId('chart-perspectives')).getByText('3/4')).toBeInTheDocument();
   });
 
   it('leaves out the duty and culture charts when the result has neither', () => {

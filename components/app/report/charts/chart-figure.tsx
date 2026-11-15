@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 /**
  * The frame every report chart shares (t-30): a captioned figure holding a
@@ -24,10 +24,18 @@ export function ChartFigure({
   children: ReactNode;
   testId?: string;
 }) {
+  // Named by its title alone: the caption's description is read as its text.
+  const titleId = useId();
   return (
-    <figure className="@container break-inside-avoid" aria-label={title} data-testid={testId}>
+    <figure
+      className="@container break-inside-avoid"
+      aria-labelledby={titleId}
+      data-testid={testId}
+    >
       <figcaption>
-        <span className="block font-mono text-xs text-(--hd-muted) uppercase">{title}</span>
+        <span id={titleId} className="block font-mono text-xs text-(--hd-muted) uppercase">
+          {title}
+        </span>
         {description ? (
           <span className="mt-1 block text-sm text-(--hd-muted)">{description}</span>
         ) : null}
@@ -61,13 +69,13 @@ export function ChartRow({
   children: ReactNode;
 }) {
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 @sm:grid-cols-[8rem_minmax(0,1fr)_5.5rem] @2xl:grid-cols-[11rem_minmax(0,1fr)_6rem]">
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 @sm:grid-cols-[8rem_minmax(0,1fr)_6.5rem] @2xl:grid-cols-[11rem_minmax(0,1fr)_6.5rem]">
       <span className="min-w-0">
         <span className="font-semibold">{label}</span>
         {sublabel ? <span className="block text-xs text-(--hd-muted)">{sublabel}</span> : null}
       </span>
       <span className="order-last col-span-2 @sm:order-none @sm:col-span-1">{children}</span>
-      <span className="text-right font-mono text-sm">{value}</span>
+      <span className="text-right font-mono text-sm whitespace-nowrap">{value}</span>
     </li>
   );
 }

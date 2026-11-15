@@ -1,5 +1,5 @@
 import { ChartFigure, ChartRow, Track } from '@/components/app/report/charts/chart-figure';
-import { percentOf } from '@/components/app/report/charts/shares';
+import { INK, percentOf, trackOf } from '@/components/app/report/charts/marks';
 
 export interface ScoreBarRow {
   id: string;
@@ -10,11 +10,6 @@ export interface ScoreBarRow {
   /** The mark's colour; ink when unset. */
   colour?: string;
 }
-
-const INK = 'var(--hd-ink)';
-
-/** The unfilled track: a light step of the bar's own colour, so a row reads as one. */
-const trackOf = (colour: string) => `color-mix(in srgb, ${colour} 16%, var(--hd-paper))`;
 
 /**
  * Scores on one scale, one bar per row (t-30): the appeal scores out of 100,

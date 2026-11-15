@@ -21,6 +21,7 @@ import type {
   ReportRecommendation,
   ReportResult,
 } from '@/lib/app/reports/input';
+import { sharesOf } from '@/lib/app/reports/shares';
 
 export const APPEAL_IDS = ['ethos', 'pathos', 'logos', 'kairos'] as const;
 
@@ -113,7 +114,19 @@ export interface ReportView {
     } | null;
   };
   lands: {
-    appeals: { id: string; name: string; question: string; score: number; target: number }[];
+    /**
+     * `share` is the appeal's share of the four scores and `target` its weight
+     * in the target mix, both whole percentages adding to exactly 100: the two
+     * mixes the balance index compares.
+     */
+    appeals: {
+      id: string;
+      name: string;
+      question: string;
+      score: number;
+      share: number;
+      target: number;
+    }[];
     balanceIndex: number;
     caps: { appealName: string; cap: number; why: string }[];
     findings: { name: string; message: string }[];
@@ -321,14 +334,17 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
       : null;
 
   // How it lands
-  const landsAppeals = APPEAL_IDS.map((id) => {
+  const appealShares = sharesOf(APPEAL_IDS.map((id) => result.scores[id]));
+  const appealTargets = sharesOf(APPEAL_IDS.map((id) => result.effective_weights[id]));
+  const landsAppeals = APPEAL_IDS.map((id, i) => {
     const def = model.appeals.find((a) => a.id === id);
     return {
       id,
       name: def?.name ?? id,
       question: def?.question ?? '',
       score: result.scores[id],
-      target: Math.round(result.effective_weights[id] * 100),
+      share: appealShares[i],
+      target: appealTargets[i],
     };
   });
   const dimScore = new Map(result.dimensions.map((d) => [d.id, d.score]));
