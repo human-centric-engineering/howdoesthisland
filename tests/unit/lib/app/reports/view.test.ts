@@ -190,6 +190,28 @@ describe('buildReportView — what a result does not have is absent', () => {
   });
 });
 
+describe('buildReportView — the appeal mix', () => {
+  it('gives each appeal a share of the scores and a target, each mix adding to exactly 100', () => {
+    const parsed = reportResultSchema.parse(engineResult({ editor: WRITTEN_EDITOR }));
+    const v = buildReportView({
+      assessment: apiAssessment(),
+      result: {
+        ...parsed,
+        scores: { ...parsed.scores, ethos: 50, pathos: 25, logos: 25, kairos: 0 },
+        // Rounded one by one these print 34 + 34 + 17 + 17 = 102.
+        effective_weights: { ethos: 0.335, pathos: 0.335, logos: 0.165, kairos: 0.165 },
+      },
+      model: reportModelSchema.parse(modelDocument(true)),
+    });
+    const a = v.lands.appeals;
+    expect(a.map((x) => x.share)).toEqual([50, 25, 25, 0]);
+    expect(a.reduce((t, x) => t + x.target, 0)).toBe(100);
+    // Each target is within a point of its weight; which ones round up is a tie here.
+    const weights = [33.5, 33.5, 16.5, 16.5];
+    a.forEach((x, i) => expect(Math.abs(x.target - weights[i])).toBeLessThan(1));
+  });
+});
+
 describe('buildReportView — notes and caps', () => {
   it('lists a note whose offsets do not fit the copy, but does not mark it', () => {
     const result = engineResult({ editor: WRITTEN_EDITOR });
