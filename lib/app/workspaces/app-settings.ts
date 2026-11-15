@@ -16,6 +16,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { isSettingsWriteConflict } from '@/lib/tenancy/org-settings';
+import { isRecord } from '@/lib/utils';
 
 /** The key this app keeps its own org config under, inside `Org.settings`. */
 export const APP_SETTINGS_KEY = 'app';
@@ -40,9 +41,9 @@ export async function withSettingsConflictRetry<T>(write: () => Promise<T>): Pro
 
 /** The `app` slice of a stored `settings` column, or `{}` when it has none. */
 export function readAppSettings(settings: unknown): Record<string, unknown> {
-  if (!isJsonObject(settings)) return {};
+  if (!isRecord(settings)) return {};
   const app = settings[APP_SETTINGS_KEY];
-  return isJsonObject(app) ? { ...app } : {};
+  return isRecord(app) ? { ...app } : {};
 }
 
 /**
@@ -66,9 +67,7 @@ export async function writeAppSettings(
       async (tx) => {
         const row = await tx.org.findUnique({ where: { id: orgId }, select: { settings: true } });
         if (!row) return null;
-        const settings: Record<string, unknown> = isJsonObject(row.settings)
-          ? { ...row.settings }
-          : {};
+        const settings: Record<string, unknown> = isRecord(row.settings) ? { ...row.settings } : {};
         const app = readAppSettings(row.settings);
         edit(app);
         if (Object.keys(app).length > 0) settings[APP_SETTINGS_KEY] = app;
@@ -82,8 +81,4 @@ export async function writeAppSettings(
       { isolationLevel: 'Serializable' }
     )
   );
-}
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

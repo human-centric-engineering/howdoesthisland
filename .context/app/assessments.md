@@ -162,7 +162,7 @@ which leaves core's slices and the signup marker as they were:
 | Judge replies | `judgeReplyRetention: { days }` | 30 days             | 1–365  | `JudgeReply` rows; the runs stay           |
 
 `GET /api/v1/workspaces/{id}/settings` answers both, the reply default filled
-in. `PATCH` takes either key or both: a window sets it, `null` clears it
+in (or `null` for an unreadable stored reply window, below). `PATCH` takes either key or both: a window sets it, `null` clears it
 (content kept for good, replies back to 30 days), a key left out is
 unchanged. Both need a browser session as the workspace's `OWNER` or `ADMIN`,
 or a platform admin.
@@ -186,11 +186,18 @@ sooner, which is harmless. Each pass:
   status, model, cost, tokens and timing.
 
 `QUEUED` and `RUNNING` assessments are skipped, and so are their judges'
-replies, because a re-driven run reads its finished judges' replies back. A
-succeeded run found with no reply on a re-drive is counted as a failed judge
-rather than called again, so the workspace is not billed twice. A window that
-does not parse is read as unset, so nothing is deleted on a guess. The pass is
-idempotent.
+replies, because a re-driven run reads its finished judges' replies back. So is
+a `CANCELLED` one whose lease has not run out, since its judges in flight can
+still land on it. A succeeded run found with no reply on a re-drive is counted
+as a failed judge rather than called again, so the workspace is not billed
+twice. A window that does not parse is never purged on: for content that is no
+window, and for replies `GET` answers `judgeReplyRetention: null` and no reply
+is deleted until it is set again. The 30-day default could be shorter than what
+was stored. The pass is idempotent.
+
+Replies stored before the `app_judge_reply` table were copied into it dated at
+the migration, so each gets the full window from deploy rather than being
+purged on the first boot.
 
 Shares, rewrites and comparison sets do not exist yet. Each task that adds
 one says what purging an assessment does to it.

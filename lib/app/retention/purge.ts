@@ -16,8 +16,12 @@
  *
  * Assessments still `QUEUED` or `RUNNING` are left alone, and so are their
  * judges' replies: a run re-driven by the recovery job reads its finished
- * judges' replies back. The recovery job finishes or fails them, and a later
- * pass takes them.
+ * judges' replies back. So is a `CANCELLED` one whose lease has not run out:
+ * its judges in flight can still land on it (`saveJudgeRun`). The recovery
+ * job finishes or fails them, the lease frees or expires, and a later pass
+ * takes them.
+ *
+ * An unreadable stored window purges nothing on it (`./settings.ts`).
  *
  * Idempotent: a second pass finds nothing older than either window, and
  * changes nothing.
@@ -30,6 +34,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Statuses whose rows a run may still be reading or writing. */
 const LIVE = ['QUEUED', 'RUNNING'] as const;
+
+/**
+ * An assessment no run can still write to: not live, and holding no lease
+ * (a cancelled run keeps its lease until its judges in flight have landed).
+ */
+const settled = (now: Date) => ({
+  status: { notIn: [...LIVE] },
+  OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }],
+});
 
 export interface PurgeResult {
   /** Assessments deleted past the content window (their judge runs went with them). */
@@ -52,20 +65,23 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
   if (windows.retention) {
     const cutoff = before(windows.retention.days);
     ({ count: assessments } = await prisma.assessment.deleteMany({
-      where: { orgId, createdAt: { lt: cutoff }, status: { notIn: [...LIVE] } },
+      where: { orgId, createdAt: { lt: cutoff }, ...settled(now) },
     }));
     ({ count: contents } = await prisma.content.deleteMany({
       where: { orgId, createdAt: { lt: cutoff }, assessments: { none: {} } },
     }));
   }
 
-  const { count: replies } = await prisma.judgeReply.deleteMany({
-    where: {
-      orgId,
-      createdAt: { lt: before(windows.judgeReplyRetention.days) },
-      judgeRun: { assessment: { status: { notIn: [...LIVE] } } },
-    },
-  });
+  let replies = 0;
+  if (windows.judgeReplyRetention) {
+    ({ count: replies } = await prisma.judgeReply.deleteMany({
+      where: {
+        orgId,
+        createdAt: { lt: before(windows.judgeReplyRetention.days) },
+        judgeRun: { assessment: settled(now) },
+      },
+    }));
+  }
 
   return { assessments, contents, replies };
 }

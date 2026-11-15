@@ -10,8 +10,10 @@
 -- Prisma cannot model any of them; they were removed from this file.
 --
 -- Existing replies are copied across before the columns go. A copied row's
--- `createdAt` is the run's `updatedAt`, when its reply was saved, so the
--- purge ages it from then.
+-- `createdAt` is the migration's time, not when its reply was saved: the
+-- purge starts on the first boot after deploy, and dating a copy from its run
+-- would delete every reply past 30 days at once, before any workspace could
+-- set a longer window. Each copy gets the full window from deploy instead.
 --
 -- The table is tenant-owned: it takes the `org_isolation` policy
 -- (lib/tenancy/isolation.ts orgIsolationPolicySql(), verbatim), and the block
@@ -51,7 +53,7 @@ SELECT
     "id",
     "output",
     COALESCE("dropped", '[]'::jsonb),
-    "updatedAt"
+    CURRENT_TIMESTAMP
 FROM "app_judge_run"
 WHERE "output" IS NOT NULL;
 

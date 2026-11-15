@@ -29,6 +29,7 @@ interface AssessmentRow {
   orgId: string;
   contentId: string;
   status: Status;
+  leaseExpiresAt: Date | null;
   createdAt: Date;
 }
 interface JudgeRunRow {
@@ -59,8 +60,30 @@ const fakePrisma = vi.hoisted(() => {
     }
   };
   const before = (at: Date, clause: unknown) => at < (clause as { lt: Date }).lt;
-  const notIn = (status: string, clause: unknown) =>
-    !(clause as { notIn: string[] }).notIn.includes(status);
+  /**
+   * The purge's `settled` filter, modelled exactly: a status outside
+   * `notIn`, and a lease that is null or at most `lte`. Any other shape throws.
+   */
+  const settled = (a: { status: string; leaseExpiresAt: Date | null }, clause: unknown) => {
+    const c = clause as {
+      status?: { notIn?: string[] };
+      OR?: Array<{ leaseExpiresAt: null | { lte: Date } }>;
+    };
+    const lte = c.OR?.[1]?.leaseExpiresAt;
+    if (
+      !c.status?.notIn ||
+      c.OR?.length !== 2 ||
+      c.OR[0]?.leaseExpiresAt !== null ||
+      !(lte && lte.lte instanceof Date) ||
+      Object.keys(c).join() !== 'status,OR'
+    ) {
+      throw new Error("fake models only the purge's settled filter");
+    }
+    return (
+      !c.status.notIn.includes(a.status) &&
+      (a.leaseExpiresAt === null || a.leaseExpiresAt <= lte.lte)
+    );
+  };
   /** Delete assessments, cascading to their judge runs and replies. */
   const dropAssessments = (ids: Set<string>) => {
     db.assessments = db.assessments.filter((a) => !ids.has(a.id));
@@ -76,12 +99,10 @@ const fakePrisma = vi.hoisted(() => {
     },
     assessment: {
       deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
-        allowed(where, ['orgId', 'createdAt', 'status']);
+        allowed(where, ['orgId', 'createdAt', 'status', 'OR']);
+        const { orgId, createdAt, ...rest } = where;
         const hit = db.assessments.filter(
-          (a) =>
-            a.orgId === where.orgId &&
-            before(a.createdAt, where.createdAt) &&
-            notIn(a.status, where.status)
+          (a) => a.orgId === orgId && before(a.createdAt, createdAt) && settled(a, rest)
         );
         dropAssessments(new Set(hit.map((a) => a.id)));
         return Promise.resolve({ count: hit.length });
@@ -110,13 +131,13 @@ const fakePrisma = vi.hoisted(() => {
           where,
         }: {
           where: Record<string, unknown> & {
-            judgeRun?: { assessment?: { status?: unknown } };
+            judgeRun?: { assessment?: unknown };
           };
         }) => {
           allowed(where, ['orgId', 'createdAt', 'judgeRun']);
-          const status = where.judgeRun?.assessment?.status;
-          if (Object.keys(where.judgeRun ?? {}).join() !== 'assessment' || !status) {
-            throw new Error('fake models only `judgeRun: { assessment: { status } }`');
+          const filter = where.judgeRun?.assessment;
+          if (Object.keys(where.judgeRun ?? {}).join() !== 'assessment' || !filter) {
+            throw new Error('fake models only `judgeRun: { assessment }`');
           }
           const hit = db.replies.filter((reply) => {
             const run = db.judgeRuns.find((r) => r.id === reply.judgeRunId);
@@ -125,7 +146,7 @@ const fakePrisma = vi.hoisted(() => {
               reply.orgId === where.orgId &&
               before(reply.createdAt, where.createdAt) &&
               parent !== undefined &&
-              notIn(parent.status, status)
+              settled(parent, filter)
             );
           });
           const ids = new Set(hit.map((r) => r.id));
@@ -153,7 +174,12 @@ const daysAgo = (d: number) => new Date(NOW.getTime() - d * 24 * 60 * 60 * 1000)
 
 let seq = 0;
 /** One content row, one assessment on it, one judge run and its reply. */
-function piece(orgId: string, ageDays: number, status: Status = 'COMPLETED') {
+function piece(
+  orgId: string,
+  ageDays: number,
+  status: Status = 'COMPLETED',
+  leaseExpiresAt: Date | null = null
+) {
   const n = ++seq;
   const content = { id: `c${n}`, orgId, createdAt: daysAgo(ageDays) };
   const assessment = {
@@ -161,6 +187,7 @@ function piece(orgId: string, ageDays: number, status: Status = 'COMPLETED') {
     orgId,
     contentId: content.id,
     status,
+    leaseExpiresAt,
     createdAt: daysAgo(ageDays),
   };
   const run = { id: `r${n}`, orgId, assessmentId: assessment.id };
@@ -229,6 +256,7 @@ describe('with a content window', () => {
       orgId: WS,
       contentId: old.content.id,
       status: 'COMPLETED',
+      leaseExpiresAt: null,
       createdAt: daysAgo(5),
     });
 
@@ -250,6 +278,19 @@ describe('with a content window', () => {
     expect(ids(db.contents)).toEqual(ids([queued.content, running.content]));
     // A re-drive reads its finished judges' replies back.
     expect(ids(db.replies)).toEqual(ids([queued.reply, running.reply]));
+  });
+
+  it('leaves a cancelled assessment whose judges may still land, until its lease is gone', async () => {
+    const inFlight = piece(WS, 120, 'CANCELLED', new Date(NOW.getTime() + 60_000));
+    piece(WS, 120, 'CANCELLED', new Date(NOW.getTime() - 60_000));
+    piece(WS, 120, 'CANCELLED', null);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result).toMatchObject({ assessments: 2, contents: 2 });
+    expect(ids(db.assessments)).toEqual([inFlight.assessment.id]);
+    expect(ids(db.contents)).toEqual([inFlight.content.id]);
+    expect(ids(db.replies)).toEqual([inFlight.reply.id]);
   });
 
   it('touches no other workspace', async () => {
@@ -284,6 +325,23 @@ describe('judge replies', () => {
 
     expect((await purgeExpiredContent(NOW)).replies).toBe(1);
     expect(ids(db.replies)).toEqual([week.reply.id]);
+  });
+
+  it('an unreadable reply window deletes no reply, rather than falling back to 30 days', async () => {
+    db.settings.set(WS, { app: { judgeReplyRetention: { days: 400 } } });
+    const old = piece(WS, 45);
+
+    expect((await purgeExpiredContent(NOW)).replies).toBe(0);
+    expect(ids(db.replies)).toEqual([old.reply.id]);
+    expect(fakePrisma.judgeReply.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("keep a cancelled run's replies while its judges may still land", async () => {
+    const inFlight = piece(WS, 45, 'CANCELLED', new Date(NOW.getTime() + 60_000));
+    piece(WS, 45, 'CANCELLED', new Date(NOW.getTime() - 60_000));
+
+    expect((await purgeExpiredContent(NOW)).replies).toBe(1);
+    expect(ids(db.replies)).toEqual([inFlight.reply.id]);
   });
 
   it('a longer reply window keeps a reply the default would have taken', async () => {

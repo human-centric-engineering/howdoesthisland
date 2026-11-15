@@ -229,10 +229,12 @@ describe('reading', () => {
     ['zero days', { days: 0 }],
     ['a bare number', 30],
     ['a fraction of a day', { days: 1.5 }],
-  ])('reads %s as unset: no content window, the default reply window', (_l, stored) => {
-    // Unreadable means never purge on a guess.
+    ['a window past both caps', { days: 4000 }],
+  ])('reads %s as no window to purge on, for content and replies alike', (_l, stored) => {
+    // Unreadable means never purge on a guess: the 30-day default could be
+    // shorter than what the workspace stored.
     expect(
       readWorkspaceSettings({ app: { retention: stored, judgeReplyRetention: stored } })
-    ).toEqual({ retention: null, judgeReplyRetention: { days: 30 } });
+    ).toEqual({ retention: null, judgeReplyRetention: null });
   });
 });

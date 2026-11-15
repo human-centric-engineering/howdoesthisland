@@ -11,6 +11,11 @@
  *   The judge run itself, with its model, cost and timing, stays as long as
  *   its assessment.
  *
+ * A stored window that does not parse is never purged on: for content that
+ * is the same as no window, and for replies it means none are deleted until
+ * the window is set again (read as `null`). Falling back to the default
+ * could delete replies a longer stored window meant to keep.
+ *
  * The purge job (`./purge.ts`) applies both.
  *
  * Neither is core's `settings.retention` slice. That one governs core's own
@@ -74,31 +79,30 @@ export const updateWorkspaceSettingsSchema = z
 
 export type WorkspaceSettingsPatch = z.infer<typeof updateWorkspaceSettingsSchema>;
 
-/** The windows in force: the reply window is always one, the default if unset. */
+/**
+ * The windows in force. `judgeReplyRetention` is the default when unset, and
+ * `null` only when the stored window is unreadable: no reply is deleted then.
+ */
 export type WorkspaceSettings = {
   retention: AppRetention | null;
-  judgeReplyRetention: JudgeReplyRetention;
+  judgeReplyRetention: JudgeReplyRetention | null;
 };
 
-/**
- * One stored window, or `null` when absent. A stored value that does not
- * parse is read as absent and logged: purging on a window nobody can read
- * could delete what the workspace meant to keep. For the content window,
- * absent keeps everything; for the reply window, it is the default, which
- * is the window D10 set.
- */
+/** A stored window: absent, read, or present but not readable. */
+type Stored<T> = { state: 'absent' } | { state: 'set'; value: T } | { state: 'unreadable' };
+
 function readWindow<T>(
   app: Record<string, unknown>,
   key: string,
   schema: z.ZodType<T>,
   orgId?: string
-): T | null {
+): Stored<T> {
   const stored = app[key];
-  if (stored === undefined || stored === null) return null;
+  if (stored === undefined || stored === null) return { state: 'absent' };
   const parsed = schema.safeParse(stored);
-  if (parsed.success) return parsed.data;
-  logger.warn('Unreadable app retention window; reading it as unset', { orgId, key });
-  return null;
+  if (parsed.success) return { state: 'set', value: parsed.data };
+  logger.warn('Unreadable app retention window; purging nothing on it', { orgId, key });
+  return { state: 'unreadable' };
 }
 
 /** The windows a stored `settings` column sets, defaults filled in. */
@@ -107,14 +111,16 @@ export function readWorkspaceSettings(settings: unknown, orgId?: string): Worksp
 }
 
 function settingsOf(app: Record<string, unknown>, orgId?: string): WorkspaceSettings {
+  const content = readWindow(app, APP_RETENTION_KEY, appRetentionSchema, orgId);
+  const reply = readWindow(app, JUDGE_REPLY_RETENTION_KEY, judgeReplyRetentionSchema, orgId);
   return {
-    retention: readWindow(app, APP_RETENTION_KEY, appRetentionSchema, orgId),
-    judgeReplyRetention: readWindow(
-      app,
-      JUDGE_REPLY_RETENTION_KEY,
-      judgeReplyRetentionSchema,
-      orgId
-    ) ?? { days: DEFAULT_JUDGE_REPLY_DAYS },
+    retention: content.state === 'set' ? content.value : null,
+    judgeReplyRetention:
+      reply.state === 'set'
+        ? reply.value
+        : reply.state === 'absent'
+          ? { days: DEFAULT_JUDGE_REPLY_DAYS }
+          : null,
   };
 }
 

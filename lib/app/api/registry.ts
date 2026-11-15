@@ -205,7 +205,8 @@ export const invitationSentSchema = z.object({
 /** `WorkspaceSettings` in `lib/app/retention/settings.ts`. */
 export const workspaceSettingsSchema = z.object({
   retention: appRetentionSchema.nullable(),
-  judgeReplyRetention: judgeReplyRetentionSchema,
+  /** `null` only when the stored window is unreadable: no reply is deleted then. */
+  judgeReplyRetention: judgeReplyRetentionSchema.nullable(),
 });
 
 /** `JudgeModelChoice` in `lib/app/judges/model-choice.ts`. */

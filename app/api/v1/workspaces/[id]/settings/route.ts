@@ -8,6 +8,8 @@
  *   - `judgeReplyRetention`: `{ days }` (1–365) to delete each judge's reply
  *     that many days after it was saved, or `null` for the default, 30.
  *   A key left out is unchanged. Answers the windows in force, as `GET` does.
+ *   `judgeReplyRetention` reads `null` only when the stored window is
+ *   unreadable: no reply is deleted until it is set again.
  *
  * These are the app's (`Org.settings.app`). Core's per-org `retention`
  * slice, set on core's org settings, governs core's own history and is left
@@ -96,7 +98,7 @@ export const PATCH = withAuth<{ id: string }>(async (request, session, { params 
   log.info('Workspace retention set', {
     orgId: id,
     retentionDays: written.retention?.days ?? null,
-    judgeReplyDays: written.judgeReplyRetention.days,
+    judgeReplyDays: written.judgeReplyRetention?.days ?? null,
     userId: session.user.id,
   });
   return successResponse(written);
