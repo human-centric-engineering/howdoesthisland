@@ -169,6 +169,15 @@ describe('when the editor is asked', () => {
     expect(chat).not.toHaveBeenCalled();
   });
 
+  it('makes no editor call when the result merged no reply (still the quick scan)', async () => {
+    const quick = { ...RESULT, mode: 'quick' };
+    expect(await run({ result: quick })).toEqual({
+      status: 'skipped',
+      reason: 'no_judge_answered',
+    });
+    expect(chat).not.toHaveBeenCalled();
+  });
+
   it('asks for two judges or more', () => {
     expect(editorSkipReason(['a', 'b'], 1)).toBeNull();
     expect(editorSkipReason(['a'], 1)).toBe('too_few_judges');

@@ -359,7 +359,16 @@ async function drive(
     assessmentId: row.id,
     userId: row.createdByUserId,
   });
-  await addCost(row.id, token, editorCostUsd(editor));
+  // Already billed, so a failed write is logged, not thrown: a throw would
+  // hand the run back, and its re-drive would pay for the editor again.
+  try {
+    await addCost(row.id, token, editorCostUsd(editor));
+  } catch (err) {
+    logger.error('Could not add the editor’s cost to the assessment', err, {
+      assessmentId: row.id,
+      costUsd: editorCostUsd(editor),
+    });
+  }
   result = withEditor(result, editor);
 
   const status = failures > 0 ? 'PARTIAL' : 'COMPLETED';

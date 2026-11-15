@@ -97,6 +97,12 @@ export function editorOutputSchema(result: Assessment): Record<string, unknown> 
 
 const name = (m: EngineModel, id: string): string => m.DIM.get(id)?.name ?? id;
 
+/**
+ * The block with any `<assessment>` or `</assessment>` tag taken out: its
+ * quotes are the writer's text, and one could otherwise close the fence early.
+ */
+const unfenced = (block: string): string => block.replace(/<\s*\/?\s*assessment\s*>/gi, '');
+
 function resultBlock(m: EngineModel, result: Assessment): string {
   const s = result.scores;
   const scores = APPEALS.map((a) => `${a} ${s[a]}`).join(', ');
@@ -114,7 +120,7 @@ function resultBlock(m: EngineModel, result: Assessment): string {
     (f) => `- ${m.FLAG.get(f.id)?.name ?? f.id} (${f.severity}): "${f.quote}"`
   );
   const list = (lines: string[]) => (lines.length ? lines.join('\n') : '- none');
-  return `Overall: ${s.overall} of 100 (${s.band}). Appeals: ${scores}. Balance: ${s.balance_index}.
+  return unfenced(`Overall: ${s.overall} of 100 (${s.band}). Appeals: ${scores}. Balance: ${s.balance_index}.
 
 What each judge found:
 ${list(summaries)}
@@ -126,7 +132,7 @@ Strengths the judges marked:
 ${list(strengths)}
 
 Red flags:
-${list(flags)}`;
+${list(flags)}`);
 }
 
 export function buildEditorRequest(
@@ -182,7 +188,7 @@ Reply with exactly one JSON object in this shape:
 export type EditorReplyValidation = FrameworkJudgeReplyValidation<EditorSummary, JudgeDropReason>;
 
 /** A non-empty string, trimmed, of at most `max` characters, or `undefined`. */
-const text = (v: unknown, max = MAX_SENTENCE_CHARS): string | undefined => {
+const sentence = (v: unknown, max = MAX_SENTENCE_CHARS): string | undefined => {
   if (typeof v !== 'string') return undefined;
   const t = v.trim();
   return t !== '' && t.length <= max ? t : undefined;
@@ -207,7 +213,7 @@ const text = (v: unknown, max = MAX_SENTENCE_CHARS): string | undefined => {
  */
 export function validateEditorReply(reply: unknown, result: Assessment): EditorReplyValidation {
   if (!isRecord(reply)) return { ok: false, reason: 'malformed', detail: 'not an object' };
-  const verdict = text(reply.verdict, MAX_VERDICT_CHARS);
+  const verdict = sentence(reply.verdict, MAX_VERDICT_CHARS);
   if (verdict === undefined) {
     return { ok: false, reason: 'malformed', detail: 'no verdict, or one too long' };
   }
@@ -226,9 +232,9 @@ export function validateEditorReply(reply: unknown, result: Assessment): EditorR
     const at = `changes[${i}]`;
     const fields = isRecord(item)
       ? {
-          recommendation: text(item.recommendation),
-          change: text(item.change),
-          why: text(item.why),
+          recommendation: sentence(item.recommendation),
+          change: sentence(item.change),
+          why: sentence(item.why),
         }
       : null;
     if (!fields?.recommendation || !fields.change || !fields.why) {
@@ -251,7 +257,7 @@ export function validateEditorReply(reply: unknown, result: Assessment): EditorR
   const works: string[] = [];
   reply.works.forEach((item: unknown, i) => {
     const at = `works[${i}]`;
-    const entry = text(item);
+    const entry = sentence(item);
     if (entry === undefined) drops.push({ at, reason: 'malformed' });
     else if (works.length >= MAX_WORKS) drops.push({ at, reason: 'over_limit' });
     else works.push(entry);

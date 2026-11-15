@@ -290,6 +290,33 @@ describe('the editor’s summary', () => {
     expect(a.costUsd).toBeCloseTo(0.03);
   });
 
+  it('logs, and still finishes, when the editor’s cost cannot be added', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runEditor.mockResolvedValue({
+      status: 'failed',
+      code: 'malformed',
+      message: 'x',
+      spend: { ...editorSpend, costUsd: 0.007 },
+      latencyMs: 9,
+    });
+    const real = fake.db.assessment.updateMany.getMockImplementation();
+    fake.db.assessment.updateMany.mockImplementation((args) =>
+      JSON.stringify(args.data.costUsd) === JSON.stringify({ increment: 0.007 })
+        ? Promise.reject(new Error('connection reset'))
+        : real!(args)
+    );
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.runEditor).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Could not add the editor’s cost to the assessment',
+      expect.any(Error),
+      { assessmentId: a.id, costUsd: 0.007 }
+    );
+    expect(a).toMatchObject({ status: 'COMPLETED', result: { editor: { status: 'failed' } } });
+  });
+
   it('counts only the judges that answered, and a partial run stays PARTIAL', async () => {
     const a = fake.seed({ judges: ['judge_a', 'judge_b', 'judge_c'] });
     mocks.runJudge.mockImplementation(async (slot: string) => {

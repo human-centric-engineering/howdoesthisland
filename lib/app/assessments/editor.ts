@@ -19,6 +19,7 @@
  * summary, and its `editor` record says why ({@link EditorRecord}); the
  * assessment's status is the judges' alone.
  */
+import { z } from 'zod';
 import type { EditorSummary, FrameworkEngine, JudgeDrop } from '@/lib/app/frameworks/engine';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import {
@@ -81,13 +82,21 @@ export type EditorRecord =
   | { status: 'skipped'; reason: EditorSkipReason }
   | { status: 'failed'; errorCode: EditorErrorCode; model: string | null; costUsd: number };
 
-/** Why the editor is not asked, or `null` when it is. */
+/** A result that says it merged no judge's reply (`mode: 'quick'`). */
+const quickResult = z.object({ mode: z.literal('quick') });
+
+/**
+ * Why the editor is not asked, or `null` when it is. A result that merged no
+ * reply (an answered judge the engine does not read, such as a culture reply
+ * alone) is the quick scan as surely as one where none answered.
+ */
 export function editorSkipReason(
   judges: readonly string[],
-  answered: number
+  answered: number,
+  result?: unknown
 ): EditorSkipReason | null {
   if (judges.length < EDITOR_MIN_JUDGES) return 'too_few_judges';
-  if (answered === 0) return 'no_judge_answered';
+  if (answered === 0 || quickResult.safeParse(result).success) return 'no_judge_answered';
   return null;
 }
 
@@ -104,9 +113,7 @@ export interface RunEditorInput {
   /** How many of them answered. */
   answered: number;
   projectContext?: string | null;
-  /** Absent on an ephemeral run. */
   assessmentId?: string;
-  ephemeral?: boolean;
   userId?: string | null;
 }
 
@@ -117,7 +124,7 @@ export interface RunEditorInput {
  * every re-drive) is a `failed` outcome, logged with its message.
  */
 export async function runEditor(input: RunEditorInput): Promise<EditorOutcome> {
-  const reason = editorSkipReason(input.judges, input.answered);
+  const reason = editorSkipReason(input.judges, input.answered, input.result);
   if (reason) return { status: 'skipped', reason };
 
   const { engine, result } = input;
@@ -138,7 +145,6 @@ export async function runEditor(input: RunEditorInput): Promise<EditorOutcome> {
       phase: 'editor',
       frameworkVersion: input.frameworkVersion,
       ...(input.assessmentId !== undefined ? { assessmentId: input.assessmentId } : {}),
-      ...(input.ephemeral ? { ephemeral: true } : {}),
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
     });
     return {

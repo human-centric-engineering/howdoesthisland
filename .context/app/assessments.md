@@ -109,8 +109,9 @@ from either of the first two.
   judge's call sits in its agent's scope inside it (`runJudge`), so each
   agent's privacy mode applies to its call.
 - **The editor's summary** (`editor.ts`, t-25). Once the result is assembled,
-  a run that asked for two judges or more, at least one of which answered,
-  asks the editor what the writer should do first: a `verdict` of two or
+  a run that asked for two judges or more, at least one of which answered
+  and was merged (a result still in `quick` mode is skipped as
+  `no_judge_answered`), asks the editor what the writer should do first: a `verdict` of two or
   three sentences, up to three `changes`, each naming one of the result's
   recommendations by id (`rec_1` is `result.recommendations[0]`), and what
   `works`. It goes through the judges' own call path under the `editor` role
