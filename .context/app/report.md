@@ -48,6 +48,28 @@ in the components:
 - **Integrity caps** are shown when a capping dimension is at or below its
   line (`scoring.integrity_caps`), the same test the engine applies.
 
+## Charts
+
+`components/app/report/charts/` (t-30) draws five charts: appeal scores and
+balance against the target mix (How it lands), the duty profile, perspective
+scores and the culture scales. Each is a captioned figure of rows, each row a
+name, an SVG mark and the figure.
+
+- **The values are visible text.** The SVG is `aria-hidden`, so a screen reader
+  reads the same row a sighted reader does, and print or forced-colors keeps the
+  values where a fill can fail. There is no separate data table.
+- **Balance and duties are a bar per part with the target as an upright line**,
+  not two stacked wholes, so each gap is read on its own row. An appeal's share
+  is its score's share of the four, which is what the balance index compares.
+  Shares are rounded to add to exactly 100 (`sharesOf`).
+- **Colours are the brand's appeal tokens**, which switch for dark and print.
+  The dataviz palette validator flags them (Logos's chroma in light, all four
+  too light in dark). That is accepted because every mark is named beside it,
+  so colour never carries identity alone.
+- Rows use a container query, so a chart in half a section keeps a usable bar.
+  Narrow, the bar drops under the name.
+- No hover tooltips: every value is already printed on the row.
+
 ## Three variants
 
 `<Report variant>`: `web` is the signed-in page. `print` is what the PDF is made
