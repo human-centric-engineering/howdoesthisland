@@ -4,7 +4,9 @@
  *
  * Mocked: Prisma (the fake in `fake-db.ts`, so every assertion is on the rows
  * a run leaves), the engine (a stub whose `assemble` reports which judges'
- * outputs it was given) and `runJudge` (scripted per slot). Real: the fan-out,
+ * outputs it was given), `runJudge` (scripted per slot) and `runEditor`
+ * (skipping by default; its own tests are `editor.test.ts`). Real: how the
+ * editor's outcome is stored and costed. Real: the fan-out,
  * the lease and claim logic, the tenant context and the privacy scope.
  *
  * The load-bearing chain is job → runJudge → JudgeRun row: each test drives
@@ -18,6 +20,7 @@ import { createFakeDb, type FakeDb, type Row } from '@/tests/unit/lib/app/assess
 
 const mocks = vi.hoisted(() => ({
   runJudge: vi.fn(),
+  runEditor: vi.fn(),
   engineForVersion: vi.fn(),
 }));
 
@@ -35,6 +38,10 @@ vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
   runJudge: mocks.runJudge,
 }));
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
+vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/assessments/editor')>()),
+  runEditor: mocks.runEditor,
+}));
 
 import { JUDGES_IN_FLIGHT, LEASE_MS, LEASE_RENEW_MS } from '@/lib/app/assessments/limits';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
@@ -101,6 +108,7 @@ beforeEach(() => {
     label: 'howdoesthisland@0.5.1',
   });
   mocks.runJudge.mockImplementation(async (slot: string) => reply(slot));
+  mocks.runEditor.mockResolvedValue({ status: 'skipped', reason: 'too_few_judges' });
 });
 
 afterEach(() => {
@@ -194,6 +202,136 @@ describe('a run that completes', () => {
       orgId: ORG,
       userId: 'user-1',
     });
+  });
+});
+
+describe('the editor’s summary', () => {
+  const SUMMARY = {
+    verdict: 'It lands.',
+    changes: [{ recommendation: 'rec_1', change: 'Cut the opener.', why: 'It delays the ask.' }],
+    works: ['The close.'],
+  };
+  const editorSpend = {
+    provider: 'openai',
+    model: 'gpt-5',
+    usage: { input: 900, output: 150, attempts: 1 },
+    costUsd: 0.005,
+  };
+
+  it('asks the editor after the judges, with the assembled result, and stores its summary', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runEditor.mockImplementation(async () => {
+      // The judges have all been saved before the editor is asked.
+      expect(runsOf(a.id).map((r) => r.judge)).toEqual(['judge_a', 'judge_b']);
+      return {
+        status: 'written',
+        summary: SUMMARY,
+        drops: [{ at: 'changes[1]', reason: 'unknown_id', detail: 'rec_9' }],
+        spend: editorSpend,
+        latencyMs: 5,
+      };
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.runEditor).toHaveBeenCalledTimes(1);
+    expect(mocks.runEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engine,
+        frameworkVersion: 'howdoesthisland@0.5.1',
+        text: 'The text.',
+        ctx: a.context,
+        result: expect.objectContaining({ judged: ['judge_a', 'judge_b'] }),
+        judges: ['judge_a', 'judge_b'],
+        answered: 2,
+        assessmentId: a.id,
+        userId: 'user-1',
+      })
+    );
+    expect(a).toMatchObject({
+      status: 'COMPLETED',
+      result: {
+        judged: ['judge_a', 'judge_b'],
+        editor: {
+          status: 'written',
+          summary: SUMMARY,
+          dropped: [{ at: 'changes[1]', reason: 'unknown_id', detail: 'rec_9' }],
+          model: 'gpt-5',
+          costUsd: 0.005,
+        },
+      },
+    });
+    // Two judges at 0.01 and the editor's 0.005.
+    expect(a.costUsd).toBeCloseTo(0.025);
+  });
+
+  it('leaves the assessment COMPLETED, without a summary and marked, when the editor fails', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runEditor.mockResolvedValue({
+      status: 'failed',
+      code: 'malformed',
+      message: 'The editor’s reply was not usable, twice.',
+      spend: { ...editorSpend, usage: { input: 1800, output: 300, attempts: 2 }, costUsd: 0.01 },
+      latencyMs: 9,
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(a).toMatchObject({
+      status: 'COMPLETED',
+      error: null,
+      result: {
+        judged: ['judge_a', 'judge_b'],
+        editor: { status: 'failed', errorCode: 'malformed', model: 'gpt-5', costUsd: 0.01 },
+      },
+    });
+    expect((a.result as Record<string, unknown>).editor).not.toHaveProperty('summary');
+    // What the failed editor was billed still counts.
+    expect(a.costUsd).toBeCloseTo(0.03);
+  });
+
+  it('counts only the judges that answered, and a partial run stays PARTIAL', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b', 'judge_c'] });
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      if (slot === 'judge_b') throw new JudgeRunError('refused', 'no');
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('partial');
+    expect(mocks.runEditor).toHaveBeenCalledWith(
+      expect.objectContaining({ judges: ['judge_a', 'judge_b', 'judge_c'], answered: 2 })
+    );
+    expect(a).toMatchObject({
+      status: 'PARTIAL',
+      result: { editor: { status: 'skipped', reason: 'too_few_judges' } },
+    });
+  });
+
+  it('records a skipped editor on the result, at no cost', async () => {
+    const a = fake.seed({ judges: [], profile: 'quick' });
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+    expect(a).toMatchObject({
+      result: { editor: { status: 'skipped', reason: 'too_few_judges' } },
+      costUsd: 0,
+    });
+  });
+
+  it('requeues the run when the editor’s step fails on an error that is not its own', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runEditor.mockRejectedValue(new Error('database gone'));
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    expect(a).toMatchObject({ status: 'QUEUED', result: null, leaseToken: null });
+  });
+
+  it('counts the editor’s cost on an assessment cancelled while it ran, not writing it again', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runEditor.mockImplementation(async () => {
+      await inOrg(() => cancelAssessment(String(a.id)));
+      return { status: 'written', summary: SUMMARY, drops: [], spend: editorSpend, latencyMs: 1 };
+    });
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
+    expect(a).toMatchObject({ status: 'CANCELLED', result: null });
+    expect(a.costUsd).toBeCloseTo(0.025);
   });
 });
 

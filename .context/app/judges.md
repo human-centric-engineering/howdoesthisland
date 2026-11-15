@@ -133,7 +133,11 @@ admit a model that is not on the list, and where its settings come from.
 ## Running a judge
 
 `runJudge(slot, input)` (`lib/app/judges/run-judge.ts`) makes the call the
-engine builds (`buildJudgeRequest`). It goes to the provider directly, not
+engine builds (`buildJudgeRequest`). The checks below live in `callAgent`,
+which the editor's summary (`lib/app/assessments/editor.ts`, t-25) goes
+through too, under the `editor` role, so there is one path for spend checks.
+Its cost rows carry `editor: 'summary'` where a judge's carry `judge`, and its
+refusals name `the editor` where a judge's name the slot. It goes to the provider directly, not
 through chat, so the reply can be held to a strict schema, and so it applies
 the checks the chat routes would have made itself:
 
