@@ -367,13 +367,15 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['Assessment', 'assessments'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
-      // holding no personal data (t-10), and judge runs (t-22). Ledger row 2.
+      // holding no personal data (t-10), judge runs (t-22) and their replies
+      // (t-26). Ledger row 2.
       expect(getAppExcludedSubjectSources().map((entry) => entry.model)).toEqual([
         'Framework',
         'FrameworkVersion',
         'FrameworkNode',
         'FrameworkLink',
         'JudgeRun',
+        'JudgeReply',
       ]);
     },
   },
@@ -384,13 +386,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppOrgSourceRegistryForTests();
       // The reads trigger the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our sources, the workspace
-      // invitations (t-9) and assessments (t-22). Ledger:
+      // invitations (t-9), assessments (t-22) and judge replies (t-26). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppOrgSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
         ['Content', 'contents'],
         ['Assessment', 'assessments'],
         ['JudgeRun', 'judgeRuns'],
+        ['JudgeReply', 'judgeReplies'],
       ]);
       expect(getAppExcludedOrgSources()).toEqual([]);
       expect(appOrgDeclarationsFailed()).toBe(false);
@@ -504,7 +507,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppJobsForTests();
       // getAppJobs() triggers the lazy init, so this exercises the REAL seam.
       // FORK (HowDoesThisLand): pinned to our jobs, the signup-workspace
-      // sweep (t-7) and assessment recovery (t-22). Ledger:
+      // sweep (t-7), assessment recovery (t-22) and the retention purge
+      // (t-26). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppJobs().map((job) => [job.name, job.intervalMs, job.scope])).toEqual([
         [
@@ -513,6 +517,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
           { system: 'signup workspaces span orgs; Org is a system model' },
         ],
         ['app:assessment-recovery', 15 * 60 * 1000, 'per-org'],
+        ['app:retention-purge', 24 * 60 * 60 * 1000, 'per-org'],
       ]);
     },
   },

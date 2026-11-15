@@ -37,12 +37,16 @@
 import { registerAppJob } from '@/lib/orchestration/maintenance/app-jobs';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
+import { purgeExpiredContent } from '@/lib/app/retention/purge';
 
 /** The signup-workspace sweep's name, as the tick logs it. */
 export const SIGNUP_WORKSPACE_SWEEP_JOB = 'app:signup-workspace-sweep';
 
 /** The assessment recovery job's name, as the tick logs it. */
 export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
+
+/** The retention purge's name, as the tick logs it. */
+export const RETENTION_PURGE_JOB = 'app:retention-purge';
 
 export function initAppJobs(): void {
   // Erase signup workspaces nobody joined (t-7). Org is a system model and the
@@ -66,5 +70,16 @@ export function initAppJobs(): void {
     intervalMs: 15 * 60 * 1000,
     scope: 'per-org',
     run: () => recoverAssessments(),
+  });
+
+  // Delete content and assessments past the workspace's window, and judge
+  // replies past theirs (30 days unless set) (t-26, D10). Per workspace: each
+  // pass reads its own windows and touches only its own rows. Daily: the
+  // windows are counted in days, so a row goes at most a day late.
+  registerAppJob({
+    name: RETENTION_PURGE_JOB,
+    intervalMs: 24 * 60 * 60 * 1000,
+    scope: 'per-org',
+    run: () => purgeExpiredContent(),
   });
 }

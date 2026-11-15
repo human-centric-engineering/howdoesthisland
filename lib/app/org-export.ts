@@ -127,9 +127,18 @@ export function initAppOrgSources(): void {
         model: 'JudgeRun',
         section: 'judgeRuns',
         disposition: 'export',
-        description: 'Each judge’s part of an assessment: its model, cost, reply and any failure.',
+        description: 'Each judge’s part of an assessment: its model, cost and any failure.',
         fetch: ({ orgId }) =>
           prisma.judgeRun.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
+      {
+        model: 'JudgeReply',
+        section: 'judgeReplies',
+        disposition: 'export',
+        description:
+          'Each judge’s reply, until the workspace’s reply window (30 days unless set) deletes it.',
+        fetch: ({ orgId }) =>
+          prisma.judgeReply.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
     ],
     excluded: [],

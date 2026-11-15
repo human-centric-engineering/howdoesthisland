@@ -42,6 +42,11 @@ import {
 } from '@/lib/app/assessments/api/validations';
 import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import {
+  appRetentionSchema,
+  judgeReplyRetentionSchema,
+  updateWorkspaceSettingsSchema,
+} from '@/lib/app/retention/settings';
+import {
   createWorkspaceSchema,
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
@@ -195,6 +200,13 @@ export const acceptedInvitationSchema = z.object({
 export const invitationSentSchema = z.object({
   email: z.string(),
   message: z.string(),
+});
+
+/** `WorkspaceSettings` in `lib/app/retention/settings.ts`. */
+export const workspaceSettingsSchema = z.object({
+  retention: appRetentionSchema.nullable(),
+  /** `null` only when the stored window is unreadable: no reply is deleted then. */
+  judgeReplyRetention: judgeReplyRetentionSchema.nullable(),
 });
 
 /** `JudgeModelChoice` in `lib/app/judges/model-choice.ts`. */
@@ -489,6 +501,23 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: SIGNED_IN,
     request: { params: invitationIdParamSchema },
     response: { status: 200, data: z.object({ declined: z.literal(true) }) },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/workspaces/{id}/settings',
+    summary: "Get the workspace's retention windows for its content and its judges' replies.",
+    auth: WORKSPACE_ADMIN,
+    request: { params: orgIdParamSchema },
+    response: { status: 200, data: workspaceSettingsSchema },
+  },
+  {
+    method: 'PATCH',
+    path: '/api/v1/workspaces/{id}/settings',
+    summary:
+      "Set how long the workspace keeps its content and assessments, and its judges' replies.",
+    auth: WORKSPACE_ADMIN,
+    request: { params: orgIdParamSchema, body: updateWorkspaceSettingsSchema },
+    response: { status: 200, data: workspaceSettingsSchema },
   },
 
   // Judges (t-21).

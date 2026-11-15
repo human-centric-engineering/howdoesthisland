@@ -142,10 +142,21 @@ describe('a run that completes', () => {
         attempts: 1,
         costUsd: 0.01,
         tokens: { input: 100, output: 20 },
+      }),
+      expect.objectContaining({ judge: 'judge_b', status: 'SUCCEEDED' }),
+    ]);
+    // The reply is its own row, which retention deletes sooner (t-26).
+    const [runA, runB] = runsOf(a.id);
+    expect(runA).not.toHaveProperty('output');
+    expect(runA).not.toHaveProperty('dropped');
+    expect(fake.replies).toEqual([
+      expect.objectContaining({
+        orgId: ORG,
+        judgeRunId: runA?.id,
         output: { from: 'judge_a' },
         dropped: [{ at: 'highlights[0]', reason: 'quote_not_found' }],
       }),
-      expect.objectContaining({ judge: 'judge_b', status: 'SUCCEEDED' }),
+      expect.objectContaining({ judgeRunId: runB?.id, output: { from: 'judge_b' } }),
     ]);
     expect(a).toMatchObject({
       status: 'COMPLETED',
@@ -916,6 +927,28 @@ describe('the recovery job', () => {
     expect(a).toMatchObject({ status: 'FAILED', attempts: 3, leaseToken: null });
     expect(a.error).toMatch(/not a judge/);
     expect(a.completedAt).toEqual(expect.any(Date));
+  });
+});
+
+describe('a succeeded judge whose reply is gone (t-26)', () => {
+  it('is counted as failed on a re-drive, not called again, so nothing is billed twice', async () => {
+    // The purge never deletes a live run's replies; this is the guard if one goes anyway.
+    const a = fake.seed(
+      {
+        status: 'RUNNING',
+        leaseToken: 'dead',
+        leaseExpiresAt: new Date(Date.now() - 5_000),
+        attempts: 1,
+        judges: ['judge_a', 'judge_b'],
+      },
+      [{ judge: 'judge_a', status: 'SUCCEEDED', costUsd: 0.01 }]
+    );
+
+    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 1, gaveUp: 0 });
+    await settle();
+
+    expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_b']);
+    expect(a).toMatchObject({ status: 'PARTIAL', result: { judged: ['judge_b'] } });
   });
 });
 
