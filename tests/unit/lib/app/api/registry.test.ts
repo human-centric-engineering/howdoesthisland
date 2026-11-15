@@ -41,6 +41,7 @@ import {
   quickScanViewSchema,
   versionMetaSchema,
   versionSummarySchema,
+  workspaceSettingsSchema,
 } from '@/lib/app/api/registry';
 import type {
   FrameworkDetail,
@@ -52,6 +53,7 @@ import type {
 import type { CreatedWorkspace } from '@/lib/app/workspaces/create';
 import type { InvitationForInvitee, acceptInvitation } from '@/lib/app/workspaces/invitations';
 import type { JudgeModelChoice } from '@/lib/app/judges/model-choice';
+import type { WorkspaceSettings } from '@/lib/app/retention/settings';
 import type {
   AssessmentDetail,
   AssessmentSummary,
@@ -290,6 +292,9 @@ describe('response schemas match what the services return', () => {
       Wire<Awaited<ReturnType<typeof acceptInvitation>>>
     >();
     expectTypeOf<z.infer<typeof judgeModelChoiceSchema>>().toEqualTypeOf<Wire<JudgeModelChoice>>();
+    expectTypeOf<z.infer<typeof workspaceSettingsSchema>>().toEqualTypeOf<
+      Wire<WorkspaceSettings>
+    >();
     expectTypeOf<z.infer<typeof judgeRunViewSchema>>().toEqualTypeOf<Wire<JudgeRunView>>();
     expectTypeOf<z.infer<typeof assessmentSummarySchema>>().toEqualTypeOf<
       Wire<AssessmentSummary>

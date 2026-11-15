@@ -41,6 +41,7 @@ import {
   scanRequestSchema,
 } from '@/lib/app/assessments/api/validations';
 import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
+import { appRetentionSchema, updateWorkspaceSettingsSchema } from '@/lib/app/retention/settings';
 import {
   createWorkspaceSchema,
   invitationIdParamSchema,
@@ -196,6 +197,9 @@ export const invitationSentSchema = z.object({
   email: z.string(),
   message: z.string(),
 });
+
+/** `WorkspaceSettings` in `lib/app/retention/settings.ts`. */
+export const workspaceSettingsSchema = z.object({ retention: appRetentionSchema.nullable() });
 
 /** `JudgeModelChoice` in `lib/app/judges/model-choice.ts`. */
 export const judgeModelChoiceSchema = z.object({
@@ -489,6 +493,15 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: SIGNED_IN,
     request: { params: invitationIdParamSchema },
     response: { status: 200, data: z.object({ declined: z.literal(true) }) },
+  },
+
+  {
+    method: 'PATCH',
+    path: '/api/v1/workspaces/{id}/settings',
+    summary: "Set the workspace's retention window for its content and assessments, or keep them.",
+    auth: WORKSPACE_ADMIN,
+    request: { params: orgIdParamSchema, body: updateWorkspaceSettingsSchema },
+    response: { status: 200, data: workspaceSettingsSchema },
   },
 
   // Judges (t-21).

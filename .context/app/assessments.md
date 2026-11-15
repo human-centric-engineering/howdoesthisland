@@ -17,7 +17,7 @@ policy, and a member's erasure clears their id and leaves the rows.
 
 | Model        | Table            | Holds                                                                                                     |
 | ------------ | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| `Content`    | `app_content`    | The text as intake produced it, its source and checksum. Kept so a run can be re-driven.                  |
+| `Content`    | `app_content`    | The text as intake produced it, its source and checksum. Kept so a run can be re-driven, until retention. |
 | `Assessment` | `app_assessment` | The version, profile, the judges it resolved to, the context, the state, the lease, the result and cost.  |
 | `JudgeRun`   | `app_judge_run`  | One judge's outcome: model, cost, tokens, the validated reply and its drops, or the failure and its code. |
 
@@ -148,6 +148,39 @@ attempt.
 
 It is idempotent: a second pass finds every row final or held by a live
 lease.
+
+## Retention
+
+A workspace may set a window for its content and assessments (D10, t-26):
+`PATCH /api/v1/workspaces/{id}/settings` with `{ "retention": { "days": N } }`
+(1 to 3650), or `{ "retention": null }` to keep everything. It needs a
+browser session as the workspace's `OWNER` or `ADMIN`, or a platform admin.
+It is stored at `Org.settings.app.retention` through the one writer of the
+`app` key (`lib/app/workspaces/app-settings.ts`), which leaves core's slices
+and the signup marker as they were.
+
+**This is not core's `settings.retention`.** That slice governs core's own
+history (executions, cost logs, evaluations, webhooks) and its sweep knows
+nothing of these tables. A settings page that shows both must say which is
+which.
+
+`app:retention-purge` (`lib/app/retention/purge.ts`) runs hourly, once per
+workspace. Each pass:
+
+- with a window, deletes the assessments made before it (their judge runs
+  cascade), then the content made before it that no assessment is left on;
+  content a newer assessment still uses stays until that one ages out;
+- always, clears `output` and `dropped` on judge runs older than 30 days.
+  The assessment's assembled `result` is what is read afterwards, and the
+  run keeps its status, cost, tokens and timing.
+
+`QUEUED` and `RUNNING` assessments are skipped, and so are their judge runs,
+because a re-driven run reads its finished judges' replies back. A window
+that does not parse is read as none, so nothing is deleted on a guess. The
+pass is idempotent.
+
+Shares, rewrites and comparison sets do not exist yet. Each task that adds
+one says what purging an assessment does to it.
 
 ## The API
 

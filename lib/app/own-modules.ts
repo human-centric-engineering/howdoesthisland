@@ -72,4 +72,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/assessments/',
   // The route registry: the contract of every app route (t-23).
   'lib/app/api/',
+  // The workspace's retention window and the purge that applies it (t-26).
+  'lib/app/retention/',
 ];

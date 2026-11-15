@@ -7,15 +7,16 @@ the app's side; the org model itself is core's
 
 ## Where each piece lives
 
-| Piece                                    | Where                                                                                           |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| A workspace of one's own at signup (t-7) | `lib/app/signup-org.ts` → `lib/app/workspaces/provision.ts`                                     |
-| Sweeping signup workspaces nobody joined | `lib/app/workspaces/sweep.ts`, registered in `lib/app/jobs.ts`                                  |
-| Creating a team workspace (t-8)          | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`                                      |
-| Switching workspace                      | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot                        |
-| Members and invitations                  | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)                           |
-| Inviting, account or not (t-9)           | `POST /api/v1/workspaces/[id]/invitations` → `lib/app/workspaces/invitations.ts`                |
-| Answering an invitation (t-9)            | `GET /api/v1/workspaces/invitations`, `POST …/invitations/[invitationId]/accept` and `/decline` |
+| Piece                                    | Where                                                                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A workspace of one's own at signup (t-7) | `lib/app/signup-org.ts` → `lib/app/workspaces/provision.ts`                                                                                         |
+| Sweeping signup workspaces nobody joined | `lib/app/workspaces/sweep.ts`, registered in `lib/app/jobs.ts`                                                                                      |
+| Creating a team workspace (t-8)          | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`                                                                                          |
+| Switching workspace                      | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot                                                                            |
+| Members and invitations                  | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)                                                                               |
+| Inviting, account or not (t-9)           | `POST /api/v1/workspaces/[id]/invitations` → `lib/app/workspaces/invitations.ts`                                                                    |
+| Answering an invitation (t-9)            | `GET /api/v1/workspaces/invitations`, `POST …/invitations/[invitationId]/accept` and `/decline`                                                     |
+| The app's own settings (`settings.app`)  | `lib/app/workspaces/app-settings.ts`, the one writer of that key; the retention window's route is in [`assessments.md`](./assessments.md#retention) |
 
 ## What every new workspace gets
 
