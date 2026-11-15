@@ -92,6 +92,20 @@ Not ported here: `rewritePrompt`, `calibrate` and `toApi` (see the porting map, 
 - **Limits.** Each request carries interim `maxTokens` and timeout hints for its shape
   (`JUDGE_LIMITS`), under its agent's ceiling ([`judges.md`](./judges.md)). k3 measures
   them.
+- **The editor's summary** (`editor.ts`, t-25). `buildEditorRequest(text, ctx, result)`
+  shows the editor the assembled result (scores, each judge's summary, the
+  recommendations, strengths and red flags, fenced as `<assessment>` since its quotes
+  are the writer's text) with the audience and the fenced text.
+  Recommendations carry no id in the result, and giving them one would change
+  `assemble()`'s baseline, so the request names each by position: `rec_1` is
+  `result.recommendations[0]`, and the reply's schema holds `recommendation` to those
+  ids. `validateEditorReply(reply, result)` drops a change naming an unknown, repeated
+  or fourth recommendation, and records fewer changes than the result supports as
+  `missing`, and drops a change or "works" entry past 600 characters as `malformed`.
+  It refuses a reply whole when it has no verdict (or one past 1,200 characters) or
+  lacks a list, or when
+  every change was dropped while there were recommendations to name. The prompt is
+  versioned with the code until a model version carries an editor brief.
 
 ## Where it differs from the prototype
 

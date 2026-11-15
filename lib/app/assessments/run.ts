@@ -2,7 +2,13 @@
  * Run a stored assessment under a lease (t-22, app-plan §8.2).
  *
  *   claim ─▶ quick scan ─▶ missing judges (≤ 4 in flight, each JudgeRun saved
- *   as it lands) ─▶ assemble ─▶ COMPLETED | PARTIAL | FAILED
+ *   as it lands) ─▶ assemble ─▶ editor's summary ─▶ COMPLETED | PARTIAL | FAILED
+ *
+ * **The editor** (`editor.ts`, t-25) summarises the assembled result for a run
+ * of two judges or more, and its record is stored on the result as `editor`:
+ * the summary, or that there is none and why. Its failure never changes the
+ * status. A run re-driven after the editor answered (the final write failing)
+ * asks it again: there is no row to reuse, and the case is rare.
  *
  * **The lease.** A run claims the assessment by writing a fresh `leaseToken`
  * and a `leaseExpiresAt` {@link LEASE_MS} ahead, and renews it every
@@ -25,7 +31,8 @@
  *
  * **Cost.** Each judge's spend is added to the assessment's `costUsd` in the
  * transaction that saves it, so the total holds however the run ends:
- * completed, cancelled, or given up on.
+ * completed, cancelled, or given up on. The editor's is added as it lands,
+ * under the same guard.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
  * assessment back to the queue under the same attempt count, so the recovery
@@ -55,6 +62,7 @@ import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { engineForVersion } from '@/lib/app/assessments/engine';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { runJudges, type LandedJudge } from '@/lib/app/assessments/fan-out';
+import { editorCostUsd, runEditor, withEditor } from '@/lib/app/assessments/editor';
 import {
   LEASE_MS,
   LEASE_RENEW_MS,
@@ -337,6 +345,32 @@ async function drive(
   } catch (err) {
     return await notScorable(row.id, token, err);
   }
+
+  // The editor's summary (t-25). Its failure is recorded on the result and
+  // leaves the status the judges' alone.
+  const editor = await runEditor({
+    engine,
+    frameworkVersion: label,
+    text,
+    ctx: row.context,
+    result,
+    judges: row.judges,
+    answered: Object.keys(outputs).length,
+    assessmentId: row.id,
+    userId: row.createdByUserId,
+  });
+  // Already billed, so a failed write is logged, not thrown: a throw would
+  // hand the run back, and its re-drive would pay for the editor again.
+  try {
+    await addCost(row.id, token, editorCostUsd(editor));
+  } catch (err) {
+    logger.error('Could not add the editor’s cost to the assessment', err, {
+      assessmentId: row.id,
+      costUsd: editorCostUsd(editor),
+    });
+  }
+  result = withEditor(result, editor);
+
   const status = failures > 0 ? 'PARTIAL' : 'COMPLETED';
   const written = await finish(row.id, token, {
     status,
@@ -419,6 +453,18 @@ async function saveJudgeRun(
       update: data,
     });
     return true;
+  });
+}
+
+/**
+ * Add a spend that is not a judge's (the editor's) to the assessment's cost,
+ * while the run still holds it, running or cancelled, as `saveJudgeRun` does.
+ */
+async function addCost(assessmentId: string, token: string, usd: number): Promise<void> {
+  if (usd === 0) return;
+  await prisma.assessment.updateMany({
+    where: { id: assessmentId, leaseToken: token, status: { in: ['RUNNING', 'CANCELLED'] } },
+    data: { costUsd: { increment: usd } },
   });
 }
 

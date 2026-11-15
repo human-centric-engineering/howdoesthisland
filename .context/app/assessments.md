@@ -108,6 +108,22 @@ from either of the first two.
 - **Privacy.** The run is one privacy scope (`assessment:<id>`), and each
   judge's call sits in its agent's scope inside it (`runJudge`), so each
   agent's privacy mode applies to its call.
+- **The editor's summary** (`editor.ts`, t-25). Once the result is assembled,
+  a run that asked for two judges or more, at least one of which answered
+  and was merged (a result still in `quick` mode is skipped as
+  `no_judge_answered`), asks the editor what the writer should do first: a `verdict` of two or
+  three sentences, up to three `changes`, each naming one of the result's
+  recommendations by id (`rec_1` is `result.recommendations[0]`), and what
+  `works`. It goes through the judges' own call path under the `editor` role
+  ([`judges.md`](./judges.md#running-a-judge)). The result carries it as
+  `result.editor`: `{ status: 'written', summary, dropped, model, costUsd }`,
+  `{ status: 'skipped', reason }` (`too_few_judges`, `no_judge_answered`), or
+  `{ status: 'failed', errorCode, model, costUsd }`, where `errorCode` is a
+  judge call's code or `internal_error` for anything else the step threw (the
+  engine refusing to build the request, the agent read failing); the message
+  is logged, not stored. **A failed editor never changes the status**: the
+  assessment is `COMPLETED` (or `PARTIAL`, from its judges) without a summary. Its spend is added to `costUsd` as it lands, under
+  the same guard as a judge's. A `store: false` run asks no editor yet.
 
 The limits are constants in `limits.ts` until f-usage measures them.
 

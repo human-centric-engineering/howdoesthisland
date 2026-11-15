@@ -15,7 +15,8 @@
  * | `validJudgeOutput`, as post-validation       | `validate-reply.ts` |
  *
  * New here (t-18): each judge's strict reply schema (`judge-schemas.ts`), and
- * which judges a profile runs and the call each makes (`judges.ts`).
+ * which judges a profile runs and the call each makes (`judges.ts`). And
+ * (t-25) the editor's summary request and its validation (`editor.ts`).
  *
  * Not here: the rewrite prompt (f-rewrite), `calibrate` (f-calibration) and
  * `toApi` (f-assessments).
@@ -28,6 +29,10 @@
  */
 import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 import { assemble } from '@/lib/app/frameworks/howdoesthisland/engine/assemble';
+import {
+  buildEditorRequest,
+  validateEditorReply,
+} from '@/lib/app/frameworks/howdoesthisland/engine/editor';
 import { outputSchema } from '@/lib/app/frameworks/howdoesthisland/engine/judge-schemas';
 import {
   activeJudgeSlots,
@@ -92,5 +97,8 @@ export function createHowDoesThisLandEngine(
       buildJudgeRequest(m, slot, text, ctx, { ...options, projectContext }),
     outputSchema: (slot) => outputSchema(m, slot),
     validateJudgeReply: (slot, reply, text) => validateJudgeReply(m, slot, reply, text),
+    buildEditorRequest: (text, ctx, result, projectContext = null) =>
+      buildEditorRequest(m, text, ctx, result, { ...options, projectContext }),
+    validateEditorReply: (reply, result) => validateEditorReply(reply, result),
   };
 }
