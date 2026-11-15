@@ -131,7 +131,8 @@ describe('Report — names and fields the model or result lacks', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Untitled copy');
     expect(screen.getByText(/model not recorded/)).toBeInTheDocument();
     expect(screen.getByText(/did not run; its dimensions use the quick scan/)).toBeInTheDocument();
-    expect(screen.getByText(/persp_unknown/)).toBeInTheDocument();
+    // Once in the perspective scores chart, once on its card.
+    expect(screen.getAllByText(/persp_unknown/)).toHaveLength(2);
     expect(screen.getByText(/Duties · mostly/).textContent).not.toMatch(/fit/);
     expect(container.textContent).not.toMatch(/written from/);
     expect(container.textContent).not.toMatch(/undefined|null|NaN/);

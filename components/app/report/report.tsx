@@ -1,4 +1,8 @@
 import type { ReactNode } from 'react';
+import { ScalePositions } from '@/components/app/report/charts/scale-positions';
+import { ScoreBars } from '@/components/app/report/charts/score-bars';
+import { ShareVsTarget } from '@/components/app/report/charts/share-vs-target';
+import { sharesOf } from '@/components/app/report/charts/shares';
 import { MarkedUpCopy } from '@/components/app/report/marked-up-copy';
 import { DIMENSION_MAX, type ReportView } from '@/lib/app/reports/view';
 import { WORDS } from '@/lib/app/reports/words';
@@ -201,39 +205,36 @@ function Verdict({ view }: { view: ReportView }) {
 
 function HowItLands({ view }: { view: ReportView }) {
   const { lands } = view;
+  const shares = sharesOf(lands.appeals.map((a) => a.score));
   return (
     <div className="grid gap-6">
-      <table className="w-full text-left text-sm">
-        <caption className="sr-only">Appeal scores against the target mix</caption>
-        <thead className="font-mono text-xs text-(--hd-muted) uppercase">
-          <tr>
-            <th scope="col" className="py-2">
-              Appeal
-            </th>
-            <th scope="col" className="py-2">
-              Score
-            </th>
-            <th scope="col" className="py-2">
-              Weight in the target mix
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {lands.appeals.map((a) => (
-            <tr key={a.id} className="border-t align-top">
-              <th scope="row" className="py-3 pr-4 font-semibold">
-                <span style={{ color: APPEAL_COLOUR[a.id] }}>{a.name}</span>
-                <span className="block text-xs font-normal text-(--hd-muted)">{a.question}</span>
-              </th>
-              <td className="w-1/3 py-3 pr-4">
-                <span className="font-mono">{a.score}</span>
-                <Bar value={a.score} colour={APPEAL_COLOUR[a.id]} />
-              </td>
-              <td className="py-3 font-mono">{a.target}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="grid gap-8 md:grid-cols-2">
+        <ScoreBars
+          title="Appeal scores"
+          description="Each appeal out of 100."
+          max={100}
+          testId="chart-appeals"
+          rows={lands.appeals.map((a) => ({
+            id: a.id,
+            label: a.name,
+            sublabel: a.question,
+            score: a.score,
+            colour: APPEAL_COLOUR[a.id],
+          }))}
+        />
+        <ShareVsTarget
+          title="Balance against the target mix"
+          description="Each appeal's share of the four scores, against its weight in the target mix."
+          testId="chart-balance"
+          rows={lands.appeals.map((a, i) => ({
+            id: a.id,
+            label: a.name,
+            share: shares[i],
+            target: a.target,
+            colour: APPEAL_COLOUR[a.id],
+          }))}
+        />
+      </div>
       <p>
         <span className="font-mono text-xs text-(--hd-muted) uppercase">Balance index</span>{' '}
         <span className="font-mono">{lands.balanceIndex}</span>
@@ -360,28 +361,20 @@ function DutiesAndLenses({ view }: { view: ReportView }) {
             Duties · mostly {duties.primary}
             {duties.fit !== null ? ` · fit ${duties.fit}` : ''}
           </h3>
-          <table className="mt-3 w-full text-left text-sm">
-            <caption className="sr-only">Duty profile</caption>
-            <thead className="font-mono text-[0.65rem] text-(--hd-muted) uppercase">
-              <tr>
-                <th scope="col">Duty</th>
-                <th scope="col">Share</th>
-                <th scope="col">Target</th>
-              </tr>
-            </thead>
-            <tbody>
-              {duties.rows.map((d) => (
-                <tr key={d.id} className="border-t">
-                  <th scope="row" className="py-2 pr-3 font-semibold">
-                    {d.name}
-                    <span className="block text-xs font-normal text-(--hd-muted)">{d.verb}</span>
-                  </th>
-                  <td className="py-2 pr-3 font-mono">{d.share}%</td>
-                  <td className="py-2 font-mono">{d.target !== null ? `${d.target}%` : '–'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="mt-3">
+            <ShareVsTarget
+              title="Duty profile"
+              description="How the copy's work splits across the duties, against the target for this type of copy."
+              testId="chart-duties"
+              rows={duties.rows.map((d) => ({
+                id: d.id,
+                label: d.name,
+                sublabel: d.verb,
+                share: d.share,
+                target: d.target,
+              }))}
+            />
+          </div>
         </div>
       ) : null}
       {lenses.length > 0 ? (
@@ -417,6 +410,16 @@ function Perspectives({ view }: { view: ReportView }) {
       {view.summaries.influence ? (
         <p className="md:col-span-2">{view.summaries.influence}</p>
       ) : null}
+      <div className="md:col-span-2">
+        <ScoreBars
+          title="Perspective scores"
+          description="Each perspective out of 4."
+          max={4}
+          unit="/4"
+          testId="chart-perspectives"
+          rows={view.perspectives.map((p) => ({ id: p.id, label: p.name, score: p.score }))}
+        />
+      </div>
       {view.perspectives.map((p) => (
         <div key={p.id} className="break-inside-avoid">
           <h3 className="flex justify-between font-semibold">
@@ -467,30 +470,7 @@ function Culture({ culture }: { culture: NonNullable<ReportView['culture']> }) {
         Read as for <b>{culture.reader}</b> ({culture.style})
         {culture.writer ? `, written from ${culture.writer}` : ''}.
       </p>
-      <table className="w-full text-left text-sm">
-        <caption className="sr-only">Culture scales: the copy against the reader</caption>
-        <thead className="font-mono text-[0.65rem] text-(--hd-muted) uppercase">
-          <tr>
-            <th scope="col">Scale</th>
-            <th scope="col">The copy</th>
-            <th scope="col">The reader</th>
-          </tr>
-        </thead>
-        <tbody>
-          {culture.scales.map((s) => (
-            <tr key={s.id} className="border-t align-top">
-              <th scope="row" className="py-2 pr-3 font-semibold">
-                {s.name}
-                <span className="block text-xs font-normal text-(--hd-muted)">
-                  {s.low} ↔ {s.high}
-                </span>
-              </th>
-              <td className="py-2 pr-3 font-mono">{Math.round(s.position * 100)}</td>
-              <td className="py-2 font-mono">{Math.round(s.target * 100)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ScalePositions rows={culture.scales} />
     </div>
   );
 }
