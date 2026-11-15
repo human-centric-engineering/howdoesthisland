@@ -249,6 +249,7 @@ export interface AgentCall<Output> {
   frameworkVersion: string;
   assessmentId?: string;
   ephemeral?: boolean;
+  /** Who asked, for the cost row: a real `User.id`, as on {@link RunJudgeInput.userId}. */
   userId?: string | null;
 }
 
@@ -386,7 +387,7 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
   // `logCost` is called with its FK columns written out, so the platform's
   // attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
   // `agent.id` is the row just loaded, and `userId` is a real `User.id` or
-  // nothing (see `RunJudgeInput.userId`). It never rejects: a failed write is
+  // nothing (see `AgentCall.userId`). It never rejects: a failed write is
   // logged there and answers `null`.
   const rows = await Promise.all(
     [...byTier(billed)].map(([tier, attempts]) => {

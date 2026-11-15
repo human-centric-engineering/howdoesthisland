@@ -8,7 +8,8 @@
  * the service, intake for files, enqueue, the job (claim, lease, fan-out,
  * saving each judge), the events stream and the per-user sub-cap. Replaced:
  * Prisma by the job's stateful fake (`fake-db.ts`, so assertions read the
- * rows left behind), `runJudge` (scripted per slot), the catalogue of
+ * rows left behind), `runJudge` (scripted per slot), `runEditor` (skipping;
+ * its own tests are `editor.test.ts`), the catalogue of
  * framework versions, `fetchPage`, and the engine's `assemble()` (a stub
  * reporting which judges it was given; the rest of the engine is the real
  * 0.5.1 one, so contexts and profiles are checked for real).
@@ -33,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   membership: vi.fn(),
   apiKey: vi.fn(),
   runJudge: vi.fn(),
+  runEditor: vi.fn(),
   fetchPage: vi.fn(),
   engineForVersion: vi.fn(),
 }));
@@ -59,6 +61,10 @@ vi.mock('@/lib/orchestration/maintenance/idle-gate', () => ({ noteMaintenanceWor
 vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/judges/run-judge')>()),
   runJudge: mocks.runJudge,
+}));
+vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/assessments/editor')>()),
+  runEditor: mocks.runEditor,
 }));
 vi.mock('@/lib/app/intake/fetch-page', () => ({ fetchPage: mocks.fetchPage }));
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
@@ -257,6 +263,7 @@ beforeEach(() => {
       : null
   );
   mocks.runJudge.mockImplementation(async (slot: string) => reply(slot));
+  mocks.runEditor.mockResolvedValue({ status: 'skipped', reason: 'too_few_judges' });
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   aiAssessmentLimiter.reset(`user:${BOB}`);
   signedIn(ALICE, WS_A);
