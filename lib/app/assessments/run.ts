@@ -84,6 +84,14 @@ export type RunOutcome =
 /** The two numbers every framework's result carries for listing (§9 `overall`, `band`). */
 const resultScores = z.object({ scores: z.object({ overall: z.number(), band: z.string() }) });
 
+/** A result's `overall` and `band`, or nulls when it carries none. */
+export function scoresOf(result: unknown): { overall: number | null; band: string | null } {
+  const parsed = resultScores.safeParse(result);
+  return parsed.success
+    ? { overall: parsed.data.scores.overall, band: parsed.data.scores.band }
+    : { overall: null, band: null };
+}
+
 /**
  * Failures a re-drive runs the judge again for: each is about the moment
  * (a rate-limit window, a provider outage), not the judge or the text.
@@ -240,7 +248,7 @@ type StoredJudgeRun = {
 const storedTokens = z.object({ input: z.number(), output: z.number() });
 
 /** Thrown by the engine's own scoring: the same text would throw again. */
-const NOT_SCORABLE = 'The framework could not score this text.';
+export const NOT_SCORABLE = 'The framework could not score this text.';
 
 async function drive(
   row: AssessmentRow,
@@ -329,14 +337,12 @@ async function drive(
   } catch (err) {
     return await notScorable(row.id, token, err);
   }
-  const scores = resultScores.safeParse(result);
   const status = failures > 0 ? 'PARTIAL' : 'COMPLETED';
   const written = await finish(row.id, token, {
     status,
     // The engine's own output, plain data by construction.
     result: result as Prisma.InputJsonValue,
-    overall: scores.success ? scores.data.scores.overall : null,
-    band: scores.success ? scores.data.scores.band : null,
+    ...scoresOf(result),
     error: null,
   });
   if (!written) return await lostTo(row.id);

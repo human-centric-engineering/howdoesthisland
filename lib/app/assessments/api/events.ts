@@ -18,6 +18,7 @@
  *   stream ends, and a client opens it again to carry on.
  */
 import { prisma } from '@/lib/db/client';
+import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { EVENTS_MAX_MS, POLL_MS } from '@/lib/app/assessments/limits';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
@@ -68,7 +69,23 @@ export function assessmentEvents(
 ): AsyncGenerator<AssessmentEvent> {
   // Read here, in the request's tenant context. A generator's body runs only
   // when the stream first pulls it, so the org is not read there.
-  return pollEvents(id, requireOrgId(), options);
+  return loggingErrors(id, pollEvents(id, requireOrgId(), options));
+}
+
+/**
+ * The stream's own errors, logged here: `sseResponse` answers a source that
+ * throws with a generic `stream_error` frame and leaves the logging to it.
+ */
+async function* loggingErrors(
+  id: string,
+  events: AsyncGenerator<AssessmentEvent>
+): AsyncGenerator<AssessmentEvent> {
+  try {
+    yield* events;
+  } catch (err) {
+    logger.error('Assessment events stream failed', err, { assessmentId: id });
+    throw err;
+  }
 }
 
 async function* pollEvents(

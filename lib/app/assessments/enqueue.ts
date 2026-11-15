@@ -20,6 +20,7 @@ import type { Prisma } from '@prisma/client';
 import { engineForVersion } from '@/lib/app/assessments/engine';
 import { AssessmentInputError } from '@/lib/app/assessments/errors';
 import { assessableText } from '@/lib/app/assessments/text';
+import { countWords } from '@/lib/app/intake/extract-text';
 import { runAssessment } from '@/lib/app/assessments/run';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { prisma } from '@/lib/db/client';
@@ -88,7 +89,7 @@ export async function enqueueAssessment(
         fileName: input.content.fileName ?? null,
         text,
         textSha256,
-        wordCount: text.split(/\s+/).filter(Boolean).length,
+        wordCount: countWords(text),
         createdByUserId: userId,
       },
       select: { id: true },

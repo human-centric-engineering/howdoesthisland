@@ -26,7 +26,13 @@ import { fetchPage } from '@/lib/app/intake/fetch-page';
 import { runJudges } from '@/lib/app/assessments/fan-out';
 import { AssessmentInputError, type AssessmentInputErrorCode } from '@/lib/app/assessments/errors';
 import { enqueueAssessment, startAssessmentInBackground } from '@/lib/app/assessments/enqueue';
-import { beginAssessment, cancelAssessment } from '@/lib/app/assessments/run';
+import {
+  beginAssessment,
+  cancelAssessment,
+  NOT_SCORABLE,
+  scoresOf,
+} from '@/lib/app/assessments/run';
+import { logger } from '@/lib/logging';
 import { assessableText } from '@/lib/app/assessments/text';
 import { POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
@@ -92,16 +98,6 @@ function storedContext(ctx: unknown): z.infer<typeof jsonObject> {
   return jsonObject.parse(JSON.parse(JSON.stringify(ctx)));
 }
 
-/** The two numbers every framework's result carries for listing (§9 `overall`, `band`). */
-const resultScores = z.object({ scores: z.object({ overall: z.number(), band: z.string() }) });
-
-export function scoresOf(result: unknown): { overall: number | null; band: string | null } {
-  const parsed = resultScores.safeParse(result);
-  return parsed.success
-    ? { overall: parsed.data.scores.overall, band: parsed.data.scores.band }
-    : { overall: null, band: null };
-}
-
 export interface Caller {
   /** A real `User.id`. */
   userId: string;
@@ -162,7 +158,7 @@ export async function createAssessment(
     return {
       kind: 'ephemeral',
       assessment: await refusingAsApi(() =>
-        runEphemeral(resolved, source.text, ctx, profile, judges, caller)
+        runEphemeral(resolved, source, ctx, profile, judges, caller)
       ),
     };
   }
@@ -231,15 +227,16 @@ async function waitForRun(assessmentId: string, boundMs: number): Promise<void> 
 /** The quick scan and the judges with no rows: the result, and the cost rows alone. */
 async function runEphemeral(
   resolved: VersionToScore,
-  rawText: string,
+  source: Source,
   ctx: unknown,
   profile: JudgeProfile,
   judges: readonly string[],
   caller: Caller
 ): Promise<EphemeralAssessment> {
-  const text = assessableText(rawText);
+  const text = assessableText(source.text);
   const { engine, label } = resolved;
-  const quick = engine.quickScan(text, ctx);
+  // Nothing has been spent yet: the same text would throw again, so refuse it.
+  const quick = notScorable(() => engine.quickScan(text, ctx), 0);
   const fan = await runJudges({
     engine,
     frameworkVersion: label,
@@ -265,7 +262,10 @@ async function runEphemeral(
       errorCode: landed.ok ? null : landed.code,
     });
   }
-  const result = engine.assemble(text, ctx, quick, outputs, null);
+  const result = notScorable(
+    () => engine.assemble(text, ctx, quick, outputs, source.sourceUrl),
+    costUsd
+  );
   const failed = [...runs.values()].some((r) => r.status === 'failed');
   return {
     stored: false,
@@ -282,6 +282,20 @@ async function runEphemeral(
   };
 }
 
+/**
+ * The engine's own scoring, or `NOT_SCORABLE` (422) when it throws: the
+ * stored run's `FAILED` (`run.ts`), with no row to record it on. `costUsd`
+ * is what the judges had already spent.
+ */
+function notScorable<T>(score: () => T, costUsd: number): T {
+  try {
+    return score();
+  } catch (err) {
+    logger.error('Ephemeral assessment could not be scored', err, { costUsd });
+    throw new APIError(NOT_SCORABLE, 'NOT_SCORABLE', 422, { costUsd });
+  }
+}
+
 /** One of this workspace's assessments, or 404. */
 export async function getAssessment(id: string): Promise<AssessmentDetail> {
   const assessment = await readAssessment(id);
@@ -294,11 +308,13 @@ export async function getAssessment(id: string): Promise<AssessmentDetail> {
  * are saved, since their cost is spent; no further judge starts (`run.ts`).
  */
 export async function cancel(id: string): Promise<AssessmentDetail> {
-  const current = await getAssessment(id);
-  if (!(await cancelAssessment(id))) {
-    throw new APIError(`This assessment is already ${current.status}.`, 'ASSESSMENT_FINAL', 409);
+  const cancelled = await cancelAssessment(id);
+  // Read after the attempt, so a refusal names the state that refused it.
+  const assessment = await getAssessment(id);
+  if (!cancelled) {
+    throw new APIError(`This assessment is already ${assessment.status}.`, 'ASSESSMENT_FINAL', 409);
   }
-  return await getAssessment(id);
+  return assessment;
 }
 
 /**

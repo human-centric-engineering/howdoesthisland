@@ -25,23 +25,28 @@
  * - 429 `RATE_LIMIT_EXCEEDED` — over the per-IP cap.
  */
 import type { NextRequest } from 'next/server';
-import { handleAPIError } from '@/lib/api/errors';
+import { handleAPIError, ValidationError } from '@/lib/api/errors';
 import { successResponse } from '@/lib/api/responses';
-import { validateRequestBody } from '@/lib/api/validation';
 import { refuseAccountOnlyInput, runQuickScan } from '@/lib/app/assessments/api/scan';
 import { scanRequestSchema } from '@/lib/app/assessments/api/validations';
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
-    // A body that is not JSON is the schema's to answer, below.
-    refuseAccountOnlyInput(
-      await request
-        .clone()
-        .json()
-        .catch(() => null)
-    );
-    const body = await validateRequestBody(request, scanRequestSchema);
-    return successResponse(await runQuickScan(body));
+    // Read once: the account-only check and the schema both use it.
+    const raw: unknown = await request.json().catch(() => {
+      throw new ValidationError('Invalid JSON in request body');
+    });
+    refuseAccountOnlyInput(raw);
+    const parsed = scanRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid request body', {
+        errors: parsed.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      });
+    }
+    return successResponse(await runQuickScan(parsed.data));
   } catch (error) {
     return handleAPIError(error);
   }

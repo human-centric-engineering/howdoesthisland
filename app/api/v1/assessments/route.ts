@@ -33,6 +33,9 @@
  * - 422 `TEXT_TOO_LONG` — over 40,000 characters.
  * - 422 `TOO_MANY_PAGES`, `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE` — the file.
  * - 422 `URL_NOT_ALLOWED`, `FETCH_FAILED`, `FETCH_TIMEOUT` — the page.
+ * - 422 `NOT_SCORABLE` — `store: false` only: the framework could not score
+ *   the text (a stored run records it as `failed`). `details.costUsd` is what
+ *   the judges had already spent.
  * - 429 `RATE_LIMIT_EXCEEDED` — over `AI_ASSESSMENTS_PER_MINUTE` assessments
  *   that call judges, per user (a `quick` profile is not counted).
  *

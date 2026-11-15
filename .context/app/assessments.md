@@ -161,7 +161,10 @@ Each route's docblock lists its error codes. A few rules hold across them:
 - **`store: false`** is synchronous only (`wait: false` with it is a 400). It
   runs the quick scan and `runJudges` with no rows, so no `Content`,
   `Assessment` or `JudgeRun` is written; only the judges' cost rows, marked
-  `ephemeral`. The answer has `stored: false` and no id.
+  `ephemeral`. The answer has `stored: false` and no id. A text the
+  framework cannot score (its quick scan or `assemble()` throwing) is 422
+  `NOT_SCORABLE`, with what the judges had spent in `details.costUsd`: the
+  stored run's `failed`, with no row to record it on.
 - **Another workspace's id** is 404, not 403, on every `{id}` route: every
   read names the org the guard entered, so an id is not confirmed to an
   outsider. Within a workspace, any member may read, cancel or delete.

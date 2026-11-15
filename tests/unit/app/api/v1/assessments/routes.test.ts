@@ -419,6 +419,55 @@ describe('POST /api/v1/assessments — store: false', () => {
     }
   });
 
+  it('scores a fetched page with its URL, as the stored run does', async () => {
+    mocks.fetchPage.mockResolvedValue({
+      text: TEXT,
+      title: 'Pricing',
+      url: 'https://example.com/pricing',
+      wordCount: 14,
+      format: 'html',
+      warnings: [],
+    });
+    const res = await post({
+      source: { url: 'https://example.com/p' },
+      judges: TWO,
+      store: false,
+    });
+    expect(res.status).toBe(200);
+    expect(engine.assemble).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Object),
+      'https://example.com/pricing'
+    );
+  });
+
+  it('422 NOT_SCORABLE when assemble throws, saying what the judges had spent', async () => {
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('no score');
+    });
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false });
+    expect(res.status).toBe(422);
+    const body = await json(res);
+    expect(body.error).toMatchObject({ code: 'NOT_SCORABLE', details: { costUsd: 0.02 } });
+    expect(log.error).toHaveBeenCalledWith(
+      'Ephemeral assessment could not be scored',
+      expect.any(Error),
+      { costUsd: 0.02 }
+    );
+  });
+
+  it('422 NOT_SCORABLE when the quick scan throws, before any judge is called', async () => {
+    const quickScan = vi.spyOn(engine, 'quickScan').mockImplementationOnce(() => {
+      throw new Error('no scan');
+    });
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false });
+    expect(await code(res)).toEqual({ status: 422, code: 'NOT_SCORABLE' });
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+    quickScan.mockRestore();
+  });
+
   it('is refused with wait: false, since it can only be waited for', async () => {
     const res = await post({ source: { text: TEXT }, store: false, wait: false });
     expect(await code(res)).toEqual({ status: 400, code: 'VALIDATION_ERROR' });
@@ -629,6 +678,18 @@ describe('GET /api/v1/assessments/{id}/events', () => {
     ]);
   });
 
+  it('logs a read that fails mid-stream, and ends it with the error frame', async () => {
+    const a = fake.seed({ status: 'RUNNING' });
+    const received = stream(String(a.id)).then((res) => res.text());
+    await settle();
+    fake.db.assessment.findUnique.mockRejectedValueOnce(new Error('db down'));
+    const text = await received;
+    expect(text).toContain('stream_error');
+    expect(log.error).toHaveBeenCalledWith('Assessment events stream failed', expect.any(Error), {
+      assessmentId: a.id,
+    });
+  });
+
   it('ends with assessment_gone when the assessment is deleted while it is followed', async () => {
     const a = fake.seed({ status: 'RUNNING' });
     const received = frames(await stream(String(a.id)));
@@ -649,11 +710,13 @@ describe('POST /api/v1/assessments/{id}/cancel', () => {
     expect(mocks.runJudge).not.toHaveBeenCalled();
   });
 
-  it('409 ASSESSMENT_FINAL for one already finished', async () => {
+  it('409 ASSESSMENT_FINAL for one already finished, naming its final state', async () => {
     const a = fake.seed({ status: 'COMPLETED' });
-    expect(await code(await stop(String(a.id)))).toEqual({
-      status: 409,
+    const res = await stop(String(a.id));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
       code: 'ASSESSMENT_FINAL',
+      message: 'This assessment is already completed.',
     });
   });
 
