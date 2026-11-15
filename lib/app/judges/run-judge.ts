@@ -1,7 +1,9 @@
 /**
- * Run one judge on its workspace's agent (app-plan j3, §8.3, D17).
+ * Run one judge on its workspace's agent (app-plan j3, §8.3, D17), and the
+ * editor on its (t-25), through one path: {@link callAgent}.
  *
- * The engine builds the call (`buildJudgeRequest`, t-18); this makes it. The
+ * The engine builds the call (`buildJudgeRequest`, t-18; `buildEditorRequest`,
+ * t-25); this makes it. The
  * call goes to the provider directly with the agent's binding, not through
  * chat, so the reply can be held to a strict schema. Going direct skips what
  * the chat routes check, so this applies the agent's own limits itself:
@@ -28,7 +30,8 @@
  *    content-filter finish) gets none.
  * 5. **Cost**: one `AiCostLog` row per run (one per service tier, in the
  *    rare run whose attempts were served at two), with `{ judge, frameworkVersion,
- *    assessmentId? | ephemeral? }` in its metadata, counting every attempt the provider
+ *    assessmentId? | ephemeral? }` in its metadata (`editor: 'summary'` in
+ *    place of `judge` for the editor), counting every attempt the provider
  *    billed: the retry, and an attempt that failed, as well as the one that
  *    answered. The runner sums both attempts only when it succeeds, so the
  *    usage is read off the provider's responses here instead.
@@ -44,9 +47,9 @@
  *
  * Tenancy posture: `judgeLimiter` is keyed by agent id, unique across orgs.
  */
-import type { FrameworkEngine, JudgeDrop } from '@/lib/app/frameworks/engine';
+import type { FrameworkEngine, JudgeDrop, JudgeRequest } from '@/lib/app/frameworks/engine';
 import { judgeAgentSlug } from '@/lib/app/judges/agents';
-import { approvedEntry, roleOfSlot } from '@/lib/app/judges/approved-models';
+import { approvedEntry, roleOfSlot, type JudgeRole } from '@/lib/app/judges/approved-models';
 import { prisma } from '@/lib/db/client';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
@@ -182,7 +185,8 @@ const RETRY_MESSAGE =
   'Your previous reply was not a valid JSON object in the shape the brief gives. Reply again with exactly one JSON object in that shape: no prose around it and no code fences.';
 
 /**
- * Run the judge for `slot` on the current workspace's agent.
+ * Run the judge for `slot` on the current workspace's agent, through
+ * {@link callAgent}.
  *
  * Every outcome the run decides is a {@link JudgeRunError} with a `code`, and
  * the cost of every billed attempt is logged first, whatever the outcome. Two
@@ -194,10 +198,69 @@ export async function runJudge<Ctx, Output>(
   slot: string,
   input: RunJudgeInput<Ctx, Output>
 ): Promise<JudgeReply<Output>> {
+  const reply = await callAgent<Output>({
+    agentSlug: judgeAgentSlug(slot),
+    role: roleOfSlot(slot),
+    name: `${slot} judge`,
+    target: slot,
+    // A slot this engine cannot run (culture's, with the switch off) is the
+    // caller's error, thrown by the engine before anything is counted or spent.
+    request: () =>
+      input.engine.buildJudgeRequest(slot, input.text, input.ctx, input.projectContext ?? null),
+    validate: (reply) => {
+      const checked = input.engine.validateJudgeReply(slot, reply, input.text);
+      return checked.ok ? { output: checked.output, drops: checked.drops } : null;
+    },
+    costMetadata: { judge: slot },
+    phase: 'judge',
+    frameworkVersion: input.frameworkVersion,
+    ...(input.assessmentId !== undefined ? { assessmentId: input.assessmentId } : {}),
+    ...(input.ephemeral ? { ephemeral: true } : {}),
+    ...(input.userId !== undefined ? { userId: input.userId } : {}),
+  });
+  return { slot, ...reply };
+}
+
+/**
+ * One structured call to one of the app's agents: a judge, or the editor
+ * (t-25). The checks in this file's header (binding, approved list, budget,
+ * rate limit, privacy scope, cost rows) are made here, once, for both.
+ */
+export interface AgentCall<Output> {
+  /** The agent's slug in the current workspace. */
+  agentSlug: string;
+  /** Whose approved list the bound model must be on. */
+  role: JudgeRole;
+  /** How a refusal names the agent: `judge_ethos judge`, `editor`. */
+  name: string;
+  /** What a missing or switched-off agent is named for: the slot, `the editor`. */
+  target: string;
+  /**
+   * The call, built once the agent is known to exist and be on, and before
+   * anything is spent. A throw here is the caller's error and propagates.
+   */
+  request: () => Omit<JudgeRequest, 'slot'>;
+  /** The parsed reply checked, or `null` to refuse it (the one retry follows). */
+  validate: (reply: unknown) => { output: Output; drops: JudgeDrop[] } | null;
+  /** What the cost row says this call was, beside the run's own fields. */
+  costMetadata: Record<string, string | boolean>;
+  /** The structured-completion span's phase. */
+  phase: string;
+  frameworkVersion: string;
+  assessmentId?: string;
+  ephemeral?: boolean;
+  userId?: string | null;
+}
+
+/** An agent's checked reply, with what it cost. */
+export type AgentReply<Output> = Omit<JudgeReply<Output>, 'slot'>;
+
+/** Make one {@link AgentCall}. Fails as {@link runJudge} does. */
+export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentReply<Output>> {
   const orgId = requireOrgId();
-  const slug = judgeAgentSlug(slot);
+  const { name, target } = call;
   const agent = await prisma.aiAgent.findUnique({
-    where: { orgId_slug: { orgId, slug } },
+    where: { orgId_slug: { orgId, slug: call.agentSlug } },
     select: {
       id: true,
       isActive: true,
@@ -210,20 +273,13 @@ export async function runJudge<Ctx, Output>(
     },
   });
   if (!agent) {
-    throw new JudgeRunError('agent_not_found', `This workspace has no agent for ${slot}.`);
+    throw new JudgeRunError('agent_not_found', `This workspace has no agent for ${target}.`);
   }
   if (!agent.isActive) {
-    throw new JudgeRunError('agent_inactive', `The agent for ${slot} is switched off.`);
+    throw new JudgeRunError('agent_inactive', `The agent for ${target} is switched off.`);
   }
 
-  // A slot this engine cannot run (culture's, with the switch off) is the
-  // caller's error, thrown by the engine before anything is counted or spent.
-  const request = input.engine.buildJudgeRequest(
-    slot,
-    input.text,
-    input.ctx,
-    input.projectContext ?? null
-  );
+  const request = call.request();
 
   let binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
   let isLocal: boolean;
@@ -234,31 +290,31 @@ export async function runJudge<Ctx, Output>(
     );
     isLocal = await isLocalProvider(binding.providerSlug);
   } catch (err) {
-    throw toJudgeRunError(slot, err);
+    throw toJudgeRunError(name, err);
   }
 
   // Only a model on the role's list is sent, with that entry's settings, so
   // no call asks a model for more than it can produce.
-  const approved = approvedEntry(roleOfSlot(slot), {
+  const approved = approvedEntry(call.role, {
     provider: binding.providerSlug,
     model: binding.model,
   });
   if (!approved) {
     throw new JudgeRunError(
       'model_not_approved',
-      `The ${slot} judge is bound to "${binding.model}", which is not approved for it.`
+      `The ${name} is bound to "${binding.model}", which is not approved for it.`
     );
   }
 
-  // A reached cap stops paid calls, not free ones, as in the chat handler: a
-  // judge bound to a local model still runs. (The org and install caps are
+  // A reached cap stops paid calls, not free ones, as in the chat handler: an
+  // agent bound to a local model still runs. (The org and install caps are
   // also enforced at the provider gate, which exempts local providers too.)
   const budget = await withAgentBudgetLock(agent.id, () => checkBudget(agent.id));
   if (!budget.withinBudget && !isLocal) {
     // Which cap, in the chat handler's order: the install's, then the
     // workspace's, then the agent's own.
     const cap = budget.globalCapExceeded ? 'global' : budget.orgCapExceeded ? 'org' : 'agent';
-    throw new JudgeRunError('over_budget', `The ${slot} judge is over ${CAP_NAMES[cap]}.`, {
+    throw new JudgeRunError('over_budget', `The ${name} is over ${CAP_NAMES[cap]}.`, {
       cap,
     });
   }
@@ -266,7 +322,7 @@ export async function runJudge<Ctx, Output>(
   if (agent.rateLimitRpm !== null) {
     const limit = judgeLimiter.check(agent.id, agent.rateLimitRpm);
     if (!limit.success) {
-      throw new JudgeRunError('rate_limited', `The ${slot} judge is over its rate limit.`, {
+      throw new JudgeRunError('rate_limited', `The ${name} is over its rate limit.`, {
         resetAt: limit.reset,
       });
     }
@@ -283,7 +339,7 @@ export async function runJudge<Ctx, Output>(
     const provider = meteredProvider(
       await getProvider(binding.providerSlug, primaryCallContext(binding.provenance)),
       billed,
-      slot
+      name
     );
     // In the agent's privacy scope (Sunrise 0.19.0), so the privacy stage
     // applies this agent's mode, and the workspace's minimum, to the call and
@@ -301,13 +357,11 @@ export async function runJudge<Ctx, Output>(
         ],
         parse: (raw) => {
           const reply = parseJson(raw);
-          if (reply === undefined) return null;
-          const checked = input.engine.validateJudgeReply(slot, reply, input.text);
-          return checked.ok ? { output: checked.output, drops: checked.drops } : null;
+          return reply === undefined ? null : call.validate(reply);
         },
         retryUserMessage: RETRY_MESSAGE,
         onFinalFailure: () =>
-          new JudgeRunError('malformed', `The ${slot} judge's reply was not usable, twice.`),
+          new JudgeRunError('malformed', `The ${name}'s reply was not usable, twice.`),
         responseSchema: request.schema,
         responseSchemaName: request.schemaName,
         responseSchemaStrict: true,
@@ -317,12 +371,12 @@ export async function runJudge<Ctx, Output>(
         ...(approved.settings.reasoningEffort
           ? { reasoningEffort: approved.settings.reasoningEffort }
           : {}),
-        phase: 'judge',
+        phase: call.phase,
       })
     );
     outcome = { value: result.value, finishReason: result.finishReason };
   } catch (err) {
-    outcome = { error: toJudgeRunError(slot, err) };
+    outcome = { error: toJudgeRunError(name, err) };
   }
 
   // One row per service tier the attempts were served at: a row is priced at
@@ -339,7 +393,7 @@ export async function runJudge<Ctx, Output>(
       const usage = sumUsage(attempts);
       return logCost({
         agentId: agent.id,
-        userId: input.userId ?? null,
+        userId: call.userId ?? null,
         provider: binding.providerSlug,
         model: binding.model,
         inputTokens: usage.inputTokens,
@@ -350,10 +404,10 @@ export async function runJudge<Ctx, Output>(
         operation: CostOperation.CHAT,
         isLocal,
         metadata: {
-          judge: slot,
-          frameworkVersion: input.frameworkVersion,
-          ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
-          ...(input.ephemeral ? { ephemeral: true } : {}),
+          ...call.costMetadata,
+          frameworkVersion: call.frameworkVersion,
+          ...(call.assessmentId ? { assessmentId: call.assessmentId } : {}),
+          ...(call.ephemeral ? { ephemeral: true } : {}),
           attempts: attempts.length,
           ...('error' in outcome ? { error: outcome.error.code } : {}),
         },
@@ -375,7 +429,6 @@ export async function runJudge<Ctx, Output>(
     throw outcome.error;
   }
   return {
-    slot,
     output: outcome.value.output,
     drops: outcome.value.drops,
     ...spend,
@@ -391,7 +444,7 @@ type Provider = Awaited<ReturnType<typeof getProvider>>;
  * a refusal raised as one (no retry: a model or filter that declined once
  * declines again, and the retry would be billed).
  */
-function meteredProvider(provider: Provider, billed: LlmUsage[], slot: string): Provider {
+function meteredProvider(provider: Provider, billed: LlmUsage[], name: string): Provider {
   const chat: Provider['chat'] = async (messages, options) => {
     try {
       const response = await provider.chat(messages, options);
@@ -400,7 +453,7 @@ function meteredProvider(provider: Provider, billed: LlmUsage[], slot: string): 
       // drops `message.refusal`), and a content filter as an `error` finish.
       // Neither is a reply of any shape, and a retry would be billed too.
       if (response.finishReason === 'error' || response.content.trim() === '') {
-        throw new JudgeRunError('refused', `The provider declined to run the ${slot} judge.`);
+        throw new JudgeRunError('refused', `The provider declined to run the ${name}.`);
       }
       return response;
     } catch (err) {
@@ -424,19 +477,20 @@ function parseJson(raw: string): unknown {
   }
 }
 
-function toJudgeRunError(slot: string, err: unknown): JudgeRunError {
+/** `name` as {@link AgentCall.name} gives it: `judge_ethos judge`, `editor`. */
+function toJudgeRunError(name: string, err: unknown): JudgeRunError {
   if (err instanceof JudgeRunError) return err;
   if (err instanceof ProviderError) {
     if (err.code === 'truncated_no_output') {
-      return new JudgeRunError('truncated', `The ${slot} judge's reply was cut off at its limit.`, {
+      return new JudgeRunError('truncated', `The ${name}'s reply was cut off at its limit.`, {
         cause: err,
       });
     }
-    return new JudgeRunError('provider_error', `The ${slot} judge's provider call failed.`, {
+    return new JudgeRunError('provider_error', `The ${name}'s provider call failed.`, {
       cause: err,
     });
   }
-  return new JudgeRunError('provider_error', `The ${slot} judge's call failed.`, { cause: err });
+  return new JudgeRunError('provider_error', `The ${name}'s call failed.`, { cause: err });
 }
 
 /** The attempts' token counts added together. */
