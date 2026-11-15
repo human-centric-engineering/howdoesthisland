@@ -47,6 +47,8 @@ export interface RunJudgesInput {
   projectContext?: string | null;
   /** Absent on an ephemeral run. */
   assessmentId?: string;
+  /** A run that keeps nothing (`store: false`): marks its cost rows. */
+  ephemeral?: boolean;
   userId?: string | null;
   /** Asked before each judge starts; `false` starts no more. */
   shouldContinue?: () => Promise<boolean>;
@@ -84,6 +86,7 @@ export async function runJudges(input: RunJudgesInput): Promise<RunJudgesResult>
         ctx: input.ctx,
         ...(input.projectContext !== undefined ? { projectContext: input.projectContext } : {}),
         ...(input.assessmentId !== undefined ? { assessmentId: input.assessmentId } : {}),
+        ...(input.ephemeral ? { ephemeral: true } : {}),
         ...(input.userId !== undefined ? { userId: input.userId } : {}),
       });
       outcome = { slot, ok: true, reply, latencyMs: Date.now() - started };

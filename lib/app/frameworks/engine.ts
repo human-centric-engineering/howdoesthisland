@@ -11,7 +11,8 @@
  * `rewriteRequest` arrives with f-rewrite, together with its implementation,
  * so no method is ever a stub (B31). f-judges added one §8.2 did not list,
  * `validateJudgeReply`: the post-validation a reply needs is the framework's,
- * since only it knows the ids and scales.
+ * since only it knows the ids and scales. f-assessments added `parseContext`,
+ * for the same reason: a context's ids are the version's.
  *
  * The slots themselves are not the engine's: they are the definition's static
  * `judges.slots` (`types.ts`), because each is a platform agent that exists
@@ -65,6 +66,13 @@ export type JudgeReplyValidation<Output = unknown, Reason extends string = strin
   | { ok: true; output: Output; drops: JudgeDrop<Reason>[] }
   | { ok: false; reason: 'malformed'; detail: string };
 
+/**
+ * A caller's context checked against the version: the context the engine
+ * runs with, defaults applied, or each problem by its dotted path.
+ */
+export type ContextParse<Ctx = unknown> =
+  { ok: true; ctx: Ctx } | { ok: false; issues: { path: string; message: string }[] };
+
 export interface FrameworkEngine<
   Ctx = unknown,
   Quick = unknown,
@@ -72,6 +80,13 @@ export interface FrameworkEngine<
   Result = unknown,
   JudgeOutput = unknown,
 > {
+  /**
+   * Who the text is for, as a caller sent it (untrusted; absent is `{}`),
+   * checked against this version's ids. Every other method trusts the `Ctx`
+   * this returns, so the API calls it before anything is stored or run
+   * (t-24). Added in f-assessments, beside its first caller.
+   */
+  parseContext(input: unknown): ContextParse<Ctx>;
   /** The free, deterministic scan: no model call, the same answer every time. */
   quickScan(text: string, ctx: Ctx): Quick;
   /**

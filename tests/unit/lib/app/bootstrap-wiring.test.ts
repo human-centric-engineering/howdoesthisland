@@ -81,7 +81,7 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     expect(resolveRateLimitTier('wiretest')).toBeDefined();
   });
 
-  it('default lib/app/rate-limit is a no-op (effective policy is the base policy by identity)', async () => {
+  it('the real lib/app/rate-limit registers only our scan rule', async () => {
     // Arrange — no doMock: the real (empty) registerAppRateLimits runs
     vi.resetModules();
 
@@ -90,8 +90,12 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     const { getEffectiveRateLimitPolicy, RATE_LIMIT_POLICY } =
       await import('@/lib/security/rate-limit-policy');
 
-    // Assert — no app rules registered → identity return (no allocation, no extra rule)
-    expect(getEffectiveRateLimitPolicy()).toBe(RATE_LIMIT_POLICY);
+    // FORK (HowDoesThisLand): our one rule, the quick scan's per-IP cap
+    // (t-24), and nothing else. Ledger: .context/app/platform-divergences.md row 11.
+    const added = getEffectiveRateLimitPolicy().filter((r) => !RATE_LIMIT_POLICY.includes(r));
+    expect(added.map((r) => [String(r.match), r.tier, r.key])).toEqual([
+      [String(/^\/api\/v1\/scan\/?$/), 'scan', 'ip'],
+    ]);
   });
 
   it('aborts boot when an app rule references an unregistered tier (finding #6 integrity check)', async () => {

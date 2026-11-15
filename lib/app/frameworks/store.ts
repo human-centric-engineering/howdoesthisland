@@ -130,12 +130,15 @@ export async function publishVersion(
 
 const materialised = new Map<string, JsonObject>();
 
+/** The reads `materialise` needs, so a caller can hand it no more than that. */
+export type FrameworkReader = Pick<FrameworkRepo, 'findVersionById' | 'readNodes'>;
+
 /**
  * Rebuilds a version's model from its records. A published version's result
  * is cached by version id; a draft's is not, since a re-import can change it.
  */
 export async function materialise(
-  repo: FrameworkRepo,
+  repo: FrameworkReader,
   def: FrameworkDefinition,
   versionId: string
 ): Promise<JsonObject> {

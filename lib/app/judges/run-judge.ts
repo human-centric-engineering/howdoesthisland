@@ -28,7 +28,7 @@
  *    content-filter finish) gets none.
  * 5. **Cost**: one `AiCostLog` row per run (one per service tier, in the
  *    rare run whose attempts were served at two), with `{ judge, frameworkVersion,
- *    assessmentId? }` in its metadata, counting every attempt the provider
+ *    assessmentId? | ephemeral? }` in its metadata, counting every attempt the provider
  *    billed: the retry, and an attempt that failed, as well as the one that
  *    answered. The runner sums both attempts only when it succeeds, so the
  *    usage is read off the provider's responses here instead.
@@ -146,6 +146,11 @@ export interface RunJudgeInput<Ctx, Output> {
   projectContext?: string | null;
   /** The assessment this run is for; absent on an ephemeral run (§8.2). */
   assessmentId?: string;
+  /**
+   * A run that keeps nothing (`store: false`, §8.2): its cost rows say
+   * `ephemeral: true`, and count toward usage and the budget like any other.
+   */
+  ephemeral?: boolean;
   /**
    * Who asked for the run, for the cost row: a real `User.id` from the
    * session, never a synthetic visitor id. Absent for a job.
@@ -348,6 +353,7 @@ export async function runJudge<Ctx, Output>(
           judge: slot,
           frameworkVersion: input.frameworkVersion,
           ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
+          ...(input.ephemeral ? { ephemeral: true } : {}),
           attempts: attempts.length,
           ...('error' in outcome ? { error: outcome.error.code } : {}),
         },
