@@ -30,7 +30,9 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
   const read = await readSharedReport(token);
   if (!read.ok) notFound();
 
-  const load = await loadReport(read.shareId, sharedReportSource(read.report));
+  const load = await loadReport(read.shareId, sharedReportSource(read.report), {
+    shareId: read.shareId,
+  });
   // A link is made only for a report, so anything but `ready` is a result
   // the page cannot read.
   // Spaced as the signed-in report page's layout spaces it.

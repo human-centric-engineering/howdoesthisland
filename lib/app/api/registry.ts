@@ -533,7 +533,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     path: '/api/v1/assessments/{id}/shares',
     summary:
       "Make a link that opens a finished review's report for someone without an account, until it expires (30 days unless set) or is revoked. The token is shown only here.",
-    auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
+    auth: { who: 'signed-in', apiKeyScope: ASSESS_SCOPE },
     request: { params: assessmentParams, body: createShareSchema },
     response: { status: 201, data: createdReportShareSchema },
   },
@@ -549,7 +549,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'DELETE',
     path: '/api/v1/shares/{id}',
     summary: 'Revoke a share link: it stops opening the report at once.',
-    auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
+    auth: { who: 'signed-in', apiKeyScope: ASSESS_SCOPE },
     request: { params: shareIdParamSchema },
     response: { status: 200, data: reportShareSchema },
   },

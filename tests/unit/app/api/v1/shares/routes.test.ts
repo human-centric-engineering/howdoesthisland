@@ -186,15 +186,21 @@ describe('POST /api/v1/assessments/{id}/shares', () => {
     expect(mocks.createShare).toHaveBeenCalledTimes(1);
   });
 
-  it('needs the `reports` scope on an API key', async () => {
+  it('needs the `assess` scope on an API key: a read-only `reports` key cannot publish a report', async () => {
     mocks.createShare.mockResolvedValue({ ...SHARE_VIEW, token: 't', url: 'u' });
 
-    withKey(['assess']);
+    withKey(['reports']);
     expect((await post(undefined, KEY)).status).toBe(403);
     expect(mocks.createShare).not.toHaveBeenCalled();
 
-    withKey(['reports']);
+    withKey(['assess']);
     expect((await post(undefined, KEY)).status).toBe(201);
+  });
+
+  it('takes an empty body as every default', async () => {
+    mocks.createShare.mockResolvedValue({ ...SHARE_VIEW, token: 't', url: 'u' });
+    expect((await post('')).status).toBe(201);
+    expect(mocks.createShare).toHaveBeenCalledWith(ID, { expiresInDays: 30 }, ALICE);
   });
 
   it('needs someone signed in', async () => {
@@ -246,10 +252,14 @@ describe('DELETE /api/v1/shares/{id}', () => {
     expect((await del()).status).toBe(404);
   });
 
-  it('needs the `reports` scope on an API key', async () => {
-    withKey(['assess']);
+  it('needs the `assess` scope on an API key: a read-only `reports` key cannot revoke', async () => {
+    withKey(['reports']);
     expect((await del(KEY)).status).toBe(403);
     expect(mocks.revokeShare).not.toHaveBeenCalled();
+
+    mocks.revokeShare.mockResolvedValue({ ...SHARE_VIEW, state: 'revoked' });
+    withKey(['assess']);
+    expect((await del(KEY)).status).toBe(200);
   });
 });
 

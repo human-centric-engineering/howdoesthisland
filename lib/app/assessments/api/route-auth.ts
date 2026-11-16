@@ -15,7 +15,8 @@ export const ASSESS_SCOPE = 'assess';
 /**
  * The API-key scope the report's PDF enforces (t-31). Separate from `assess`
  * so a key that only fetches reports, for a script that files them, cannot
- * start runs that spend.
+ * start runs that spend. Read-only: making or revoking a share link (t-32),
+ * which publishes a report, needs `assess`.
  */
 export const REPORTS_SCOPE = 'reports';
 

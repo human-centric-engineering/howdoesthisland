@@ -47,7 +47,7 @@
  *
  * HowDoesThisLand: `assess` (t-24), enforced by every `assessments` route,
  * and `reports` (t-31), enforced by `GET /api/v1/assessments/{id}/report.pdf`
- * (both in `lib/app/assessments/api/route-auth.ts`). `projects` arrives with
+ * and the share-link list; making or revoking a link needs `assess` (both in `lib/app/assessments/api/route-auth.ts`). `projects` arrives with
  * the routes that enforce it (f-projects), so no key can be minted with a
  * scope nothing checks.
  */

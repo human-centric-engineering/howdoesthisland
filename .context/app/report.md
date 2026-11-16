@@ -198,11 +198,19 @@ a dialog that makes a link (7, 30 or 90 days; the API takes 1 to 365, default
 30), shows its address once to copy, and lists the report's links with their
 state and views, each live one with **Revoke**.
 
+**Scopes.** `reports` stays read-only: an API key with it can list a
+report's links but not make or revoke one, since a link publishes the report
+to anyone who holds it. Making and revoking need `assess`.
+
+**Views** count fetches of the link, not people: a chat app's link preview,
+a refresh and an API call each count. An open that shows nothing (the model
+version gone or unreadable) does not.
+
 | Route                                  | Who                       | What                                               |
 | -------------------------------------- | ------------------------- | -------------------------------------------------- |
-| `POST /api/v1/assessments/{id}/shares` | member; API key `reports` | Make a link. 409 `REPORT_NOT_READY` with no report |
+| `POST /api/v1/assessments/{id}/shares` | member; API key `assess`  | Make a link. 409 `REPORT_NOT_READY` with no report |
 | `GET /api/v1/assessments/{id}/shares`  | member; API key `reports` | The report's links, newest first                   |
-| `DELETE /api/v1/shares/{id}`           | member; API key `reports` | Revoke (repeating keeps the first time)            |
+| `DELETE /api/v1/shares/{id}`           | member; API key `assess`  | Revoke (repeating keeps the first time)            |
 | `GET /api/v1/shared-reports/{token}`   | anyone with the token     | The shared report and its model                    |
 | `/r/{token}`                           | anyone with the token     | The `shared` variant                               |
 
@@ -219,7 +227,7 @@ state and views, each live one with **Revoke**.
   whether the link is live (not revoked, not expired); once the report is
   known to be readable, one write checks that again and counts the view, so a
   revoke cannot race a read and an open that shows nothing (its model version
-  gone) is not counted. A malformed, unknown, revoked or
+  gone or not parseable) is not counted. A malformed, unknown, revoked or
   expired token, or a suspended workspace, answers the same 404, and the page
   the same not-found.
 - **What a link serves** (`sharedAssessmentSchema` in the route registry) is

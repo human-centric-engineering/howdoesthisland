@@ -230,6 +230,20 @@ describe('SharePanel', () => {
     expect(within(dialog).queryByRole('button', { name: 'Revoke' })).toBeNull();
   });
 
+  it('does not show the last list again while a reopened dialog loads, since it may be stale', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce([share()]);
+    const { user, dialog } = await openPanel();
+    await within(dialog).findByRole('button', { name: 'Revoke' });
+
+    vi.mocked(apiClient.get).mockReturnValue(new Promise(() => undefined));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Share' }));
+    const reopened = await screen.findByRole('dialog');
+
+    expect(within(reopened).queryByRole('listitem')).toBeNull();
+    expect(within(reopened).queryByRole('button', { name: 'Revoke' })).toBeNull();
+  });
+
   it('shows a list that could not be loaded as a failure, not as empty', async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new APIClientError('Server error', 'INTERNAL', 500));
     const { dialog } = await openPanel();

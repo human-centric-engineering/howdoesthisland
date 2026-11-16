@@ -19,7 +19,7 @@ import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { getAssessment } from '@/lib/app/assessments/api/service';
 import type { AssessmentDetail, JudgeRunView } from '@/lib/app/assessments/api/views';
-import { reportResultSchema } from '@/lib/app/reports/input';
+import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
 import { loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
@@ -203,7 +203,11 @@ export type SharedReportRead =
  * Live means not revoked and not expired. The token's row is checked first,
  * and then again in the same write that counts the view, so a link revoked
  * a moment ago is not opened once more by a read already under way. A link
- * whose model version no longer resolves shows nothing and is not counted.
+ * whose model version no longer resolves, or does not parse, shows nothing
+ * and is not counted.
+ *
+ * A view is a fetch of the link, not a person: a chat app's link preview
+ * counts, as do a refresh and an API call.
  */
 export async function readSharedReport(
   token: string,
@@ -240,7 +244,7 @@ export async function readSharedReport(
       return { ok: false as const, refused: 'no-report' as const };
     }
 
-    const model = await loadModelDocument(assessment.framework.slug, assessment.framework.version);
+    const model = await readableModel(share.id, assessment);
     if (model !== null) {
       const orgId = requireOrgId();
       const { count } = await prisma.reportShare.updateMany({
@@ -307,4 +311,25 @@ function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
 function sharedResult(result: unknown): Record<string, unknown> | null {
   const parsed = reportResultSchema.safeParse(result);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * The model version `a` ran on, or `null` when the report cannot use it:
+ * the version no longer resolves, or its document does not parse. Either
+ * way the report is unreadable, so the open is not counted.
+ */
+async function readableModel(
+  shareId: string,
+  a: AssessmentDetail
+): Promise<Record<string, unknown> | null> {
+  const model = await loadModelDocument(a.framework.slug, a.framework.version);
+  if (model === null) return null;
+  if (!reportModelSchema.safeParse(model).success) {
+    logger.error('Share link: its model is not one the report can read', undefined, {
+      shareId,
+      framework: a.framework,
+    });
+    return null;
+  }
+  return model;
 }

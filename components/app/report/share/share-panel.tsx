@@ -93,7 +93,9 @@ type SharesAction =
 function sharesReducer(state: SharesState, action: SharesAction): SharesState {
   switch (action.type) {
     case 'load':
-      return { ...state, loading: action.id, touched: new Map() };
+      // The last list may be stale by now (revoked elsewhere, expired), so
+      // it is not shown while the new one loads.
+      return { shares: null, loading: action.id, touched: new Map() };
     case 'loaded': {
       if (action.id !== state.loading) return state;
       const listed = new Set(action.list.map((s) => s.id));

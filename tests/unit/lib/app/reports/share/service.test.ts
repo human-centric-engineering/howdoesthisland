@@ -151,7 +151,7 @@ vi.mock('@/lib/app/frameworks/api/service', async () => {
 
 import { FrameworkApiError } from '@/lib/app/frameworks/api/service';
 import { reportResultSchema } from '@/lib/app/reports/input';
-import { apiAssessment } from '@/tests/unit/lib/app/reports/fixtures';
+import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
 import {
   createShare,
   listShares,
@@ -224,7 +224,7 @@ beforeEach(() => {
   db.assessments.clear();
   db.assessments.set(ASSESSMENT, { orgId: ORG, status: 'COMPLETED' });
   getAssessment.mockReset().mockResolvedValue(detail);
-  versionDocument.mockReset().mockResolvedValue({ data: { meta: { name: 'HDTL' } } });
+  versionDocument.mockReset().mockResolvedValue({ data: modelDocument(false) });
 });
 
 /** Make a link in the workspace and return its token. */
@@ -372,7 +372,7 @@ describe('readSharedReport', () => {
         result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
       },
-      model: { meta: { name: 'HDTL' } },
+      model: modelDocument(false),
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
@@ -462,6 +462,14 @@ describe('readSharedReport', () => {
     const read = await readSharedReport(token, NOW);
     expect(read.ok && read.report.model).toBeNull();
     // It shows nothing, so it is not a view.
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('answers a null model, uncounted, when the version resolves but its document does not parse', async () => {
+    versionDocument.mockResolvedValue({ data: { meta: { name: 'HDTL' } } });
+    const { token } = await made();
+    const read = await readSharedReport(token, NOW);
+    expect(read.ok && read.report.model).toBeNull();
     expect(db.shares[0].viewCount).toBe(0);
   });
 
