@@ -266,10 +266,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/admin-nav.ts',
     risk: 'a stray section would appear in every install’s admin sidebar',
+    // FORK (HowDoesThisLand): pinned to our one section, the Frameworks page (t-38).
     assert: () => {
       __resetNavRegistryForTests();
       initAppNav();
-      expect(getRegisteredNavSections()).toHaveLength(0);
+      expect(
+        getRegisteredNavSections().map((s) => [s.title, (s.items ?? []).map((i) => i.href)])
+      ).toEqual([['HowDoesThisLand', ['/admin/frameworks']]]);
+      __resetNavRegistryForTests();
     },
   },
   {

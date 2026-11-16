@@ -241,6 +241,8 @@ describe('reserved fork tiers', () => {
       // FORK (HowDoesThisLand): calibration runs (t-37).
       'model CalibrationRun {',
       'enum CalibrationMode {',
+      // FORK (HowDoesThisLand): a run's status, for runs started from the admin page (t-38).
+      'enum CalibrationRunStatus {',
     ]);
   });
 

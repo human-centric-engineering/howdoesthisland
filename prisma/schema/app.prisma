@@ -346,11 +346,11 @@ model ReportShare {
 /// cascade, `org_isolation`), written in the system scope by
 /// lib/app/calibration/store.ts. Keeps no Assessment rows.
 model CalibrationRun {
-  id                 String           @id @default(cuid())
+  id                 String               @id @default(cuid())
   orgId              String?
-  org                Org?             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org                Org?                 @relation(fields: [orgId], references: [id], onDelete: Cascade)
   frameworkVersionId String
-  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Cascade)
+  frameworkVersion   FrameworkVersion     @relation(fields: [frameworkVersionId], references: [id], onDelete: Cascade)
   /// The version's `sourceSha256` when it ran: a draft re-imported since is
   /// different content, and the run no longer counts for it.
   sourceSha256       String
@@ -373,10 +373,10 @@ model CalibrationRun {
   finishedAt         DateTime?
   /// What the judge calls cost, summed from each reply's and each billed
   /// failure's cost (the same figures runJudge wrote to `AiCostLog`).
-  costUsd            Float            @default(0)
+  costUsd            Float                @default(0)
   /// Who started it. FK → user, ON DELETE SET NULL. Null from the CLI.
   startedByUserId    String?
-  createdAt          DateTime         @default(now())
+  createdAt          DateTime             @default(now())
 
   @@index([frameworkVersionId, mode, createdAt])
   @@index([mode, createdAt])
