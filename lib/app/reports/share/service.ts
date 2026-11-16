@@ -16,7 +16,6 @@ import { getPublicUrl } from '@/lib/api/server-fetch';
 import { prisma } from '@/lib/db/client';
 import type { AssessmentStatus } from '@prisma/client';
 import { logger } from '@/lib/logging';
-import { isRecord } from '@/lib/utils';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { getAssessment } from '@/lib/app/assessments/api/service';
 import type { AssessmentDetail, JudgeRunView } from '@/lib/app/assessments/api/views';
@@ -25,6 +24,7 @@ import {
   resolveVersion,
   versionDocument,
 } from '@/lib/app/frameworks/api/service';
+import { reportResultSchema } from '@/lib/app/reports/input';
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
 import type { CreateShareInput } from '@/lib/app/reports/share/validations';
@@ -221,8 +221,18 @@ export async function readSharedReport(
       return { ok: false as const, refused: 'no-report' as const };
     }
 
+    // Only what the report reads of the result: see `sharedResult`.
+    const result = sharedResult(assessment.result);
+    if (result === null) {
+      logger.error('Share link: its result is not one the report can read', undefined, {
+        shareId,
+        framework: assessment.framework,
+      });
+      return { ok: false as const, refused: 'no-report' as const };
+    }
+
     const report: SharedReport = {
-      assessment: sharedView(assessment),
+      assessment: sharedView(assessment, result),
       model: await modelOf(assessment),
       expiresAt: share.expiresAt,
     };
@@ -239,7 +249,7 @@ const isReportable = (state: AssessmentDetail['status']): boolean =>
   state === 'completed' || state === 'partial';
 
 /** The fields a share serves, picked one by one, so a field added to the detail is not shared by default. */
-function sharedView(a: AssessmentDetail): SharedAssessment {
+function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
   return {
     status: a.status,
     profile: a.profile,
@@ -253,23 +263,28 @@ function sharedView(a: AssessmentDetail): SharedAssessment {
     completedAt: a.completedAt,
     text: a.text,
     context: a.context,
-    result: sharedResult(a.result),
+    result,
     judgeRuns: a.judgeRuns.map((r) => ({ judge: r.judge, status: r.status, model: r.model })),
   };
 }
 
 /**
- * The result, less the editor's cost. The run stores the editor's record on
- * the result (`withEditor`, `lib/app/assessments/editor.ts`), and that record
- * carries what the call cost, which a link must not show. The rest of the
- * result is the report.
+ * The result as the report reads it, and nothing more, or `null` when the
+ * report cannot read it.
+ *
+ * The stored result holds more than the report shows, and some of it a link
+ * must not serve: `source`, the URL the copy was fetched from (`assemble()`),
+ * which can itself be a credential (a preview link, an "anyone with the link"
+ * document), and the editor's `costUsd` (`withEditor`,
+ * `lib/app/assessments/editor.ts`). So the result goes through the report's
+ * own parser (`reportResultSchema`), which keeps only the keys the report
+ * reads: an allowlist, as `sharedView` is for the assessment, so a key the
+ * engine adds later is not shared by default. A result the report cannot
+ * read would only render as unreadable, so it opens nothing.
  */
-function sharedResult(result: unknown): unknown {
-  if (!isRecord(result) || !isRecord(result.editor) || !('costUsd' in result.editor)) {
-    return result;
-  }
-  const { costUsd: _cost, ...editor } = result.editor;
-  return { ...result, editor };
+function sharedResult(result: unknown): Record<string, unknown> | null {
+  const parsed = reportResultSchema.safeParse(result);
+  return parsed.success ? parsed.data : null;
 }
 
 async function modelOf(a: AssessmentDetail): Promise<Record<string, unknown> | null> {

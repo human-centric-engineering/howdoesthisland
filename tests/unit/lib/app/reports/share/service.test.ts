@@ -149,6 +149,8 @@ vi.mock('@/lib/app/frameworks/api/service', async () => {
 });
 
 import { FrameworkApiError } from '@/lib/app/frameworks/api/service';
+import { reportResultSchema } from '@/lib/app/reports/input';
+import { apiAssessment } from '@/tests/unit/lib/app/reports/fixtures';
 import {
   createShare,
   listShares,
@@ -166,6 +168,19 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const inOrg = <T>(fn: () => Promise<T>, org = ORG) => runAsOrg(org, fn, { source: 'session' });
 
+/** Where the copy came from: a preview link, which is itself a credential. */
+const SOURCE_URL = 'https://intranet.example.com/draft?preview=s3cret';
+
+/**
+ * A real assembled result (the report fixtures' engine run), as the run
+ * stores it: with the source URL `assemble()` records and the editor's record,
+ * which carries its cost.
+ */
+const storedResult = (): Record<string, unknown> => {
+  const result = apiAssessment().result as Record<string, unknown>;
+  return { ...result, source: SOURCE_URL };
+};
+
 /** A finished review, as `getAssessment` returns it: every field the detail has. */
 const detail = {
   id: ASSESSMENT,
@@ -175,7 +190,7 @@ const detail = {
   judges: ['judge_ethos'],
   framework: { slug: 'howdoesthisland', version: '0.5.1' },
   title: 'Spring launch email',
-  source: { kind: 'url', url: 'https://intranet.example.com/draft', fileName: null },
+  source: { kind: 'url', url: SOURCE_URL, fileName: null },
   wordCount: 120,
   overall: 71,
   band: 'Strong',
@@ -186,7 +201,7 @@ const detail = {
   completedAt: new Date('2026-11-10T10:01:00.000Z'),
   text: 'The copy.',
   context: { audience: 'exec' },
-  result: { mode: 'full' },
+  result: storedResult(),
   judgeRuns: [
     {
       judge: 'judge_ethos',
@@ -333,29 +348,52 @@ describe('readSharedReport', () => {
         completedAt: detail.completedAt,
         text: 'The copy.',
         context: { audience: 'exec' },
-        result: { mode: 'full' },
+        result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
       },
       model: { meta: { name: 'HDTL' } },
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
-    for (const leak of [ASSESSMENT, ORG, 'user-1', 'intranet.example.com', '0.42', 'costUsd']) {
+    for (const leak of [ASSESSMENT, ORG, 'user-1', 'intranet.example.com', 's3cret', 'costUsd']) {
       expect(wire).not.toContain(leak);
     }
   });
 
-  it("leaves the editor's cost out of the result, and the rest of the result alone", async () => {
-    const editor = { status: 'written', summary: { verdict: 'v' }, model: 'gpt-e', costUsd: 0.004 };
-    getAssessment.mockResolvedValue({ ...detail, result: { mode: 'full', editor } });
+  it("serves only the result's keys the report reads: not its source URL, nor the editor's cost", async () => {
+    const stored = storedResult();
+    // The stored result does carry both, so the test can fail.
+    expect(stored.source).toBe(SOURCE_URL);
+    expect(stored.editor).toHaveProperty('costUsd');
+    const { token } = await made();
+
+    const read = await readSharedReport(token, NOW);
+    if (!read.ok) throw new Error('expected the link to open');
+
+    const result = read.report.assessment.result as Record<string, unknown>;
+    expect(result).not.toHaveProperty('source');
+    expect(result.editor).not.toHaveProperty('costUsd');
+    expect(result.editor).toMatchObject({ status: 'written', model: 'gpt-editor' });
+    // Everything the report reads is still there.
+    expect(result).toEqual(reportResultSchema.parse(stored));
+  });
+
+  it('does not share a key the engine adds later until the report reads it', async () => {
+    getAssessment.mockResolvedValue({
+      ...detail,
+      result: { ...storedResult(), internal_notes: 'not for outside eyes' },
+    });
     const { token } = await made();
 
     const read = await readSharedReport(token, NOW);
 
-    expect(read.ok && read.report.assessment.result).toEqual({
-      mode: 'full',
-      editor: { status: 'written', summary: { verdict: 'v' }, model: 'gpt-e' },
-    });
+    expect(JSON.stringify(read)).not.toContain('not for outside eyes');
+  });
+
+  it('opens nothing when the result is not one the report can read', async () => {
+    getAssessment.mockResolvedValue({ ...detail, result: { mode: 'full' } });
+    const { token } = await made();
+    expect(await readSharedReport(token, NOW)).toEqual({ ok: false, refused: 'no-report' });
   });
 
   it('opens nothing once revoked, and counts nothing', async () => {

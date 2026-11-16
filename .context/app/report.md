@@ -223,7 +223,13 @@ state and views, each live one with **Revoke**.
 - **What a link serves** (`sharedAssessmentSchema` in the route registry) is
   the report's fields, picked one by one: no id, cost, source, failure,
   per-judge cost or timing, workspace or author. A field added to the
-  assessment's detail is not shared until someone adds it there.
+  assessment's detail is not shared until someone adds it there. The stored
+  `result` is an allowlist too: it goes through `reportResultSchema`, so a
+  link serves only the keys the report reads. That drops `result.source`, the
+  URL the copy was fetched from (which can itself be a credential, such as a
+  preview link), and the editor's `costUsd`; a key the engine adds later is
+  not shared until the report reads it. A result the report cannot read opens
+  nothing.
 - **Rate limit.** The page and the API share one per-IP tier,
   `shared-report` at `SHARED_REPORT_VIEWS_PER_MINUTE` (30,
   `lib/app/rate-limit.ts`). With no session the section cap would key on IP
