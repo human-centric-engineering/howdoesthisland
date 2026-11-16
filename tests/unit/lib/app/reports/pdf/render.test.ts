@@ -43,6 +43,7 @@ const b = vi.hoisted(() => {
     launches: [] as unknown[],
     closed: 0,
     gotoUrl: '',
+    closeError: null as Error | null,
   };
   const page = {
     setDefaultTimeout: vi.fn(),
@@ -57,7 +58,8 @@ const b = vi.hoisted(() => {
       return { ok: () => state.status >= 200 && state.status < 300, status: () => state.status };
     }),
     $: vi.fn(async () => (state.ready ? {} : null)),
-    evaluate: vi.fn(async () => undefined),
+    // Runs the callback, as the page would, against the stubbed `document`.
+    evaluate: vi.fn(async (fn: () => unknown) => fn()),
     pdf: vi.fn(async () => new Uint8Array([37, 80, 68, 70])),
   };
   const launch = vi.fn(async (options: unknown) => {
@@ -66,6 +68,7 @@ const b = vi.hoisted(() => {
       newPage: async () => page,
       close: async () => {
         state.closed += 1;
+        if (state.closeError) throw state.closeError;
       },
     };
   });
@@ -101,8 +104,10 @@ beforeEach(() => {
     launches: [],
     closed: 0,
     gotoUrl: '',
+    closeError: null,
   });
   mockEnv.PDF_CHROMIUM_PATH = undefined;
+  vi.stubGlobal('document', { fonts: { ready: Promise.resolve() } });
 });
 
 describe('chromiumPath', () => {
@@ -157,6 +162,25 @@ describe('renderReportPdf', () => {
 
     await renderReportPdf('asm_1', 'tok');
     expect(b.page.setRequestInterception).toHaveBeenCalledWith(true);
+  });
+
+  it('waits for the page’s fonts before printing', async () => {
+    let fontsReady!: () => void;
+    vi.stubGlobal('document', {
+      fonts: { ready: new Promise<void>((resolve) => (fontsReady = resolve)) },
+    });
+    const render = renderReportPdf('asm_1', 'tok');
+    await vi.waitFor(() => expect(b.page.evaluate).toHaveBeenCalled());
+    expect(b.page.pdf).not.toHaveBeenCalled();
+    fontsReady();
+    await render;
+    expect(b.page.pdf).toHaveBeenCalled();
+  });
+
+  it('still returns the PDF when the browser does not close cleanly', async () => {
+    b.state.closeError = new Error('already gone');
+    const pdf = await renderReportPdf('asm_1', 'tok');
+    expect(pdf.toString()).toBe('%PDF');
   });
 
   it('launches with the configured binary and without the sandbox', async () => {
