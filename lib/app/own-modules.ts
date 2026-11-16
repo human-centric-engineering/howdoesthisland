@@ -76,4 +76,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/retention/',
   // The report: what it reads from the API and how it is laid out (t-29).
   'lib/app/reports/',
+  // The calibration set's schema, and later its runner (t-36).
+  'lib/app/calibration/',
 ];
