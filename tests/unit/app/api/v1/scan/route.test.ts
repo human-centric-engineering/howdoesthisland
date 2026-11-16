@@ -59,7 +59,7 @@ import { POST } from '@/app/api/v1/scan/route';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { importVersion, publishVersion } from '@/lib/app/frameworks/store';
 import { prismaFrameworkRepo } from '@/lib/app/frameworks/repo';
-import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
+import { FakeFrameworkRepo, OPEN_GATE } from '@/tests/unit/lib/app/frameworks/fake-repo';
 import { getTenantContext } from '@/lib/tenancy/context';
 import { MAX_CONTENT_CHARS, SCANS_PER_MINUTE } from '@/lib/app/assessments/limits';
 import { quickScanViewSchema } from '@/lib/app/api/registry';
@@ -98,7 +98,13 @@ async function refusal(res: Response) {
 
 beforeAll(async () => {
   await importVersion(repo(), howDoesThisLand, RAW);
-  await publishVersion(repo(), howDoesThisLand.slug, '0.5.1', new Date('2026-11-12T21:50:46Z'));
+  await publishVersion(
+    repo(),
+    howDoesThisLand.slug,
+    '0.5.1',
+    OPEN_GATE,
+    new Date('2026-11-12T21:50:46Z')
+  );
 });
 
 beforeEach(() => {

@@ -103,6 +103,7 @@ model Org {
   judgeRuns            JudgeRun[]
   judgeReplies         JudgeReply[]
   reportShares         ReportShare[]
+  calibrationRuns      CalibrationRun[]
 
   @@map("org")
 }

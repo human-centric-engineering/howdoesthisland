@@ -20,6 +20,8 @@
  * Exit 0 passed, 1 a check failed.
  */
 import { readFileSync } from 'node:fs';
+import { calibrationGate } from '@/lib/app/calibration/gate';
+import { prismaCalibrationStore } from '@/lib/app/calibration/store';
 import { isDeepStrictEqual } from 'node:util';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { prismaFrameworkRepo as repo } from '@/lib/app/frameworks/repo';
@@ -44,6 +46,8 @@ function check(ok: boolean, what: string): void {
 }
 
 const system = <T>(fn: () => Promise<T>) => runAsSystem('smoke: framework store', fn);
+// The real gate: 0.5.1 was published before it existed, so it lets it through (t-37).
+const gate = calibrationGate(prismaCalibrationStore);
 
 async function main(): Promise<number> {
   check(isMultiTenant(), 'TENANCY_MODE is multi');
@@ -52,7 +56,7 @@ async function main(): Promise<number> {
 
   const first = await system(() => importVersion(repo, howDoesThisLand, raw));
   check(first.nodeCount > 600 && first.linkCount > 1000, `imported 0.5.1 (${first.outcome})`);
-  const published = await system(() => publishVersion(repo, 'howdoesthisland', '0.5.1'));
+  const published = await system(() => publishVersion(repo, 'howdoesthisland', '0.5.1', gate));
   check(published.version.status === 'PUBLISHED', `published 0.5.1 (${published.outcome})`);
 
   const versionId = published.version.id;

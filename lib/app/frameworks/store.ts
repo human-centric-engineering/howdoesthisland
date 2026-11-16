@@ -9,6 +9,11 @@
  * - **Every problem is refused before anything is written**: an unknown or
  *   missing section, a record failing its schema, a duplicate key, an
  *   unresolved reference. The error lists them all.
+ * - **Publishing is gated** (t-37): a {@link PublishGate} decides whether a
+ *   draft may publish, and what is recorded in `FrameworkVersion.calibration`
+ *   when it does. The app's gate is the calibration run
+ *   (`lib/app/calibration/gate.ts`); the store requires one, so no path
+ *   publishes without asking it.
  * - **Published is immutable.** No path here updates or deletes a published
  *   version's records, and the repo conditions each write on the draft state.
  * - **The round trip is exact**, and a published version's materialised model
@@ -23,7 +28,8 @@ export type FrameworkStoreErrorCode =
   | 'INVALID_MODEL'
   | 'VERSION_PUBLISHED'
   | 'VERSION_NOT_FOUND'
-  | 'VERSION_NOT_DRAFT';
+  | 'VERSION_NOT_DRAFT'
+  | 'VERSION_UNCALIBRATED';
 
 export class FrameworkStoreError extends Error {
   constructor(
@@ -107,11 +113,25 @@ export async function importVersion(
 
 export type PublishOutcome = 'published' | 'already_published';
 
-/** Publishes a draft. Publishing a published version changes nothing. */
+/**
+ * Whether a draft may publish. `calibration` is what the version records of
+ * the check that let it (null for none); `reason` says why it may not.
+ */
+export interface PublishGate {
+  check(
+    version: StoredVersion
+  ): Promise<{ ok: true; calibration: JsonObject | null } | { ok: false; reason: string }>;
+}
+
+/**
+ * Publishes a draft the gate allows. Publishing a published version changes
+ * nothing and asks no gate.
+ */
 export async function publishVersion(
   repo: FrameworkRepo,
   slug: string,
   version: string,
+  gate: PublishGate,
   now: Date = new Date()
 ): Promise<{ outcome: PublishOutcome; version: StoredVersion }> {
   const existing = await repo.findVersion(slug, version);
@@ -119,10 +139,21 @@ export async function publishVersion(
     throw new FrameworkStoreError('VERSION_NOT_FOUND', `No ${slug} version ${version} to publish.`);
   }
   if (existing.status === 'PUBLISHED') return { outcome: 'already_published', version: existing };
-  if (existing.status !== 'DRAFT' || !(await repo.markPublished(existing.id, now))) {
+  if (existing.status !== 'DRAFT') {
     throw new FrameworkStoreError(
       'VERSION_NOT_DRAFT',
       `${slug} ${version} is ${existing.status.toLowerCase()}, so it cannot be published.`
+    );
+  }
+  const allowed = await gate.check(existing);
+  if (!allowed.ok) throw new FrameworkStoreError('VERSION_UNCALIBRATED', allowed.reason);
+  // The sha the gate checked is a condition of the write, so a re-import
+  // between the check and here does not publish uncalibrated content.
+  if (!(await repo.markPublished(existing.id, now, existing.sourceSha256, allowed.calibration))) {
+    throw new FrameworkStoreError(
+      'VERSION_NOT_DRAFT',
+      `${slug} ${version} changed while it was being published (published or re-imported ` +
+        'elsewhere). Run the publish again.'
     );
   }
   return { outcome: 'published', version: { ...existing, status: 'PUBLISHED', publishedAt: now } };

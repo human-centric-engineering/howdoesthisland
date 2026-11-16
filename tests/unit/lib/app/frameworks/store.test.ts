@@ -2,7 +2,7 @@
  * The framework store end to end on an in-memory repo (t-10): import,
  * idempotence, refusal, publish, immutability and materialise.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import {
@@ -14,7 +14,7 @@ import {
   sha256,
 } from '@/lib/app/frameworks/store';
 import type { JsonObject } from '@/lib/app/frameworks/types';
-import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
+import { FakeFrameworkRepo, OPEN_GATE } from '@/tests/unit/lib/app/frameworks/fake-repo';
 
 const RAW = readFileSync('lib/app/frameworks/howdoesthisland/data/model-0.5.1.json', 'utf8');
 const RAW_0_5_0 = readFileSync('tests/unit/lib/app/frameworks/fixtures/model-0.5.0.json', 'utf8');
@@ -79,7 +79,7 @@ describe('importVersion()', () => {
 
   it('refuses a different file under a published version, and changes nothing', async () => {
     const { version } = await importVersion(repo, howDoesThisLand, RAW);
-    await publishVersion(repo, 'howdoesthisland', '0.5.1');
+    await publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE);
     const before = JSON.stringify(repo.versions.get(version.id));
 
     const err = await refusal(importVersion(repo, howDoesThisLand, edited()));
@@ -103,7 +103,7 @@ describe('importVersion()', () => {
 
   it('answers the same file under a published version as unchanged, not as an error', async () => {
     await importVersion(repo, howDoesThisLand, RAW);
-    await publishVersion(repo, 'howdoesthisland', '0.5.1');
+    await publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE);
     const again = await importVersion(repo, howDoesThisLand, RAW);
     expect(again.outcome).toBe('unchanged');
     expect(again.version.status).toBe('PUBLISHED');
@@ -130,33 +130,74 @@ describe('publishVersion()', () => {
   it('publishes a draft, once', async () => {
     await importVersion(repo, howDoesThisLand, RAW);
     const at = new Date('2026-11-12T12:00:00Z');
-    const first = await publishVersion(repo, 'howdoesthisland', '0.5.1', at);
+    const first = await publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE, at);
     expect(first.outcome).toBe('published');
     expect(first.version).toMatchObject({ status: 'PUBLISHED', publishedAt: at });
 
-    const second = await publishVersion(repo, 'howdoesthisland', '0.5.1');
+    const second = await publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE);
     expect(second.outcome).toBe('already_published');
     expect(second.version.publishedAt).toEqual(at);
     expect(repo.calls.markPublished).toBe(1);
   });
 
   it('refuses a version that does not exist', async () => {
-    const err = await refusal(publishVersion(repo, 'howdoesthisland', '9.9.9'));
+    const err = await refusal(publishVersion(repo, 'howdoesthisland', '9.9.9', OPEN_GATE));
     expect(err.code).toBe('VERSION_NOT_FOUND');
   });
 
   it('refuses a retired version', async () => {
     const { version } = await importVersion(repo, howDoesThisLand, RAW);
     repo.versions.get(version.id)!.status = 'RETIRED';
-    const err = await refusal(publishVersion(repo, 'howdoesthisland', '0.5.1'));
+    const err = await refusal(publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE));
     expect(err.code).toBe('VERSION_NOT_DRAFT');
     expect(repo.calls.markPublished).toBe(0);
+  });
+
+  it('refuses a draft its gate refuses, and publishes nothing (t-37)', async () => {
+    await importVersion(repo, howDoesThisLand, RAW);
+    const gate = { check: vi.fn().mockResolvedValue({ ok: false, reason: 'No AI run.' }) };
+    const err = await refusal(publishVersion(repo, 'howdoesthisland', '0.5.1', gate));
+    expect(err.code).toBe('VERSION_UNCALIBRATED');
+    expect(err.message).toBe('No AI run.');
+    expect(repo.calls.markPublished).toBe(0);
+    expect(gate.check).toHaveBeenCalledWith(expect.objectContaining({ version: '0.5.1' }));
+  });
+
+  it('records what the gate allowed it with', async () => {
+    const { version } = await importVersion(repo, howDoesThisLand, RAW);
+    const gate = {
+      check: () => Promise.resolve({ ok: true as const, calibration: { runId: 'cal-1' } }),
+    };
+    await publishVersion(repo, 'howdoesthisland', '0.5.1', gate);
+    expect(repo.versions.get(version.id)?.calibration).toEqual({ runId: 'cal-1' });
+  });
+
+  it('asks no gate of a version already published', async () => {
+    await importVersion(repo, howDoesThisLand, RAW);
+    await publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE);
+    const gate = { check: vi.fn() };
+    const again = await publishVersion(repo, 'howdoesthisland', '0.5.1', gate);
+    expect(again.outcome).toBe('already_published');
+    expect(gate.check).not.toHaveBeenCalled();
+  });
+
+  it('does not publish a draft re-imported after the gate checked it', async () => {
+    const { version } = await importVersion(repo, howDoesThisLand, RAW);
+    const gate = {
+      check: () => {
+        repo.versions.get(version.id)!.sourceSha256 = 'other';
+        return Promise.resolve({ ok: true as const, calibration: null });
+      },
+    };
+    const err = await refusal(publishVersion(repo, 'howdoesthisland', '0.5.1', gate));
+    expect(err.code).toBe('VERSION_NOT_DRAFT');
+    expect(repo.versions.get(version.id)?.status).toBe('DRAFT');
   });
 
   it('refuses when the repo finds the version no longer a draft', async () => {
     await importVersion(repo, howDoesThisLand, RAW);
     repo.markPublished = () => Promise.resolve(false);
-    const err = await refusal(publishVersion(repo, 'howdoesthisland', '0.5.1'));
+    const err = await refusal(publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE));
     expect(err.code).toBe('VERSION_NOT_DRAFT');
   });
 });
@@ -169,7 +210,7 @@ describe('materialise()', () => {
 
   it('caches a published version, and hands every caller the same frozen model', async () => {
     const { version } = await importVersion(repo, howDoesThisLand, RAW);
-    await publishVersion(repo, 'howdoesthisland', '0.5.1');
+    await publishVersion(repo, 'howdoesthisland', '0.5.1', OPEN_GATE);
     const first = await materialise(repo, howDoesThisLand, version.id);
     const second = await materialise(repo, howDoesThisLand, version.id);
     expect(second).toBe(first);

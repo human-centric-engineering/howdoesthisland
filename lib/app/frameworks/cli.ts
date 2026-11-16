@@ -9,7 +9,12 @@
  */
 import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
 import type { FrameworkRepo } from '@/lib/app/frameworks/repo';
-import { FrameworkStoreError, importVersion, publishVersion } from '@/lib/app/frameworks/store';
+import {
+  FrameworkStoreError,
+  importVersion,
+  publishVersion,
+  type PublishGate,
+} from '@/lib/app/frameworks/store';
 
 export interface CliDeps {
   repo: FrameworkRepo;
@@ -57,8 +62,14 @@ export async function runImport(args: readonly string[], deps: CliDeps): Promise
   }
 }
 
-/** `publish <slug> <version>` */
-export async function runPublish(args: readonly string[], deps: CliDeps): Promise<ExitCode> {
+/**
+ * `publish <slug> <version>`. A draft publishes only if `gate` allows it: the
+ * calibration gate (`lib/app/calibration/gate.ts`, t-37).
+ */
+export async function runPublish(
+  args: readonly string[],
+  deps: CliDeps & { gate: PublishGate }
+): Promise<ExitCode> {
   const [slug, version] = args;
   if (!slug || !version || args.length !== 2) {
     deps.out('Usage: publish.ts <framework-slug> <version>');
@@ -66,7 +77,7 @@ export async function runPublish(args: readonly string[], deps: CliDeps): Promis
   }
   try {
     const result = await deps.runAsSystem(`framework publish: ${slug} ${version}`, () =>
-      publishVersion(deps.repo, slug, version)
+      publishVersion(deps.repo, slug, version, deps.gate)
     );
     deps.out(`${slug} ${version}: ${result.outcome.replace('_', ' ')}`);
     return 0;
