@@ -9,6 +9,11 @@
  * own tests (`tests/unit/lib/app/reports/share/`) cover the links themselves,
  * so these assert what reaches it and what the caller is sent.
  *
+ * FORK NOTE — the per-IP cap case reads `@/lib/app/rate-limit` for real on
+ * purpose: it is this fork's `shared-report` rule under test. A change to that
+ * rule should change it; the seam's pinned rules are in
+ * tests/unit/lib/app/defaults.test.ts (ledger row 2).
+ *
  * @see app/api/v1/assessments/[id]/shares/route.ts
  * @see app/api/v1/shares/[id]/route.ts
  * @see app/api/v1/shared-reports/[token]/route.ts
