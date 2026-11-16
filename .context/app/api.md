@@ -12,7 +12,7 @@ tasks read.
 | `method`   | `GET`, `HEAD`, `OPTIONS`, `POST`, `PUT`, `PATCH` or `DELETE`, as the route file exports it.                                                                                                                                                                                                                                                                                                                                                              |
 | `path`     | The URL path, with each dynamic segment as `{name}`: `app/api/v1/frameworks/[slug]/route.ts` is `/api/v1/frameworks/{slug}`.                                                                                                                                                                                                                                                                                                                             |
 | `summary`  | One line, in the words a developer reading the docs would use.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `auth`     | `{ who: 'anyone' }`; `{ who: 'signed-in', apiKeyScope }`; or `{ who: 'workspace-admin', apiKeyScope, platformAdmin }`, where `platformAdmin` is `'anywhere'` or `'entered'` (a platform admin must be acting in this workspace). `apiKeyScope` is the scope an API key needs, or `null` when the route wants a browser session.                                                                                                                          |
+| `auth`     | `{ who: 'anyone' }`; `{ who: 'platform-admin' }` (`withAdminAuth`: a session or an `admin`-scoped key); `{ who: 'signed-in', apiKeyScope }`; or `{ who: 'workspace-admin', apiKeyScope, platformAdmin }`, where `platformAdmin` is `'anywhere'` or `'entered'` (a platform admin must be acting in this workspace). `apiKeyScope` is the scope an API key needs, or `null` when the route wants a browser session.                                       |
 | `request`  | `params`, `query`, `body`: the Zod schemas the handler parses with, **imported, never restated**. The `params` object has one key per `{name}` in the path. A path that fails `params` answers 400 `VALIDATION_ERROR` unless `invalidParamsStatus` says otherwise: the framework routes set it to 404.                                                                                                                                                   |
 | `response` | The success `status`, or a list of them when one route answers several with the same `data` (`POST assessments`: `[200, 202]`); the Zod schemas of the envelope's `data` and (if sent) `meta`, as they are on the wire, where a `Date` is an ISO string; `conditional: true` for a route that sends an `ETag` and answers a matching `If-None-Match` with 304; and `stream: 'sse'` for a Server-Sent Events route, whose `data` is each event's payload. |
 
@@ -31,9 +31,12 @@ and its docblock lists its codes.
    `APP_ROUTE_DIRS` in the same test. Until it is, the
    test fails: every directory there must be in `APP_ROUTE_DIRS` or `CORE_ROUTE_DIRS`.
 
-An app route goes in an app directory, never inside one of core's: the scan does not
-look inside `CORE_ROUTE_DIRS`, so a route added under, say, `app/api/v1/orgs/` would go
-undeclared.
+An app route goes in an app directory. The scan does not look inside `CORE_ROUTE_DIRS`,
+so a route added under, say, `app/api/v1/orgs/` would go undeclared. The one exception
+is the app's admin routes, which sit under core's `admin/` so they share the `/api/v1/admin`
+rate-limit section and URL space. Each of them gets its own subdirectory, listed by path
+in `APP_ROUTE_DIRS` (`admin/frameworks`, t-38), and the scan reads that subdirectory as
+it reads any app directory.
 
 ## What keeps it honest
 
