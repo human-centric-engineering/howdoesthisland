@@ -33,16 +33,14 @@ export interface CalibrationSnapshot {
   judgeModels: Record<string, string[]>;
 }
 
-/** AI runs of one version read when publishing; more than enough for any real history. */
-const RUNS_READ = 50;
-
 export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): PublishGate {
   return {
     async check(version: StoredVersion) {
       if (UNGATED_VERSIONS[version.frameworkSlug]?.includes(version.version)) {
         return { ok: true, calibration: null };
       }
-      const runs = await store.aiRunsOf(version.id, RUNS_READ);
+      // Every AI run of the version: a version has few, and a cap could hide the one complete run.
+      const runs = await store.aiRunsOf(version.id);
       const run = runs.find(
         (r) =>
           r.sourceSha256 === version.sourceSha256 &&
@@ -50,17 +48,19 @@ export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): Publ
           r.totals.checks > 0
       );
       if (!run) {
-        const stale = runs.some((r) => r.sourceSha256 !== version.sourceSha256);
-        const partial = runs.some((r) => r.sourceSha256 === version.sourceSha256);
+        const current = runs.filter((r) => r.sourceSha256 === version.sourceSha256);
+        const why =
+          current.length === 0
+            ? runs.length > 0
+              ? ' of the file as imported now: it was re-imported after its last run.'
+              : '.'
+            : current.some((r) => r.totals.judgeFailures > 0)
+              ? ': every run of it had a judge fail or scored nothing.'
+              : ': every run of it scored nothing.';
         return {
           ok: false,
           reason:
-            `${version.frameworkSlug} ${version.version} has no complete AI calibration run` +
-            (partial
-              ? ': every run of it had a judge fail.'
-              : stale
-                ? ' of the file as imported now: it was re-imported after its last run.'
-                : '.') +
+            `${version.frameworkSlug} ${version.version} has no complete AI calibration run${why}` +
             ` Run \`npm run calibrate -- --mode ai --version ${version.version}\` first.`,
         };
       }

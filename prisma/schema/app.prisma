@@ -84,7 +84,7 @@ model FrameworkVersion {
   sourceSha256    String
   publishedAt     DateTime?
   /// The calibration run that allowed publishing, copied at publish (t-37):
-  /// `{ runId, ranAt, agreement, setVersion }`. Null on a draft, and on 0.5.1,
+  /// `{ runId, ranAt, agreement, setVersion, checks, judgeModels }`. Null on a draft, and on 0.5.1,
   /// published before the gate existed.
   calibration     Json?
   createdAt       DateTime               @default(now())
@@ -363,7 +363,8 @@ model CalibrationRun {
   totals             Json
   /// Each case's scored expectations.
   rows               Json
-  /// What the judge calls cost, summed from their `AiCostLog` rows.
+  /// What the judge calls cost, summed from each reply's and each billed
+  /// failure's cost (the same figures runJudge wrote to `AiCostLog`).
   costUsd            Float            @default(0)
   /// Who started it. FK → user, ON DELETE SET NULL. Null from the CLI.
   startedByUserId    String?

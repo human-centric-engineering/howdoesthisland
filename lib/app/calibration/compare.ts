@@ -10,7 +10,13 @@
  * a case or expectation one run has and the other does not is not a flip:
  * it is counted in the totals of the run that has it, and nowhere else.
  */
-import { type Check, type CheckKind, type Outcome, type Totals } from '@/lib/app/calibration/score';
+import {
+  round4,
+  type Check,
+  type CheckKind,
+  type Outcome,
+  type Totals,
+} from '@/lib/app/calibration/score';
 
 export interface ScoredRow {
   case: string;
@@ -54,7 +60,6 @@ export interface RunComparison {
   flips: Flip[];
 }
 
-const round4 = (x: number) => Math.round(x * 10_000) / 10_000;
 const okRate = (t: Totals, k: CheckKind): number | null => {
   const tally = t.byKind[k];
   return tally.n ? round4(tally.ok / tally.n) : null;

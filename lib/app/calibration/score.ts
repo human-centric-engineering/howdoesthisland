@@ -150,7 +150,8 @@ export interface Totals {
   judgeFailures: number;
 }
 
-const round4 = (x: number) => Math.round(x * 10_000) / 10_000;
+/** Rounds to four places, as every agreement figure is. */
+export const round4 = (x: number): number => Math.round(x * 10_000) / 10_000;
 const emptyTally = (): Tally => ({ ok: 0, near: 0, miss: 0, n: 0 });
 
 export function tally(rows: readonly { checks: readonly Check[] }[], judgeFailures = 0): Totals {

@@ -81,8 +81,8 @@ export interface CalibrationStore {
   createRun(run: NewRun): Promise<StoredRun>;
   /** The newest run of `mode` against any version of the framework. */
   latestRun(where: { frameworkSlug: string; mode: 'quick' | 'ai' }): Promise<StoredRun | null>;
-  /** A version's AI runs, newest first. */
-  aiRunsOf(frameworkVersionId: string, take: number): Promise<StoredRun[]>;
+  /** All of a version's AI runs, newest first. */
+  aiRunsOf(frameworkVersionId: string): Promise<StoredRun[]>;
 }
 
 const MODE = { quick: 'QUICK', ai: 'AI' } as const;
@@ -169,12 +169,11 @@ export const prismaCalibrationStore: CalibrationStore = {
       return row ? toStored(row) : null;
     }),
 
-  aiRunsOf: (frameworkVersionId, take) =>
+  aiRunsOf: (frameworkVersionId) =>
     system('read a version’s runs', async () => {
       const rows = await prisma.calibrationRun.findMany({
         where: { frameworkVersionId, mode: 'AI' },
         orderBy: { createdAt: 'desc' },
-        take,
         select,
       });
       return rows.map(toStored);

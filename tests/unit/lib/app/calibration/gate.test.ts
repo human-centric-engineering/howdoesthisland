@@ -73,7 +73,7 @@ describe('calibrationGate()', () => {
         'howdoesthisland 0.6.0 has no complete AI calibration run. ' +
         'Run `npm run calibrate -- --mode ai --version 0.6.0` first.',
     });
-    expect(aiRunsOf).toHaveBeenCalledWith('ver-2', expect.any(Number));
+    expect(aiRunsOf).toHaveBeenCalledWith('ver-2');
   });
 
   it('refuses a draft whose only runs had a judge fail', async () => {
@@ -81,6 +81,13 @@ describe('calibrationGate()', () => {
     const out = await gate.check(DRAFT);
     expect(out.ok).toBe(false);
     expect(!out.ok && out.reason).toContain('every run of it had a judge fail');
+  });
+
+  it('says a run that scored nothing is why, not a judge failure', async () => {
+    const empty = aiRun();
+    const { gate } = gateOver([{ ...empty, totals: { ...empty.totals, checks: 0 } }]);
+    const out = await gate.check(DRAFT);
+    expect(!out.ok && out.reason).toContain(': every run of it scored nothing.');
   });
 
   it('refuses a draft re-imported since its run', async () => {

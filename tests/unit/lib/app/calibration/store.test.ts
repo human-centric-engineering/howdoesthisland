@@ -86,19 +86,19 @@ describe('prismaCalibrationStore', () => {
 
   it('reads a version’s AI runs, newest first', async () => {
     db.calibrationRun.findMany.mockResolvedValue([dbRow()]);
-    const runs = await store.aiRunsOf('ver-1', 50);
+    const runs = await store.aiRunsOf('ver-1');
     expect(db.calibrationRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { frameworkVersionId: 'ver-1', mode: 'AI' },
         orderBy: { createdAt: 'desc' },
-        take: 50,
       })
     );
     expect(runs).toHaveLength(1);
+    expect(db.calibrationRun.findMany.mock.calls[0][0]).not.toHaveProperty('take');
   });
 
   it('refuses stored JSON that is not a run’s, rather than trusting it', async () => {
     db.calibrationRun.findMany.mockResolvedValue([dbRow({ totals: { agreement: 'high' } })]);
-    await expect(store.aiRunsOf('ver-1', 50)).rejects.toThrow();
+    await expect(store.aiRunsOf('ver-1')).rejects.toThrow();
   });
 });
