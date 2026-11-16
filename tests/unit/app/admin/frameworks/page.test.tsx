@@ -36,6 +36,11 @@ describe('FrameworksPage', () => {
 
   it('says so when no framework comes back', async () => {
     vi.mocked(serverFetch).mockResolvedValue(apiSuccess([]));
+    const { unmount } = render(await FrameworksPage());
+    expect(screen.getByText('No frameworks could be loaded.')).toBeInTheDocument();
+    unmount();
+    // A body that is not a list is not read as one.
+    vi.mocked(serverFetch).mockResolvedValue(apiSuccess({ versions: [] }));
     render(await FrameworksPage());
     expect(screen.getByText('No frameworks could be loaded.')).toBeInTheDocument();
   });
