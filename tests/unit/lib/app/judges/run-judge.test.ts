@@ -241,6 +241,20 @@ describe('runJudge on a good reply', () => {
     expect(costRow().userId).toBe('user-1');
   });
 
+  it('tags the cost row with a calibration run’s id, never over the run’s own fields', async () => {
+    chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
+    await run({
+      ephemeral: true,
+      costTags: { calibrationRunId: 'cal-1', judge: 'spoofed', frameworkVersion: 'spoofed' },
+    });
+    expect(costRow().metadata).toMatchObject({
+      calibrationRunId: 'cal-1',
+      judge: SLOT,
+      frameworkVersion: 'howdoesthisland@0.5.1',
+      ephemeral: true,
+    });
+  });
+
   it('does not mark a stored run as ephemeral', async () => {
     chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
     await run({ assessmentId: 'asmt-1' });

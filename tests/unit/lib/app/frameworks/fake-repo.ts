@@ -11,7 +11,16 @@ import type {
   StoredVersion,
   VersionContent,
 } from '@/lib/app/frameworks/repo';
-import type { LinkRecord, NodeRecord } from '@/lib/app/frameworks/types';
+import type { PublishGate } from '@/lib/app/frameworks/store';
+import type { JsonObject, LinkRecord, NodeRecord } from '@/lib/app/frameworks/types';
+
+/**
+ * A gate that lets every draft publish and records nothing: for tests whose
+ * subject is not the calibration gate (that is `calibration/gate.test.ts`).
+ */
+export const OPEN_GATE: PublishGate = {
+  check: () => Promise.resolve({ ok: true, calibration: null }),
+};
 import type {
   FrameworkCatalog,
   ServedFramework,
@@ -19,6 +28,8 @@ import type {
 } from '@/lib/app/frameworks/api/catalog';
 
 export interface FakeVersion extends StoredVersion {
+  /** What `markPublished` recorded (t-37). */
+  calibration: JsonObject | null;
   nodes: NodeRecord[];
   links: LinkRecord[];
   sourceDocument: unknown;
@@ -37,7 +48,7 @@ export class FakeFrameworkRepo implements FrameworkRepo {
   }
 
   private stored(v: FakeVersion): StoredVersion {
-    const { nodes: _n, links: _l, sourceDocument: _d, ...rest } = v;
+    const { nodes: _n, links: _l, sourceDocument: _d, calibration: _c, ...rest } = v;
     return { ...rest };
   }
 
@@ -62,6 +73,7 @@ export class FakeFrameworkRepo implements FrameworkRepo {
       status: 'DRAFT',
       sourceSha256: content.sourceSha256,
       publishedAt: null,
+      calibration: null,
       sourceDocument: content.sourceDocument,
       // Stored as JSON, as the database would.
       nodes: JSON.parse(JSON.stringify(content.nodes)) as NodeRecord[],
@@ -85,12 +97,20 @@ export class FakeFrameworkRepo implements FrameworkRepo {
     return Promise.resolve(true);
   }
 
-  markPublished(versionId: string, at: Date): Promise<boolean> {
+  markPublished(
+    versionId: string,
+    at: Date,
+    sourceSha256: string,
+    calibration: JsonObject | null
+  ): Promise<boolean> {
     this.calls.markPublished++;
     const v = this.versions.get(versionId);
-    if (!v || v.status !== 'DRAFT') return Promise.resolve(false);
+    if (!v || v.status !== 'DRAFT' || v.sourceSha256 !== sourceSha256) {
+      return Promise.resolve(false);
+    }
     v.status = 'PUBLISHED';
     v.publishedAt = at;
+    v.calibration = calibration;
     return Promise.resolve(true);
   }
 

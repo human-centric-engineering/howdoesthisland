@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { importVersion, publishVersion } from '@/lib/app/frameworks/store';
 import { prismaFrameworkRepo } from '@/lib/app/frameworks/repo';
-import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
+import { FakeFrameworkRepo, OPEN_GATE } from '@/tests/unit/lib/app/frameworks/fake-repo';
 import { GET as listRoute } from '@/app/api/v1/frameworks/route';
 import { GET as frameworkRoute } from '@/app/api/v1/frameworks/[slug]/route';
 import { GET as versionRoute } from '@/app/api/v1/frameworks/[slug]/versions/[version]/route';
@@ -93,7 +93,7 @@ const kind = (k: string, v = '0.5.1', extra: Record<string, string> = {}) =>
 
 beforeAll(async () => {
   await importVersion(repo(), howDoesThisLand, RAW);
-  await publishVersion(repo(), SLUG, '0.5.1', new Date('2026-11-12T21:50:46.474Z'));
+  await publishVersion(repo(), SLUG, '0.5.1', OPEN_GATE, new Date('2026-11-12T21:50:46.474Z'));
   // A draft beside it, which no route may show.
   await importVersion(repo(), howDoesThisLand, asVersion('0.6.0'));
 });
@@ -346,7 +346,7 @@ describe('an unexpected failure', () => {
   it('is a 500 in the standard envelope, not a 404', async () => {
     const spy = vi.spyOn(repo(), 'findVersionById').mockRejectedValueOnce(new Error('db down'));
     // A version not yet materialised, so the read reaches the repo.
-    await publishVersion(repo(), SLUG, '0.6.0', new Date('2026-11-13T00:00:00Z'));
+    await publishVersion(repo(), SLUG, '0.6.0', OPEN_GATE, new Date('2026-11-13T00:00:00Z'));
     try {
       const res = await version('0.6.0');
       expect(res.status).toBe(500);

@@ -829,6 +829,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'scripts/app/frameworks/*.ts',
         // FORK (HowDoesThisLand): and the engine-baseline recorder (t-12).
         'scripts/app/baseline/record.ts',
+        // FORK (HowDoesThisLand): and the calibrate command and the prototype
+        // totals recorder (t-37).
+        'scripts/app/calibrate.ts',
+        'scripts/app/calibration/record-prototype.ts',
       ]);
       // FORK (HowDoesThisLand): pinned to our two repo-reading tests, the
       // prototype import guard and the baseline drift check (t-12).

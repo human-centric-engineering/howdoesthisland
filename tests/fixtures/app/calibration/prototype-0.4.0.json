@@ -1,0 +1,25 @@
+{
+  "sources": {
+    "engine": {
+      "file": "prototype/src/engine.js",
+      "sha256": "6ecf930f3b49191a38f7283d2ab30af404527fc7737a732e7ae150bad8e5cd27"
+    },
+    "model": {
+      "file": "prototype/howdoesthisland_model.json",
+      "sha256": "6b4f0d80a0eaf60ccab2ab9b7a99b96d53d6d0f850fcbf3f98c1c797d187344e"
+    },
+    "evalSet": {
+      "file": "prototype/howdoesthisland_eval_set.json",
+      "sha256": "f9d3abcb89706144e3fc7143ab2d9f4d74dfd6ebb538f57d5320137db6a7d99b"
+    }
+  },
+  "totals": {
+    "appealHits": 42,
+    "appealNear": 27,
+    "appealN": 72,
+    "flagHits": 27,
+    "flagN": 27,
+    "fnHits": 5,
+    "fnN": 15
+  }
+}

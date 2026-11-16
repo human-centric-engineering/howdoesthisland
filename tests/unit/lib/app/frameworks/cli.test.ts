@@ -5,14 +5,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runImport, runPublish, type CliDeps } from '@/lib/app/frameworks/cli';
-import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
+import type { PublishGate } from '@/lib/app/frameworks/store';
+import { FakeFrameworkRepo, OPEN_GATE } from '@/tests/unit/lib/app/frameworks/fake-repo';
 
 const FILE = 'lib/app/frameworks/howdoesthisland/data/model-0.5.1.json';
 const OLD = 'tests/unit/lib/app/frameworks/fixtures/model-0.5.0.json';
 
 let repo: FakeFrameworkRepo;
 let lines: string[];
-let deps: CliDeps;
+let deps: CliDeps & { gate: PublishGate };
 const reasons: string[] = [];
 
 beforeEach(() => {
@@ -21,6 +22,7 @@ beforeEach(() => {
   reasons.length = 0;
   deps = {
     repo,
+    gate: OPEN_GATE,
     readFile: (path) => readFileSync(path, 'utf8'),
     runAsSystem: (reason, fn) => {
       reasons.push(reason);

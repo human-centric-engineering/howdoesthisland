@@ -17,14 +17,21 @@ python3 prototype/tools/validate_refs.py prototype/howdoesthisland_model.json
 npx tsx --env-file=.env.local scripts/app/frameworks/import.ts \
   howdoesthisland lib/app/frameworks/howdoesthisland/data/model-0.5.1.json
 
-# 3. Publish it. From here it can never change.
-npx tsx --env-file=.env.local scripts/app/frameworks/publish.ts howdoesthisland 0.5.1
+# 3. Calibrate it with the judges (t-37). A draft without a complete AI run of it
+#    does not publish. See calibration.md.
+npm run calibrate -- --mode ai --version 0.6.0
+
+# 4. Publish it. From here it can never change.
+npx tsx --env-file=.env.local scripts/app/frameworks/publish.ts howdoesthisland 0.6.0
 ```
 
 Exit codes: `0` done, `1` refused (every problem is printed), `2` bad usage.
 
-**Run both against every database**, development and each deployed one. No seed
-runs them, so a database nobody imported into has no model.
+**Run them against every database**, development and each deployed one. No seed
+runs them, so a database nobody imported into has no model. The gate reads the runs in
+the database it publishes in, so each database needs its own AI run of a new version
+before it publishes there. 0.5.1, published before the gate, needs none
+(`UNGATED_VERSIONS`).
 
 - **Importing the same file again changes nothing.** A different file under a draft's
   version number replaces the draft. Under a published one it is refused: give the

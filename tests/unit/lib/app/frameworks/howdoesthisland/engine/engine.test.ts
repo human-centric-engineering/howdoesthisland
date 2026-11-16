@@ -34,7 +34,7 @@ import {
   materialise,
   publishVersion,
 } from '@/lib/app/frameworks/store';
-import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
+import { FakeFrameworkRepo, OPEN_GATE } from '@/tests/unit/lib/app/frameworks/fake-repo';
 import {
   MODEL_FILE,
   loadCases,
@@ -58,7 +58,7 @@ async function frozenModel() {
   __resetMaterialiseCacheForTests();
   const repo = new FakeFrameworkRepo();
   const { version } = await importVersion(repo, howDoesThisLand, readFileSync(MODEL_FILE, 'utf8'));
-  await publishVersion(repo, HOWDOESTHISLAND_SLUG, version.version);
+  await publishVersion(repo, HOWDOESTHISLAND_SLUG, version.version, OPEN_GATE);
   return materialise(repo, howDoesThisLand, version.id);
 }
 

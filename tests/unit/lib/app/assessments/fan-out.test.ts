@@ -46,6 +46,17 @@ describe('runJudges', () => {
     expect(mocks.runJudge.mock.calls[0][1]).not.toHaveProperty('assessmentId');
   });
 
+  it('hands each judge the cost tags it was given', async () => {
+    await runJudges({ ...input(), ephemeral: true, costTags: { calibrationRunId: 'cal-1' } });
+    for (const [, judgeInput] of mocks.runJudge.mock.calls) {
+      expect(judgeInput).toMatchObject({
+        ephemeral: true,
+        costTags: { calibrationRunId: 'cal-1' },
+      });
+    }
+    expect(mocks.runJudge).toHaveBeenCalledTimes(3);
+  });
+
   it('records a judge’s failure and carries on with the others', async () => {
     mocks.runJudge.mockImplementation(async (slot: string) => {
       if (slot === 'judge_b') throw new JudgeRunError('refused', 'The provider declined.');

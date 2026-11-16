@@ -172,16 +172,30 @@ describe('replaceDraft()', () => {
 });
 
 describe('markPublished()', () => {
-  it('publishes only a draft', async () => {
+  it('publishes only a draft that still has the file the gate checked', async () => {
     const at = new Date('2026-11-12T12:00:00Z');
     db.frameworkVersion.updateMany.mockResolvedValueOnce({ count: 1 });
-    expect(await repo.markPublished('ver-1', at)).toBe(true);
+    expect(await repo.markPublished('ver-1', at, 'sha-1', null)).toBe(true);
     expect(db.frameworkVersion.updateMany).toHaveBeenCalledWith({
-      where: { id: 'ver-1', status: 'DRAFT' },
+      where: { id: 'ver-1', status: 'DRAFT', sourceSha256: 'sha-1' },
       data: { status: 'PUBLISHED', publishedAt: at },
     });
 
     db.frameworkVersion.updateMany.mockResolvedValueOnce({ count: 0 });
-    expect(await repo.markPublished('ver-1', at)).toBe(false);
+    expect(await repo.markPublished('ver-1', at, 'sha-1', null)).toBe(false);
+  });
+
+  it('records the calibration snapshot it is given (t-37)', async () => {
+    const at = new Date('2026-11-12T12:00:00Z');
+    db.frameworkVersion.updateMany.mockResolvedValueOnce({ count: 1 });
+    await repo.markPublished('ver-1', at, 'sha-1', { runId: 'cal-1', agreement: 0.7 });
+    expect(db.frameworkVersion.updateMany).toHaveBeenCalledWith({
+      where: { id: 'ver-1', status: 'DRAFT', sourceSha256: 'sha-1' },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt: at,
+        calibration: { runId: 'cal-1', agreement: 0.7 },
+      },
+    });
   });
 });

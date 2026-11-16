@@ -148,6 +148,23 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'tests/fixtures/app/engine-baseline/. Nothing imports it. Its logic is ' +
       'in the three modules beside it, which have their own tests.',
   },
+  {
+    // HowDoesThisLand (t-37), by name like the ones above.
+    pattern: 'scripts/app/calibrate.ts',
+    reason:
+      'a thin entry point that wires lib/app/calibration/cli.ts to the file ' +
+      'system, the database, the judges and process.exit, run by hand. The ' +
+      'command is in cli.ts, which stays gated and has its own tests.',
+  },
+  {
+    // HowDoesThisLand (t-37), by name.
+    pattern: 'scripts/app/calibration/record-prototype.ts',
+    reason:
+      'a tsx entry point run by hand to record the prototype calibrate() ' +
+      'totals: it copies prototype/src/engine.js to a temp directory, imports ' +
+      'it from there and writes tests/fixtures/app/calibration/. Nothing ' +
+      'imports it; parity.test.ts checks what it wrote.',
+  },
 ];
 
 /** One test that must run regardless of what the module graph says. */

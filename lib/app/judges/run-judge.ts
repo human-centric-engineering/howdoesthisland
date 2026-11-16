@@ -155,6 +155,11 @@ export interface RunJudgeInput<Ctx, Output> {
    */
   ephemeral?: boolean;
   /**
+   * Extra fields for the cost row's metadata, such as a calibration run's id
+   * (t-37). They never replace the fields the run itself writes.
+   */
+  costTags?: Readonly<Record<string, string>>;
+  /**
    * Who asked for the run, for the cost row: a real `User.id` from the
    * session, never a synthetic visitor id. Absent for a job.
    */
@@ -211,7 +216,7 @@ export async function runJudge<Ctx, Output>(
       const checked = input.engine.validateJudgeReply(slot, reply, input.text);
       return checked.ok ? { output: checked.output, drops: checked.drops } : null;
     },
-    costMetadata: { judge: slot },
+    costMetadata: { ...input.costTags, judge: slot },
     phase: 'judge',
     frameworkVersion: input.frameworkVersion,
     ...(input.assessmentId !== undefined ? { assessmentId: input.assessmentId } : {}),

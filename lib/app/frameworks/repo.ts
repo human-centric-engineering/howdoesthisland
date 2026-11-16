@@ -14,7 +14,7 @@
  */
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
-import type { LinkRecord, NodeRecord } from '@/lib/app/frameworks/types';
+import type { JsonObject, LinkRecord, NodeRecord } from '@/lib/app/frameworks/types';
 
 export type VersionStatus = 'DRAFT' | 'PUBLISHED' | 'RETIRED';
 
@@ -51,8 +51,16 @@ export interface FrameworkRepo {
   createDraft(framework: FrameworkHeader, content: VersionContent): Promise<StoredVersion>;
   /** Replaces a draft's records. Returns false if the version is no longer a draft. */
   replaceDraft(versionId: string, content: VersionContent): Promise<boolean>;
-  /** Draft → published. Returns false if the version is no longer a draft. */
-  markPublished(versionId: string, at: Date): Promise<boolean>;
+  /**
+   * Draft → published, recording `calibration` (t-37). Returns false if the
+   * version is no longer a draft, or no longer has the file `sourceSha256`.
+   */
+  markPublished(
+    versionId: string,
+    at: Date,
+    sourceSha256: string,
+    calibration: JsonObject | null
+  ): Promise<boolean>;
   readNodes(versionId: string): Promise<NodeRecord[]>;
 }
 
@@ -188,10 +196,14 @@ export const prismaFrameworkRepo: FrameworkRepo = {
     );
   },
 
-  async markPublished(versionId, at) {
+  async markPublished(versionId, at, sourceSha256, calibration) {
     const result = await prisma.frameworkVersion.updateMany({
-      where: { id: versionId, status: 'DRAFT' },
-      data: { status: 'PUBLISHED', publishedAt: at },
+      where: { id: versionId, status: 'DRAFT', sourceSha256 },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt: at,
+        ...(calibration ? { calibration: calibration as Prisma.InputJsonValue } : {}),
+      },
     });
     return result.count === 1;
   },
