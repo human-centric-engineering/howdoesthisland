@@ -82,11 +82,13 @@ describe('runCalibrate()', () => {
       ['--mode', 'quick', '--version'],
       ['--mode', 'quick', '--version', '0.5.1', '--mode', 'ai'],
       ['--mode', 'quick', '--version', '0.5.1', '--force', 'yes'],
+      // No flag picks another set (see cli.ts).
+      ['--mode', 'quick', '--version', '0.5.1', '--set', 'tiny.json'],
     ]) {
       expect(await runCalibrate(args, deps)).toBe(2);
     }
     expect(new Set(lines)).toEqual(
-      new Set(['Usage: calibrate --mode quick|ai --version <version> [--set <eval-file.json>]'])
+      new Set(['Usage: calibrate --mode quick|ai --version <version>'])
     );
   });
 
@@ -94,31 +96,31 @@ describe('runCalibrate()', () => {
     expect(await runCalibrate(['--mode', 'quick', '--version', '9.9.9'], deps)).toBe(1);
     expect(lines.pop()).toBe('No howdoesthisland version 9.9.9. Import it first.');
 
-    const set = (file: string) => ['--mode', 'quick', '--version', '0.5.1', '--set', file];
-    expect(await runCalibrate(set('nope.json'), deps)).toBe(1);
-    expect(lines.pop()).toBe('No calibration set at nope.json.');
+    const args = ['--mode', 'quick', '--version', '0.5.1'];
+    const EVAL = 'lib/app/frameworks/howdoesthisland/data/eval-0.5.1.json';
+    deps.readFile = () => {
+      throw new Error('ENOENT');
+    };
+    expect(await runCalibrate(args, deps)).toBe(1);
+    expect(lines.pop()).toBe(`No calibration set at ${EVAL}.`);
 
     deps.readFile = () => '{';
-    expect(await runCalibrate(set('bad.json'), deps)).toBe(1);
-    expect(lines.pop()).toBe('bad.json is not valid JSON.');
+    expect(await runCalibrate(args, deps)).toBe(1);
+    expect(lines.pop()).toBe(`${EVAL} is not valid JSON.`);
 
     deps.readFile = () => '{"meta": {}}';
-    expect(await runCalibrate(set('odd.json'), deps)).toBe(1);
-    expect(lines).toContain('odd.json is not a calibration set:');
+    expect(await runCalibrate(args, deps)).toBe(1);
+    expect(lines).toContain(`${EVAL} is not a calibration set:`);
     expect(created).toHaveLength(0);
   });
 
   it('exits 1 with the runner’s reason when the set does not fit the version', async () => {
     const other = readFileSync(MODEL, 'utf8').replace('"version": "0.5.1"', '"version": "0.6.0"');
     await importVersion(repo, howDoesThisLand, other);
-    const args = [
-      '--mode',
-      'quick',
-      '--version',
-      '0.6.0',
-      '--set',
-      'lib/app/frameworks/howdoesthisland/data/eval-0.5.1.json',
-    ];
+    // eval-0.6.0.json does not exist; stand the 0.5.1 set in for it.
+    const real = deps.readFile;
+    deps.readFile = (path) => real(path.replace('eval-0.6.0.json', 'eval-0.5.1.json'));
+    const args = ['--mode', 'quick', '--version', '0.6.0'];
     expect(await runCalibrate(args, deps)).toBe(1);
     expect(lines.pop()).toBe('The calibration set is written for model 0.5.1, not 0.6.0.');
   });

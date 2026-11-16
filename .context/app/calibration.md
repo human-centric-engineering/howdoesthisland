@@ -72,7 +72,7 @@ npm run calibrate -- --mode ai --version 0.5.1
 ```
 
 The version must be imported (draft or published). The set is the one written for it,
-`data/eval-<version>.json`, or `--set <file>`. A set whose `meta.model` is not the version,
+`data/eval-<version>.json`; no flag picks another, because an AI run is what lets a draft publish. A set whose `meta.model` is not the version,
 or that names an id the version does not have, is refused before anything runs.
 
 - **quick** puts every case through the quick scan and `assemble`. It is free and
@@ -120,8 +120,9 @@ conditioned on the same `sourceSha256`, so a re-import between the check and the
 does not publish uncalibrated content.
 
 0.5.1 was published before the gate existed, and the gate does not apply to it
-retroactively (a planning ruling). It is listed in `UNGATED_VERSIONS`, so a new database
-still publishes it from a draft, with no snapshot. Never add a version to that list.
+retroactively (a planning ruling). It is listed in `UNGATED_VERSIONS`, pinned to the sha256 of the file as published, so a new
+database still publishes that file from a draft, with no snapshot, and a different file
+under the same number is gated. Never add a version to that list.
 
 ## Parity with the prototype
 

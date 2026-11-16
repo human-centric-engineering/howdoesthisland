@@ -18,9 +18,15 @@ import type { CalibrationStore } from '@/lib/app/calibration/store';
 import type { PublishGate } from '@/lib/app/frameworks/store';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 
-/** Published before the gate existed, by framework slug. Never added to. */
-export const UNGATED_VERSIONS: Readonly<Record<string, readonly string[]>> = {
-  howdoesthisland: ['0.5.1'],
+/**
+ * Published before the gate existed: framework slug → version → the sha256 of
+ * the file as published. Pinned to the file, so a different file imported
+ * under the same number is gated like any other. Never added to.
+ */
+export const UNGATED_VERSIONS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  howdoesthisland: {
+    '0.5.1': '6b4f0d80a0eaf60ccab2ab9b7a99b96d53d6d0f850fcbf3f98c1c797d187344e',
+  },
 };
 
 /** What `FrameworkVersion.calibration` holds once a gated version is published. */
@@ -36,7 +42,7 @@ export interface CalibrationSnapshot {
 export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): PublishGate {
   return {
     async check(version: StoredVersion) {
-      if (UNGATED_VERSIONS[version.frameworkSlug]?.includes(version.version)) {
+      if (UNGATED_VERSIONS[version.frameworkSlug]?.[version.version] === version.sourceSha256) {
         return { ok: true, calibration: null };
       }
       // Every AI run of the version: a version has few, and a cap could hide the one complete run.

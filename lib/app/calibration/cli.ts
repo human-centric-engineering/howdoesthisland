@@ -2,12 +2,14 @@
  * The calibrate command (t-37), behind `scripts/app/calibrate.ts`, which only
  * wires it to the real file system, database and process.
  *
- *   npm run calibrate -- --mode quick|ai --version <v> [--set <file>]
+ *   npm run calibrate -- --mode quick|ai --version <v>
  *
  * Runs the HowDoesThisLand calibration set against an imported version
  * (draft or published), stores the run, and prints its totals beside the
- * last run of the same mode. The set defaults to the one written for the
- * version, `lib/app/frameworks/howdoesthisland/data/eval-<v>.json`.
+ * last run of the same mode. The set is always the one written for the
+ * version, `lib/app/frameworks/howdoesthisland/data/eval-<v>.json`: there is
+ * no flag for another, because an AI run is what lets a draft publish, and a
+ * hand-picked set would let a sliver of the cases stand in for the whole.
  *
  * `ai` calls every judge on every case, in the install org, against its
  * budget: about 26 cases × 9 judges.
@@ -33,24 +35,22 @@ export interface CalibrateDeps extends RunCalibrationDeps {
   out: (line: string) => void;
 }
 
-const USAGE = 'Usage: calibrate --mode quick|ai --version <version> [--set <eval-file.json>]';
+const USAGE = 'Usage: calibrate --mode quick|ai --version <version>';
 const setFileFor = (version: string) =>
   `lib/app/frameworks/howdoesthisland/data/eval-${version}.json`;
 
-function parseArgs(
-  args: readonly string[]
-): { mode: CalibrationMode; version: string; set: string | null } | null {
+function parseArgs(args: readonly string[]): { mode: CalibrationMode; version: string } | null {
   const flags = new Map<string, string>();
   for (let i = 0; i < args.length; i += 2) {
     const [name, value] = [args[i], args[i + 1]];
-    if (!['--mode', '--version', '--set'].includes(name) || value === undefined) return null;
+    if (!['--mode', '--version'].includes(name) || value === undefined) return null;
     if (flags.has(name)) return null;
     flags.set(name, value);
   }
   const mode = flags.get('--mode');
   const version = flags.get('--version');
   if ((mode !== 'quick' && mode !== 'ai') || !version) return null;
-  return { mode, version, set: flags.get('--set') ?? null };
+  return { mode, version };
 }
 
 const pct = (x: number | null) => (x === null ? '–' : `${(x * 100).toFixed(1)}%`);
@@ -104,7 +104,7 @@ export async function runCalibrate(
     return 1;
   }
 
-  const file = parsed.set ?? setFileFor(version);
+  const file = setFileFor(version);
   let raw: string;
   try {
     raw = deps.readFile(file);

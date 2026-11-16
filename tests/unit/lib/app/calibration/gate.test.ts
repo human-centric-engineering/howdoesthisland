@@ -4,6 +4,7 @@
  * with such a run publishes and records its snapshot; the versions published
  * before the gate are exempt.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { calibrationGate, UNGATED_VERSIONS } from '@/lib/app/calibration/gate';
@@ -13,6 +14,8 @@ import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 import { FrameworkStoreError, importVersion, publishVersion } from '@/lib/app/frameworks/store';
 import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
+
+const MODEL_FILE = 'lib/app/frameworks/howdoesthisland/data/model-0.5.1.json';
 
 const DRAFT: StoredVersion = {
   id: 'ver-2',
@@ -115,14 +118,21 @@ describe('calibrationGate()', () => {
     });
   });
 
-  it('lets the versions published before the gate through without a run', async () => {
-    expect(UNGATED_VERSIONS).toEqual({ howdoesthisland: ['0.5.1'] });
+  it('lets the file published before the gate through without a run', async () => {
+    const sha = createHash('sha256').update(readFileSync(MODEL_FILE)).digest('hex');
+    expect(UNGATED_VERSIONS).toEqual({ howdoesthisland: { '0.5.1': sha } });
     const { gate, aiRunsOf } = gateOver([]);
-    expect(await gate.check({ ...DRAFT, version: '0.5.1' })).toEqual({
+    expect(await gate.check({ ...DRAFT, version: '0.5.1', sourceSha256: sha })).toEqual({
       ok: true,
       calibration: null,
     });
     expect(aiRunsOf).not.toHaveBeenCalled();
+  });
+
+  it('gates a different file imported under the exempt version number', async () => {
+    const { gate } = gateOver([]);
+    const out = await gate.check({ ...DRAFT, version: '0.5.1', sourceSha256: 'other' });
+    expect(out.ok).toBe(false);
   });
 });
 
