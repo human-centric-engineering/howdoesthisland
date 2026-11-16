@@ -3,8 +3,8 @@
  *
  * Public: the token is the access. The answer is the assessment as a shared
  * report shows it (no id, cost, source, workspace or author) and the model
- * version it ran on, so a reader needs no second call. Each answer counts as
- * a view of the link.
+ * version it ran on, so a reader needs no second call. Each answer that
+ * serves the report counts as a view of the link; a 422 does not.
  *
  * The token enters the link's workspace (`runAsShareOrg`,
  * `lib/app/reports/share/share-org.ts`). An unknown, malformed, revoked or

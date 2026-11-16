@@ -5,7 +5,8 @@
  * (`GET /api/v1/assessments/{id}`) and the model version it ran on
  * (`GET /api/v1/frameworks/{slug}/versions/{version}`). The first serves
  * `result` and `context` as `unknown`, because they are each framework's own
- * shapes (`lib/app/api/registry.ts`). The second is the whole model document.
+ * shapes (`lib/app/api/registry.ts`). The report never reads `context`, so
+ * a share link does not serve it. The second is the whole model document.
  * Both are external data to the page, so each is parsed here and never cast.
  *
  * The schemas cover the fields the report shows, and Zod strips the rest, so
@@ -170,7 +171,6 @@ export type ReportHighlight = z.infer<typeof highlightSchema>;
 export type ReportRecommendation = z.infer<typeof recommendationSchema>;
 export type ReportRedFlag = z.infer<typeof redFlagSchema>;
 
-/** The assessment as the API serves it, dates as the ISO strings they arrive as. */
 /**
  * The assessment as the report reads it: what a share link serves
  * (`sharedAssessmentSchema`), plus the two fields only a workspace member

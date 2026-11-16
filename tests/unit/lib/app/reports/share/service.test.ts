@@ -11,16 +11,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/env', () => ({
-  env: {
-    BETTER_AUTH_SECRET: 'test-secret-that-is-at-least-32-characters-long',
-    BETTER_AUTH_URL: 'https://app.example.com',
-    TENANCY_MODE: 'multi',
-  },
+const env = vi.hoisted(() => ({
+  BETTER_AUTH_SECRET: 'test-secret-that-is-at-least-32-characters-long',
+  BETTER_AUTH_URL: 'https://app.example.com',
+  TENANCY_MODE: 'multi',
 }));
-vi.mock('@/lib/logging', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock('@/lib/env', () => ({ env }));
+const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger }));
 
 interface ShareRow {
   id: string;
@@ -47,6 +45,8 @@ const db = vi.hoisted(() => ({
   assessments: new Map<string, { orgId: string; status: string }>(),
   /** The tenant context each share write ran in. */
   writes: [] as unknown[],
+  /** When set, the next share insert fails with it. */
+  createError: null as Error | null,
 }));
 
 vi.mock('@/lib/db/client', async () => {
@@ -84,6 +84,7 @@ vi.mock('@/lib/db/client', async () => {
             select: Record<string, unknown>;
           }) => {
             db.writes.push(getTenantContext());
+            if (db.createError) return Promise.reject(db.createError);
             const n = db.shares.length + 1;
             const row: ShareRow = {
               ...data,
@@ -200,7 +201,7 @@ const detail = {
   startedAt: new Date('2026-11-10T10:00:01.000Z'),
   completedAt: new Date('2026-11-10T10:01:00.000Z'),
   text: 'The copy.',
-  context: { audience: 'exec' },
+  context: { audience: 'exec', brief: 'internal pricing notes' },
   result: storedResult(),
   judgeRuns: [
     {
@@ -215,6 +216,9 @@ const detail = {
 };
 
 beforeEach(() => {
+  env.BETTER_AUTH_URL = 'https://app.example.com';
+  logger.info.mockClear();
+  db.createError = null;
   db.shares.length = 0;
   db.writes.length = 0;
   db.assessments.clear();
@@ -248,6 +252,21 @@ describe('createShare', () => {
   it('expires after 30 days unless told otherwise', async () => {
     expect((await made(30)).expiresAt).toEqual(new Date(NOW.getTime() + 30 * DAY));
     expect((await made(7)).expiresAt).toEqual(new Date(NOW.getTime() + 7 * DAY));
+  });
+
+  it('builds the URL without a double slash when the public address ends in one', async () => {
+    env.BETTER_AUTH_URL = 'https://app.example.com/';
+    const share = await made();
+    expect(share.url).toBe(`https://app.example.com/r/${share.token}`);
+  });
+
+  it('is not found when the assessment is deleted between the check and the insert', async () => {
+    const { Prisma } = await import('@prisma/client');
+    db.createError = new Prisma.PrismaClientKnownRequestError('FK', {
+      code: 'P2003',
+      clientVersion: 'test',
+    });
+    await expect(made()).rejects.toMatchObject({ status: 404 });
   });
 
   it("is not found for another workspace's assessment", async () => {
@@ -299,6 +318,9 @@ describe('listShares and revokeShare', () => {
     const again = await inOrg(() => revokeShare(share.id, new Date(NOW.getTime() + DAY)));
     expect(again.revokedAt).toEqual(first.revokedAt);
     expect(again.state).toBe('revoked');
+    // Only the call that revoked it is logged as a revoke.
+    const revokes = logger.info.mock.calls.filter(([msg]) => msg === 'Share link revoked');
+    expect(revokes).toHaveLength(1);
   });
 
   it("does not revoke another workspace's link", async () => {
@@ -347,7 +369,6 @@ describe('readSharedReport', () => {
         createdAt: detail.createdAt,
         completedAt: detail.completedAt,
         text: 'The copy.',
-        context: { audience: 'exec' },
         result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
       },
@@ -355,7 +376,17 @@ describe('readSharedReport', () => {
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
-    for (const leak of [ASSESSMENT, ORG, 'user-1', 'intranet.example.com', 's3cret', 'costUsd']) {
+    // `context` is the caller's own JSON, which the report never reads.
+    expect(read.report.assessment).not.toHaveProperty('context');
+    for (const leak of [
+      ASSESSMENT,
+      ORG,
+      'user-1',
+      'intranet.example.com',
+      's3cret',
+      'costUsd',
+      'internal pricing notes',
+    ]) {
       expect(wire).not.toContain(leak);
     }
   });
@@ -430,5 +461,24 @@ describe('readSharedReport', () => {
     versionDocument.mockRejectedValue(new FrameworkApiError('FRAMEWORK_VERSION_NOT_FOUND', 'gone'));
     const read = await readSharedReport(token, NOW);
     expect(read.ok && read.report.model).toBeNull();
+    // It shows nothing, so it is not a view.
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('does not count an open whose result the report cannot read', async () => {
+    getAssessment.mockResolvedValue({ ...detail, result: { mode: 'full' } });
+    const { token } = await made();
+    await readSharedReport(token, NOW);
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('opens nothing when revoked after the lookup but before the view is counted', async () => {
+    const share = await made();
+    getAssessment.mockImplementation(async () => {
+      await inOrg(() => revokeShare(share.id, NOW));
+      return detail;
+    });
+    expect(await readSharedReport(share.token, NOW)).toEqual({ ok: false, refused: 'closed' });
+    expect(db.shares[0].viewCount).toBe(0);
   });
 });

@@ -19,12 +19,8 @@ import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { getAssessment } from '@/lib/app/assessments/api/service';
 import type { AssessmentDetail, JudgeRunView } from '@/lib/app/assessments/api/views';
-import {
-  FrameworkApiError,
-  resolveVersion,
-  versionDocument,
-} from '@/lib/app/frameworks/api/service';
 import { reportResultSchema } from '@/lib/app/reports/input';
+import { loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
 import type { CreateShareInput } from '@/lib/app/reports/share/validations';
@@ -65,7 +61,6 @@ export type SharedAssessment = Pick<
   | 'createdAt'
   | 'completedAt'
   | 'text'
-  | 'context'
   | 'result'
 > & { judgeRuns: Pick<JudgeRunView, 'judge' | 'status' | 'model'>[] };
 
@@ -96,6 +91,14 @@ const shareSelect = {
 function toView(row: ShareRow, now: Date): ReportShareView {
   const state = row.revokedAt ? 'revoked' : row.expiresAt <= now ? 'expired' : 'active';
   return { ...row, state };
+}
+
+/**
+ * Prisma's P2003, a foreign key that no longer resolves, read by its code:
+ * `lib/app` does not import Prisma's runtime, only its types.
+ */
+function isForeignKeyFailure(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2003';
 }
 
 /** 404 unless the assessment is in this workspace. */
@@ -129,18 +132,31 @@ export async function createShare(
     );
   }
   const { token, tokenHash } = mintShareToken();
-  const row = await prisma.reportShare.create({
-    data: {
-      orgId,
-      assessmentId,
-      tokenHash,
-      expiresAt: new Date(now.getTime() + input.expiresInDays * DAY_MS),
-      createdByUserId: userId,
-    },
-    select: shareSelect,
-  });
+  let row: ShareRow;
+  try {
+    row = await prisma.reportShare.create({
+      data: {
+        orgId,
+        assessmentId,
+        tokenHash,
+        expiresAt: new Date(now.getTime() + input.expiresInDays * DAY_MS),
+        createdByUserId: userId,
+      },
+      select: shareSelect,
+    });
+  } catch (err) {
+    // Deleted (by a member or the retention purge) since the check above.
+    if (isForeignKeyFailure(err)) {
+      throw new NotFoundError('Assessment not found');
+    }
+    throw err;
+  }
   logger.info('Share link made', { shareId: row.id, assessmentId });
-  return { ...toView(row, now), token, url: `${getPublicUrl()}${sharedReportPath(token)}` };
+  return {
+    ...toView(row, now),
+    token,
+    url: new URL(sharedReportPath(token), getPublicUrl()).toString(),
+  };
 }
 
 /** An assessment's links, newest first, live or not. */
@@ -164,13 +180,14 @@ export async function listShares(
  */
 export async function revokeShare(id: string, now: Date = new Date()): Promise<ReportShareView> {
   const orgId = requireOrgId();
-  await prisma.reportShare.updateMany({
+  const { count } = await prisma.reportShare.updateMany({
     where: { id, orgId, revokedAt: null },
     data: { revokedAt: now },
   });
   const row = await prisma.reportShare.findUnique({ where: { id, orgId }, select: shareSelect });
   if (!row) throw new NotFoundError('Share link not found');
-  logger.info('Share link revoked', { shareId: id });
+  // Only the call that revoked it: a repeat changes nothing.
+  if (count === 1) logger.info('Share link revoked', { shareId: id });
   return toView(row, now);
 }
 
@@ -181,41 +198,33 @@ export type SharedReportRead =
   { ok: true; shareId: string; report: SharedReport } | { ok: false; refused: SharedReportRefusal };
 
 /**
- * What `token` opens, counted as a view. Live means not revoked and not
- * expired, checked in the same write that counts the view, so a link revoked
- * a moment ago is not opened once more by a read already under way.
+ * What `token` opens, counted as a view when it shows a report.
+ *
+ * Live means not revoked and not expired. The token's row is checked first,
+ * and then again in the same write that counts the view, so a link revoked
+ * a moment ago is not opened once more by a read already under way. A link
+ * whose model version no longer resolves shows nothing and is not counted.
  */
 export async function readSharedReport(
   token: string,
   now: Date = new Date()
 ): Promise<SharedReportRead> {
-  const entered = await runAsShareOrg(token, async (shareId) => {
-    const orgId = requireOrgId();
-    const { count } = await prisma.reportShare.updateMany({
-      where: { id: shareId, orgId, revokedAt: null, expiresAt: { gt: now } },
-      data: { viewCount: { increment: 1 } },
-    });
-    if (count === 0) return { ok: false as const, refused: 'closed' as const };
-
-    const share = await prisma.reportShare.findUnique({
-      where: { id: shareId, orgId },
-      select: { assessmentId: true, expiresAt: true },
-    });
-    // Deleted with its assessment since the write: nothing to open.
-    if (!share) return { ok: false as const, refused: 'closed' as const };
+  const entered = await runAsShareOrg(token, async (share) => {
+    const closed = { ok: false as const, refused: 'closed' as const };
+    if (share.revokedAt !== null || share.expiresAt <= now) return closed;
 
     let assessment: AssessmentDetail;
     try {
       assessment = await getAssessment(share.assessmentId);
     } catch (err) {
-      if (err instanceof NotFoundError) return { ok: false as const, refused: 'closed' as const };
+      if (err instanceof NotFoundError) return closed;
       throw err;
     }
     // A link is made only for a report, and a final run stays final, so
     // this is a defect rather than a state, but it must not serve a half run.
     if (assessment.result === null || !isReportable(assessment.status)) {
       logger.error('Share link: its assessment has no report', undefined, {
-        shareId,
+        shareId: share.id,
         status: assessment.status,
       });
       return { ok: false as const, refused: 'no-report' as const };
@@ -225,18 +234,28 @@ export async function readSharedReport(
     const result = sharedResult(assessment.result);
     if (result === null) {
       logger.error('Share link: its result is not one the report can read', undefined, {
-        shareId,
+        shareId: share.id,
         framework: assessment.framework,
       });
       return { ok: false as const, refused: 'no-report' as const };
     }
 
+    const model = await loadModelDocument(assessment.framework.slug, assessment.framework.version);
+    if (model !== null) {
+      const orgId = requireOrgId();
+      const { count } = await prisma.reportShare.updateMany({
+        where: { id: share.id, orgId, revokedAt: null, expiresAt: { gt: now } },
+        data: { viewCount: { increment: 1 } },
+      });
+      if (count === 0) return closed;
+    }
+
     const report: SharedReport = {
       assessment: sharedView(assessment, result),
-      model: await modelOf(assessment),
+      model,
       expiresAt: share.expiresAt,
     };
-    return { ok: true as const, shareId, report };
+    return { ok: true as const, shareId: share.id, report };
   });
 
   if (!entered.ok) return entered;
@@ -248,7 +267,11 @@ export async function readSharedReport(
 const isReportable = (state: AssessmentDetail['status']): boolean =>
   state === 'completed' || state === 'partial';
 
-/** The fields a share serves, picked one by one, so a field added to the detail is not shared by default. */
+/**
+ * The fields a share serves, picked one by one, so a field added to the
+ * detail is not shared by default. Not `context`: it is open JSON the caller
+ * supplied (briefs, client names, links) and the report never reads it.
+ */
 function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
   return {
     status: a.status,
@@ -262,7 +285,6 @@ function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
     createdAt: a.createdAt,
     completedAt: a.completedAt,
     text: a.text,
-    context: a.context,
     result,
     judgeRuns: a.judgeRuns.map((r) => ({ judge: r.judge, status: r.status, model: r.model })),
   };
@@ -285,16 +307,4 @@ function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
 function sharedResult(result: unknown): Record<string, unknown> | null {
   const parsed = reportResultSchema.safeParse(result);
   return parsed.success ? parsed.data : null;
-}
-
-async function modelOf(a: AssessmentDetail): Promise<Record<string, unknown> | null> {
-  try {
-    const { data } = await versionDocument(
-      await resolveVersion(a.framework.slug, a.framework.version)
-    );
-    return data;
-  } catch (err) {
-    if (err instanceof FrameworkApiError) return null;
-    throw err;
-  }
 }

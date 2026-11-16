@@ -215,14 +215,17 @@ state and views, each live one with **Revoke**.
   workspace from its token (`runAsShareOrg`, `share-org.ts`): the lookup by
   hash under `runAsCredentialLookup`, the org through `resolveCredentialOrg`,
   then `runAsOrg`. The source is `'approval-token'`, t-31's decision for the
-  print page, for the same reason (see the PDF above). Inside the org, one
-  write both checks the link is live (not revoked, not expired) and counts the
-  view, so a revoke cannot race a read. A malformed, unknown, revoked or
+  print page, for the same reason (see the PDF above). The lookup's row says
+  whether the link is live (not revoked, not expired); once the report is
+  known to be readable, one write checks that again and counts the view, so a
+  revoke cannot race a read and an open that shows nothing (its model version
+  gone) is not counted. A malformed, unknown, revoked or
   expired token, or a suspended workspace, answers the same 404, and the page
   the same not-found.
 - **What a link serves** (`sharedAssessmentSchema` in the route registry) is
   the report's fields, picked one by one: no id, cost, source, failure,
-  per-judge cost or timing, workspace or author. A field added to the
+  per-judge cost or timing, workspace or author, and no `context` (open JSON
+  the caller supplied, which the report never reads). A field added to the
   assessment's detail is not shared until someone adds it there. The stored
   `result` is an allowlist too: it goes through `reportResultSchema`, so a
   link serves only the keys the report reads. That drops `result.source`, the

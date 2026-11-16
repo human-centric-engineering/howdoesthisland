@@ -22,11 +22,11 @@ export type CreateShareInput = z.infer<typeof createShareSchema>;
 export const shareIdParamSchema = z.object({ id: z.string().min(1).max(64) });
 
 /**
- * `GET /api/v1/shared-reports/{token}`. Any string up to a sane length: a
- * token of the wrong shape is not found, like a wrong one, not a 400 that
- * would tell a guesser the shape.
+ * `GET /api/v1/shared-reports/{token}`. Any string: a token of the wrong
+ * shape or length is not found, like a wrong one (`runAsShareOrg` answers it
+ * without a read), not a 400 that would tell a guesser the shape.
  */
-export const shareTokenParamSchema = z.object({ token: z.string().min(1).max(128) });
+export const shareTokenParamSchema = z.object({ token: z.string() });
 
 /** `ReportShareView` in `lib/app/reports/share/service.ts`, on the wire. */
 export const reportShareSchema = z.object({

@@ -293,6 +293,13 @@ describe('GET /api/v1/shared-reports/{token}', () => {
     }
   );
 
+  it('hands a token of any length to the service, so a long one is a 404 like any other', async () => {
+    mocks.readSharedReport.mockResolvedValue({ ok: false, refused: 'malformed' });
+    const res = await openToken('x'.repeat(200));
+    expect(res.status).toBe(404);
+    expect(mocks.readSharedReport).toHaveBeenCalledWith('x'.repeat(200));
+  });
+
   it('answers 422 when the model it ran on no longer resolves', async () => {
     mocks.readSharedReport.mockResolvedValue({
       ok: true,

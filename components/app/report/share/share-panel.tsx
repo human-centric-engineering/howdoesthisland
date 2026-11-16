@@ -12,7 +12,7 @@
  * (`<SaveError>`), the one way every form here shows a failed save.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useReducer, useState } from 'react';
 import { Check, Copy, Link2, Loader2 } from 'lucide-react';
 import { z } from 'zod';
 import { apiClient } from '@/lib/api/client';
@@ -71,9 +71,58 @@ function formatDate(iso: string): string {
   });
 }
 
+/**
+ * The list, and what has changed since the latest load began. A load's
+ * answer may predate a make or revoke made while it was in flight, so those
+ * are laid over it rather than wiped by it; an older load's answer is dropped.
+ */
+interface SharesState {
+  shares: ReportShareWire[] | null;
+  /** The latest load, by the token its caller made. */
+  loading: symbol | null;
+  /** Links made or revoked since that load began, in the order they changed. */
+  touched: ReadonlyMap<string, ReportShareWire>;
+}
+
+type SharesAction =
+  | { type: 'load'; id: symbol }
+  | { type: 'loaded'; id: symbol; list: ReportShareWire[] }
+  | { type: 'made'; share: ReportShareWire }
+  | { type: 'revoked'; share: ReportShareWire };
+
+function sharesReducer(state: SharesState, action: SharesAction): SharesState {
+  switch (action.type) {
+    case 'load':
+      return { ...state, loading: action.id, touched: new Map() };
+    case 'loaded': {
+      if (action.id !== state.loading) return state;
+      const listed = new Set(action.list.map((s) => s.id));
+      const added = [...state.touched.values()].filter((s) => !listed.has(s.id)).reverse();
+      const shares = [...added, ...action.list.map((s) => state.touched.get(s.id) ?? s)];
+      return { ...state, shares, loading: null };
+    }
+    case 'made':
+      return {
+        ...state,
+        shares: [action.share, ...(state.shares ?? [])],
+        touched: new Map(state.touched).set(action.share.id, action.share),
+      };
+    case 'revoked':
+      return {
+        ...state,
+        shares: (state.shares ?? []).map((s) => (s.id === action.share.id ? action.share : s)),
+        touched: new Map(state.touched).set(action.share.id, action.share),
+      };
+  }
+}
+
 export function SharePanel({ assessmentId }: { assessmentId: string }) {
   const [open, setOpen] = useState(false);
-  const [shares, setShares] = useState<ReportShareWire[] | null>(null);
+  const [{ shares }, dispatch] = useReducer(sharesReducer, {
+    shares: null,
+    loading: null,
+    touched: new Map(),
+  });
   const [days, setDays] = useState<string>(String(DEFAULT_SHARE_DAYS));
   const [made, setMade] = useState<{ id: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -84,8 +133,11 @@ export function SharePanel({ assessmentId }: { assessmentId: string }) {
   const load = useSaveFailure({ fallback: "This report's links could not be loaded." });
 
   const loadShares = useCallback(async () => {
+    const id = Symbol('load');
+    dispatch({ type: 'load', id });
     try {
-      setShares(sharesSchema.parse(await apiClient.get<unknown>(reportSharesPath(assessmentId))));
+      const list = sharesSchema.parse(await apiClient.get<unknown>(reportSharesPath(assessmentId)));
+      dispatch({ type: 'loaded', id, list });
     } catch (err) {
       load.report(err);
     }
@@ -120,7 +172,7 @@ export function SharePanel({ assessmentId }: { assessmentId: string }) {
       setMade({ id: share.id, url: share.url });
       // Into the list as the list reads it: the token stays out of it.
       const view: ReportShareWire = reportShareSchema.parse(share);
-      setShares((all) => [view, ...(all ?? [])]);
+      dispatch({ type: 'made', share: view });
     } catch (err) {
       make.report(err);
     } finally {
@@ -133,7 +185,7 @@ export function SharePanel({ assessmentId }: { assessmentId: string }) {
       setBusy(shareId);
       try {
         const next = reportShareSchema.parse(await apiClient.delete<unknown>(sharePath(shareId)));
-        setShares((all) => (all ?? []).map((s) => (s.id === next.id ? next : s)));
+        dispatch({ type: 'revoked', share: next });
         if (made?.id === shareId) setMade(null);
       } catch (err) {
         revoke.report(err, "Couldn't revoke the link");

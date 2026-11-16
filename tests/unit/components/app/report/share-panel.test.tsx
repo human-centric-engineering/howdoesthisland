@@ -177,6 +177,59 @@ describe('SharePanel', () => {
     expect(within(dialog).queryByLabelText('New link')).toBeNull();
   });
 
+  it('keeps a link made while the list was still loading, alongside the links the load brings', async () => {
+    let answerList: (list: unknown) => void = () => undefined;
+    vi.mocked(apiClient.get).mockReturnValue(
+      new Promise((resolve) => {
+        answerList = resolve;
+      })
+    );
+    vi.mocked(apiClient.post).mockResolvedValue({
+      ...share({ id: 'share-new', viewCount: 0 }),
+      token: 'tok',
+      url: 'https://app.example.com/r/tok',
+    });
+    const { user, dialog } = await openPanel();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Make a link' }));
+    await within(dialog).findByLabelText('New link');
+    // The list answers late, with only the link that was there before.
+    answerList([share({ id: 'share-old', viewCount: 5 })]);
+
+    await waitFor(() => expect(within(dialog).getAllByRole('listitem')).toHaveLength(2));
+    const [first, second] = within(dialog).getAllByRole('listitem');
+    expect(first).toHaveTextContent(/0 views/);
+    expect(second).toHaveTextContent(/5 views/);
+  });
+
+  it('keeps a link revoked while the list was still loading revoked, though the list says active', async () => {
+    let answerList: (list: unknown) => void = () => undefined;
+    vi.mocked(apiClient.get).mockReturnValue(
+      new Promise((resolve) => {
+        answerList = resolve;
+      })
+    );
+    vi.mocked(apiClient.post).mockResolvedValue({
+      ...share({ viewCount: 0 }),
+      token: 'tok',
+      url: 'https://app.example.com/r/tok',
+    });
+    vi.mocked(apiClient.delete).mockResolvedValue(
+      share({ viewCount: 0, state: 'revoked', revokedAt: '2026-11-17T09:00:00.000Z' })
+    );
+    const { user, dialog } = await openPanel();
+    await user.click(within(dialog).getByRole('button', { name: 'Make a link' }));
+    await user.click(await within(dialog).findByRole('button', { name: 'Revoke' }));
+    await waitFor(() => expect(within(dialog).getByRole('listitem')).toHaveTextContent(/Revoked/));
+
+    // The list was read between the make and the revoke, so it has the link active.
+    answerList([share({ viewCount: 0 })]);
+
+    await waitFor(() => expect(within(dialog).getAllByRole('listitem')).toHaveLength(1));
+    expect(within(dialog).getByRole('listitem')).toHaveTextContent(/Revoked/);
+    expect(within(dialog).queryByRole('button', { name: 'Revoke' })).toBeNull();
+  });
+
   it('shows a list that could not be loaded as a failure, not as empty', async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new APIClientError('Server error', 'INTERNAL', 500));
     const { dialog } = await openPanel();

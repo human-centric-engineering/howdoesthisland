@@ -317,7 +317,6 @@ export const sharedAssessmentSchema = assessmentDetailSchema
     createdAt: true,
     completedAt: true,
     text: true,
-    context: true,
     result: true,
   })
   .extend({ judgeRuns: z.array(sharedJudgeRunSchema) });

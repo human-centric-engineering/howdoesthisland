@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { loadReport, type ReportSource } from '@/lib/app/reports/load';
+import { asOnTheWire } from '@/lib/app/reports/pdf/print-source';
 import { readSharedReport, type SharedReport } from '@/lib/app/reports/share/service';
 import { Report } from '@/components/app/report/report';
 import { ReportUnreadable } from '@/components/app/report/report-states';
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
  * `runAsShareOrg`), and the report is read from the same services the API
  * answers from, as the PDF's print page reads them. An unknown, malformed,
  * revoked or expired token, or a suspended workspace, is the not-found page,
- * all alike. Each open counts as a view.
+ * all alike. Each open that shows the report counts as a view.
  *
  * The report is `<Report>` in its `shared` variant, fed only what a link
  * serves: no workspace, author, cost or source.
@@ -46,9 +47,4 @@ function sharedReportSource(report: SharedReport): ReportSource {
     assessment: () => Promise.resolve(asOnTheWire(report.assessment)),
     model: () => Promise.resolve(report.model === null ? null : asOnTheWire(report.model)),
   };
-}
-
-function asOnTheWire(value: unknown): unknown {
-  const wire: unknown = JSON.parse(JSON.stringify(value));
-  return wire;
 }

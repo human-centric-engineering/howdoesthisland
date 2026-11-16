@@ -36,13 +36,21 @@ export type ShareOrgRefusal = 'malformed' | 'missing' | 'org';
 
 export type ShareOrgResult<T> = { ok: true; value: T } | { ok: false; refused: ShareOrgRefusal };
 
+/** The share a token names, as read by its hash. */
+export interface ShareTarget {
+  id: string;
+  assessmentId: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+}
+
 /**
- * Find the share `token` names and run `fn(shareId)` inside its org. Never
+ * Find the share `token` names and run `fn(share)` inside its org. Never
  * throws for a token that opens nothing; what `fn` throws propagates.
  */
 export async function runAsShareOrg<T>(
   token: string,
-  fn: (shareId: string) => Promise<T>
+  fn: (share: ShareTarget) => Promise<T>
 ): Promise<ShareOrgResult<T>> {
   // Not a token at all: answered without a read.
   if (!SHARE_TOKEN_PATTERN.test(token)) return { ok: false, refused: 'malformed' };
@@ -50,7 +58,14 @@ export async function runAsShareOrg<T>(
   const share = await runAsCredentialLookup('report-share', () =>
     prisma.reportShare.findUnique({
       where: { tokenHash: hashShareToken(token) },
-      select: { id: true, orgId: true, org: { select: { status: true } } },
+      select: {
+        id: true,
+        orgId: true,
+        assessmentId: true,
+        expiresAt: true,
+        revokedAt: true,
+        org: { select: { status: true } },
+      },
     })
   );
   if (!share) return { ok: false, refused: 'missing' };
@@ -67,7 +82,13 @@ export async function runAsShareOrg<T>(
     return { ok: false, refused: 'org' };
   }
 
-  const value = await runAsOrg(org.orgId, () => fn(share.id), {
+  const target: ShareTarget = {
+    id: share.id,
+    assessmentId: share.assessmentId,
+    expiresAt: share.expiresAt,
+    revokedAt: share.revokedAt,
+  };
+  const value = await runAsOrg(org.orgId, () => fn(target), {
     source: org.source,
     role: org.role,
   });

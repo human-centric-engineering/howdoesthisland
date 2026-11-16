@@ -21,7 +21,14 @@ vi.mock('@/lib/logging', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-type Row = { id: string; orgId: string | null; org: { status: string } | null };
+type Row = {
+  id: string;
+  orgId: string | null;
+  assessmentId: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  org: { status: string } | null;
+};
 const rows = vi.hoisted(() => new Map<string, Row>());
 const lookups = vi.hoisted(() => [] as unknown[]);
 vi.mock('@/lib/db/client', async () => {
@@ -38,14 +45,26 @@ vi.mock('@/lib/db/client', async () => {
   };
 });
 
-import { runAsShareOrg } from '@/lib/app/reports/share/share-org';
+import { runAsShareOrg, type ShareTarget } from '@/lib/app/reports/share/share-org';
 import { hashShareToken, mintShareToken } from '@/lib/app/reports/share/token';
 import { getTenantContext } from '@/lib/tenancy/context';
 
 const ORG = 'cmorg000000000000000team1';
 const SHARE = 'cmshare00000000000000001';
 
-const inside = (shareId: string) => Promise.resolve({ shareId, context: getTenantContext() });
+const ASSESSMENT = 'cmassess000000000000000001';
+const EXPIRES = new Date('2026-12-16T09:00:00.000Z');
+
+const inside = (share: ShareTarget) => Promise.resolve({ share, context: getTenantContext() });
+
+const liveRow = (): Row => ({
+  id: SHARE,
+  orgId: ORG,
+  assessmentId: ASSESSMENT,
+  expiresAt: EXPIRES,
+  revokedAt: null,
+  org: { status: 'ACTIVE' },
+});
 
 let token: string;
 
@@ -54,7 +73,7 @@ beforeEach(() => {
   lookups.length = 0;
   const minted = mintShareToken();
   token = minted.token;
-  rows.set(minted.tokenHash, { id: SHARE, orgId: ORG, org: { status: 'ACTIVE' } });
+  rows.set(minted.tokenHash, liveRow());
 });
 
 describe('runAsShareOrg at multi', () => {
@@ -63,7 +82,11 @@ describe('runAsShareOrg at multi', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { shareId: SHARE, context: { orgId: ORG, source: 'approval-token', role: null } },
+      value: {
+        // The row as the lookup read it, so the caller needs no second read.
+        share: { id: SHARE, assessmentId: ASSESSMENT, expiresAt: EXPIRES, revokedAt: null },
+        context: { orgId: ORG, source: 'approval-token', role: null },
+      },
     });
     // The one read ran as the system scope, and asked for the hash, never the token.
     expect(lookups).toEqual([
@@ -86,14 +109,14 @@ describe('runAsShareOrg at multi', () => {
   });
 
   it("refuses a suspended workspace's link, as its members' sessions are", async () => {
-    rows.set(hashShareToken(token), { id: SHARE, orgId: ORG, org: { status: 'SUSPENDED' } });
+    rows.set(hashShareToken(token), { ...liveRow(), org: { status: 'SUSPENDED' } });
     const fn = vi.fn(inside);
     expect(await runAsShareOrg(token, fn)).toEqual({ ok: false, refused: 'org' });
     expect(fn).not.toHaveBeenCalled();
   });
 
   it('refuses a row with no org at multi, where there is no install-org fallback', async () => {
-    rows.set(hashShareToken(token), { id: SHARE, orgId: null, org: null });
+    rows.set(hashShareToken(token), { ...liveRow(), orgId: null, org: null });
     expect(await runAsShareOrg(token, inside)).toEqual({ ok: false, refused: 'org' });
   });
 
