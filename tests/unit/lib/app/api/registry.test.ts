@@ -29,6 +29,7 @@ import {
   assessmentDetailSchema,
   assessmentEventSchema,
   assessmentSummarySchema,
+  createdReportShareSchema,
   createdWorkspaceSchema,
   ephemeralAssessmentSchema,
   frameworkDetailSchema,
@@ -40,6 +41,9 @@ import {
   paginationMetaSchema,
   quickScanViewSchema,
   reportPdfSchema,
+  reportShareSchema,
+  sharedAssessmentSchema,
+  sharedReportSchema,
   versionMetaSchema,
   versionSummarySchema,
   workspaceSettingsSchema,
@@ -64,10 +68,23 @@ import type {
 } from '@/lib/app/assessments/api/views';
 import type { AssessmentEvent } from '@/lib/app/assessments/api/events';
 import type { remove } from '@/lib/app/assessments/api/service';
+import type {
+  CreatedReportShare,
+  ReportShareView,
+  SharedAssessment,
+  SharedReport,
+} from '@/lib/app/reports/share/service';
 import type { PaginationMeta } from '@/types/api';
 
 /** The route directories this fork added under `app/api/v1/`. */
-const APP_ROUTE_DIRS = ['assessments', 'frameworks', 'scan', 'workspaces'] as const;
+const APP_ROUTE_DIRS = [
+  'assessments',
+  'frameworks',
+  'scan',
+  'shared-reports',
+  'shares',
+  'workspaces',
+] as const;
 
 /** Sunrise's route directories under `app/api/v1/`, which are not the app's to declare. */
 const CORE_ROUTE_DIRS = [
@@ -318,6 +335,15 @@ describe('response schemas match what the services return', () => {
       Wire<Awaited<ReturnType<typeof remove>>>
     >();
     expectTypeOf<z.infer<typeof paginationMetaSchema>>().toEqualTypeOf<Wire<PaginationMeta>>();
+    expectTypeOf<z.infer<typeof reportShareSchema>>().toEqualTypeOf<Wire<ReportShareView>>();
+    expectTypeOf<z.infer<typeof createdReportShareSchema>>().toEqualTypeOf<
+      Wire<CreatedReportShare>
+    >();
+    expectTypeOf<z.infer<typeof sharedAssessmentSchema>>().toEqualTypeOf<Wire<SharedAssessment>>();
+    // The route answers 422 rather than send a `null` model.
+    expectTypeOf<z.infer<typeof sharedReportSchema>>().toEqualTypeOf<
+      Wire<Omit<SharedReport, 'model'> & { model: NonNullable<SharedReport['model']> }>
+    >();
   });
 
   it('accepts a service value once serialised', () => {

@@ -230,13 +230,15 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/rate-limit.ts',
     risk: 'a stray tier or rule would re-cap every install',
-    // FORK (HowDoesThisLand): pinned to our one rule, the free quick scan's
-    // per-IP cap (t-24). Ledger: .context/app/platform-divergences.md row 2.
+    // FORK (HowDoesThisLand): pinned to our rules, the free quick scan's
+    // per-IP cap (t-24) and the share links' (t-32). Ledger:
+    // .context/app/platform-divergences.md row 2.
     assert: () => {
       registerAppRateLimits();
       const added = getEffectiveRateLimitPolicy().filter((r) => !RATE_LIMIT_POLICY.includes(r));
       expect(added.map((r) => [String(r.match), r.tier, r.key])).toEqual([
         [String(/^\/api\/v1\/scan\/?$/), 'scan', 'ip'],
+        [String(/^\/(r|api\/v1\/shared-reports)\/[^/]+\/?$/), 'shared-report', 'ip'],
       ]);
     },
   },
@@ -343,18 +345,20 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     risk: 'a stray collector would leak app rows into every install’s subject-access export, and a stray declaration would pre-account for a table nobody decided about',
     assert: async () => {
       // FORK (HowDoesThisLand): pinned to our sections and sources, the
-      // workspace invitations (t-9) and content and assessments (t-22). The
-      // reads are stubbed: this pins the shape, not the query. Ledger:
+      // workspace invitations (t-9), content and assessments (t-22), and share
+      // links (t-32). The reads are stubbed: this pins the shape, not the query. Ledger:
       // .context/app/platform-divergences.md row 2.
       const reads = [
         vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.content, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.assessment, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.reportShare, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
         contents: [],
         assessments: [],
+        reportShares: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -365,6 +369,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['WorkspaceInvitation', 'workspaceInvitations'],
         ['Content', 'contents'],
         ['Assessment', 'assessments'],
+        ['ReportShare', 'reportShares'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22) and their replies
@@ -386,7 +391,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppOrgSourceRegistryForTests();
       // The reads trigger the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our sources, the workspace
-      // invitations (t-9), assessments (t-22) and judge replies (t-26). Ledger:
+      // invitations (t-9), assessments (t-22), judge replies (t-26) and share
+      // links (t-32). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppOrgSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
@@ -394,6 +400,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['Assessment', 'assessments'],
         ['JudgeRun', 'judgeRuns'],
         ['JudgeReply', 'judgeReplies'],
+        ['ReportShare', 'reportShares'],
       ]);
       expect(getAppExcludedOrgSources()).toEqual([]);
       expect(appOrgDeclarationsFailed()).toBe(false);
@@ -406,7 +413,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppOwnerClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our models, the workspace invitation
-      // (t-9) and content and assessments (t-22), as not personal. Ledger:
+      // (t-9), content and assessments (t-22) and share links (t-32), as not
+      // personal. Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(
         Object.entries(appOwnerClassifications()).map(([model, rule]) => [model, rule.kind])
@@ -414,6 +422,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['WorkspaceInvitation', 'not-personal'],
         ['Content', 'not-personal'],
         ['Assessment', 'not-personal'],
+        ['ReportShare', 'not-personal'],
       ]);
     },
   },
@@ -479,7 +488,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/credential-paths.ts',
     risk: 'a stray pattern would blank a route word out of every install’s logs and analytics',
-    assert: () => expect(appCredentialPaths).toEqual([]),
+    // FORK (HowDoesThisLand): pinned to the share link's two paths (t-32).
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () =>
+      expect(appCredentialPaths).toEqual(['/r/[token]', '/api/v1/shared-reports/[token]']),
   },
   {
     seam: 'lib/app/env.ts',

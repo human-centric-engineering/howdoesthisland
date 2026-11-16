@@ -82,6 +82,11 @@ export function initAppOwnerClassification(): void {
         kind: 'not-personal',
         because: 'An assessment the workspace ran; `createdByUserId` is who asked for it.',
       },
+      // t-32: any member may see and revoke a report's links.
+      ReportShare: {
+        kind: 'not-personal',
+        because: 'A link to one of the workspace’s reports; `createdByUserId` is who made it.',
+      },
     },
   });
 }

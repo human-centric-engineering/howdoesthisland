@@ -81,7 +81,7 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     expect(resolveRateLimitTier('wiretest')).toBeDefined();
   });
 
-  it('the real lib/app/rate-limit registers only our scan rule', async () => {
+  it('the real lib/app/rate-limit registers only our scan and share-link rules', async () => {
     // Arrange — no doMock: the real (empty) registerAppRateLimits runs
     vi.resetModules();
 
@@ -90,11 +90,12 @@ describe('rate-limit auto-wire (lib/app/rate-limit.ts → middleware realm)', ()
     const { getEffectiveRateLimitPolicy, RATE_LIMIT_POLICY } =
       await import('@/lib/security/rate-limit-policy');
 
-    // FORK (HowDoesThisLand): our one rule, the quick scan's per-IP cap
-    // (t-24), and nothing else. Ledger: .context/app/platform-divergences.md row 11.
+    // FORK (HowDoesThisLand): our rules, the quick scan's per-IP cap (t-24)
+    // and the share links' (t-32), and nothing else. Ledger: .context/app/platform-divergences.md row 11.
     const added = getEffectiveRateLimitPolicy().filter((r) => !RATE_LIMIT_POLICY.includes(r));
     expect(added.map((r) => [String(r.match), r.tier, r.key])).toEqual([
       [String(/^\/api\/v1\/scan\/?$/), 'scan', 'ip'],
+      [String(/^\/(r|api\/v1\/shared-reports)\/[^/]+\/?$/), 'shared-report', 'ip'],
     ]);
   });
 

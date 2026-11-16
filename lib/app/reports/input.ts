@@ -5,7 +5,8 @@
  * (`GET /api/v1/assessments/{id}`) and the model version it ran on
  * (`GET /api/v1/frameworks/{slug}/versions/{version}`). The first serves
  * `result` and `context` as `unknown`, because they are each framework's own
- * shapes (`lib/app/api/registry.ts`). The second is the whole model document.
+ * shapes (`lib/app/api/registry.ts`). The report never reads `context`, so
+ * a share link does not serve it. The second is the whole model document.
  * Both are external data to the page, so each is parsed here and never cast.
  *
  * The schemas cover the fields the report shows, and Zod strips the rest, so
@@ -15,7 +16,7 @@
  * document as materialised. A second framework brings its own.
  */
 import { z } from 'zod';
-import { assessmentDetailSchema } from '@/lib/app/api/registry';
+import { sharedAssessmentSchema } from '@/lib/app/api/registry';
 
 // ─── The assessment ─────────────────────────────────────────────────────────
 
@@ -170,8 +171,19 @@ export type ReportHighlight = z.infer<typeof highlightSchema>;
 export type ReportRecommendation = z.infer<typeof recommendationSchema>;
 export type ReportRedFlag = z.infer<typeof redFlagSchema>;
 
-/** The assessment as the API serves it, dates as the ISO strings they arrive as. */
-export const reportAssessmentSchema = assessmentDetailSchema;
+/**
+ * The assessment as the report reads it: what a share link serves
+ * (`sharedAssessmentSchema`), plus the two fields only a workspace member
+ * sees. `GET assessments/{id}` sends both; a shared report sends neither, so
+ * one parser reads all three variants' inputs (t-32). The detail's other
+ * fields (its id, source, timings, each run's cost) are stripped.
+ */
+export const reportAssessmentSchema = sharedAssessmentSchema.extend({
+  /** What the run cost. Shown on the web report only. */
+  costUsd: z.number().optional(),
+  /** Why it failed, for a failed run's panel. */
+  error: z.string().nullable().optional(),
+});
 export type ReportAssessment = z.infer<typeof reportAssessmentSchema>;
 
 // ─── The model ──────────────────────────────────────────────────────────────

@@ -47,6 +47,13 @@ import {
   updateWorkspaceSettingsSchema,
 } from '@/lib/app/retention/settings';
 import {
+  createdReportShareSchema,
+  createShareSchema,
+  reportShareSchema,
+  shareIdParamSchema,
+  shareTokenParamSchema,
+} from '@/lib/app/reports/share/validations';
+import {
   createWorkspaceSchema,
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
@@ -282,6 +289,53 @@ export const assessmentDetailSchema = assessmentSummarySchema.extend({
   judgeRuns: z.array(judgeRunViewSchema),
 });
 
+/**
+ * A judge run as a shared report shows it (t-32): which judge, whether it
+ * answered, and its model. Not its cost, timing or error code.
+ */
+export const sharedJudgeRunSchema = judgeRunViewSchema.pick({
+  judge: true,
+  status: true,
+  model: true,
+});
+
+/**
+ * `SharedAssessment` in `lib/app/reports/share/service.ts`: what a share link
+ * serves of an assessment. The report's fields and nothing else: no id, cost,
+ * source, error, workspace or author.
+ */
+export const sharedAssessmentSchema = assessmentDetailSchema
+  .pick({
+    status: true,
+    profile: true,
+    judges: true,
+    framework: true,
+    title: true,
+    wordCount: true,
+    overall: true,
+    band: true,
+    createdAt: true,
+    completedAt: true,
+    text: true,
+    result: true,
+  })
+  .extend({ judgeRuns: z.array(sharedJudgeRunSchema) });
+
+// `reportShareSchema` and `createdReportShareSchema` live with the share
+// routes' request schemas, which the share panel imports in the browser.
+export { createdReportShareSchema, reportShareSchema };
+
+/**
+ * `SharedReport`: what `GET shared-reports/{token}` answers with, the
+ * assessment and the model version it ran on, so a reader needs no second
+ * call (and has nothing to make one with). `expiresAt` is when the link stops.
+ */
+export const sharedReportSchema = z.object({
+  assessment: sharedAssessmentSchema,
+  model: jsonObjectSchema,
+  expiresAt: isoDateTime,
+});
+
 /** `EphemeralAssessment`. */
 export const ephemeralAssessmentSchema = z.object({
   stored: z.literal(false),
@@ -472,6 +526,41 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
     request: { params: assessmentParams },
     response: { status: 200, data: reportPdfSchema, file: 'application/pdf' },
+  },
+  // Share links (t-32).
+  {
+    method: 'POST',
+    path: '/api/v1/assessments/{id}/shares',
+    summary:
+      "Make a link that opens a finished review's report for someone without an account, until it expires (30 days unless set) or is revoked. The token is shown only here.",
+    auth: { who: 'signed-in', apiKeyScope: ASSESS_SCOPE },
+    request: { params: assessmentParams, body: createShareSchema },
+    response: { status: 201, data: createdReportShareSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/assessments/{id}/shares',
+    summary: "List a review's share links, newest first, with each one's state and view count.",
+    auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
+    request: { params: assessmentParams },
+    response: { status: 200, data: z.array(reportShareSchema) },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/shares/{id}',
+    summary: 'Revoke a share link: it stops opening the report at once.',
+    auth: { who: 'signed-in', apiKeyScope: ASSESS_SCOPE },
+    request: { params: shareIdParamSchema },
+    response: { status: 200, data: reportShareSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/shared-reports/{token}',
+    summary:
+      'Open a shared report by its link token, without an account: the review, less its cost and who ran it, and the model it ran on. Limited per IP.',
+    auth: { who: 'anyone' },
+    request: { params: shareTokenParamSchema },
+    response: { status: 200, data: sharedReportSchema },
   },
   {
     method: 'POST',

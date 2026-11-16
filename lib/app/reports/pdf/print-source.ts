@@ -21,9 +21,27 @@ import {
 import type { ReportSource } from '@/lib/app/reports/load';
 
 /** A value as it would arrive in a JSON response body. */
-function asOnTheWire(value: unknown): unknown {
+export function asOnTheWire(value: unknown): unknown {
   const wire: unknown = JSON.parse(JSON.stringify(value));
   return wire;
+}
+
+/**
+ * The model document a framework version holds, or `null` when that version
+ * no longer resolves. Shared with the share link's read
+ * (`lib/app/reports/share/service.ts`), so both resolve it alike.
+ */
+export async function loadModelDocument(
+  slug: string,
+  version: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { data } = await versionDocument(await resolveVersion(slug, version));
+    return data;
+  } catch (err) {
+    if (err instanceof FrameworkApiError) return null;
+    throw err;
+  }
 }
 
 export const printReportSource: ReportSource = {
@@ -33,12 +51,7 @@ export const printReportSource: ReportSource = {
     return asOnTheWire(await getAssessment(id));
   },
   async model(slug, version) {
-    try {
-      const { data } = await versionDocument(await resolveVersion(slug, version));
-      return asOnTheWire(data);
-    } catch (err) {
-      if (err instanceof FrameworkApiError) return null;
-      throw err;
-    }
+    const data = await loadModelDocument(slug, version);
+    return data === null ? null : asOnTheWire(data);
   },
 };

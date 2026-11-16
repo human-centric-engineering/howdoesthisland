@@ -1,0 +1,506 @@
+/**
+ * Tests: share links (t-32), at `TENANCY_MODE=multi`.
+ *
+ * Real: the service, the token, the tenant entry (`runAsShareOrg`) and the
+ * tenant context. Replaced: Prisma, by a small in-memory table that applies
+ * the `where` clauses the service sends (so expiry and revoke are decided by
+ * the query, as in the database), and the assessment and model services,
+ * which have their own tests.
+ *
+ * @see lib/app/reports/share/service.ts
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const env = vi.hoisted(() => ({
+  BETTER_AUTH_SECRET: 'test-secret-that-is-at-least-32-characters-long',
+  BETTER_AUTH_URL: 'https://app.example.com',
+  TENANCY_MODE: 'multi',
+}));
+vi.mock('@/lib/env', () => ({ env }));
+const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger }));
+
+interface ShareRow {
+  id: string;
+  orgId: string;
+  assessmentId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  viewCount: number;
+  createdByUserId: string | null;
+  createdAt: Date;
+}
+type Where = {
+  id?: string;
+  orgId?: string;
+  tokenHash?: string;
+  assessmentId?: string;
+  revokedAt?: null;
+  expiresAt?: { gt: Date };
+};
+
+const db = vi.hoisted(() => ({
+  shares: [] as ShareRow[],
+  assessments: new Map<string, { orgId: string; status: string; completedAt: Date | null }>(),
+  /** The tenant context each share write ran in. */
+  writes: [] as unknown[],
+  /** When set, the next share insert fails with it. */
+  createError: null as Error | null,
+}));
+
+vi.mock('@/lib/db/client', async () => {
+  const { getTenantContext } = await import('@/lib/tenancy/context');
+  const matches = (row: ShareRow, where: Where) =>
+    (where.id === undefined || row.id === where.id) &&
+    (where.orgId === undefined || row.orgId === where.orgId) &&
+    (where.tokenHash === undefined || row.tokenHash === where.tokenHash) &&
+    (where.assessmentId === undefined || row.assessmentId === where.assessmentId) &&
+    (where.revokedAt !== null || row.revokedAt === null) &&
+    (where.expiresAt === undefined || row.expiresAt > where.expiresAt.gt);
+  const pick = (row: ShareRow, select?: Record<string, unknown>) => {
+    if (!select) return row;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(select)) {
+      out[key] = key === 'org' ? { status: 'ACTIVE' } : row[key as keyof ShareRow];
+    }
+    return out;
+  };
+  return {
+    prisma: {
+      assessment: {
+        findUnique: vi.fn(({ where }: { where: { id: string; orgId: string } }) => {
+          const a = db.assessments.get(where.id);
+          return Promise.resolve(
+            a && a.orgId === where.orgId ? { status: a.status, completedAt: a.completedAt } : null
+          );
+        }),
+      },
+      reportShare: {
+        create: vi.fn(
+          ({
+            data,
+            select,
+          }: {
+            data: Omit<ShareRow, 'id' | 'createdAt' | 'viewCount' | 'revokedAt'>;
+            select: Record<string, unknown>;
+          }) => {
+            db.writes.push(getTenantContext());
+            if (db.createError) return Promise.reject(db.createError);
+            const n = db.shares.length + 1;
+            const row: ShareRow = {
+              ...data,
+              id: `share-${n}`,
+              revokedAt: null,
+              viewCount: 0,
+              createdAt: new Date(Date.UTC(2026, 10, 1, 0, n)),
+            };
+            db.shares.push(row);
+            return Promise.resolve(pick(row, select));
+          }
+        ),
+        findUnique: vi.fn(
+          ({ where, select }: { where: Where; select?: Record<string, unknown> }) => {
+            const row = db.shares.find((r) => matches(r, where));
+            return Promise.resolve(row ? pick(row, select) : null);
+          }
+        ),
+        findMany: vi.fn(({ where, select }: { where: Where; select: Record<string, unknown> }) =>
+          Promise.resolve(
+            db.shares
+              .filter((r) => matches(r, where))
+              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+              .map((r) => pick(r, select))
+          )
+        ),
+        updateMany: vi.fn(
+          ({
+            where,
+            data,
+          }: {
+            where: Where;
+            data: { revokedAt?: Date; viewCount?: { increment: number } };
+          }) => {
+            db.writes.push(getTenantContext());
+            let count = 0;
+            for (const row of db.shares.filter((r) => matches(r, where))) {
+              count += 1;
+              if (data.revokedAt) row.revokedAt = data.revokedAt;
+              if (data.viewCount) row.viewCount += data.viewCount.increment;
+            }
+            return Promise.resolve({ count });
+          }
+        ),
+      },
+    },
+  };
+});
+
+const getAssessment = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/app/assessments/api/service', () => ({ getAssessment }));
+
+const versionDocument = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/app/frameworks/api/service', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/app/frameworks/api/service')>(
+    '@/lib/app/frameworks/api/service'
+  );
+  return {
+    FrameworkApiError: actual.FrameworkApiError,
+    resolveVersion: vi.fn((slug: string, version: string) => Promise.resolve({ slug, version })),
+    versionDocument,
+  };
+});
+
+import { FrameworkApiError } from '@/lib/app/frameworks/api/service';
+import { reportResultSchema } from '@/lib/app/reports/input';
+import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
+import {
+  createShare,
+  listShares,
+  readSharedReport,
+  revokeShare,
+} from '@/lib/app/reports/share/service';
+import { hashShareToken } from '@/lib/app/reports/share/token';
+import { getTenantContext, runAsOrg } from '@/lib/tenancy/context';
+
+const ORG = 'cmorg000000000000000team1';
+const OTHER_ORG = 'cmorg0000000000000000org2';
+const ASSESSMENT = 'cmassess000000000000000001';
+const NOW = new Date('2026-11-16T09:00:00.000Z');
+const DAY = 24 * 60 * 60 * 1000;
+
+const inOrg = <T>(fn: () => Promise<T>, org = ORG) => runAsOrg(org, fn, { source: 'session' });
+
+/** Where the copy came from: a preview link, which is itself a credential. */
+const SOURCE_URL = 'https://intranet.example.com/draft?preview=s3cret';
+
+/**
+ * A real assembled result (the report fixtures' engine run), as the run
+ * stores it: with the source URL `assemble()` records and the editor's record,
+ * which carries its cost.
+ */
+const storedResult = (): Record<string, unknown> => {
+  const result = apiAssessment().result as Record<string, unknown>;
+  return { ...result, source: SOURCE_URL };
+};
+
+/** A finished review, as `getAssessment` returns it: every field the detail has. */
+const detail = {
+  id: ASSESSMENT,
+  stored: true,
+  status: 'completed',
+  profile: 'full',
+  judges: ['judge_ethos'],
+  framework: { slug: 'howdoesthisland', version: '0.5.1' },
+  title: 'Spring launch email',
+  source: { kind: 'url', url: SOURCE_URL, fileName: null },
+  wordCount: 120,
+  overall: 71,
+  band: 'Strong',
+  costUsd: 0.42,
+  error: null,
+  createdAt: new Date('2026-11-10T10:00:00.000Z'),
+  startedAt: new Date('2026-11-10T10:00:01.000Z'),
+  completedAt: new Date('2026-11-10T10:01:00.000Z'),
+  text: 'The copy.',
+  context: { audience: 'exec', brief: 'internal pricing notes' },
+  result: storedResult(),
+  judgeRuns: [
+    {
+      judge: 'judge_ethos',
+      status: 'succeeded',
+      model: 'gpt-x',
+      costUsd: 0.42,
+      latencyMs: 900,
+      errorCode: null,
+    },
+  ],
+};
+
+beforeEach(() => {
+  env.BETTER_AUTH_URL = 'https://app.example.com';
+  logger.info.mockClear();
+  db.createError = null;
+  db.shares.length = 0;
+  db.writes.length = 0;
+  db.assessments.clear();
+  db.assessments.set(ASSESSMENT, { orgId: ORG, status: 'COMPLETED', completedAt: NOW });
+  getAssessment.mockReset().mockResolvedValue(detail);
+  versionDocument.mockReset().mockResolvedValue({ data: modelDocument(false) });
+});
+
+/** Make a link in the workspace and return its token. */
+async function made(days = 30, at = NOW) {
+  return inOrg(() => createShare(ASSESSMENT, { expiresInDays: days }, 'user-1', at));
+}
+
+describe('createShare', () => {
+  it('stores only the hash, and answers the token and its URL once', async () => {
+    const share = await made();
+
+    expect(share).toMatchObject({
+      id: 'share-1',
+      state: 'active',
+      viewCount: 0,
+      revokedAt: null,
+      url: `https://app.example.com/r/${share.token}`,
+    });
+    const [row] = db.shares;
+    expect(row.tokenHash).toBe(hashShareToken(share.token));
+    expect(JSON.stringify(row)).not.toContain(share.token);
+    expect(row).toMatchObject({ orgId: ORG, assessmentId: ASSESSMENT, createdByUserId: 'user-1' });
+  });
+
+  it('expires after 30 days unless told otherwise', async () => {
+    expect((await made(30)).expiresAt).toEqual(new Date(NOW.getTime() + 30 * DAY));
+    expect((await made(7)).expiresAt).toEqual(new Date(NOW.getTime() + 7 * DAY));
+  });
+
+  it('refuses a completed review with no completion time, as the PDF does', async () => {
+    db.assessments.set(ASSESSMENT, { orgId: ORG, status: 'COMPLETED', completedAt: null });
+    await expect(made()).rejects.toMatchObject({ status: 409, code: 'REPORT_NOT_READY' });
+  });
+
+  it('builds the URL without a double slash when the public address ends in one', async () => {
+    env.BETTER_AUTH_URL = 'https://app.example.com/';
+    const share = await made();
+    expect(share.url).toBe(`https://app.example.com/r/${share.token}`);
+  });
+
+  it('is not found when the assessment is deleted between the check and the insert', async () => {
+    const { Prisma } = await import('@prisma/client');
+    db.createError = new Prisma.PrismaClientKnownRequestError('FK', {
+      code: 'P2003',
+      clientVersion: 'test',
+    });
+    await expect(made()).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("is not found for another workspace's assessment", async () => {
+    await expect(
+      inOrg(() => createShare(ASSESSMENT, { expiresInDays: 30 }, 'user-1'), OTHER_ORG)
+    ).rejects.toMatchObject({ status: 404 });
+    expect(db.shares).toHaveLength(0);
+  });
+
+  it.each(['QUEUED', 'RUNNING', 'FAILED', 'CANCELLED'])(
+    'refuses a %s review, which has no report',
+    async (status) => {
+      db.assessments.set(ASSESSMENT, { orgId: ORG, status, completedAt: null });
+      await expect(made()).rejects.toMatchObject({
+        status: 409,
+        code: 'REPORT_NOT_READY',
+        details: { status: status.toLowerCase() },
+      });
+      expect(db.shares).toHaveLength(0);
+    }
+  );
+});
+
+describe('listShares and revokeShare', () => {
+  it('lists newest first, each with its state, and never a token or hash', async () => {
+    const first = await made();
+    await made();
+    await inOrg(() => revokeShare(first.id, NOW));
+
+    const list = await inOrg(() => listShares(ASSESSMENT, NOW));
+    expect(list.map((s) => [s.id, s.state])).toEqual([
+      ['share-2', 'active'],
+      ['share-1', 'revoked'],
+    ]);
+    expect(Object.keys(list[0]).sort()).toEqual(
+      ['createdAt', 'expiresAt', 'id', 'revokedAt', 'state', 'viewCount'].sort()
+    );
+  });
+
+  it('reads a link past its expiry as expired', async () => {
+    await made(1);
+    const later = new Date(NOW.getTime() + 2 * DAY);
+    expect((await inOrg(() => listShares(ASSESSMENT, later)))[0].state).toBe('expired');
+  });
+
+  it('keeps the first revoke time when revoked again', async () => {
+    const share = await made();
+    const first = await inOrg(() => revokeShare(share.id, NOW));
+    const again = await inOrg(() => revokeShare(share.id, new Date(NOW.getTime() + DAY)));
+    expect(again.revokedAt).toEqual(first.revokedAt);
+    expect(again.state).toBe('revoked');
+    // Only the call that revoked it is logged as a revoke.
+    const revokes = logger.info.mock.calls.filter(([msg]) => msg === 'Share link revoked');
+    expect(revokes).toHaveLength(1);
+  });
+
+  it("does not revoke another workspace's link", async () => {
+    const share = await made();
+    await expect(inOrg(() => revokeShare(share.id), OTHER_ORG)).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(db.shares[0].revokedAt).toBeNull();
+  });
+});
+
+describe('readSharedReport', () => {
+  it("opens the report inside the link's org, and counts the view", async () => {
+    const { token } = await made();
+    db.writes.length = 0;
+    getAssessment.mockImplementation(() =>
+      Promise.resolve({ ...detail, orgSeen: getTenantContext() })
+    );
+
+    const read = await readSharedReport(token, NOW);
+
+    expect(read.ok).toBe(true);
+    // The count was written, and the assessment read, in the share's org.
+    expect(db.writes).toEqual([{ orgId: ORG, source: 'approval-token', role: null }]);
+    expect(getAssessment).toHaveBeenCalledWith(ASSESSMENT);
+    expect(db.shares[0].viewCount).toBe(1);
+    await readSharedReport(token, NOW);
+    expect(db.shares[0].viewCount).toBe(2);
+  });
+
+  it('serves the report and nothing about the workspace, its people or the cost', async () => {
+    const { token, expiresAt } = await made();
+    const read = await readSharedReport(token, NOW);
+    if (!read.ok) throw new Error('expected the link to open');
+
+    expect(read.report).toEqual({
+      assessment: {
+        status: 'completed',
+        profile: 'full',
+        judges: ['judge_ethos'],
+        framework: { slug: 'howdoesthisland', version: '0.5.1' },
+        title: 'Spring launch email',
+        wordCount: 120,
+        overall: 71,
+        band: 'Strong',
+        createdAt: detail.createdAt,
+        completedAt: detail.completedAt,
+        text: 'The copy.',
+        result: reportResultSchema.parse(detail.result),
+        judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
+      },
+      model: modelDocument(false),
+      expiresAt,
+    });
+    const wire = JSON.stringify(read.report);
+    // `context` is the caller's own JSON, which the report never reads.
+    expect(read.report.assessment).not.toHaveProperty('context');
+    for (const leak of [
+      ASSESSMENT,
+      ORG,
+      'user-1',
+      'intranet.example.com',
+      's3cret',
+      'costUsd',
+      'internal pricing notes',
+    ]) {
+      expect(wire).not.toContain(leak);
+    }
+  });
+
+  it("serves only the result's keys the report reads: not its source URL, nor the editor's cost", async () => {
+    const stored = storedResult();
+    // The stored result does carry both, so the test can fail.
+    expect(stored.source).toBe(SOURCE_URL);
+    expect(stored.editor).toHaveProperty('costUsd');
+    const { token } = await made();
+
+    const read = await readSharedReport(token, NOW);
+    if (!read.ok) throw new Error('expected the link to open');
+
+    const result = read.report.assessment.result as Record<string, unknown>;
+    expect(result).not.toHaveProperty('source');
+    expect(result.editor).not.toHaveProperty('costUsd');
+    expect(result.editor).toMatchObject({ status: 'written', model: 'gpt-editor' });
+    // Everything the report reads is still there.
+    expect(result).toEqual(reportResultSchema.parse(stored));
+  });
+
+  it('does not share a key the engine adds later until the report reads it', async () => {
+    getAssessment.mockResolvedValue({
+      ...detail,
+      result: { ...storedResult(), internal_notes: 'not for outside eyes' },
+    });
+    const { token } = await made();
+
+    const read = await readSharedReport(token, NOW);
+
+    expect(JSON.stringify(read)).not.toContain('not for outside eyes');
+  });
+
+  it('opens nothing when the result is not one the report can read', async () => {
+    getAssessment.mockResolvedValue({ ...detail, result: { mode: 'full' } });
+    const { token } = await made();
+    expect(await readSharedReport(token, NOW)).toEqual({ ok: false, refused: 'no-report' });
+  });
+
+  it('opens nothing once revoked, and counts nothing', async () => {
+    const share = await made();
+    await inOrg(() => revokeShare(share.id, NOW));
+
+    expect(await readSharedReport(share.token, NOW)).toEqual({ ok: false, refused: 'closed' });
+    expect(getAssessment).not.toHaveBeenCalled();
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('opens nothing once expired', async () => {
+    const share = await made(1);
+    const atExpiry = new Date(NOW.getTime() + DAY);
+    expect(await readSharedReport(share.token, atExpiry)).toEqual({ ok: false, refused: 'closed' });
+    expect(getAssessment).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing for a wrong token, or a string that is not one', async () => {
+    await made();
+    expect(await readSharedReport('A'.repeat(43), NOW)).toEqual({ ok: false, refused: 'missing' });
+    expect(await readSharedReport('nope', NOW)).toEqual({ ok: false, refused: 'malformed' });
+  });
+
+  it('opens nothing when the assessment went between the lookup and the read', async () => {
+    const { token } = await made();
+    const { NotFoundError } = await import('@/lib/api/errors');
+    getAssessment.mockRejectedValue(new NotFoundError('Assessment not found'));
+    expect(await readSharedReport(token, NOW)).toEqual({ ok: false, refused: 'closed' });
+  });
+
+  it('answers a null model when the version it ran on no longer resolves', async () => {
+    const { token } = await made();
+    versionDocument.mockRejectedValue(new FrameworkApiError('FRAMEWORK_VERSION_NOT_FOUND', 'gone'));
+    const read = await readSharedReport(token, NOW);
+    expect(read.ok && read.report.model).toBeNull();
+    // It shows nothing, so it is not a view.
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('answers a null model, uncounted, when the version resolves but its document does not parse', async () => {
+    versionDocument.mockResolvedValue({ data: { meta: { name: 'HDTL' } } });
+    const { token } = await made();
+    const read = await readSharedReport(token, NOW);
+    expect(read.ok && read.report.model).toBeNull();
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('opens nothing, uncounted, when the assessment is not one the report can read', async () => {
+    getAssessment.mockResolvedValue({ ...detail, judges: 'not a list' });
+    const { token } = await made();
+    expect(await readSharedReport(token, NOW)).toEqual({ ok: false, refused: 'no-report' });
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('does not count an open whose result the report cannot read', async () => {
+    getAssessment.mockResolvedValue({ ...detail, result: { mode: 'full' } });
+    const { token } = await made();
+    await readSharedReport(token, NOW);
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('opens nothing when revoked after the lookup but before the view is counted', async () => {
+    const share = await made();
+    getAssessment.mockImplementation(async () => {
+      await inOrg(() => revokeShare(share.id, NOW));
+      return detail;
+    });
+    expect(await readSharedReport(share.token, NOW)).toEqual({ ok: false, refused: 'closed' });
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+});

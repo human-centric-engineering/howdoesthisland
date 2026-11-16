@@ -6,7 +6,9 @@
  * @see lib/app/reports/view.ts
  */
 import { describe, expect, it } from 'vitest';
+import { sharedAssessmentSchema } from '@/lib/app/api/registry';
 import {
+  reportAssessmentSchema,
   reportModelSchema,
   reportResultSchema,
   type ReportAssessment,
@@ -474,5 +476,25 @@ describe('buildReportView — round 3 review', () => {
     });
     expect(v.recommendations.map((x) => x.number)).toEqual([2, 1]);
     expect(v.copy.notes[0].recommendation).toBe(2);
+  });
+});
+
+describe('buildReportView — what a share link serves (t-32)', () => {
+  it('reads a shared assessment, which carries no cost, as a report with none', () => {
+    const shared = reportAssessmentSchema.parse(sharedAssessmentSchema.parse(apiAssessment()));
+    expect(shared).not.toHaveProperty('costUsd');
+    expect(view(shared).method.costUsd).toBeNull();
+  });
+
+  it("keeps the API's cost for the web report", () => {
+    expect(view(reportAssessmentSchema.parse(apiAssessment())).method.costUsd).toBe(0.1234);
+  });
+
+  it('builds the same report from either input, but for the cost', () => {
+    const full = view(reportAssessmentSchema.parse(apiAssessment()));
+    const shared = view(
+      reportAssessmentSchema.parse(sharedAssessmentSchema.parse(apiAssessment()))
+    );
+    expect({ ...shared, method: { ...shared.method, costUsd: 0.1234 } }).toEqual(full);
   });
 });

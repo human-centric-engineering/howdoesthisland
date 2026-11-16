@@ -75,11 +75,20 @@ export const apiReportSource: ReportSource = {
   },
 };
 
-export async function loadReport(id: string, source: ReportSource): Promise<ReportLoad> {
+/**
+ * `logAs` is what the diagnostics name the report by: the assessment's id,
+ * unless the caller has a better handle (a shared report passes its share's
+ * id, since the id it reads by is not an assessment's).
+ */
+export async function loadReport(
+  id: string,
+  source: ReportSource,
+  logAs: Record<string, string> = { assessmentId: id }
+): Promise<ReportLoad> {
   const assessment = reportAssessmentSchema.safeParse(await source.assessment(id));
   if (!assessment.success) {
     logger.error('Report: the assessment did not parse', undefined, {
-      assessmentId: id,
+      ...logAs,
       issues: assessment.error.issues.slice(0, 5),
     });
     return { kind: 'unreadable' };
@@ -91,7 +100,7 @@ export async function loadReport(id: string, source: ReportSource): Promise<Repo
   const result = reportResultSchema.safeParse(a.result);
   if (!result.success) {
     logger.error('Report: the result did not parse', undefined, {
-      assessmentId: id,
+      ...logAs,
       framework: a.framework,
       issues: result.error.issues.slice(0, 5),
     });
@@ -103,7 +112,7 @@ export async function loadReport(id: string, source: ReportSource): Promise<Repo
   const modelData = await source.model(a.framework.slug, a.framework.version);
   if (modelData === null) {
     logger.error('Report: the model version it ran on was not found', undefined, {
-      assessmentId: id,
+      ...logAs,
       framework: a.framework,
     });
     return { kind: 'unreadable' };
@@ -111,7 +120,7 @@ export async function loadReport(id: string, source: ReportSource): Promise<Repo
   const model = reportModelSchema.safeParse(modelData);
   if (!model.success) {
     logger.error('Report: the model did not parse', undefined, {
-      assessmentId: id,
+      ...logAs,
       framework: a.framework,
       issues: model.error.issues.slice(0, 5),
     });

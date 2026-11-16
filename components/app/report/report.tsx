@@ -513,7 +513,7 @@ function Method({ view, variant }: { view: ReportView; variant: ReportVariant })
         </p>
       ) : null}
       <p className="text-sm">Model: {method.framework}.</p>
-      {variant === 'web' ? (
+      {variant === 'web' && method.costUsd !== null ? (
         // Printing the web page from the browser must not carry the cost either.
         <p className="text-sm" data-print="hide">
           Cost of this {WORDS.review}: {formatUsd(method.costUsd)}.

@@ -13,7 +13,6 @@
  */
 import { APIError, NotFoundError } from '@/lib/api/errors';
 import { prisma } from '@/lib/db/client';
-import type { AssessmentStatus } from '@prisma/client';
 import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import type { RateLimitResult } from '@/lib/security/rate-limit';
@@ -25,6 +24,7 @@ import {
   writeCachedPdf,
 } from '@/lib/app/reports/pdf/cache';
 import { PdfRenderError, renderReportPdf } from '@/lib/app/reports/pdf/render';
+import { hasReport } from '@/lib/app/reports/reportable';
 import { mintRenderToken } from '@/lib/app/reports/pdf/render-token';
 
 export interface ReportPdf {
@@ -48,8 +48,6 @@ export interface ReportPdfLimited {
   limited: RateLimitResult;
 }
 
-const REPORTABLE: ReadonlySet<AssessmentStatus> = new Set(['COMPLETED', 'PARTIAL']);
-
 /** Renders in flight in this process, by cache key. */
 const inFlight = new Map<string, Promise<Buffer>>();
 
@@ -63,9 +61,7 @@ export async function getReportPdf(
     select: { status: true, completedAt: true },
   });
   if (!row) throw new NotFoundError('Assessment not found');
-  // The two statuses that store a result (`drive` in `lib/app/assessments/run.ts`) are
-  // the ones with a report. Checked by status so the result is not loaded.
-  if (!REPORTABLE.has(row.status) || row.completedAt === null) {
+  if (!hasReport(row)) {
     throw new APIError(
       'This review has no report yet: it is still running, or it failed or was cancelled.',
       'REPORT_NOT_READY',

@@ -126,6 +126,13 @@ export function initAppSubjectSources(): void {
         disposition: 'export',
         description: 'Assessments you asked for, with their scores and results.',
       },
+      {
+        model: 'ReportShare',
+        section: 'reportShares',
+        disposition: 'export',
+        description:
+          'Links you made to share a report, with when each expires, whether it was revoked and how often it was opened.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -157,7 +164,7 @@ export function initAppSubjectSources(): void {
  * change the signature just to add one.
  */
 export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
-  const [received, sent, contents, assessments] = await Promise.all([
+  const [received, sent, contents, assessments, reportShares] = await Promise.all([
     // The ones to them, without the inviter's id (their name is in the
     // invitation email, and the id is someone else's data).
     prisma.workspaceInvitation.findMany({
@@ -180,6 +187,13 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       omit: { leaseToken: true, leaseExpiresAt: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // The links they made (t-32), without the token's hash: it is the
+    // credential's verifier, not data about anyone.
+    prisma.reportShare.findMany({
+      where: { createdByUserId: userId },
+      omit: { tokenHash: true },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
   return {
     workspaceInvitations: [
@@ -188,5 +202,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     ],
     contents,
     assessments,
+    reportShares,
   };
 }

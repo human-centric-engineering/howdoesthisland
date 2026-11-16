@@ -83,6 +83,12 @@ describe('Report — a full review', () => {
     rerender(<Report view={view} variant="shared" />);
     expect(screen.queryByText(/Cost of this review/)).not.toBeInTheDocument();
   });
+
+  it('shows no cost line, rather than $0, when the input carried no cost (t-32)', () => {
+    const view = viewOf(apiAssessment());
+    render(<Report view={{ ...view, method: { ...view.method, costUsd: null } }} variant="web" />);
+    expect(screen.queryByText(/Cost of this review/)).not.toBeInTheDocument();
+  });
 });
 
 describe('Report — sections a result lacks are left out', () => {
