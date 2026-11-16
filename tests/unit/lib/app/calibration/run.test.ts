@@ -15,10 +15,12 @@ import {
   CalibrationError,
   runCalibration,
   scoreSet,
+  startCalibration,
   type RunCalibrationDeps,
 } from '@/lib/app/calibration/run';
 import { calibrationSetSchema, type CalibrationSet } from '@/lib/app/calibration/schema';
-import type { CalibrationStore, NewRun, StoredRun } from '@/lib/app/calibration/store';
+import type { CalibrationStore, StoredRun } from '@/lib/app/calibration/store';
+import { fakeCalibrationStore } from '@/tests/unit/lib/app/calibration/fake-store';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 
@@ -175,20 +177,7 @@ describe('scoreSet() in ai mode', () => {
 });
 
 function fakeStore(previous: StoredRun | null = null) {
-  const created: NewRun[] = [];
-  const store: CalibrationStore = {
-    createRun: vi.fn(async (run: NewRun) => {
-      created.push(run);
-      return {
-        ...run,
-        createdAt: new Date('2026-11-16T12:00:00Z'),
-        frameworkVersion: '0.5.1',
-      };
-    }),
-    latestRun: vi.fn(async () => previous),
-    aiRunsOf: vi.fn(async () => []),
-  };
-  return { store, created };
+  return fakeCalibrationStore(previous);
 }
 
 function deps(store: CalibrationStore, runJudges = stubJudges()) {
@@ -274,7 +263,7 @@ describe('runCalibration()', () => {
       runCalibration({ version: other, model, set, mode: 'ai' }, deps(store, judges).d)
     ).rejects.toMatchObject({ code: 'SET_MISMATCH' });
     expect(judges).not.toHaveBeenCalled();
-    expect(store.createRun).not.toHaveBeenCalled();
+    expect(store.startRun).not.toHaveBeenCalled();
   });
 
   it('refuses a set naming an id the version does not have, listing it', async () => {
@@ -287,6 +276,48 @@ describe('runCalibration()', () => {
     ).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CalibrationError);
     expect(err).toMatchObject({ code: 'DANGLING_REFERENCES', problems: ["ev01.flags: 'rf_nope'"] });
-    expect(store.createRun).not.toHaveBeenCalled();
+    expect(store.startRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('startCalibration() (t-38)', () => {
+  it('stores the run as running and returns before its judges answer', async () => {
+    const { store, runs } = fakeStore();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const answering = stubJudges();
+    const judges = vi.fn<typeof RunJudges>(async (input) => {
+      await gate;
+      return answering(input);
+    });
+    const { runId, done } = await startCalibration(
+      { version: VERSION, model, set, mode: 'ai', startedByUserId: 'admin-1' },
+      deps(store, judges).d
+    );
+
+    expect(runs.get(runId)).toMatchObject({
+      status: 'running',
+      totals: null,
+      startedByUserId: 'admin-1',
+    });
+    release();
+    const { run } = await done;
+    expect(run.id).toBe(runId);
+    expect(runs.get(runId)?.status).toBe('complete');
+    expect(judges.mock.calls[0][0]).toMatchObject({ userId: 'admin-1' });
+  });
+
+  it('stores a run that throws part-way as failed, with why, and rejects', async () => {
+    const { store, runs } = fakeStore();
+    const judges = vi.fn<typeof RunJudges>(async () => {
+      throw new Error('provider unreachable');
+    });
+    const { runId, done } = await startCalibration(
+      { version: VERSION, model, set, mode: 'ai' },
+      deps(store, judges).d
+    );
+    await expect(done).rejects.toThrow('provider unreachable');
+    expect(runs.get(runId)).toMatchObject({ status: 'failed', error: 'provider unreachable' });
+    expect(store.finishRun).not.toHaveBeenCalled();
   });
 });

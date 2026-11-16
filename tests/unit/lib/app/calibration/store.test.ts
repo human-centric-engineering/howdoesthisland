@@ -1,12 +1,19 @@
 /**
- * Calibration runs in the database (t-37), against a mocked Prisma: every
- * read and write in the system scope, a run owned by the install org, and
- * the stored JSON parsed on the way back.
+ * Calibration runs in the database (t-37, t-38), against a mocked Prisma:
+ * every read and write in the system scope, a run owned by the install org
+ * and stored as running before it has results, only a complete run read back
+ * for comparing and publishing, and the stored JSON parsed on the way back.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
-  calibrationRun: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+  calibrationRun: {
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+  },
 }));
 const scope = vi.hoisted(() => ({ reasons: [] as string[] }));
 
@@ -56,25 +63,67 @@ beforeEach(() => {
 });
 
 describe('prismaCalibrationStore', () => {
-  it('stores a run as the install org’s, in the system scope', async () => {
-    db.calibrationRun.create.mockResolvedValue(dbRow());
-    const stored = await store.createRun(run);
-    expect(scope.reasons).toEqual(['calibration: store a run']);
-    expect(db.calibrationRun.create).toHaveBeenCalledWith(
+  it('stores a run as the install org’s and running, with no results, in the system scope', async () => {
+    db.calibrationRun.create.mockResolvedValue({ id: 'cal-1' });
+    const { judgeModels: _m, totals: _t, rows: _r, costUsd: _c, ...start } = run;
+    await store.startRun(start);
+    expect(scope.reasons).toEqual(['calibration: start a run']);
+    const { data } = db.calibrationRun.create.mock.calls[0][0];
+    expect(data).toMatchObject({ id: 'cal-1', orgId: 'install', mode: 'AI', status: 'RUNNING' });
+    expect(data).not.toHaveProperty('totals');
+    expect(data).not.toHaveProperty('rows');
+  });
+
+  it('finishes only a running run, with its results, and reads it back', async () => {
+    db.calibrationRun.update.mockResolvedValue(dbRow());
+    const stored = await store.finishRun('cal-1', run);
+    expect(db.calibrationRun.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ id: 'cal-1', orgId: 'install', mode: 'AI', costUsd: 0.5 }),
+        where: { id: 'cal-1', status: 'RUNNING' },
+        data: expect.objectContaining({ status: 'COMPLETE', costUsd: 0.5, totals: run.totals }),
       })
     );
     expect(stored).toMatchObject({ id: 'cal-1', mode: 'ai', frameworkVersion: '0.5.1' });
     expect(stored.totals).toEqual(run.totals);
   });
 
-  it('reads the newest run of a mode across the framework’s versions', async () => {
+  it('fails only a running run, keeping why', async () => {
+    db.calibrationRun.updateMany.mockResolvedValue({ count: 1 });
+    await store.failRun('cal-1', 'provider unreachable');
+    expect(db.calibrationRun.updateMany).toHaveBeenCalledWith({
+      where: { id: 'cal-1', status: 'RUNNING' },
+      data: expect.objectContaining({ status: 'FAILED', error: 'provider unreachable' }),
+    });
+  });
+
+  it('lists the framework’s runs of every status, a running one without results', async () => {
+    db.calibrationRun.findMany.mockResolvedValue([
+      dbRow({ id: 'cal-2', status: 'RUNNING', totals: null, rows: null, judgeModels: {} }),
+      dbRow({ status: 'COMPLETE', startedByUserId: 'admin-1', error: null, finishedAt: null }),
+    ]);
+    const listed = await store.listRuns('howdoesthisland');
+    expect(db.calibrationRun.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { frameworkVersion: { framework: { slug: 'howdoesthisland' } } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      })
+    );
+    expect(listed[0]).toMatchObject({ id: 'cal-2', status: 'running', totals: null, rows: null });
+    expect(listed[1]).toMatchObject({ status: 'complete', startedByUserId: 'admin-1' });
+    expect(listed[1].totals).toEqual(run.totals);
+  });
+
+  it('reads the newest complete run of a mode across the framework’s versions', async () => {
     db.calibrationRun.findFirst.mockResolvedValue(dbRow({ mode: 'QUICK' }));
     const last = await store.latestRun({ frameworkSlug: 'howdoesthisland', mode: 'quick' });
     expect(db.calibrationRun.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { mode: 'QUICK', frameworkVersion: { framework: { slug: 'howdoesthisland' } } },
+        where: {
+          mode: 'QUICK',
+          status: 'COMPLETE',
+          frameworkVersion: { framework: { slug: 'howdoesthisland' } },
+        },
         orderBy: { createdAt: 'desc' },
       })
     );
@@ -84,12 +133,12 @@ describe('prismaCalibrationStore', () => {
     expect(await store.latestRun({ frameworkSlug: 'howdoesthisland', mode: 'ai' })).toBeNull();
   });
 
-  it('reads a version’s AI runs, newest first', async () => {
+  it('reads a version’s complete AI runs, newest first', async () => {
     db.calibrationRun.findMany.mockResolvedValue([dbRow()]);
     const runs = await store.aiRunsOf('ver-1');
     expect(db.calibrationRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { frameworkVersionId: 'ver-1', mode: 'AI' },
+        where: { frameworkVersionId: 'ver-1', mode: 'AI', status: 'COMPLETE' },
         orderBy: { createdAt: 'desc' },
       })
     );

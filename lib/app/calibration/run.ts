@@ -184,15 +184,26 @@ export interface CalibrationOutcome {
   comparison: RunComparison | null;
 }
 
+export interface StartedCalibration {
+  /** The run's id, stored as `RUNNING` before this returns. */
+  runId: string;
+  /**
+   * Settles when the run has finished and is stored `COMPLETE`, or rejects
+   * once it is stored `FAILED`. It has already started.
+   */
+  done: Promise<CalibrationOutcome>;
+}
+
 /**
- * Checks the set against the version, runs it, stores the run and compares
- * it with the last run of the same mode. Nothing is spent or stored when the
- * set does not fit the version.
+ * Checks the set against the version, stores the run as `RUNNING` and starts
+ * it (t-38: the admin page returns once it has started). Nothing is spent or
+ * stored when the set does not fit the version: that throws here, before
+ * anything is written.
  */
-export async function runCalibration(
+export async function startCalibration(
   input: RunCalibrationInput,
   deps: RunCalibrationDeps
-): Promise<CalibrationOutcome> {
+): Promise<StartedCalibration> {
   const { version, set, mode } = input;
   if (set.meta.model !== version.version) {
     throw new CalibrationError(
@@ -210,33 +221,65 @@ export async function runCalibration(
   }
 
   const engine = createHowDoesThisLandEngine(input.model, { culture: true });
+  // Checked before the run is stored, so a version that cannot run leaves no row.
+  if (mode === 'ai' && engine.activeJudgeSlots('full').length === 0) {
+    throw new CalibrationError(
+      'NO_JUDGES',
+      'This version has no judges to run, so ai mode cannot.'
+    );
+  }
   // Web Crypto, so this module runs in any realm (lib/app/** may not import node:crypto).
   const runId = globalThis.crypto.randomUUID();
   const frameworkVersion = `${version.frameworkSlug}@${version.version}`;
-  const scored = await deps.runAsInstallOrg(() =>
-    scoreSet({
-      engine,
-      cases: set.cases,
-      mode,
-      frameworkVersion,
-      runId,
-      runJudges: deps.runJudges,
-      ...(input.startedByUserId !== undefined ? { startedByUserId: input.startedByUserId } : {}),
-    })
-  );
-
-  const previous = await deps.store.latestRun({ frameworkSlug: version.frameworkSlug, mode });
-  const run = await deps.store.createRun({
+  const startedByUserId = input.startedByUserId ?? null;
+  await deps.store.startRun({
     id: runId,
     frameworkVersionId: version.id,
     sourceSha256: version.sourceSha256,
     setVersion: set.meta.version,
     mode,
-    judgeModels: scored.judgeModels,
-    totals: scored.totals,
-    rows: scored.rows,
-    costUsd: scored.costUsd,
-    startedByUserId: input.startedByUserId ?? null,
+    startedByUserId,
   });
-  return { run, comparison: previous ? compareRuns(previous, scored) : null };
+
+  const work = async (): Promise<CalibrationOutcome> => {
+    const scored = await deps.runAsInstallOrg(() =>
+      scoreSet({
+        engine,
+        cases: set.cases,
+        mode,
+        frameworkVersion,
+        runId,
+        runJudges: deps.runJudges,
+        startedByUserId,
+      })
+    );
+    // Read before this run is finished, so it is the run before this one.
+    const previous = await deps.store.latestRun({ frameworkSlug: version.frameworkSlug, mode });
+    const run = await deps.store.finishRun(runId, {
+      judgeModels: scored.judgeModels,
+      totals: scored.totals,
+      rows: scored.rows,
+      costUsd: scored.costUsd,
+    });
+    return { run, comparison: previous ? compareRuns(previous, scored) : null };
+  };
+
+  const done = work().catch(async (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    await deps.store.failRun(runId, message);
+    throw err;
+  });
+  return { runId, done };
+}
+
+/**
+ * {@link startCalibration}, waited for: the CLI's way. Throws
+ * {@link CalibrationError} before anything is stored when the set does not
+ * fit the version.
+ */
+export async function runCalibration(
+  input: RunCalibrationInput,
+  deps: RunCalibrationDeps
+): Promise<CalibrationOutcome> {
+  return (await startCalibration(input, deps)).done;
 }

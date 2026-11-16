@@ -13,6 +13,20 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · lib/admin-nav/registry.ts
  */
+import { Scale } from 'lucide-react';
+import { registerNavSection } from '@/lib/admin-nav/registry';
+
 export function initAppNav(): void {
-  // No app nav sections by default.
+  registerNavSection({
+    title: 'HowDoesThisLand',
+    items: [
+      {
+        // t-38: platform admins only (no `tier`), as the page and its routes are.
+        href: '/admin/frameworks',
+        label: 'Frameworks',
+        icon: Scale,
+        description: 'Framework versions and their calibration runs',
+      },
+    ],
+  });
 }
