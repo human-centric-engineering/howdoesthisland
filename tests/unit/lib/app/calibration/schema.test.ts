@@ -102,14 +102,20 @@ describe('eval-0.5.1.json', () => {
   });
 
   it('keeps each pair of cases comparable', () => {
-    const [expert, novice] = [caseById(set, 'ev19'), caseById(set, 'ev20')];
-    expect(novice.audience).toEqual(expert.audience);
-    expect(novice.content_type).toBe(expert.content_type);
+    // The same novice reader, two texts: one pitched for an adviser, one for them.
+    const [forAdviser, forNovice] = [caseById(set, 'ev19'), caseById(set, 'ev20')];
+    expect(forNovice.audience).toEqual(forAdviser.audience);
+    expect(forNovice.content_type).toBe(forAdviser.content_type);
+    expect(forNovice.culture).toEqual(forAdviser.culture);
+    expect(forNovice.text).not.toBe(forAdviser.text);
 
+    // One email, everything the same but the reader.
     const [japan, us] = [caseById(set, 'ev22'), caseById(set, 'ev24')];
-    expect(us.text).toBe(japan.text);
-    expect(us.audience).toEqual(japan.audience);
-    expect([japan.culture?.reader, us.culture?.reader]).toEqual(['jp', 'us']);
+    const { culture: jc, id: _j, title: _jt, notes: _jn, expect: _je, ...japanRest } = japan;
+    const { culture: uc, id: _u, title: _ut, notes: _un, expect: _ue, ...usRest } = us;
+    expect(usRest).toEqual(japanRest);
+    expect(uc?.writer).toBe(jc?.writer);
+    expect([jc?.reader, uc?.reader]).toEqual(['jp', 'us']);
   });
 
   it("states the bands the engine's band3 scores with", () => {
@@ -299,6 +305,12 @@ describe('calibrationSetSchema', () => {
   it('refuses a lever expected in two statuses', () => {
     const d = raw();
     firstExpect(d).levers = { present: ['lv_scarcity'], misused: ['lv_scarcity'] };
+    expect(calibrationSetSchema.safeParse(d).success).toBe(false);
+  });
+
+  it('refuses an id listed twice', () => {
+    const d = raw();
+    firstExpect(d).flags_present = ['rf_hype', 'rf_hype'];
     expect(calibrationSetSchema.safeParse(d).success).toBe(false);
   });
 

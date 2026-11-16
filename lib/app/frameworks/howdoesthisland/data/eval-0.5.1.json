@@ -884,7 +884,9 @@
           "kairos": "mid"
         },
         "overall": "low",
-        "flags_present": [],
+        "flags_present": [
+          "rf_false_urgency"
+        ],
         "flags_absent": [],
         "recommend_dimensions": [
           "eth_goodwill"
@@ -965,7 +967,9 @@
           "kairos": "mid"
         },
         "overall": "low",
-        "flags_present": [],
+        "flags_present": [
+          "rf_false_urgency"
+        ],
         "flags_absent": [],
         "recommend_dimensions": [
           "eth_goodwill"

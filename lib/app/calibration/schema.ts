@@ -41,7 +41,10 @@ const bandsMatchEngine: SameBands<Band, ReturnType<typeof band3>> = true;
 void bandsMatchEngine;
 
 const id = z.string().min(1);
-const ids = z.array(id);
+/** A list of ids, none repeated: a repeat would count one hit twice. */
+const ids = z.array(id).refine((list) => new Set(list).size === list.length, {
+  error: 'An id is listed twice',
+});
 
 /** The groups a judge scores as a band and key dimensions. */
 export const CALIBRATED_GROUPS = ['craft', 'audience', 'culture'] as const;
