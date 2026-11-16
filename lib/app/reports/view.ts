@@ -93,7 +93,6 @@ export interface ReviewerView {
 }
 
 export interface ReportView {
-  id: string;
   status: ReportAssessment['status'];
   mode: 'full' | 'quick';
   cover: {
@@ -178,7 +177,8 @@ export interface ReportView {
     framework: string;
     interpretation: string;
     limitations: { title: string; detail: string }[];
-    costUsd: number;
+    /** `null` when the input carried none: a shared report's. */
+    costUsd: number | null;
   };
 }
 
@@ -487,7 +487,6 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     : null;
 
   return {
-    id: assessment.id,
     status: assessment.status,
     mode: result.mode,
     cover: {
@@ -531,7 +530,7 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
       framework: `${model.meta.name} ${model.meta.version}`,
       interpretation: model.scoring.interpretation,
       limitations: model.limitations.map((l) => ({ title: l.title, detail: l.detail })),
-      costUsd: assessment.costUsd,
+      costUsd: assessment.costUsd ?? null,
     },
   };
 }

@@ -37,4 +37,8 @@
  * ];
  * ```
  */
-export const appCredentialPaths: readonly string[] = [];
+export const appCredentialPaths: readonly string[] = [
+  // HowDoesThisLand (t-32): a share link's token is the access to a report.
+  '/r/[token]',
+  '/api/v1/shared-reports/[token]',
+];

@@ -1,6 +1,6 @@
 /**
- * The app's subject-export collector (t-9, t-22): what a person receives from
- * the workspace invitations, content and assessment tables.
+ * The app's subject-export collector (t-9, t-22, t-32): what a person receives
+ * from the workspace invitations, content, assessment and share-link tables.
  *
  * Prisma is mocked at the delegate; the assertions are on the queries asked
  * and on how rows are labelled and pared, which is the collector's own work.
@@ -20,6 +20,7 @@ vi.mock('@/lib/db/client', () => ({
     workspaceInvitation: { findMany: vi.fn() },
     content: { findMany: vi.fn() },
     assessment: { findMany: vi.fn() },
+    reportShare: { findMany: vi.fn() },
   },
 }));
 
@@ -33,6 +34,7 @@ describe('collectAppSubjectData', () => {
     vi.clearAllMocks();
     vi.mocked(prisma.content.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.assessment.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.reportShare.findMany).mockResolvedValue([] as never);
   });
 
   it('reads invitations to the person by invitee, and the ones they sent without the invitee', async () => {
@@ -69,6 +71,7 @@ describe('collectAppSubjectData', () => {
       ],
       contents: [],
       assessments: [],
+      reportShares: [],
     });
   });
 
@@ -99,6 +102,21 @@ describe('collectAppSubjectData', () => {
       workspaceInvitations: [],
       contents: [],
       assessments: [],
+      reportShares: [],
     });
+  });
+
+  it('reads the share links they made, without the token hash', async () => {
+    vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.reportShare.findMany).mockResolvedValue([{ id: 'share-1' }] as never);
+
+    const data = await collectAppSubjectData(SUBJECT);
+
+    expect(vi.mocked(prisma.reportShare.findMany)).toHaveBeenCalledWith({
+      where: { createdByUserId: 'user-1' },
+      omit: { tokenHash: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(data.reportShares).toEqual([{ id: 'share-1' }]);
   });
 });
