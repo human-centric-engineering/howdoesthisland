@@ -42,7 +42,7 @@ type Where = {
 
 const db = vi.hoisted(() => ({
   shares: [] as ShareRow[],
-  assessments: new Map<string, { orgId: string; status: string }>(),
+  assessments: new Map<string, { orgId: string; status: string; completedAt: Date | null }>(),
   /** The tenant context each share write ran in. */
   writes: [] as unknown[],
   /** When set, the next share insert fails with it. */
@@ -71,7 +71,9 @@ vi.mock('@/lib/db/client', async () => {
       assessment: {
         findUnique: vi.fn(({ where }: { where: { id: string; orgId: string } }) => {
           const a = db.assessments.get(where.id);
-          return Promise.resolve(a && a.orgId === where.orgId ? { status: a.status } : null);
+          return Promise.resolve(
+            a && a.orgId === where.orgId ? { status: a.status, completedAt: a.completedAt } : null
+          );
         }),
       },
       reportShare: {
@@ -222,7 +224,7 @@ beforeEach(() => {
   db.shares.length = 0;
   db.writes.length = 0;
   db.assessments.clear();
-  db.assessments.set(ASSESSMENT, { orgId: ORG, status: 'COMPLETED' });
+  db.assessments.set(ASSESSMENT, { orgId: ORG, status: 'COMPLETED', completedAt: NOW });
   getAssessment.mockReset().mockResolvedValue(detail);
   versionDocument.mockReset().mockResolvedValue({ data: modelDocument(false) });
 });
@@ -254,6 +256,11 @@ describe('createShare', () => {
     expect((await made(7)).expiresAt).toEqual(new Date(NOW.getTime() + 7 * DAY));
   });
 
+  it('refuses a completed review with no completion time, as the PDF does', async () => {
+    db.assessments.set(ASSESSMENT, { orgId: ORG, status: 'COMPLETED', completedAt: null });
+    await expect(made()).rejects.toMatchObject({ status: 409, code: 'REPORT_NOT_READY' });
+  });
+
   it('builds the URL without a double slash when the public address ends in one', async () => {
     env.BETTER_AUTH_URL = 'https://app.example.com/';
     const share = await made();
@@ -279,7 +286,7 @@ describe('createShare', () => {
   it.each(['QUEUED', 'RUNNING', 'FAILED', 'CANCELLED'])(
     'refuses a %s review, which has no report',
     async (status) => {
-      db.assessments.set(ASSESSMENT, { orgId: ORG, status });
+      db.assessments.set(ASSESSMENT, { orgId: ORG, status, completedAt: null });
       await expect(made()).rejects.toMatchObject({
         status: 409,
         code: 'REPORT_NOT_READY',
@@ -470,6 +477,13 @@ describe('readSharedReport', () => {
     const { token } = await made();
     const read = await readSharedReport(token, NOW);
     expect(read.ok && read.report.model).toBeNull();
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('opens nothing, uncounted, when the assessment is not one the report can read', async () => {
+    getAssessment.mockResolvedValue({ ...detail, judges: 'not a list' });
+    const { token } = await made();
+    expect(await readSharedReport(token, NOW)).toEqual({ ok: false, refused: 'no-report' });
     expect(db.shares[0].viewCount).toBe(0);
   });
 

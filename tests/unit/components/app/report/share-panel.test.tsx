@@ -202,7 +202,37 @@ describe('SharePanel', () => {
     expect(second).toHaveTextContent(/5 views/);
   });
 
-  it('keeps a link revoked while the list was still loading revoked, though the list says active', async () => {
+  it('keeps a link revoked while a newer list was loading revoked, though that list says active', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce([share()]);
+    let answerRevoke: (value: unknown) => void = () => undefined;
+    vi.mocked(apiClient.delete).mockReturnValue(
+      new Promise((resolve) => {
+        answerRevoke = resolve;
+      })
+    );
+    const { user, dialog } = await openPanel();
+    await user.click(await within(dialog).findByRole('button', { name: 'Revoke' }));
+
+    // Closed and reopened while the revoke is in flight; the new list is slow.
+    let answerList: (list: unknown) => void = () => undefined;
+    vi.mocked(apiClient.get).mockReturnValue(
+      new Promise((resolve) => {
+        answerList = resolve;
+      })
+    );
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Share' }));
+    const reopened = await screen.findByRole('dialog');
+    answerRevoke(share({ state: 'revoked', revokedAt: '2026-11-17T09:00:00.000Z' }));
+    // The list was read before the revoke landed, so it has the link active.
+    answerList([share()]);
+
+    await waitFor(() =>
+      expect(within(reopened).getByRole('listitem')).toHaveTextContent(/Revoked/)
+    );
+  });
+
+  it('shows Loading, not a part-list, when a link is made before the list lands', async () => {
     let answerList: (list: unknown) => void = () => undefined;
     vi.mocked(apiClient.get).mockReturnValue(
       new Promise((resolve) => {
@@ -210,24 +240,39 @@ describe('SharePanel', () => {
       })
     );
     vi.mocked(apiClient.post).mockResolvedValue({
+      ...share({ id: 'share-new', viewCount: 0 }),
+      token: 'tok',
+      url: 'https://app.example.com/r/tok',
+    });
+    const { user, dialog } = await openPanel();
+    await user.click(within(dialog).getByRole('button', { name: 'Make a link' }));
+    await within(dialog).findByLabelText('New link');
+
+    expect(within(dialog).getByText('Loading…')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('listitem')).toBeNull();
+    answerList([share({ id: 'share-old' })]);
+    await waitFor(() => expect(within(dialog).getAllByRole('listitem')).toHaveLength(2));
+  });
+
+  it('does not bring back the address of a link whose make finished after the dialog closed', async () => {
+    let answerMake: (value: unknown) => void = () => undefined;
+    vi.mocked(apiClient.post).mockReturnValue(
+      new Promise((resolve) => {
+        answerMake = resolve;
+      })
+    );
+    const { user, dialog } = await openPanel();
+    await user.click(within(dialog).getByRole('button', { name: 'Make a link' }));
+    await user.keyboard('{Escape}');
+    answerMake({
       ...share({ viewCount: 0 }),
       token: 'tok',
       url: 'https://app.example.com/r/tok',
     });
-    vi.mocked(apiClient.delete).mockResolvedValue(
-      share({ viewCount: 0, state: 'revoked', revokedAt: '2026-11-17T09:00:00.000Z' })
-    );
-    const { user, dialog } = await openPanel();
-    await user.click(within(dialog).getByRole('button', { name: 'Make a link' }));
-    await user.click(await within(dialog).findByRole('button', { name: 'Revoke' }));
-    await waitFor(() => expect(within(dialog).getByRole('listitem')).toHaveTextContent(/Revoked/));
 
-    // The list was read between the make and the revoke, so it has the link active.
-    answerList([share({ viewCount: 0 })]);
-
-    await waitFor(() => expect(within(dialog).getAllByRole('listitem')).toHaveLength(1));
-    expect(within(dialog).getByRole('listitem')).toHaveTextContent(/Revoked/);
-    expect(within(dialog).queryByRole('button', { name: 'Revoke' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Share' }));
+    const reopened = await screen.findByRole('dialog');
+    expect(within(reopened).queryByLabelText('New link')).toBeNull();
   });
 
   it('does not show the last list again while a reopened dialog loads, since it may be stale', async () => {

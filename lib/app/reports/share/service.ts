@@ -19,16 +19,18 @@ import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { getAssessment } from '@/lib/app/assessments/api/service';
 import type { AssessmentDetail, JudgeRunView } from '@/lib/app/assessments/api/views';
-import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
-import { loadModelDocument } from '@/lib/app/reports/pdf/print-source';
+import {
+  reportAssessmentSchema,
+  reportModelSchema,
+  reportResultSchema,
+} from '@/lib/app/reports/input';
+import { hasReport } from '@/lib/app/reports/reportable';
+import { asOnTheWire, loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
 import type { CreateShareInput } from '@/lib/app/reports/share/validations';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** The statuses that store a result, which are the ones with a report. */
-const REPORTABLE: ReadonlySet<AssessmentStatus> = new Set(['COMPLETED', 'PARTIAL']);
 
 /** A link as its workspace sees it. The token is never shown again. */
 export interface ReportShareView {
@@ -102,13 +104,16 @@ function isForeignKeyFailure(err: unknown): boolean {
 }
 
 /** 404 unless the assessment is in this workspace. */
-async function requireAssessment(id: string, orgId: string): Promise<AssessmentStatus> {
+async function requireAssessment(
+  id: string,
+  orgId: string
+): Promise<{ status: AssessmentStatus; completedAt: Date | null }> {
   const row = await prisma.assessment.findUnique({
     where: { id, orgId },
-    select: { status: true },
+    select: { status: true, completedAt: true },
   });
   if (!row) throw new NotFoundError('Assessment not found');
-  return row.status;
+  return row;
 }
 
 /**
@@ -122,13 +127,14 @@ export async function createShare(
   now: Date = new Date()
 ): Promise<CreatedReportShare> {
   const orgId = requireOrgId();
-  const status = await requireAssessment(assessmentId, orgId);
-  if (!REPORTABLE.has(status)) {
+  const assessment = await requireAssessment(assessmentId, orgId);
+  // The same rule the PDF gates on.
+  if (!hasReport(assessment)) {
     throw new APIError(
       'This review has no report yet: it is still running, or it failed or was cancelled.',
       'REPORT_NOT_READY',
       409,
-      { status: status.toLowerCase() }
+      { status: assessment.status.toLowerCase() }
     );
   }
   const { token, tokenHash } = mintShareToken();
@@ -226,7 +232,7 @@ export async function readSharedReport(
     }
     // A link is made only for a report, and a final run stays final, so
     // this is a defect rather than a state, but it must not serve a half run.
-    if (assessment.result === null || !isReportable(assessment.status)) {
+    if (assessment.result === null || !isReportable(assessment)) {
       logger.error('Share link: its assessment has no report', undefined, {
         shareId: share.id,
         status: assessment.status,
@@ -244,6 +250,17 @@ export async function readSharedReport(
       return { ok: false as const, refused: 'no-report' as const };
     }
 
+    const view = sharedView(assessment, result);
+    // The page parses the assessment as the report reads it; one that would
+    // not parse shows nothing, so it is not served.
+    if (!reportAssessmentSchema.safeParse(asOnTheWire(view)).success) {
+      logger.error('Share link: its assessment is not one the report can read', undefined, {
+        shareId: share.id,
+        framework: assessment.framework,
+      });
+      return { ok: false as const, refused: 'no-report' as const };
+    }
+
     const model = await readableModel(share.id, assessment);
     if (model !== null) {
       const orgId = requireOrgId();
@@ -255,7 +272,7 @@ export async function readSharedReport(
     }
 
     const report: SharedReport = {
-      assessment: sharedView(assessment, result),
+      assessment: view,
       model,
       expiresAt: share.expiresAt,
     };
@@ -268,8 +285,9 @@ export async function readSharedReport(
   return entered.value;
 }
 
-const isReportable = (state: AssessmentDetail['status']): boolean =>
-  state === 'completed' || state === 'partial';
+/** `hasReport`, on the detail's wire-form status. */
+const isReportable = (a: AssessmentDetail): boolean =>
+  (a.status === 'completed' || a.status === 'partial') && a.completedAt !== null;
 
 /**
  * The fields a share serves, picked one by one, so a field added to the

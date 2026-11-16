@@ -77,7 +77,12 @@ function formatDate(iso: string): string {
  * are laid over it rather than wiped by it; an older load's answer is dropped.
  */
 interface SharesState {
+  /** The list, or `null` until a load lands: a part-list is never shown as whole. */
   shares: ReportShareWire[] | null;
+  /** This opening of the dialog, or `null` while it is closed. */
+  session: symbol | null;
+  /** The link made in this opening, whose address is shown once. */
+  made: { id: string; url: string } | null;
   /** The latest load, by the token its caller made. */
   loading: symbol | null;
   /** Links made or revoked since that load began, in the order they changed. */
@@ -85,17 +90,24 @@ interface SharesState {
 }
 
 type SharesAction =
+  | { type: 'open'; session: symbol }
+  | { type: 'close' }
   | { type: 'load'; id: symbol }
   | { type: 'loaded'; id: symbol; list: ReportShareWire[] }
-  | { type: 'made'; share: ReportShareWire }
+  | { type: 'made'; share: ReportShareWire; url: string; session: symbol | null }
   | { type: 'revoked'; share: ReportShareWire };
 
 function sharesReducer(state: SharesState, action: SharesAction): SharesState {
   switch (action.type) {
+    case 'open':
+      return { ...state, session: action.session, made: null };
+    case 'close':
+      // The address is shown once: closing the dialog lets it go.
+      return { ...state, session: null, made: null };
     case 'load':
       // The last list may be stale by now (revoked elsewhere, expired), so
       // it is not shown while the new one loads.
-      return { shares: null, loading: action.id, touched: new Map() };
+      return { ...state, shares: null, loading: action.id, touched: new Map() };
     case 'loaded': {
       if (action.id !== state.loading) return state;
       const listed = new Set(action.list.map((s) => s.id));
@@ -106,27 +118,35 @@ function sharesReducer(state: SharesState, action: SharesAction): SharesState {
     case 'made':
       return {
         ...state,
-        shares: [action.share, ...(state.shares ?? [])],
+        shares: state.shares && [action.share, ...state.shares],
         touched: new Map(state.touched).set(action.share.id, action.share),
+        // Made in an opening since closed: its address is not brought back.
+        made:
+          action.session !== null && action.session === state.session
+            ? { id: action.share.id, url: action.url }
+            : state.made,
       };
     case 'revoked':
       return {
         ...state,
-        shares: (state.shares ?? []).map((s) => (s.id === action.share.id ? action.share : s)),
+        shares:
+          state.shares && state.shares.map((s) => (s.id === action.share.id ? action.share : s)),
         touched: new Map(state.touched).set(action.share.id, action.share),
+        made: state.made?.id === action.share.id ? null : state.made,
       };
   }
 }
 
 export function SharePanel({ assessmentId }: { assessmentId: string }) {
   const [open, setOpen] = useState(false);
-  const [{ shares }, dispatch] = useReducer(sharesReducer, {
+  const [{ shares, session, made }, dispatch] = useReducer(sharesReducer, {
     shares: null,
+    session: null,
+    made: null,
     loading: null,
     touched: new Map(),
   });
   const [days, setDays] = useState<string>(String(DEFAULT_SHARE_DAYS));
-  const [made, setMade] = useState<{ id: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
   /** What is in flight: `'make'`, or the id of the link being revoked. */
   const [busy, setBusy] = useState<string | null>(null);
@@ -150,11 +170,11 @@ export function SharePanel({ assessmentId }: { assessmentId: string }) {
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (next) {
+      dispatch({ type: 'open', session: Symbol('open') });
       load.clear();
       void loadShares();
     } else {
-      // The address is shown once: closing the dialog lets it go.
-      setMade(null);
+      dispatch({ type: 'close' });
       setCopied(false);
       make.clear();
       revoke.clear();
@@ -171,10 +191,9 @@ export function SharePanel({ assessmentId }: { assessmentId: string }) {
           body: { expiresInDays: Number(days) },
         })
       );
-      setMade({ id: share.id, url: share.url });
       // Into the list as the list reads it: the token stays out of it.
       const view: ReportShareWire = reportShareSchema.parse(share);
-      dispatch({ type: 'made', share: view });
+      dispatch({ type: 'made', share: view, url: share.url, session });
     } catch (err) {
       make.report(err);
     } finally {
@@ -188,7 +207,6 @@ export function SharePanel({ assessmentId }: { assessmentId: string }) {
       try {
         const next = reportShareSchema.parse(await apiClient.delete<unknown>(sharePath(shareId)));
         dispatch({ type: 'revoked', share: next });
-        if (made?.id === shareId) setMade(null);
       } catch (err) {
         revoke.report(err, "Couldn't revoke the link");
       } finally {
