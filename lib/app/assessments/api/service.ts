@@ -381,8 +381,11 @@ export async function cancel(id: string): Promise<AssessmentDetail> {
  */
 export async function remove(id: string): Promise<{ deleted: true }> {
   const orgId = requireOrgId();
-  // Under the caller's own org prefix, so an id that is not theirs touches
-  // nothing; the transaction below then answers it 404.
+  // Not found before anything else, so a missing id is 404 whatever state
+  // storage is in.
+  if ((await prisma.assessment.count({ where: { id, orgId } })) === 0) {
+    throw new NotFoundError('Assessment not found');
+  }
   await deleteReportPdfs(orgId, id);
   await prisma.$transaction(async (tx) => {
     const row = await tx.assessment.findUnique({

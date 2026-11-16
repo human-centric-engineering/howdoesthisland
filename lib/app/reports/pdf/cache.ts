@@ -3,9 +3,10 @@
  *
  * A final assessment does not change, so its PDF is rendered once and kept
  * under the workspace's private storage:
- * `orgs/{orgId}/reports/{assessmentId}/{completedAt ms}.pdf`. The completion
- * time is in the name so a file can never be served for a different run of
- * the same id. Each assessment's files sit under a folder of their own, so
+ * `orgs/{orgId}/reports/{assessmentId}/{completedAt ms}-v{RENDER_VERSION}.pdf`.
+ * The completion time is in the name so a file can never be served for a
+ * different run of the same id, and the render version so a layout change is
+ * not hidden behind old files. Each assessment's files sit under a folder of their own, so
  * deleting that folder removes every file the assessment ever had.
  *
  * **The file must not outlive its assessment.** A deleted or purged
@@ -25,6 +26,15 @@ import { orgKeyPrefix } from '@/lib/storage/org-keys';
 import { getStorageCapabilities, type StorageProvider } from '@/lib/storage/providers/types';
 import { logger } from '@/lib/logging';
 
+/**
+ * The version of what a render produces, part of each cached file's name.
+ * Bump it when the report's layout, print stylesheet, words or the renderer's
+ * output change (`components/app/report/`, `app/brand-theme.css`,
+ * `lib/app/reports/pdf/render.ts`), so PDFs made before the change are made
+ * again rather than served for good.
+ */
+export const RENDER_VERSION = 1;
+
 /** What an assessment id is (a cuid), and so what may name a folder here. */
 const ASSESSMENT_ID = /^[A-Za-z0-9_-]+$/;
 
@@ -33,9 +43,14 @@ export function reportPdfFolder(orgId: string, assessmentId: string): string {
   return `${orgKeyPrefix(orgId)}reports/${assessmentId}/`;
 }
 
-/** The key of one run's PDF. */
+/**
+ * The key of one run's PDF, as the current renderer makes it. The render
+ * version is in the name, so a layout change makes every PDF again rather
+ * than serve the old design; the old files stay in the folder until their
+ * review goes.
+ */
 export function reportPdfKey(orgId: string, assessmentId: string, completedAt: Date): string {
-  return `${reportPdfFolder(orgId, assessmentId)}${completedAt.getTime()}.pdf`;
+  return `${reportPdfFolder(orgId, assessmentId)}${completedAt.getTime()}-v${RENDER_VERSION}.pdf`;
 }
 
 /** The org's storage, when it can keep a private PDF and read it back; else `null`. */

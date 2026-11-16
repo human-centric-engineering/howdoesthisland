@@ -138,9 +138,12 @@ no report (still running, failed or cancelled).
    The page sets `data-pdf-ready` only when the report rendered, and the
    renderer refuses to print without it.
 4. **The cache** (`cache.ts`) keeps the file in the workspace's private storage
-   at `orgs/{orgId}/reports/{assessmentId}/{completedAt ms}.pdf`. A final
-   review never changes, so a file is reused until the review goes. Without
-   storage that keeps private files and reads them back, every request renders.
+   at `orgs/{orgId}/reports/{assessmentId}/{completedAt ms}-v{RENDER_VERSION}.pdf`. A final
+   review never changes, so a file is reused until the review goes, or until
+   `RENDER_VERSION` is bumped. **Bump it with any change to how the report
+   looks** (`components/app/report/`, the print block of `app/brand-theme.css`,
+   the renderer), or the PDFs already made keep the old design. Without storage
+   that keeps private files and reads them back, every request renders.
 
 **A PDF must not outlive its review.** Deleting a review and the retention
 purge delete its folder before the row. Where storage cannot cache PDFs at all

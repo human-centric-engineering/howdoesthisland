@@ -60,6 +60,12 @@ export const MAX_CONCURRENT_RENDERS = 2;
 export const MAX_QUEUED_RENDERS = 8;
 
 /**
+ * How long a render may wait for a slot before it is refused as `busy`. With
+ * {@link RENDER_TIMEOUT_MS} it stays inside the route's 60 s `maxDuration`.
+ */
+export const MAX_QUEUE_WAIT_MS = 20_000;
+
+/**
  * Where Chromium is when `PDF_CHROMIUM_PATH` is unset: the Docker image's
  * (`apk add chromium`, which the Dockerfile also names in `PDF_CHROMIUM_PATH`)
  * on Linux, and Google Chrome's usual install on a Mac, for development.
@@ -112,8 +118,9 @@ export function printPageUrl(assessmentId: string): string {
 
 /**
  * A counting semaphore with a bounded queue: `run(fn)` runs `fn` holding one
- * of `max` slots, waits in line when they are all taken, and refuses as
- * `busy` when `queueMax` are already waiting.
+ * of `max` slots, waits in line when they are all taken, and is refused as
+ * `busy` when `queueMax` are already waiting or no slot comes within
+ * `waitMs`.
  *
  * A slot that comes free goes straight to the longest waiter (the count of
  * slots in use stays as it is), so a caller arriving at that moment cannot
@@ -121,17 +128,29 @@ export function printPageUrl(assessmentId: string): string {
  */
 export function createRenderSlots(
   max: number,
-  queueMax: number
+  queueMax: number,
+  waitMs: number = MAX_QUEUE_WAIT_MS
 ): <T>(fn: () => Promise<T>) => Promise<T> {
   let running = 0;
   const waiting: (() => void)[] = [];
+  const busy = () => new PdfRenderError('busy', 'Too many PDFs are being made. Try again shortly.');
+
   return async function run<T>(fn: () => Promise<T>): Promise<T> {
     if (running >= max) {
-      if (waiting.length >= queueMax) {
-        throw new PdfRenderError('busy', 'Too many PDFs are being made. Try again shortly.');
-      }
-      // Woken holding the slot its releaser handed over.
-      await new Promise<void>((resolve) => waiting.push(resolve));
+      if (waiting.length >= queueMax) throw busy();
+      // Woken holding the slot its releaser handed over, or refused once the
+      // wait runs out, leaving the line so no slot is handed to it after.
+      await new Promise<void>((resolve, reject) => {
+        const wake = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          waiting.splice(waiting.indexOf(wake), 1);
+          reject(busy());
+        }, waitMs);
+        waiting.push(wake);
+      });
     } else {
       running += 1;
     }
@@ -198,8 +217,10 @@ export async function renderReportPdf(
 
       await page.setRequestInterception(true);
       page.on('request', (request) => {
-        const sameOrigin = safeOrigin(request.url()) === origin;
-        if (!sameOrigin) {
+        // The page's own inline data (`data:` fonts and images, `blob:`) has no
+        // origin to compare and goes nowhere, so it is allowed.
+        const inline = /^(data|blob):/.test(request.url());
+        if (!inline && safeOrigin(request.url()) !== origin) {
           void request.abort('blockedbyclient');
           return;
         }

@@ -24,7 +24,7 @@ import {
   reportPdfStore,
   writeCachedPdf,
 } from '@/lib/app/reports/pdf/cache';
-import { renderReportPdf } from '@/lib/app/reports/pdf/render';
+import { PdfRenderError, renderReportPdf } from '@/lib/app/reports/pdf/render';
 import { mintRenderToken } from '@/lib/app/reports/pdf/render-token';
 
 export interface ReportPdf {
@@ -88,7 +88,17 @@ export async function getReportPdf(
   const limit = options.limit?.();
   if (limit && !limit.success) return { limited: limit };
   const render = (async () => {
-    const pdf = await renderReportPdf(id, () => mintRenderToken(id, orgId));
+    let pdf: Buffer;
+    try {
+      pdf = await renderReportPdf(id, () => mintRenderToken(id, orgId));
+    } catch (err) {
+      // Deleted (or its workspace suspended) before the print page loaded: the
+      // page was not found, which is the answer, not a failed render.
+      if (err instanceof PdfRenderError && err.reason === 'not-rendered') {
+        await refuseIfDeleted(orgId, id, false);
+      }
+      throw err;
+    }
     const written = store ? await writeCachedPdf(store, key, pdf) : false;
     await refuseIfDeleted(orgId, id, written);
     return pdf;

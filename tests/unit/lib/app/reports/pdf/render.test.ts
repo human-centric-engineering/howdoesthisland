@@ -182,7 +182,14 @@ describe('renderReportPdf', () => {
       const analytics = request('https://www.googletagmanager.com/gtag/js');
       const lookalike = request('http://127.0.0.1:3001/print/assessments/x', { document: true });
       const garbage = request('not a url');
-      for (const r of [doc, css, frameDoc, analytics, lookalike, garbage]) b.state.onRequest?.(r);
+      const font = request('data:font/woff2;base64,AAAA');
+      const blob = request('blob:http://127.0.0.1:3000/5f1d');
+      for (const r of [doc, css, frameDoc, analytics, lookalike, garbage, font, blob]) {
+        b.state.onRequest?.(r);
+      }
+      // The page's own inline data goes nowhere, and is allowed.
+      expect(font.continue).toHaveBeenCalledWith(undefined);
+      expect(blob.continue).toHaveBeenCalledWith(undefined);
 
       expect(doc.continue).toHaveBeenCalledWith({
         headers: { accept: '*/*', 'x-report-render-token': 'tok' },
@@ -384,6 +391,24 @@ describe('createRenderSlots', () => {
     gates[2]?.();
     gates[3]?.();
     await Promise.all(jobs);
+  });
+
+  it('refuses as busy a caller who waits longer than the limit, and keeps the slot count right', async () => {
+    vi.useFakeTimers();
+    try {
+      const run = createRenderSlots(1, 5, 1_000);
+      let release!: () => void;
+      const holder = run(() => new Promise<void>((r) => (release = r)));
+      const late = run(async () => 'late').catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await late).toMatchObject({ reason: 'busy' });
+      // It left the line: the freed slot is not handed to it, and is free again.
+      release();
+      await holder;
+      await expect(run(async () => 'next')).resolves.toBe('next');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('frees its slot when the job throws', async () => {

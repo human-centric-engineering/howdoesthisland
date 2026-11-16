@@ -97,6 +97,7 @@ import { createMockAuthSession } from '@/tests/helpers/auth';
 import { reportPdfLimiter, PDF_RENDERS_PER_MINUTE } from '@/lib/app/reports/pdf/limiter';
 import { PdfRenderError } from '@/lib/app/reports/pdf/render';
 import { verifyRenderToken } from '@/lib/app/reports/pdf/render-token';
+import { RENDER_VERSION } from '@/lib/app/reports/pdf/cache';
 
 const WS_A = 'org-a';
 const WS_B = 'org-b';
@@ -156,7 +157,7 @@ const done = (over: Record<string, unknown> = {}) =>
   fake.seed({ status: 'COMPLETED', completedAt: DONE, ...over });
 
 const cacheKey = (id: unknown, orgId = WS_A) =>
-  `orgs/${orgId}/reports/${String(id)}/${DONE.getTime()}.pdf`;
+  `orgs/${orgId}/reports/${String(id)}/${DONE.getTime()}-v${RENDER_VERSION}.pdf`;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -215,9 +216,11 @@ describe('GET /api/v1/assessments/{id}/report.pdf', () => {
     const res = await get(String(a.id));
     expect(res.headers.get('x-report-cache')).toBe('miss');
     expect(mocks.render).toHaveBeenCalledTimes(2);
-    expect(store.objects.has(`orgs/${WS_A}/reports/${String(a.id)}/${later.getTime()}.pdf`)).toBe(
-      true
-    );
+    expect(
+      store.objects.has(
+        `orgs/${WS_A}/reports/${String(a.id)}/${later.getTime()}-v${RENDER_VERSION}.pdf`
+      )
+    ).toBe(true);
   });
 
   it('shares one render between two requests for the same uncached PDF', async () => {
@@ -315,6 +318,32 @@ describe('GET /api/v1/assessments/{id}/report.pdf', () => {
     expect(store.objects.size).toBe(0);
   });
 
+  it('404 for a review deleted before its print page loaded, not a render failure', async () => {
+    const a = done();
+    mocks.render.mockImplementationOnce(async () => {
+      fake.assessments.splice(fake.assessments.indexOf(a), 1);
+      throw new PdfRenderError('not-rendered', 'The print page answered 404');
+    });
+    expect(await errorOf(await get(String(a.id)))).toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    });
+    expect(log.error).not.toHaveBeenCalledWith(
+      'Report PDF could not be rendered',
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('500 for a print page that failed while the review still exists', async () => {
+    const a = done();
+    mocks.render.mockRejectedValueOnce(new PdfRenderError('not-rendered', 'answered 500'));
+    expect(await errorOf(await get(String(a.id)))).toMatchObject({
+      status: 500,
+      code: 'PDF_RENDER_FAILED',
+    });
+  });
+
   it('422 REPORT_UNREADABLE for a review whose result cannot be read, caching nothing', async () => {
     const a = done();
     mocks.render.mockRejectedValueOnce(new PdfRenderError('unreadable', 'cannot read'));
@@ -335,6 +364,11 @@ describe('GET /api/v1/assessments/{id}/report.pdf', () => {
 });
 
 describe('DELETE /api/v1/assessments/{id} and the cached PDF', () => {
+  it('404 for an id that is not there, even while storage is failing', async () => {
+    store.failPrefixDelete = true;
+    expect(await errorOf(await del('cmmissing'))).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
+
   it('a malformed id is still 404, touching no storage', async () => {
     const res = await remove(new NextRequest(`${BASE}/..`, { method: 'DELETE' }), params('..'));
     expect(await errorOf(res)).toMatchObject({ status: 404, code: 'NOT_FOUND' });

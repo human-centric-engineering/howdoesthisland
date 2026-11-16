@@ -22,6 +22,7 @@ import {
   reportPdfKey,
   reportPdfStore,
   ReportPdfCleanupError,
+  RENDER_VERSION,
   sweepReportPdfs,
   writeCachedPdf,
 } from '@/lib/app/reports/pdf/cache';
@@ -46,7 +47,9 @@ describe('keys', () => {
   it("files each run under its assessment's folder in the org", () => {
     const at = new Date('2026-11-15T10:00:00.000Z');
     expect(reportPdfFolder('org-a', 'asm_1')).toBe('orgs/org-a/reports/asm_1/');
-    expect(reportPdfKey('org-a', 'asm_1', at)).toBe(`orgs/org-a/reports/asm_1/${at.getTime()}.pdf`);
+    expect(reportPdfKey('org-a', 'asm_1', at)).toBe(
+      `orgs/org-a/reports/asm_1/${at.getTime()}-v${RENDER_VERSION}.pdf`
+    );
   });
 
   it('refuses an org id that could escape its prefix', () => {
