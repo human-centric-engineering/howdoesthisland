@@ -238,6 +238,9 @@ describe('reserved fork tiers', () => {
       'model JudgeReply {',
       // FORK (HowDoesThisLand): share links (t-32).
       'model ReportShare {',
+      // FORK (HowDoesThisLand): calibration runs (t-37).
+      'model CalibrationRun {',
+      'enum CalibrationMode {',
     ]);
   });
 

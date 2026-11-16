@@ -87,6 +87,12 @@ export function initAppOwnerClassification(): void {
         kind: 'not-personal',
         because: 'A link to one of the workspace’s reports; `createdByUserId` is who made it.',
       },
+      // t-37: the install's record of a framework version's calibration.
+      CalibrationRun: {
+        kind: 'not-personal',
+        because:
+          'A run of the calibration set against a framework version; `startedByUserId` is who started it.',
+      },
     },
   });
 }

@@ -133,6 +133,13 @@ export function initAppSubjectSources(): void {
         description:
           'Links you made to share a report, with when each expires, whether it was revoked and how often it was opened.',
       },
+      {
+        model: 'CalibrationRun',
+        section: 'calibrationRuns',
+        disposition: 'export',
+        description:
+          'Calibration runs you started against a framework version, with how often the judges agreed with the expected results.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -164,7 +171,7 @@ export function initAppSubjectSources(): void {
  * change the signature just to add one.
  */
 export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
-  const [received, sent, contents, assessments, reportShares] = await Promise.all([
+  const [received, sent, contents, assessments, reportShares, calibrationRuns] = await Promise.all([
     // The ones to them, without the inviter's id (their name is in the
     // invitation email, and the id is someone else's data).
     prisma.workspaceInvitation.findMany({
@@ -194,6 +201,13 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       omit: { tokenHash: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // The calibration runs they started (t-37). Without the rows: those are
+    // the calibration set's texts scored, the same for whoever runs them.
+    prisma.calibrationRun.findMany({
+      where: { startedByUserId: userId },
+      omit: { rows: true },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
   return {
     workspaceInvitations: [
@@ -203,5 +217,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     contents,
     assessments,
     reportShares,
+    calibrationRuns,
   };
 }

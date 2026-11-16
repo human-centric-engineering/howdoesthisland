@@ -353,12 +353,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.content, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.assessment, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reportShare, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.calibrationRun, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
         contents: [],
         assessments: [],
         reportShares: [],
+        calibrationRuns: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -370,6 +372,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['Content', 'contents'],
         ['Assessment', 'assessments'],
         ['ReportShare', 'reportShares'],
+        ['CalibrationRun', 'calibrationRuns'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22) and their replies
@@ -401,6 +404,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['JudgeRun', 'judgeRuns'],
         ['JudgeReply', 'judgeReplies'],
         ['ReportShare', 'reportShares'],
+        ['CalibrationRun', 'calibrationRuns'],
       ]);
       expect(getAppExcludedOrgSources()).toEqual([]);
       expect(appOrgDeclarationsFailed()).toBe(false);
@@ -423,6 +427,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['Content', 'not-personal'],
         ['Assessment', 'not-personal'],
         ['ReportShare', 'not-personal'],
+        ['CalibrationRun', 'not-personal'],
       ]);
     },
   },

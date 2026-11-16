@@ -93,4 +93,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_report_share',
     probe: constraintExists('app_report_share_createdByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-37: the hand-written FK from a calibration run to `user`. SET NULL: the
+  // run is the install's record of a version's calibration.
+  registerAppDriftProbe({
+    name: 'app_calibration_run_startedByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_calibration_run',
+    probe: constraintExists('app_calibration_run_startedByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

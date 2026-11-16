@@ -70,27 +70,29 @@ model Framework {
 
 /// One version of a framework, imported from a reviewed JSON file.
 model FrameworkVersion {
-  id             String                 @id @default(cuid())
-  frameworkId    String
-  framework      Framework              @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
+  id              String                 @id @default(cuid())
+  frameworkId     String
+  framework       Framework              @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
   /// Semver, from the file's `meta.version`.
-  version        String
+  version         String
   /// The file's own schema version (`meta.schema_version`).
-  schemaVersion  String
-  status         FrameworkVersionStatus @default(DRAFT)
+  schemaVersion   String
+  status          FrameworkVersionStatus @default(DRAFT)
   /// The imported file as parsed, kept for export and audit.
-  sourceDocument Json
+  sourceDocument  Json
   /// sha256 of the imported file's bytes.
-  sourceSha256   String
-  publishedAt    DateTime?
-  /// The calibration run that allowed publishing, copied at publish
-  /// (f-calibration). Null until that gate exists.
-  calibration    Json?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  nodes          FrameworkNode[]
-  links          FrameworkLink[]
-  assessments    Assessment[]
+  sourceSha256    String
+  publishedAt     DateTime?
+  /// The calibration run that allowed publishing, copied at publish (t-37):
+  /// `{ runId, ranAt, agreement, setVersion }`. Null on a draft, and on 0.5.1,
+  /// published before the gate existed.
+  calibration     Json?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  nodes           FrameworkNode[]
+  links           FrameworkLink[]
+  assessments     Assessment[]
+  calibrationRuns CalibrationRun[]
 
   @@unique([frameworkId, version])
   @@map("app_framework_version")
@@ -333,4 +335,47 @@ model ReportShare {
   @@index([assessmentId, createdAt])
   @@index([orgId])
   @@map("app_report_share")
+}
+
+// ─── Calibration (t-37, f-calibration) ───────────────────────────────────────
+
+/// One run of the calibration set against a framework version: every case
+/// through the quick scan (`QUICK`) or the judges (`AI`), each expectation
+/// scored. Design: .context/app/calibration.md. Publishing a draft needs an
+/// `AI` run of it (`publishVersion`). Owned by the install org (`orgId`,
+/// cascade, `org_isolation`), written in the system scope by
+/// lib/app/calibration/store.ts. Keeps no Assessment rows.
+model CalibrationRun {
+  id                 String           @id @default(cuid())
+  orgId              String?
+  org                Org?             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Cascade)
+  /// The version's `sourceSha256` when it ran: a draft re-imported since is
+  /// different content, and the run no longer counts for it.
+  sourceSha256       String
+  /// The calibration set's `meta.version`.
+  setVersion         String
+  mode               CalibrationMode
+  /// The provider and model each judge answered with, by slot. `{}` for `QUICK`.
+  judgeModels        Json
+  /// Agreement by kind of expectation (`lib/app/calibration/score.ts`).
+  totals             Json
+  /// Each case's scored expectations.
+  rows               Json
+  /// What the judge calls cost, summed from their `AiCostLog` rows.
+  costUsd            Float            @default(0)
+  /// Who started it. FK → user, ON DELETE SET NULL. Null from the CLI.
+  startedByUserId    String?
+  createdAt          DateTime         @default(now())
+
+  @@index([frameworkVersionId, mode, createdAt])
+  @@index([mode, createdAt])
+  @@index([orgId])
+  @@map("app_calibration_run")
+}
+
+enum CalibrationMode {
+  QUICK
+  AI
 }

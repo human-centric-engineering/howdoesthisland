@@ -445,6 +445,7 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_assessment_createdByUserId_fkey (hand-written FK → user)',
       'app_assessment_apiKeyId_fkey (hand-written FK → ai_api_key)',
       'app_report_share_createdByUserId_fkey (hand-written FK → user)',
+      'app_calibration_run_startedByUserId_fkey (hand-written FK → user)',
     ]);
   });
 });

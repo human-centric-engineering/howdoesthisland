@@ -154,6 +154,15 @@ export function initAppOrgSources(): void {
             orderBy: { createdAt: 'asc' },
           }),
       },
+      {
+        model: 'CalibrationRun',
+        section: 'calibrationRuns',
+        disposition: 'export',
+        description:
+          'Calibration runs of a framework version, with each case scored and how often the judges agreed (the install workspace only).',
+        fetch: ({ orgId }) =>
+          prisma.calibrationRun.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
     ],
     excluded: [],
   });

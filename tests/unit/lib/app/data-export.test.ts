@@ -21,6 +21,7 @@ vi.mock('@/lib/db/client', () => ({
     content: { findMany: vi.fn() },
     assessment: { findMany: vi.fn() },
     reportShare: { findMany: vi.fn() },
+    calibrationRun: { findMany: vi.fn() },
   },
 }));
 
@@ -35,6 +36,7 @@ describe('collectAppSubjectData', () => {
     vi.mocked(prisma.content.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.assessment.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reportShare.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.calibrationRun.findMany).mockResolvedValue([] as never);
   });
 
   it('reads invitations to the person by invitee, and the ones they sent without the invitee', async () => {
@@ -72,6 +74,7 @@ describe('collectAppSubjectData', () => {
       contents: [],
       assessments: [],
       reportShares: [],
+      calibrationRuns: [],
     });
   });
 
@@ -103,6 +106,7 @@ describe('collectAppSubjectData', () => {
       contents: [],
       assessments: [],
       reportShares: [],
+      calibrationRuns: [],
     });
   });
 
@@ -118,5 +122,19 @@ describe('collectAppSubjectData', () => {
       orderBy: { createdAt: 'asc' },
     });
     expect(data.reportShares).toEqual([{ id: 'share-1' }]);
+  });
+
+  it('reads the calibration runs they started, without the scored rows', async () => {
+    vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.calibrationRun.findMany).mockResolvedValue([{ id: 'run-1' }] as never);
+
+    const data = await collectAppSubjectData(SUBJECT);
+
+    expect(vi.mocked(prisma.calibrationRun.findMany)).toHaveBeenCalledWith({
+      where: { startedByUserId: 'user-1' },
+      omit: { rows: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(data.calibrationRuns).toEqual([{ id: 'run-1' }]);
   });
 });
