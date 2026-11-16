@@ -197,7 +197,10 @@ describe('renderReportPdf', () => {
   it('runs at most two renders at once, starting the next as one finishes', async () => {
     const gates: (() => void)[] = [];
     b.page.pdf.mockImplementation(
-      () => new Promise<Uint8Array>((resolve) => gates.push(() => resolve(new Uint8Array([1]))))
+      () =>
+        new Promise<Uint8Array<ArrayBuffer>>((resolve) =>
+          gates.push(() => resolve(new Uint8Array([1])))
+        )
     );
     const all = Promise.all([1, 2, 3].map((n) => renderReportPdf(`asm_${n}`, 'tok')));
 

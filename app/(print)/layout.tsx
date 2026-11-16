@@ -1,3 +1,15 @@
+import type { Metadata } from 'next';
+import { BRAND } from '@/lib/brand';
+
+/**
+ * Branded like the rest of the app (the title is the PDF's document title),
+ * and never indexed: pages here are made for a renderer, not to be found.
+ */
+export const metadata: Metadata = {
+  title: { template: `%s - ${BRAND.name}`, default: BRAND.name },
+  robots: { index: false, follow: false },
+};
+
 /**
  * The print route group (t-31): pages made to be turned into a document by
  * the PDF route's headless browser, not visited.
