@@ -1,6 +1,6 @@
 /**
- * The app's org-export sources (t-9, t-22): a workspace's invitations,
- * content, assessments and judge runs, read for the org being exported only.
+ * The app's org-export sources (t-9, t-22, t-32, t-37): a workspace's
+ * invitations, content, assessments, judge runs, share links and calibration runs, read for the org being exported only.
  *
  * @see lib/app/org-export.ts
  */
@@ -13,6 +13,8 @@ vi.mock('@/lib/db/client', () => ({
     assessment: { findMany: vi.fn() },
     judgeRun: { findMany: vi.fn() },
     judgeReply: { findMany: vi.fn() },
+    reportShare: { findMany: vi.fn() },
+    calibrationRun: { findMany: vi.fn() },
   },
 }));
 
@@ -55,6 +57,13 @@ describe('initAppOrgSources', () => {
     ],
     ['JudgeRun', 'judgeRuns', () => prisma.judgeRun.findMany, {}],
     ['JudgeReply', 'judgeReplies', () => prisma.judgeReply.findMany, {}],
+    [
+      'ReportShare',
+      'reportShares',
+      () => prisma.reportShare.findMany,
+      { omit: { tokenHash: true } },
+    ],
+    ['CalibrationRun', 'calibrationRuns', () => prisma.calibrationRun.findMany, {}],
   ] as const)('declares %s, fetched for the exported org', async (model, section, read, extra) => {
     const rows = [{ id: 'row-1', orgId: 'org-1' }];
     vi.mocked(read()).mockResolvedValue(rows as never);
