@@ -56,7 +56,6 @@ const pct = (x: number | null) => (x === null ? '–' : `${(x * 100).toFixed(1)}
 
 function Delta({ value }: { value: number | null | undefined }) {
   if (value === null || value === undefined) return null;
-  const pts = (value * 100).toFixed(1);
   const cls =
     value > 0
       ? 'text-emerald-700 dark:text-emerald-400'
@@ -64,9 +63,8 @@ function Delta({ value }: { value: number | null | undefined }) {
         ? 'text-red-700 dark:text-red-400'
         : 'text-muted-foreground';
   return (
-    <span className={`ml-1 text-xs ${cls}`}>
-      ({value > 0 ? '+' : ''}
-      {pts} pts)
+    <span className={`text-xs ${cls}`}>
+      {value === 0 ? '±0' : `${value > 0 ? '+' : ''}${(value * 100).toFixed(1)}`} pts
     </span>
   );
 }
@@ -76,10 +74,12 @@ function KindCell({ run, kind }: { run: AdminRunWire; kind: (typeof KIND_COLUMNS
   if (!tally || tally.n === 0) return <TableCell className="text-muted-foreground">–</TableCell>;
   return (
     <TableCell className="whitespace-nowrap tabular-nums">
-      {pct(tally.ok / tally.n)}
-      <span className="text-muted-foreground ml-1 text-xs">
-        {tally.ok}/{tally.n}
-      </span>
+      <div>
+        {pct(tally.ok / tally.n)}
+        <span className="text-muted-foreground ml-1 text-xs">
+          {tally.ok}/{tally.n}
+        </span>
+      </div>
       <Delta value={run.comparison?.byKind[kind].delta} />
     </TableCell>
   );
@@ -220,7 +220,7 @@ function VersionCard({
                       <button
                         type="button"
                         className="text-left underline-offset-4 hover:underline"
-                        aria-label={`Show the ${run.mode} run started ${run.createdAt}`}
+                        aria-label={`Show this ${run.mode} run's cases`}
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelect(run.id);
@@ -244,16 +244,22 @@ function VersionCard({
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
-                      {run.totals ? pct(run.totals.agreement) : '–'}
+                      <div className="font-medium">
+                        {run.totals ? pct(run.totals.agreement) : '–'}
+                      </div>
                       <Delta value={run.comparison?.agreementDelta} />
                     </TableCell>
                     {KIND_COLUMNS.map(([kind]) => (
                       <KindCell key={kind} run={run} kind={kind} />
                     ))}
                     <TableCell className="text-right tabular-nums">
-                      {run.mode === 'ai' ? `$${run.costUsd.toFixed(2)}` : '–'}
+                      {run.mode === 'ai' && run.status !== 'running'
+                        ? `$${run.costUsd.toFixed(2)}`
+                        : '–'}
                     </TableCell>
-                    <TableCell className="text-sm">{run.startedBy?.name ?? 'CLI'}</TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {run.startedBy?.name ?? 'CLI'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

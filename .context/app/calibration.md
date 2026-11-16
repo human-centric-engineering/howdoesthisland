@@ -97,16 +97,51 @@ mode (against any version), with every check whose result changed, worse ones fi
 (`compare.ts`). A check whose expected value changed between the two runs' sets is not
 counted as changed.
 
-| Module       | Does                                                                       |
-| ------------ | -------------------------------------------------------------------------- |
-| `score.ts`   | scores one case's expectations (`ok`/`near`/`miss`), and sums them         |
-| `run.ts`     | `scoreSet` runs the cases; `runCalibration` checks, runs, stores, compares |
-| `compare.ts` | the change from the previous run                                           |
-| `store.ts`   | the table's only writer; reads JSON back through Zod                       |
-| `gate.ts`    | the publish gate                                                           |
-| `cli.ts`     | the command behind `scripts/app/calibrate.ts`                              |
+A run is stored `RUNNING` when it starts, then `COMPLETE` with its results or `FAILED`
+with `error`. `totals` and `rows` are null until it is complete. Only a complete run is
+read back for comparing or for the gate, so a run that is still going, or one that died,
+never counts.
+
+| Module       | Does                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| `score.ts`   | scores one case's expectations (`ok`/`near`/`miss`), and sums them                                     |
+| `run.ts`     | `scoreSet` runs the cases; `startCalibration` checks, stores and starts; `runCalibration` waits for it |
+| `compare.ts` | the change from the previous run                                                                       |
+| `store.ts`   | the table's only writer; reads JSON back through Zod                                                   |
+| `wire.ts`    | the JSON shapes, with no database import (the route registry uses them)                                |
+| `gate.ts`    | the publish gate                                                                                       |
+| `cli.ts`     | the command behind `scripts/app/calibrate.ts`                                                          |
+| `sets.ts`    | the sets bundled for the routes                                                                        |
+| `admin.ts`   | what the admin page lists, and starting a run from it                                                  |
 
 `agreement` is every `ok` over every check. `near` does not count as agreement.
+
+## The admin page
+
+`/admin/frameworks` (platform admins only) lists every version, drafts included, with
+its calibration snapshot and its runs. Each run shows its agreement overall and for
+appeals, groups, flags and duties, with the change from the run before it of the same
+mode. Pick a run to see what changed and every case's misses. The page reads
+`GET /api/v1/admin/frameworks`. It starts runs with
+`POST /api/v1/admin/frameworks/howdoesthisland/versions/<v>/calibration-runs`
+`{ mode }`, which records the caller as `startedByUserId` on the run and on each judge
+call's cost row. Publishing is still done from the command line.
+
+- **Quick** is waited for, and answers 201 once it is complete.
+- **AI** answers 202 once the run is stored, and carries on under `after()`
+  (`maxDuration` 300), as an assessment does. The page reads the list again every few
+  seconds while a run is running. Only one AI run of a version can run at a time
+  (409 `CALIBRATION_RUNNING`).
+- **A run that has been `RUNNING` for over an hour is shown as `stopped`**
+  (`STOPPED_AFTER_MS`). That happens when the process running it went away. Nothing
+  rewrites the row; it just stops blocking the next AI run. **A whole AI run can take
+  longer than a serverless function is allowed to live**, because the 26 cases run
+  one after another. On Vercel, start AI runs from the CLI or a long-running server.
+
+The routes cannot read `data/eval-<v>.json` from disk, because a Vercel function holds
+only the files the bundler traced. So each set is imported in `sets.ts`, and
+`tests/unit/lib/app/calibration/sets.test.ts` fails on any `eval-*.json` that is not
+listed there.
 
 ## The publish gate
 
