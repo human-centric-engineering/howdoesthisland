@@ -6,11 +6,9 @@
  */
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import type { JudgeOutputs } from '@/lib/app/frameworks/howdoesthisland/engine/types';
-import {
-  reportModelSchema,
-  reportResultSchema,
-  type ReportAssessment,
-} from '@/lib/app/reports/input';
+import type { z } from 'zod';
+import type { assessmentDetailSchema } from '@/lib/app/api/registry';
+import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
 import type { BuildReportInput } from '@/lib/app/reports/view';
 import {
   loadCases,
@@ -82,7 +80,10 @@ export function engineResult(opts: {
 export const ALL_SLOTS = ALL_JUDGES.map((j) => `judge_${j}`);
 
 /** The assessment as `GET /api/v1/assessments/{id}` answers: judges by slot, as stored. */
-export function apiAssessment(over: Partial<ReportAssessment> = {}): ReportAssessment {
+/** `GET /api/v1/assessments/{id}`'s answer, on the wire: more than the report reads. */
+export type ApiAssessment = z.infer<typeof assessmentDetailSchema>;
+
+export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment {
   const judges = over.judges ?? ALL_SLOTS;
   return {
     id: 'asm_1',

@@ -47,7 +47,9 @@ import {
   updateWorkspaceSettingsSchema,
 } from '@/lib/app/retention/settings';
 import {
+  createdReportShareSchema,
   createShareSchema,
+  reportShareSchema,
   shareIdParamSchema,
   shareTokenParamSchema,
 } from '@/lib/app/reports/share/validations';
@@ -320,21 +322,9 @@ export const sharedAssessmentSchema = assessmentDetailSchema
   })
   .extend({ judgeRuns: z.array(sharedJudgeRunSchema) });
 
-/** `ReportShareView` in `lib/app/reports/share/service.ts`. */
-export const reportShareSchema = z.object({
-  id: z.string(),
-  state: z.enum(['active', 'expired', 'revoked']),
-  expiresAt: isoDateTime,
-  revokedAt: isoDateTime.nullable(),
-  viewCount: z.number().int(),
-  createdAt: isoDateTime,
-});
-
-/** `CreatedReportShare`: a new link, the only time its token is shown. */
-export const createdReportShareSchema = reportShareSchema.extend({
-  token: z.string(),
-  url: z.string(),
-});
+// `reportShareSchema` and `createdReportShareSchema` live with the share
+// routes' request schemas, which the share panel imports in the browser.
+export { createdReportShareSchema, reportShareSchema };
 
 /**
  * `SharedReport`: what `GET shared-reports/{token}` answers with, the

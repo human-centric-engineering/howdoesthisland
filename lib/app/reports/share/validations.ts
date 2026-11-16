@@ -1,6 +1,7 @@
 /**
- * What the share-link routes accept (t-32). The route registry imports these,
- * so the contract is the handlers' own schemas.
+ * What the share-link routes accept and answer (t-32). The route registry
+ * imports these, so the contract is the handlers' own schemas, and the share
+ * panel parses the answers with them: zod only, safe in the browser.
  */
 import { z } from 'zod';
 
@@ -26,3 +27,21 @@ export const shareIdParamSchema = z.object({ id: z.string().min(1).max(64) });
  * would tell a guesser the shape.
  */
 export const shareTokenParamSchema = z.object({ token: z.string().min(1).max(128) });
+
+/** `ReportShareView` in `lib/app/reports/share/service.ts`, on the wire. */
+export const reportShareSchema = z.object({
+  id: z.string(),
+  state: z.enum(['active', 'expired', 'revoked']),
+  expiresAt: z.iso.datetime(),
+  revokedAt: z.iso.datetime().nullable(),
+  viewCount: z.number().int(),
+  createdAt: z.iso.datetime(),
+});
+
+export type ReportShareWire = z.infer<typeof reportShareSchema>;
+
+/** `CreatedReportShare`: a new link, the only time its token is shown. */
+export const createdReportShareSchema = reportShareSchema.extend({
+  token: z.string(),
+  url: z.string(),
+});

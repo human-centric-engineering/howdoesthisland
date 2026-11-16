@@ -88,7 +88,13 @@ name, an SVG mark and the figure.
 from. `shared` is what a link opens. The last two go to people outside the
 workspace, so they leave out the run's cost. Nothing on the report names the
 workspace or its people yet. A later section that does must leave them out of
-`shared`.
+`shared`, and out of what a link serves (below), which is where it would leak
+first.
+
+The report reads its assessment through `reportAssessmentSchema`
+(`lib/app/reports/input.ts`): what a link serves, plus the cost and failure
+reason a member sees. So one parser takes both the API's full answer and a
+link's, and a link's builds a report whose `method.costUsd` is `null`.
 
 ## Print
 
@@ -183,6 +189,52 @@ there.
 browser runs without its sandbox, which needs privileges the image does not
 have. That is acceptable only because it loads nothing but this app's own
 print page.
+
+## Share links
+
+A link opens one report, read-only, for someone with no account, until it
+expires or is revoked (t-32, f-sharing). The report's **Share** button opens
+a dialog that makes a link (7, 30 or 90 days; the API takes 1 to 365, default
+30), shows its address once to copy, and lists the report's links with their
+state and views, each live one with **Revoke**.
+
+| Route                                  | Who                       | What                                               |
+| -------------------------------------- | ------------------------- | -------------------------------------------------- |
+| `POST /api/v1/assessments/{id}/shares` | member; API key `reports` | Make a link. 409 `REPORT_NOT_READY` with no report |
+| `GET /api/v1/assessments/{id}/shares`  | member; API key `reports` | The report's links, newest first                   |
+| `DELETE /api/v1/shares/{id}`           | member; API key `reports` | Revoke (repeating keeps the first time)            |
+| `GET /api/v1/shared-reports/{token}`   | anyone with the token     | The shared report and its model                    |
+| `/r/{token}`                           | anyone with the token     | The `shared` variant                               |
+
+- **The token** (`lib/app/reports/share/token.ts`) is 32 random bytes,
+  base64url. Only its SHA-256 is kept (`ReportShare.tokenHash`, unique), so the
+  address is shown once, and no export, backup or log line can open a report.
+  Both paths are in `lib/app/credential-paths.ts`, so logs and analytics
+  collapse the token.
+- **Opening one** (`readSharedReport`, `service.ts`) enters the link's
+  workspace from its token (`runAsShareOrg`, `share-org.ts`): the lookup by
+  hash under `runAsCredentialLookup`, the org through `resolveCredentialOrg`,
+  then `runAsOrg`. The source is `'approval-token'`, t-31's decision for the
+  print page, for the same reason (see the PDF above). Inside the org, one
+  write both checks the link is live (not revoked, not expired) and counts the
+  view, so a revoke cannot race a read. A malformed, unknown, revoked or
+  expired token, or a suspended workspace, answers the same 404, and the page
+  the same not-found.
+- **What a link serves** (`sharedAssessmentSchema` in the route registry) is
+  the report's fields, picked one by one: no id, cost, source, failure,
+  per-judge cost or timing, workspace or author. A field added to the
+  assessment's detail is not shared until someone adds it there.
+- **Rate limit.** The page and the API share one per-IP tier,
+  `shared-report` at `SHARED_REPORT_VIEWS_PER_MINUTE` (30,
+  `lib/app/rate-limit.ts`). With no session the section cap would key on IP
+  anyway, but at 100/min.
+- **The page** is in `(public)`, `noindex`, and sends no referrer, so a link
+  the report contains cannot pass the token on.
+- **A link goes with its review.** The FK to the assessment cascades, so a
+  delete and the retention purge take its links. The maker's column is
+  `SET NULL` (a hand-written FK, with a drift probe), so a link outlives its
+  maker's erasure, as the workspace's. Both exports carry links without the
+  hash.
 
 ## Words
 

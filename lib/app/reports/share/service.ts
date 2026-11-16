@@ -16,6 +16,7 @@ import { getPublicUrl } from '@/lib/api/server-fetch';
 import { prisma } from '@/lib/db/client';
 import type { AssessmentStatus } from '@prisma/client';
 import { logger } from '@/lib/logging';
+import { isRecord } from '@/lib/utils';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { getAssessment } from '@/lib/app/assessments/api/service';
 import type { AssessmentDetail, JudgeRunView } from '@/lib/app/assessments/api/views';
@@ -252,9 +253,23 @@ function sharedView(a: AssessmentDetail): SharedAssessment {
     completedAt: a.completedAt,
     text: a.text,
     context: a.context,
-    result: a.result,
+    result: sharedResult(a.result),
     judgeRuns: a.judgeRuns.map((r) => ({ judge: r.judge, status: r.status, model: r.model })),
   };
+}
+
+/**
+ * The result, less the editor's cost. The run stores the editor's record on
+ * the result (`withEditor`, `lib/app/assessments/editor.ts`), and that record
+ * carries what the call cost, which a link must not show. The rest of the
+ * result is the report.
+ */
+function sharedResult(result: unknown): unknown {
+  if (!isRecord(result) || !isRecord(result.editor) || !('costUsd' in result.editor)) {
+    return result;
+  }
+  const { costUsd: _cost, ...editor } = result.editor;
+  return { ...result, editor };
 }
 
 async function modelOf(a: AssessmentDetail): Promise<Record<string, unknown> | null> {
