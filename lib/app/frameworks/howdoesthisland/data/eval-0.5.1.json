@@ -8,18 +8,7 @@
       "mid": "45-70",
       "high": "71-100"
     },
-    "how_to_use": "Run each case through the quick scan and the AI judges, with the case's content type, audience and culture as its context. A score passes if it lands in the expected band (low, mid, high above), and is 'near' if it is one band away. Appeals and overall are read from the appeal scores; a group's band from its group score (0-100). A group's 'low' dimensions pass at a score of 1 or below and its 'high' dimensions at 3 or above, on the 0-4 scale. Flags pass when each expected flag is found and each absent flag is not. Levers pass when each named lever has the expected status (present, misused or absent) from the influence judge. primary_duty is checked against the lenses judge's primary duty. Expectations were set by hand and are reviewed in the pull request that changes them (D9). Track pass rates across framework versions and judge models.",
-    "judges": {
-      "judge_ethos": "expect.appeals.ethos",
-      "judge_pathos": "expect.appeals.pathos",
-      "judge_logos": "expect.appeals.logos",
-      "judge_kairos": "expect.appeals.kairos",
-      "judge_lenses": "expect.primary_duty",
-      "judge_craft": "expect.groups.craft",
-      "judge_audience": "expect.groups.audience",
-      "judge_culture": "expect.groups.culture",
-      "judge_influence": "expect.levers"
-    },
+    "how_to_use": "Run each case through the quick scan and the AI judges, with the case's content type, audience and culture as its context. A score passes if it lands in the expected band (low, mid, high above), and is 'near' if it is one band away. Appeals and overall are read from the appeal scores; a group's band from its group score (0-100). A group's 'low' dimensions pass at a score of 1 or below and its 'high' dimensions at 3 or above, on the 0-4 scale. Flags pass when each expected flag is found and each absent flag is not. Levers pass when each named lever has the expected status (present, misused or absent) from the influence judge. primary_duty is checked against the lenses judge's primary duty; null means no one duty is expected and is not checked. Expectations were set by hand and are reviewed in the pull request that changes them (D9). Track pass rates across framework versions and judge models.",
     "changes_from_0_4_0": [
       "Brought up to model 0.5.1; version and model are named in meta.",
       "Every case may carry 'culture' (reader and writer country ids) alongside 'audience'; 'audience' may name an archetype, a role and any audience modifier.",

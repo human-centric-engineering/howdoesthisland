@@ -22,7 +22,7 @@ audience modifier, by id) and optionally `culture` (reader and writer country id
 | ------------------------- | ------------------------ | ------------------------------------------------------------------- |
 | `appeals`, `overall`      | the four appeal judges   | the score's band is the one expected (`near`: one band away)        |
 | `flags_present/absent`    | red flags                | each expected flag is found, and each absent one is not             |
-| `primary_duty`            | the lenses judge         | the assessment's primary duty matches (null: no one duty)           |
+| `primary_duty`            | the lenses judge         | the assessment's primary duty matches (null: not checked)           |
 | `groups.<group>.band`     | craft, audience, culture | the group score's band is the one expected                          |
 | `groups.<group>.low/high` | the same judges          | the dimension scores 1 or below (`low`) or 3 or above (`high`)      |
 | `levers`                  | the influence judge      | each named lever has the status expected (present, misused, absent) |
@@ -36,7 +36,10 @@ scored them. Whether the runner does is for t-37 to decide.
 ## Changing it
 
 Changing the set is a PR, and the expectations are reviewed in that PR (D9). The 0.4.0
-note asking for two reviewers no longer applies. Before opening it:
+note asking for two reviewers no longer applies. Before opening it, run both of these.
+The tests are the check that counts. `validate_refs.py` predates 0.5.1 and checks only the
+0.4.0 fields: it does not read roles, audience modifiers, cultures, group dimensions or
+levers, so a clean run from it alone proves little.
 
 ```bash
 python3 prototype/tools/validate_refs.py \
@@ -49,8 +52,9 @@ The tests hold the set to what a run needs:
 
 - every id it names exists in the model (`danglingReferences`);
 - each of the nine judges is checked by at least six cases (`judgeCoverage`);
-- every culture case names a reader culture;
-- at least two cases are prompt injections, expected to score the way an honest reading would.
+- every culture case names a reader culture (the schema refuses one that does not);
+- the prompt-injection cases (ev25, ev26) are expected to score the way an honest reading would;
+- the bands in `meta.bands` are the ones the engine's `band3` scores with.
 
 Some cases come in pairs that only make sense together, so keep both halves when you edit
 one. ev19 and ev20 give the same pension facts, pitched for an adviser and for a novice.

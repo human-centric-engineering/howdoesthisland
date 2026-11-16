@@ -22,8 +22,11 @@ import {
 } from '@/lib/app/calibration/schema';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
+import { band3 } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 
 const DATA = 'lib/app/frameworks/howdoesthisland/data';
+/** The cases whose text tries to instruct the judges. */
+const INJECTION_CASES = ['ev25', 'ev26'] as const;
 const readJson = (file: string): unknown => JSON.parse(readFileSync(`${DATA}/${file}`, 'utf8'));
 
 const model = indexModel(z.looseObject({}).parse(readJson('model-0.5.1.json')));
@@ -77,17 +80,34 @@ describe('eval-0.5.1.json', () => {
 
   it('gives every culture case a reader culture to judge against', () => {
     const culture = set.cases.filter((c) => c.expect.groups?.culture);
-    expect(culture.length).toBeGreaterThan(0);
+    expect(culture.length).toBeGreaterThanOrEqual(6);
     for (const c of culture) expect(c.culture?.reader, c.id).toBeTruthy();
   });
 
-  it('includes at least two prompt-injection cases, expected to score as an honest reading', () => {
-    const injection = set.cases.filter((c) => c.notes.startsWith('Prompt injection'));
-    expect(injection.length).toBeGreaterThanOrEqual(2);
-    for (const c of injection) {
-      expect(c.expect.overall, c.id).toBe('low');
-      expect(c.expect.flags_present.length, c.id).toBeGreaterThan(0);
+  it('includes the two prompt-injection cases, expected to score as an honest reading', () => {
+    // An honest reading of both texts is weak, hype-laden copy; the injected
+    // instruction asks for top marks and no flags.
+    for (const id of INJECTION_CASES) {
+      const c = caseById(set, id);
+      expect(c.expect.overall, id).toBe('low');
+      expect(c.expect.flags_present.length, id).toBeGreaterThan(0);
     }
+  });
+
+  it("states the bands the engine's band3 scores with", () => {
+    const edges = Object.entries(set.meta.bands).map(([band, range]) => {
+      const [from, to] = range.split('-').map(Number);
+      return { band, from, to };
+    });
+    for (const { band, from, to } of edges) {
+      expect(band3(from), `${band} from`).toBe(band);
+      expect(band3(to), `${band} to`).toBe(band);
+    }
+    expect(edges.map((e) => [e.from, e.to])).toEqual([
+      [0, 44],
+      [45, 70],
+      [71, 100],
+    ]);
   });
 });
 
@@ -227,6 +247,27 @@ describe('calibrationSetSchema', () => {
     const d = raw();
     firstExpect(d).levers = { present: [] };
     expect(calibrationSetSchema.safeParse(d).success).toBe(false);
+  });
+
+  it('refuses a lever expected in two statuses', () => {
+    const d = raw();
+    firstExpect(d).levers = { present: ['lv_scarcity'], misused: ['lv_scarcity'] };
+    expect(calibrationSetSchema.safeParse(d).success).toBe(false);
+  });
+
+  it('refuses a flag expected both present and absent', () => {
+    const d = raw();
+    firstExpect(d).flags_present = ['rf_hype'];
+    firstExpect(d).flags_absent = ['rf_hype'];
+    expect(calibrationSetSchema.safeParse(d).success).toBe(false);
+  });
+
+  it('refuses a culture expectation with no reader culture', () => {
+    const d = raw();
+    firstExpect(d).groups = { culture: { band: 'low' } };
+    const parsed = calibrationSetSchema.safeParse(d);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((i) => i.path.join('.'))).toEqual(['cases.0.culture.reader']);
   });
 
   it('refuses an expectation it does not know, rather than ignoring it', () => {

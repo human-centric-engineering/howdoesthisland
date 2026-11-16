@@ -23,6 +23,7 @@
 import { z } from 'zod';
 import type { EngineModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import { GLOBAL_CULTURE } from '@/lib/app/frameworks/howdoesthisland/engine/context';
+import type { band3 } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 import {
   HOWDOESTHISLAND_JUDGE_SLOTS,
   type HowDoesThisLandJudgeSlot,
@@ -31,6 +32,10 @@ import {
 export const BANDS = ['low', 'mid', 'high'] as const;
 export const bandSchema = z.enum(BANDS);
 export type Band = z.infer<typeof bandSchema>;
+/** The runner scores with the engine's `band3`; this fails to compile if the two sets of bands part. */
+type SameBands<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const bandsMatchEngine: SameBands<Band, ReturnType<typeof band3>> = true;
+void bandsMatchEngine;
 
 const id = z.string().min(1);
 const ids = z.array(id);
@@ -63,49 +68,68 @@ const leverExpectationSchema = z
   })
   .refine((l) => LEVER_STATUSES.some((s) => (l[s]?.length ?? 0) > 0), {
     error: 'A lever expectation names at least one lever',
-  });
+  })
+  .refine(
+    (l) => {
+      const named = LEVER_STATUSES.flatMap((s) => l[s] ?? []);
+      return new Set(named).size === named.length;
+    },
+    { error: 'A lever can be expected in one status only' }
+  );
 
-export const expectationSchema = z.strictObject({
-  appeals: z.strictObject({
-    ethos: bandSchema,
-    pathos: bandSchema,
-    logos: bandSchema,
-    kairos: bandSchema,
-  }),
-  overall: bandSchema,
-  flags_present: ids,
-  flags_absent: ids,
-  recommend_dimensions: ids,
-  balance_rules: ids,
-  /** Checked against the lenses judge's primary duty; null where no one duty leads. */
-  primary_duty: id.nullable().optional(),
-  groups: z
-    .strictObject({
-      craft: groupExpectationSchema.optional(),
-      audience: groupExpectationSchema.optional(),
-      culture: groupExpectationSchema.optional(),
-    })
-    .optional(),
-  /** Checked against the influence judge's lever statuses. */
-  levers: leverExpectationSchema.optional(),
-});
+export const expectationSchema = z
+  .strictObject({
+    appeals: z.strictObject({
+      ethos: bandSchema,
+      pathos: bandSchema,
+      logos: bandSchema,
+      kairos: bandSchema,
+    }),
+    overall: bandSchema,
+    flags_present: ids,
+    flags_absent: ids,
+    recommend_dimensions: ids,
+    balance_rules: ids,
+    /**
+     * Checked against the lenses judge's primary duty. Null, as 0.4.0 has it,
+     * means no one duty is expected, and is not checked.
+     */
+    primary_duty: id.nullable().optional(),
+    groups: z
+      .strictObject({
+        craft: groupExpectationSchema.optional(),
+        audience: groupExpectationSchema.optional(),
+        culture: groupExpectationSchema.optional(),
+      })
+      .optional(),
+    /** Checked against the influence judge's lever statuses. */
+    levers: leverExpectationSchema.optional(),
+  })
+  .refine((e) => !e.flags_present.some((f) => e.flags_absent.includes(f)), {
+    error: 'A flag cannot be expected both present and absent',
+  });
 export type Expectation = z.infer<typeof expectationSchema>;
 
-export const calibrationCaseSchema = z.strictObject({
-  id,
-  title: z.string().min(1),
-  content_type: id,
-  /**
-   * Who reads it: `archetype`, `role` and any audience modifier, by id, as
-   * the prototype's `caseCtx()` reads a case. Empty is a general reader.
-   */
-  audience: z.record(z.string(), id),
-  /** Reader and writer culture, by country id or `global`. */
-  culture: z.strictObject({ reader: id.optional(), writer: id.optional() }).optional(),
-  text: z.string().min(1),
-  expect: expectationSchema,
-  notes: z.string(),
-});
+export const calibrationCaseSchema = z
+  .strictObject({
+    id,
+    title: z.string().min(1),
+    content_type: id,
+    /**
+     * Who reads it: `archetype`, `role` and any audience modifier, by id, as
+     * the prototype's `caseCtx()` reads a case. Empty is a general reader.
+     */
+    audience: z.record(z.string(), id),
+    /** Reader and writer culture, by country id or `global`. */
+    culture: z.strictObject({ reader: id.optional(), writer: id.optional() }).optional(),
+    text: z.string().min(1),
+    expect: expectationSchema,
+    notes: z.string(),
+  })
+  .refine((c) => !c.expect.groups?.culture || Boolean(c.culture?.reader), {
+    error: 'A culture expectation needs a reader culture to judge against',
+    path: ['culture', 'reader'],
+  });
 export type CalibrationCase = z.infer<typeof calibrationCaseSchema>;
 
 export const calibrationSetSchema = z.strictObject({
@@ -195,10 +219,9 @@ export function danglingReferences(set: CalibrationSet, m: EngineModel): string[
     for (const group of CALIBRATED_GROUPS) {
       const g = e.groups?.[group];
       if (!g) continue;
-      miss(`groups`, group, m.GROUP.has(group));
       for (const d of [...(g.low ?? []), ...(g.high ?? [])]) {
-        const dim = m.EXTRA.find((x) => x.id === d);
-        miss(`groups.${group}`, d, dim?.group === group);
+        const dim = m.DIM.get(d);
+        miss(`groups.${group}`, d, dim !== undefined && 'group' in dim && dim.group === group);
       }
     }
 
