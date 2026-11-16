@@ -6,12 +6,15 @@
  * is what the runner (t-37) reads it through: the shape, checked by Zod, and
  * the two checks that need the model beside it:
  *
- * - {@link danglingReferences}: every id a case names (content type,
- *   audience, culture, flag, dimension, group, duty, lever) is one the model
- *   has, so a run cannot fail part way through on a typo. It is the
- *   TypeScript side of `prototype/tools/validate_refs.py`, and reads the
- *   model through the engine's own index, so it accepts exactly what a run
- *   can score.
+ * - {@link caseContext}: the context a case is scored with, in the shape
+ *   the engine's `parseContext` takes. The runner must use it, not a port of
+ *   the prototype's `caseCtx()`, which dropped the case's culture.
+ * - {@link danglingReferences}: every id a case names is one the model has,
+ *   so a run cannot fail part way through on a typo. The context goes
+ *   through the engine's own `parseContext` (culture on), so it is refused
+ *   exactly when a run would refuse it; the expectations' ids are checked
+ *   against the engine's model index. It supersedes
+ *   `prototype/tools/validate_refs.py`, which reads only the 0.4.0 fields.
  * - {@link judgesChecked}: which of the nine judges a case says something
  *   about, so the set can be held to at least six cases per judge.
  *
@@ -22,7 +25,7 @@
  */
 import { z } from 'zod';
 import type { EngineModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
-import { GLOBAL_CULTURE } from '@/lib/app/frameworks/howdoesthisland/engine/context';
+import { GLOBAL_CULTURE, parseContext } from '@/lib/app/frameworks/howdoesthisland/engine/context';
 import type { band3 } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 import {
   HOWDOESTHISLAND_JUDGE_SLOTS,
@@ -116,8 +119,9 @@ export const calibrationCaseSchema = z
     title: z.string().min(1),
     content_type: id,
     /**
-     * Who reads it: `archetype`, `role` and any audience modifier, by id, as
-     * the prototype's `caseCtx()` reads a case. Empty is a general reader.
+     * Who reads it: `archetype`, `role` and any audience modifier, by id.
+     * Empty is a general reader. {@link caseContext} sorts them into the
+     * engine's context.
      */
     audience: z.record(z.string(), id),
     /** Reader and writer culture, by country id or `global`. */
@@ -126,10 +130,16 @@ export const calibrationCaseSchema = z
     expect: expectationSchema,
     notes: z.string(),
   })
-  .refine((c) => !c.expect.groups?.culture || Boolean(c.culture?.reader), {
-    error: 'A culture expectation needs a reader culture to judge against',
-    path: ['culture', 'reader'],
-  });
+  .refine(
+    (c) =>
+      !c.expect.groups?.culture ||
+      (c.culture?.reader !== undefined && c.culture.reader !== GLOBAL_CULTURE),
+    {
+      // `global` is the profile the engine uses when no reader is named.
+      error: 'A culture expectation needs a reader country to judge against',
+      path: ['culture', 'reader'],
+    }
+  );
 export type CalibrationCase = z.infer<typeof calibrationCaseSchema>;
 
 export const calibrationSetSchema = z.strictObject({
@@ -178,16 +188,36 @@ export function judgeCoverage(set: CalibrationSet): Map<HowDoesThisLandJudgeSlot
   return counts;
 }
 
+/** What the engine's `parseContext` takes for a case: archetype and role lifted out of `audience`. */
+export interface CaseContextInput {
+  contentType: string;
+  archetype?: string;
+  role?: string;
+  audience: Record<string, string>;
+  culture?: { reader?: string; writer?: string };
+}
+
+/** The context a case is scored with. Culture is passed through, so run with the culture switch on. */
+export function caseContext(c: CalibrationCase): CaseContextInput {
+  const { archetype, role, ...audience } = c.audience;
+  return {
+    contentType: c.content_type,
+    ...(archetype !== undefined ? { archetype } : {}),
+    ...(role !== undefined ? { role } : {}),
+    audience,
+    ...(c.culture ? { culture: c.culture } : {}),
+  };
+}
+
 /**
- * Every id in the set the model does not have, as `<case>.<path>: '<id>'`.
- * Empty when the set can be run against the model.
+ * Every reference in the set the model does not have: a context problem as
+ * `<case>.context.<path>: <message>`, an expectation's id as
+ * `<case>.<path>: '<id>'`. Empty when the set can be run against the model.
  */
 export function danglingReferences(set: CalibrationSet, m: EngineModel): string[] {
   const out: string[] = [];
   const balance = new Set(m.data.balance_rules.map((b) => b.id));
   const duties = new Set(m.FN.map((d) => d.id));
-  const countries = new Set([GLOBAL_CULTURE, ...m.COUNTRY.keys()]);
-  const mods = new Map(m.MODS.map((mod) => [mod.id, new Set(mod.options.map((o) => o.id))]));
 
   for (const c of set.cases) {
     const miss = (path: string, ref: string, ok: boolean) => {
@@ -195,21 +225,10 @@ export function danglingReferences(set: CalibrationSet, m: EngineModel): string[
     };
     const e = c.expect;
 
-    miss('content_type', c.content_type, m.CT.has(c.content_type));
-    for (const [key, value] of Object.entries(c.audience)) {
-      const at = `audience.${key}`;
-      if (key === 'archetype') miss(at, value, m.ARCH.has(value));
-      else if (key === 'role') miss(at, value, m.ROLE.has(value));
-      else {
-        const options = mods.get(key);
-        if (options) miss(at, value, options.has(value));
-        else miss('audience', key, false);
-      }
+    const ctx = parseContext(m, caseContext(c), true);
+    if (!ctx.ok) {
+      for (const issue of ctx.issues) out.push(`${c.id}.context.${issue.path}: ${issue.message}`);
     }
-    if (c.culture?.reader)
-      miss('culture.reader', c.culture.reader, countries.has(c.culture.reader));
-    if (c.culture?.writer)
-      miss('culture.writer', c.culture.writer, countries.has(c.culture.writer));
 
     for (const f of [...e.flags_present, ...e.flags_absent]) miss('flags', f, m.FLAG.has(f));
     for (const d of e.recommend_dimensions) miss('recommend_dimensions', d, m.DIM.has(d));

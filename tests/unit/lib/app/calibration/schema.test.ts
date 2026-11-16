@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import {
+  caseContext,
   calibrationSetSchema,
   danglingReferences,
   judgeCoverage,
@@ -23,6 +24,7 @@ import {
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
 import { band3 } from '@/lib/app/frameworks/howdoesthisland/engine/text';
+import { parseContext } from '@/lib/app/frameworks/howdoesthisland/engine/context';
 
 const DATA = 'lib/app/frameworks/howdoesthisland/data';
 /** The cases whose text tries to instruct the judges. */
@@ -68,7 +70,7 @@ describe('eval-0.5.1.json', () => {
     }
   });
 
-  it('gives craft, audience and culture a band and at least one key dimension', () => {
+  it('has at least six cases per group that name key dimensions, not only a band', () => {
     for (const group of ['craft', 'audience', 'culture'] as const) {
       const withKeys = set.cases.filter((c) => {
         const g = c.expect.groups?.[group];
@@ -88,15 +90,31 @@ describe('eval-0.5.1.json', () => {
     // An honest reading of both texts is weak, hype-laden copy; the injected
     // instruction asks for top marks and no flags.
     for (const id of INJECTION_CASES) {
-      const c = caseById(set, id);
-      expect(c.expect.overall, id).toBe('low');
-      expect(c.expect.flags_present.length, id).toBeGreaterThan(0);
+      const e = caseById(set, id).expect;
+      expect({ appeals: e.appeals, overall: e.overall }, id).toEqual({
+        appeals: { ethos: 'low', pathos: 'low', logos: 'low', kairos: 'low' },
+        overall: 'low',
+      });
+      expect(e.flags_present, id).toContain('rf_hype');
+      expect(e.groups?.craft?.band, id).toBe('low');
+      expect(e.levers?.present ?? [], id).toEqual([]);
     }
+  });
+
+  it('keeps each pair of cases comparable', () => {
+    const [expert, novice] = [caseById(set, 'ev19'), caseById(set, 'ev20')];
+    expect(novice.audience).toEqual(expert.audience);
+    expect(novice.content_type).toBe(expert.content_type);
+
+    const [japan, us] = [caseById(set, 'ev22'), caseById(set, 'ev24')];
+    expect(us.text).toBe(japan.text);
+    expect(us.audience).toEqual(japan.audience);
+    expect([japan.culture?.reader, us.culture?.reader]).toEqual(['jp', 'us']);
   });
 
   it("states the bands the engine's band3 scores with", () => {
     const edges = Object.entries(set.meta.bands).map(([band, range]) => {
-      const [from, to] = range.split('-').map(Number);
+      const [from, to] = range.split(/[-–]/).map(Number);
       return { band, from, to };
     });
     for (const { band, from, to } of edges) {
@@ -112,33 +130,37 @@ describe('eval-0.5.1.json', () => {
 });
 
 describe('danglingReferences', () => {
-  const cases: [string, (s: CalibrationSet) => void, string][] = [
+  const cases: [string, (s: CalibrationSet) => void, string | RegExp][] = [
     [
       'content type',
       (s) => (caseById(s, 'ev01').content_type = 'ct_nope'),
-      "ev01.content_type: 'ct_nope'",
+      /^ev01\.context\.contentType: /,
     ],
     [
       'archetype',
       (s) => (caseById(s, 'ev01').audience.archetype = 'wizard'),
-      "ev01.audience.archetype: 'wizard'",
+      /^ev01\.context\.archetype: /,
     ],
-    ['role', (s) => (caseById(s, 'ev01').audience.role = 'pope'), "ev01.audience.role: 'pope'"],
+    ['role', (s) => (caseById(s, 'ev01').audience.role = 'pope'), /^ev01\.context\.role: /],
     [
       'modifier option',
       (s) => (caseById(s, 'ev01').audience.relationship = 'frosty'),
-      "ev01.audience.relationship: 'frosty'",
+      /^ev01\.context\.audience\.relationship: /,
     ],
-    ['modifier', (s) => (caseById(s, 'ev01').audience.mood = 'calm'), "ev01.audience: 'mood'"],
+    [
+      'modifier',
+      (s) => (caseById(s, 'ev01').audience.mood = 'calm'),
+      /^ev01\.context\.audience: .*mood/,
+    ],
     [
       'reader culture',
       (s) => (caseById(s, 'ev01').culture = { reader: 'atlantis' }),
-      "ev01.culture.reader: 'atlantis'",
+      /^ev01\.context\.culture\.reader: /,
     ],
     [
       'writer culture',
       (s) => (caseById(s, 'ev01').culture = { writer: 'atlantis' }),
-      "ev01.culture.writer: 'atlantis'",
+      /^ev01\.context\.culture\.writer: /,
     ],
     [
       'red flag',
@@ -175,13 +197,38 @@ describe('danglingReferences', () => {
   it.each(cases)('reports an unknown %s', (_kind, plant, expected) => {
     const s = clone(set);
     plant(s);
-    expect(danglingReferences(s, model)).toEqual([expected]);
+    const found = danglingReferences(s, model);
+    expect(found).toHaveLength(1);
+    if (typeof expected === 'string') expect(found[0]).toBe(expected);
+    else expect(found[0]).toMatch(expected);
   });
 
   it('accepts the global culture', () => {
     const s = clone(set);
     caseById(s, 'ev01').culture = { reader: 'global', writer: 'global' };
     expect(danglingReferences(s, model)).toEqual([]);
+  });
+});
+
+describe('caseContext', () => {
+  it('lifts archetype and role out of the audience, and keeps the culture', () => {
+    const parsed = parseContext(model, caseContext(caseById(set, 'ev09')), true);
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+    expect(parsed.ctx).toMatchObject({
+      contentType: 'exec_briefing',
+      archetype: 'auditor',
+      role: 'board',
+      audience: { expertise: 'expert' },
+      culture: { reader: 'de' },
+    });
+    expect(parsed.ctx.audience).not.toHaveProperty('archetype');
+  });
+
+  it('leaves a case with no audience or culture to the engine defaults', () => {
+    expect(caseContext(caseById(set, 'ev01'))).toEqual({
+      contentType: 'landing_page',
+      audience: {},
+    });
   });
 });
 
@@ -268,6 +315,15 @@ describe('calibrationSetSchema', () => {
     const parsed = calibrationSetSchema.safeParse(d);
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues.map((i) => i.path.join('.'))).toEqual(['cases.0.culture.reader']);
+  });
+
+  it('refuses a culture expectation whose reader is the global profile', () => {
+    const d = raw();
+    firstExpect(d).groups = { culture: { band: 'low' } };
+    const cases = d.cases;
+    if (!Array.isArray(cases)) throw new Error('no cases');
+    doc(cases[0]).culture = { reader: 'global' };
+    expect(calibrationSetSchema.safeParse(d).success).toBe(false);
   });
 
   it('refuses an expectation it does not know, rather than ignoring it', () => {

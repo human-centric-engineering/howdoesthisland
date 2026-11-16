@@ -16,7 +16,10 @@ which `prototype-guard.test.ts` forbids.
 
 A case gives the text its context: `content_type`, plus `audience` (archetype, role and any
 audience modifier, by id) and optionally `culture` (reader and writer country ids, or
-`global`). Under `expect`:
+`global`). `caseContext()` turns that into the engine's context; run it with the culture
+switch on. Do not port the prototype's `caseCtx()` for this, because it dropped the
+case's culture. A culture expectation needs a reader country: `global` is what the engine
+uses when none is named, so the schema refuses it. Under `expect`:
 
 | Expectation               | Checks                   | Passes when                                                         |
 | ------------------------- | ------------------------ | ------------------------------------------------------------------- |
@@ -50,9 +53,9 @@ npx vitest run tests/unit/lib/app/calibration
 
 The tests hold the set to what a run needs:
 
-- every id it names exists in the model (`danglingReferences`);
 - each of the nine judges is checked by at least six cases (`judgeCoverage`);
-- every culture case names a reader culture (the schema refuses one that does not);
+- every id resolves, the context going through the engine's own `parseContext`;
+- the paired cases stay comparable (same audience for ev19 and ev20, same text and audience for ev22 and ev24, read in Japan and the US);
 - the prompt-injection cases (ev25, ev26) are expected to score the way an honest reading would;
 - the bands in `meta.bands` are the ones the engine's `band3` scores with.
 
