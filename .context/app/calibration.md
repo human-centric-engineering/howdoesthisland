@@ -72,8 +72,10 @@ npm run calibrate -- --mode ai --version 0.5.1
 ```
 
 The version must be imported (draft or published). The set is the one written for it,
-`data/eval-<version>.json`; no flag picks another, because an AI run is what lets a draft publish. A set whose `meta.model` is not the version,
-or that names an id the version does not have, is refused before anything runs.
+`data/eval-<version>.json`. No flag picks another, because an AI run is what lets a
+draft publish. A set whose `meta.model` is not the version, or that names an id the
+version does not have, is refused before anything runs, and so is `ai` mode on a version
+with no judges to run.
 
 - **quick** puts every case through the quick scan and `assemble`. It is free and
   deterministic, so two runs of one version always agree.
@@ -92,7 +94,8 @@ scope (`lib/app/calibration/store.ts`): the version and its `sourceSha256`, the 
 version, the mode, the provider and model each judge answered with, the totals, each case's
 scored checks, and the cost. The command prints the totals beside the last run of the same
 mode (against any version), with every check whose result changed, worse ones first
-(`compare.ts`).
+(`compare.ts`). A check whose expected value changed between the two runs' sets is not
+counted as changed.
 
 | Module       | Does                                                                       |
 | ------------ | -------------------------------------------------------------------------- |
@@ -112,7 +115,7 @@ mode (against any version), with every check whose result changed, worse ones fi
 
 - of the file as it is now (the run's `sourceSha256` is the version's: a draft
   re-imported since is different content), and
-- complete (no judge failed).
+- complete (no judge failed, and at least one check scored).
 
 On publish the newest such run's snapshot is copied into `FrameworkVersion.calibration`:
 `{ runId, ranAt, agreement, setVersion, checks, judgeModels }`. The publish write is
@@ -120,9 +123,9 @@ conditioned on the same `sourceSha256`, so a re-import between the check and the
 does not publish uncalibrated content.
 
 0.5.1 was published before the gate existed, and the gate does not apply to it
-retroactively (a planning ruling). It is listed in `UNGATED_VERSIONS`, pinned to the sha256 of the file as published, so a new
-database still publishes that file from a draft, with no snapshot, and a different file
-under the same number is gated. Never add a version to that list.
+retroactively (a planning ruling). It is listed in `UNGATED_VERSIONS`, pinned to the
+sha256 of the file as published, so a new database still publishes that file from a draft,
+with no snapshot, and a different file under the same number is gated. Never add a version to that list.
 
 ## Parity with the prototype
 
