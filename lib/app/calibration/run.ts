@@ -48,7 +48,7 @@ export type CalibrationMode = 'quick' | 'ai';
 
 export class CalibrationError extends Error {
   constructor(
-    readonly code: 'SET_MISMATCH' | 'DANGLING_REFERENCES' | 'INVALID_CONTEXT',
+    readonly code: 'SET_MISMATCH' | 'DANGLING_REFERENCES' | 'INVALID_CONTEXT' | 'NO_JUDGES',
     message: string,
     readonly problems: readonly string[] = []
   ) {
@@ -89,6 +89,14 @@ export async function scoreSet(input: ScoreSetInput): Promise<ScoredSet> {
   const { engine, mode } = input;
   const slots = mode === 'ai' ? engine.activeJudgeSlots('full') : [];
   if (mode === 'ai' && !input.runJudges) throw new Error('ai mode needs runJudges');
+  // An AI run with no judges would be the quick scan under another name, and
+  // would still let a draft publish.
+  if (mode === 'ai' && slots.length === 0) {
+    throw new CalibrationError(
+      'NO_JUDGES',
+      'This version has no judges to run, so ai mode cannot.'
+    );
+  }
 
   const rows: CaseRow[] = [];
   const models = new Map<string, Set<string>>();

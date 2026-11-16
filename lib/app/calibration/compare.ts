@@ -8,7 +8,8 @@
  *
  * Pure. A check is matched across the two runs by case id, kind and key, so
  * a case or expectation one run has and the other does not is not a flip:
- * it is counted in the totals of the run that has it, and nowhere else.
+ * it is counted in the totals of the run that has it, and nowhere else. Nor
+ * is a check whose expected value changed between the runs' sets.
  */
 import {
   round4,
@@ -97,7 +98,8 @@ export function compareRuns(
   for (const row of current.rows) {
     for (const c of row.checks) {
       const was = before.get(`${row.case}\u0000${c.kind}\u0000${c.key}`);
-      if (was && was.result !== c.result) {
+      // A check whose expectation changed (a newer set) is not the model's flip.
+      if (was && was.expected === c.expected && was.result !== c.result) {
         flips.push({ case: row.case, kind: c.kind, key: c.key, from: was.result, to: c.result });
       }
     }

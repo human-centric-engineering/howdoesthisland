@@ -74,4 +74,11 @@ describe('compareRuns()', () => {
       { case: 'ev01', kind: 'appeal', key: 'pathos', from: 'near', to: 'ok' },
     ]);
   });
+
+  it('does not count a check whose expectation changed as a flip', () => {
+    const now: ScoredRow[] = [
+      { case: 'ev02', checks: [{ ...check('duty', 'primary', 'ok'), expected: 'move' }] },
+    ];
+    expect(compareRuns(previous, run(now)).flips).toEqual([]);
+  });
 });

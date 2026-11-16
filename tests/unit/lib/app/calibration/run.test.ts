@@ -149,6 +149,23 @@ describe('scoreSet() in ai mode', () => {
     expect(scored.judgeModels).not.toHaveProperty('judge_culture');
   });
 
+  it('refuses ai mode on an engine with no judges to run', async () => {
+    const e = engine();
+    vi.spyOn(e, 'activeJudgeSlots').mockReturnValue([]);
+    const judges = stubJudges();
+    await expect(
+      scoreSet({
+        engine: e,
+        cases: set.cases,
+        mode: 'ai',
+        frameworkVersion: 'howdoesthisland@0.5.1',
+        runId: 'r',
+        runJudges: judges,
+      })
+    ).rejects.toMatchObject({ code: 'NO_JUDGES' });
+    expect(judges).not.toHaveBeenCalled();
+  });
+
   it('counts a judge the fan-out never started as a failure', async () => {
     const judges = vi.fn<typeof RunJudges>(async () => ({ stopped: true, landed: [] }));
     const scored = await run(judges);
