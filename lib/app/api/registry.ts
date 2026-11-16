@@ -337,7 +337,9 @@ export const assessmentEventSchema = z.discriminatedUnion('type', [
 export const assessmentDeletedSchema = z.object({ deleted: z.literal(true) });
 
 /** The report PDF's body: the document's bytes (`file: 'application/pdf'`). */
-export const reportPdfSchema = z.instanceof(Uint8Array).describe('The report, as a PDF document');
+export const reportPdfSchema = z
+  .string()
+  .meta({ format: 'binary', description: 'The report, as a PDF document' });
 
 // --- The routes ------------------------------------------------------------
 

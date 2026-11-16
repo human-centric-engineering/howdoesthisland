@@ -92,8 +92,8 @@ export async function getReportPdf(
     try {
       pdf = await renderReportPdf(id, () => mintRenderToken(id, orgId));
     } catch (err) {
-      // Deleted (or its workspace suspended) before the print page loaded: the
-      // page was not found, which is the answer, not a failed render.
+      // Deleted before the print page loaded: the page was not found, which is
+      // the answer, not a failed render.
       if (err instanceof PdfRenderError && err.reason === 'not-rendered') {
         await refuseIfDeleted(orgId, id, false);
       }

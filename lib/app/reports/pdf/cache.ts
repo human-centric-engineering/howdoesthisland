@@ -14,7 +14,9 @@
  * window would not hold for the report. So deleting an assessment
  * (`remove` in `lib/app/assessments/api/service.ts`) and the retention purge
  * (`lib/app/retention/purge.ts`) both call {@link deleteReportPdfs} first,
- * and keep the row if it fails, so a later attempt can finish the job. Org
+ * and keep the row if it fails, so a later attempt can finish the job.
+ * **Any new path that deletes assessments must do the same**: nothing lists
+ * report folders, so a PDF whose row went another way is never found again. Org
  * erasure deletes the whole `orgs/{orgId}/` tree, these files included.
  *
  * **No cache without private storage that can read back.** With no storage

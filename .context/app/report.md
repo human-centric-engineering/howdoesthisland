@@ -166,10 +166,16 @@ render gets its slot, so time in the queue cannot expire it. A caller may start
 review whose stored result cannot be read is 422 `REPORT_UNREADABLE`, since
 rendering again will not change it, and one deleted while it renders is 404.
 
-**Where the browser goes.** It opens the print page on loopback, the server's
-own `PORT` on 127.0.0.1 (`renderOrigin`), falling back to `getBaseUrl()` when no
-port is known. That keeps the token on the machine rather than sending it out
-through a CDN, and a CDN's redirect to a canonical host cannot break renders.
+**Where the browser goes** (`renderOrigin`). `INTERNAL_API_URL` when it is
+set, as for every self-call; otherwise loopback on the server's own `PORT`
+(127.0.0.1); otherwise `getBaseUrl()`. Loopback keeps the token on the machine
+rather than sending it out through a CDN, and a CDN's redirect to a canonical
+host cannot break renders. Chrome exempts loopback from the production CSP's
+`upgrade-insecure-requests`, so the page's assets load (checked for t-31). An
+`INTERNAL_API_URL` on plain `http` to a host that is not loopback would not be
+exempt: its assets would be upgraded to `https`, fall outside the origin the
+renderer allows, and the PDF would print unstyled. Use loopback or `https`
+there.
 
 **Where it runs.** The Docker image installs Alpine's `chromium` (ledger row 15) and sets `PDF_CHROMIUM_PATH`: the image grows from 126.5 MB to 460.5 MB
 (Chromium is 318 MB), and a report renders in about 0.9 s from a cold browser

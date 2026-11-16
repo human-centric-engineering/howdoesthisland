@@ -126,9 +126,10 @@ export function verifyRenderToken(
   if (!parsed.success) {
     // An authentic token from another scheme is a different event from a
     // payload that is merely incomplete, so it gets its own reason.
-    throw new RenderTokenError(
-      isRecord(raw) && raw.typ !== RENDER_TOKEN_TYPE ? 'wrong-type' : 'malformed'
-    );
+    // An untagged payload is malformed, not another scheme's: only a tag
+    // that names a different scheme says that.
+    const otherScheme = isRecord(raw) && raw.typ !== undefined && raw.typ !== RENDER_TOKEN_TYPE;
+    throw new RenderTokenError(otherScheme ? 'wrong-type' : 'malformed');
   }
 
   const expiresAt = new Date(parsed.data.expiresAt).getTime();

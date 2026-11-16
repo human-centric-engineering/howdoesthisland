@@ -20,7 +20,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
   APP_ROUTES,
   HTTP_METHODS,
@@ -39,6 +39,7 @@ import {
   kindMetaSchema,
   paginationMetaSchema,
   quickScanViewSchema,
+  reportPdfSchema,
   versionMetaSchema,
   versionSummarySchema,
   workspaceSettingsSchema,
@@ -276,6 +277,14 @@ type Wire<T> = T extends Date
     : T extends object
       ? { [K in keyof T]: Wire<T[K]> }
       : T;
+
+describe('the report PDF route', () => {
+  it('describes its body as binary, in a form OpenAPI can carry', () => {
+    const route = APP_ROUTES.find((r) => r.path === '/api/v1/assessments/{id}/report.pdf');
+    expect(route?.response.file).toBe('application/pdf');
+    expect(z.toJSONSchema(reportPdfSchema)).toMatchObject({ type: 'string', format: 'binary' });
+  });
+});
 
 describe('response schemas match what the services return', () => {
   it('holds each schema to its service type', () => {

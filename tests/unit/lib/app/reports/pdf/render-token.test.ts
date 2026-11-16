@@ -101,6 +101,9 @@ describe('verifyRenderToken', () => {
     // Authentic, the right type, a field missing.
     const partial = signed({ typ: 'report-render', assessmentId: ID });
     expect(reason(() => verifyRenderToken(partial, ID, NOW))).toBe('malformed');
+    // Authentic, with no scheme tag at all: incomplete, not another scheme's.
+    const untagged = signed({ assessmentId: ID, orgId: ORG, expiresAt: NOW.toISOString() });
+    expect(reason(() => verifyRenderToken(untagged, ID, NOW))).toBe('malformed');
   });
 });
 

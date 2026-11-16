@@ -99,12 +99,22 @@ export function chromiumPath(platform: NodeJS.Platform = process.platform): stri
 }
 
 /**
- * Where the browser reaches this app: loopback on the server's own port when
- * it is known (`PORT`, set by the Docker image and by `npm run dev`), else
- * {@link getBaseUrl}. Loopback keeps the render's request, and its token, on
- * the machine, and is not subject to a CDN's redirect to a canonical host.
+ * Where the browser reaches this app, in this order:
+ *
+ * 1. `INTERNAL_API_URL`, when set: the operator's explicit answer, as it is
+ *    for every self-call (`getBaseUrl`), for a server that does not listen on
+ *    loopback (a pod bound to its own IP, a sidecar).
+ * 2. Loopback on the server's own `PORT` (set by the Docker image and by
+ *    `npm run dev`). It keeps the render's request, and its token, on the
+ *    machine, and is not subject to a CDN's redirect to a canonical host.
+ *    Chrome exempts loopback from the production CSP's
+ *    `upgrade-insecure-requests`, so the page's assets stay on this origin
+ *    (checked for t-31).
+ * 3. {@link getBaseUrl}'s answer otherwise.
  */
 export function renderOrigin(): string {
+  const explicit = env.INTERNAL_API_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
   const port = process.env.PORT;
   return port && /^\d{1,5}$/.test(port) ? `http://127.0.0.1:${port}` : getBaseUrl();
 }

@@ -11,13 +11,19 @@
  *
  * @see lib/app/reports/pdf/render.ts
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockEnv = vi.hoisted(() => ({
+interface MockEnv {
+  BETTER_AUTH_SECRET: string;
+  BETTER_AUTH_URL: string;
+  INTERNAL_API_URL: string | undefined;
+  PDF_CHROMIUM_PATH: string | undefined;
+}
+const mockEnv = vi.hoisted((): MockEnv => ({
   BETTER_AUTH_SECRET: 'test-secret-that-is-at-least-32-characters-long',
   BETTER_AUTH_URL: 'https://app.example.com',
   INTERNAL_API_URL: 'http://127.0.0.1:3000',
-  PDF_CHROMIUM_PATH: undefined as string | undefined,
+  PDF_CHROMIUM_PATH: undefined,
 }));
 vi.mock('@/lib/env', () => ({ env: mockEnv }));
 vi.mock('@/lib/logging', () => ({
@@ -132,17 +138,27 @@ beforeEach(() => {
 });
 
 describe('renderOrigin', () => {
-  it("is loopback on the server's own port when it is known", () => {
+  const original = mockEnv.INTERNAL_API_URL;
+  afterEach(() => {
+    mockEnv.INTERNAL_API_URL = original;
+  });
+
+  it('is INTERNAL_API_URL when set, whatever the port', () => {
+    mockEnv.INTERNAL_API_URL = 'http://web.internal:8080/';
+    vi.stubEnv('PORT', '3000');
+    expect(renderOrigin()).toBe('http://web.internal:8080');
+  });
+
+  it("is otherwise loopback on the server's own port", () => {
+    mockEnv.INTERNAL_API_URL = undefined;
     vi.stubEnv('PORT', '3000');
     expect(renderOrigin()).toBe('http://127.0.0.1:3000');
   });
 
-  it('falls back to the internal API URL when the port is not', () => {
+  it("falls back to the app's base URL when neither is known", () => {
+    mockEnv.INTERNAL_API_URL = undefined;
     vi.stubEnv('PORT', 'not-a-port');
-    expect(renderOrigin()).toBe('http://127.0.0.1:3000');
-    mockEnv.INTERNAL_API_URL = 'http://web.internal:8080';
-    expect(renderOrigin()).toBe('http://web.internal:8080');
-    mockEnv.INTERNAL_API_URL = 'http://127.0.0.1:3000';
+    expect(renderOrigin()).toBe('https://app.example.com');
   });
 });
 
