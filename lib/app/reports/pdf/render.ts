@@ -8,12 +8,20 @@
  * long as one render cannot carry one report's state into the next.
  *
  * **What the browser may reach.** It opens one page, this app's print route
- * for one assessment, over {@link getBaseUrl} (loopback in development,
- * `INTERNAL_API_URL` or the app URL otherwise). The render token goes in a
- * header (`RENDER_TOKEN_HEADER`), not in the URL, so it is not written to
- * access logs or sent on as a referrer. Every request to any other origin is
- * aborted, so the token cannot be sent off the server and the page's
- * analytics never fire for a render.
+ * for one assessment, on loopback ({@link renderOrigin}): the server's own
+ * port on 127.0.0.1, so the request and its token stay on the machine rather
+ * than going out through a CDN or load balancer and back. The render token
+ * goes in a header (`RENDER_TOKEN_HEADER`), not in the URL, so it is not
+ * written to access logs or sent on as a referrer. Every request to any other
+ * origin is aborted, so the token cannot be sent off the server and the
+ * page's analytics never fire for a render.
+ *
+ * **Bounded in time and in number.** At most {@link MAX_CONCURRENT_RENDERS}
+ * browsers run at once, and at most {@link MAX_QUEUED_RENDERS} renders wait;
+ * beyond that a render is refused as `busy`. Each render, from launch to the
+ * last byte, has one deadline, {@link RENDER_TIMEOUT_MS}, after which its
+ * browser is closed. The token is minted when the render gets its slot, not
+ * when it starts waiting, so time in the queue cannot expire it.
  *
  * **The sandbox is off** (`--no-sandbox`). Chromium's sandbox needs user
  * namespaces or root, and the Docker image runs as an unprivileged user
@@ -36,11 +44,20 @@ import { RENDER_TOKEN_HEADER } from '@/lib/app/reports/pdf/render-token';
 /** The attribute the print page sets once the report itself has rendered. */
 export const PDF_READY_ATTRIBUTE = 'data-pdf-ready';
 
-/** How long a render may take, end to end, before it is given up. */
+/**
+ * The attribute the print page sets when the stored result cannot be read.
+ * Rendering again will not change that, so it is its own refusal.
+ */
+export const PDF_UNREADABLE_ATTRIBUTE = 'data-pdf-unreadable';
+
+/** How long a render may take, launch to last byte, before its browser is closed. */
 export const RENDER_TIMEOUT_MS = 30_000;
 
 /** Renders one process runs at once. Each is a whole browser, so few. */
 export const MAX_CONCURRENT_RENDERS = 2;
+
+/** Renders that may wait for a slot. More are refused as `busy`. */
+export const MAX_QUEUED_RENDERS = 8;
 
 /**
  * Where Chromium is when `PDF_CHROMIUM_PATH` is unset: the Docker image's
@@ -54,7 +71,7 @@ const DEFAULT_CHROMIUM: Partial<Record<NodeJS.Platform, string>> = {
 
 export class PdfRenderError extends Error {
   constructor(
-    readonly reason: 'no-browser' | 'not-rendered' | 'failed',
+    readonly reason: 'no-browser' | 'not-rendered' | 'unreadable' | 'busy' | 'timeout' | 'failed',
     message: string,
     options?: { cause?: unknown }
   ) {
@@ -75,28 +92,60 @@ export function chromiumPath(platform: NodeJS.Platform = process.platform): stri
   return path;
 }
 
+/**
+ * Where the browser reaches this app: loopback on the server's own port when
+ * it is known (`PORT`, set by the Docker image and by `npm run dev`), else
+ * {@link getBaseUrl}. Loopback keeps the render's request, and its token, on
+ * the machine, and is not subject to a CDN's redirect to a canonical host.
+ */
+export function renderOrigin(): string {
+  const port = process.env.PORT;
+  return port && /^\d{1,5}$/.test(port) ? `http://127.0.0.1:${port}` : getBaseUrl();
+}
+
 /** The print page's address for an assessment. */
 export function printPageUrl(assessmentId: string): string {
-  return `${getBaseUrl()}/print/assessments/${encodeURIComponent(assessmentId)}`;
+  return `${renderOrigin()}/print/assessments/${encodeURIComponent(assessmentId)}`;
 }
 
 // --- At most MAX_CONCURRENT_RENDERS at once --------------------------------
 
-let running = 0;
-const waiting: (() => void)[] = [];
-
-async function withRenderSlot<T>(fn: () => Promise<T>): Promise<T> {
-  if (running >= MAX_CONCURRENT_RENDERS) {
-    await new Promise<void>((resolve) => waiting.push(resolve));
-  }
-  running += 1;
-  try {
-    return await fn();
-  } finally {
-    running -= 1;
-    waiting.shift()?.();
-  }
+/**
+ * A counting semaphore with a bounded queue: `run(fn)` runs `fn` holding one
+ * of `max` slots, waits in line when they are all taken, and refuses as
+ * `busy` when `queueMax` are already waiting.
+ *
+ * A slot that comes free goes straight to the longest waiter (the count of
+ * slots in use stays as it is), so a caller arriving at that moment cannot
+ * take it as well and push past `max`.
+ */
+export function createRenderSlots(
+  max: number,
+  queueMax: number
+): <T>(fn: () => Promise<T>) => Promise<T> {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async function run<T>(fn: () => Promise<T>): Promise<T> {
+    if (running >= max) {
+      if (waiting.length >= queueMax) {
+        throw new PdfRenderError('busy', 'Too many PDFs are being made. Try again shortly.');
+      }
+      // Woken holding the slot its releaser handed over.
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    } else {
+      running += 1;
+    }
+    try {
+      return await fn();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running -= 1;
+    }
+  };
 }
+
+const withRenderSlot = createRenderSlots(MAX_CONCURRENT_RENDERS, MAX_QUEUED_RENDERS);
 
 /** The footer on every page: the report's name and its page number. */
 function footerTemplate(): string {
@@ -109,16 +158,28 @@ function footerTemplate(): string {
 }
 
 /**
- * Render assessment `assessmentId`'s print page to PDF bytes, authorised by
- * `token`. Throws {@link PdfRenderError}.
+ * Render assessment `assessmentId`'s print page to PDF bytes. `mintToken` is
+ * called once the render has its slot, so the token's short life starts when
+ * the browser is about to use it. Throws {@link PdfRenderError}.
  */
-export async function renderReportPdf(assessmentId: string, token: string): Promise<Buffer> {
+export async function renderReportPdf(
+  assessmentId: string,
+  mintToken: () => string
+): Promise<Buffer> {
   const url = printPageUrl(assessmentId);
   const origin = new URL(url).origin;
 
   return withRenderSlot(async () => {
     const started = Date.now();
+    const token = mintToken();
     let browser: Browser | undefined;
+    let timedOut = false;
+    // One deadline for the whole render: closing the browser makes whatever
+    // step is waiting on it fail at once.
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      void browser?.close().catch(() => undefined);
+    }, RENDER_TIMEOUT_MS);
     try {
       browser = await puppeteer.launch({
         executablePath: chromiumPath(),
@@ -131,6 +192,7 @@ export async function renderReportPdf(assessmentId: string, token: string): Prom
         ],
         timeout: RENDER_TIMEOUT_MS,
       });
+      if (timedOut) throw new PdfRenderError('timeout', 'The PDF took too long to make');
       const page = await browser.newPage();
       page.setDefaultTimeout(RENDER_TIMEOUT_MS);
 
@@ -158,8 +220,10 @@ export async function renderReportPdf(assessmentId: string, token: string): Prom
           `The print page answered ${response?.status() ?? 'nothing'}`
         );
       }
-      const ready = await page.$(`[${PDF_READY_ATTRIBUTE}]`);
-      if (!ready) {
+      if (await page.$(`[${PDF_UNREADABLE_ATTRIBUTE}]`)) {
+        throw new PdfRenderError('unreadable', "The review's stored result cannot be read");
+      }
+      if (!(await page.$(`[${PDF_READY_ATTRIBUTE}]`))) {
         throw new PdfRenderError('not-rendered', 'The print page did not render a report');
       }
       // Fonts load after `networkidle0` can settle on some pages.
@@ -180,11 +244,17 @@ export async function renderReportPdf(assessmentId: string, token: string): Prom
       });
       return Buffer.from(pdf);
     } catch (err) {
+      if (timedOut) {
+        throw new PdfRenderError('timeout', 'The PDF took too long to make', { cause: err });
+      }
       if (err instanceof PdfRenderError) throw err;
       throw new PdfRenderError('failed', 'The PDF could not be rendered', { cause: err });
     } finally {
+      clearTimeout(deadline);
       await browser?.close().catch((err: unknown) => {
-        logger.warn('Report PDF: the browser did not close cleanly', { assessmentId, err });
+        if (!timedOut) {
+          logger.warn('Report PDF: the browser did not close cleanly', { assessmentId, err });
+        }
       });
     }
   });

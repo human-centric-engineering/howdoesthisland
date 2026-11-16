@@ -25,6 +25,9 @@ import { orgKeyPrefix } from '@/lib/storage/org-keys';
 import { getStorageCapabilities, type StorageProvider } from '@/lib/storage/providers/types';
 import { logger } from '@/lib/logging';
 
+/** What an assessment id is (a cuid), and so what may name a folder here. */
+const ASSESSMENT_ID = /^[A-Za-z0-9_-]+$/;
+
 /** The folder holding every PDF an assessment has. */
 export function reportPdfFolder(orgId: string, assessmentId: string): string {
   return `${orgKeyPrefix(orgId)}reports/${assessmentId}/`;
@@ -101,13 +104,18 @@ export async function sweepReportPdfs(orgId: string, assessmentIds: string[]): P
 }
 
 /**
- * Delete every cached PDF of an assessment. Nothing to do without storage.
+ * Delete every cached PDF of an assessment. Nothing to do without a store
+ * that caches PDFs ({@link reportPdfStore}), or for an id no assessment has.
  * Throws {@link ReportPdfCleanupError} when the provider reports a failure,
  * so the caller can keep the row and try again.
  */
 export async function deleteReportPdfs(orgId: string, assessmentId: string): Promise<void> {
-  const storage = getStorageClient({ orgId });
-  if (!storage) return;
+  // Nothing can have been cached: no store that keeps PDFs, or an id that is
+  // not one an assessment could have (a key is only ever built from a real
+  // one). Either way, no storage call, so deleting a review does not depend on
+  // storage that was never used for it.
+  const storage = reportPdfStore(orgId);
+  if (!storage || !ASSESSMENT_ID.test(assessmentId)) return;
   const folder = reportPdfFolder(orgId, assessmentId);
   const result = await storage.deletePrefix(folder);
   if (!result.success) throw new ReportPdfCleanupError(folder);

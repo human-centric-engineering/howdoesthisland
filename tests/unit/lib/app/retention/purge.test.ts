@@ -96,13 +96,14 @@ const fakePrisma = vi.hoisted(() => {
   const expired = (where: Record<string, unknown>) => {
     allowed(where, ['orgId', 'createdAt', 'status', 'OR', 'id']);
     const { orgId, createdAt, id, ...rest } = where;
-    const ids = id === undefined ? null : (id as { in: string[] }).in;
+    const idCond = (id ?? {}) as { in?: string[]; notIn?: string[] };
     return db.assessments.filter(
       (a) =>
         a.orgId === orgId &&
         before(a.createdAt, createdAt) &&
         settled(a, rest) &&
-        (ids === null || ids.includes(a.id))
+        (idCond.in === undefined || idCond.in.includes(a.id)) &&
+        (idCond.notIn === undefined || !idCond.notIn.includes(a.id))
     );
   };
   /** Delete assessments, cascading to their judge runs and replies. */
@@ -119,8 +120,24 @@ const fakePrisma = vi.hoisted(() => {
       ),
     },
     assessment: {
-      findMany: vi.fn(({ where }: { where: Record<string, unknown> }) =>
-        Promise.resolve(expired(where).map((a) => ({ id: a.id })))
+      findMany: vi.fn(
+        ({
+          where,
+          take,
+          orderBy,
+        }: {
+          where: Record<string, unknown>;
+          take?: number;
+          orderBy?: { createdAt: 'asc' };
+        }) => {
+          if (JSON.stringify(orderBy) !== JSON.stringify({ createdAt: 'asc' })) {
+            throw new Error('fake models only `orderBy: { createdAt: asc }`');
+          }
+          const rows = expired(where)
+            .sort((x, y) => x.createdAt.getTime() - y.createdAt.getTime())
+            .slice(0, take);
+          return Promise.resolve(rows.map((a) => ({ id: a.id })));
+        }
       ),
       deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
         const hit = expired(where);
@@ -183,6 +200,8 @@ const pdfs = vi.hoisted(() => ({
   held: new Set<string>(),
   refuse: new Set<string>(),
   deletes: [] as string[],
+  /** Whether storage can cache PDFs at all (`reportPdfStore`). */
+  caching: true,
 }));
 vi.mock('@/lib/app/reports/pdf/cache', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/app/reports/pdf/cache')>();
@@ -196,6 +215,7 @@ vi.mock('@/lib/app/reports/pdf/cache', async (importOriginal) => {
   });
   return {
     ...real,
+    reportPdfStore: vi.fn(() => (pdfs.caching ? { name: 'fake-store' } : null)),
     deleteReportPdfs,
     sweepReportPdfs: vi.fn(async (orgId: string, ids: string[]) => {
       for (const id of ids) await deleteReportPdfs(orgId, id).catch(() => undefined);
@@ -209,7 +229,7 @@ vi.mock('@/lib/tenancy/context', () => ({
   },
 }));
 
-import { purgeExpiredContent } from '@/lib/app/retention/purge';
+import { purgeExpiredContent, PURGE_BATCH } from '@/lib/app/retention/purge';
 
 const WS = 'cmorg000000000000000team1';
 const OTHER = 'cmorg0000000000000000org2';
@@ -261,6 +281,7 @@ beforeEach(() => {
   pdfs.held.clear();
   pdfs.refuse.clear();
   pdfs.deletes = [];
+  pdfs.caching = true;
 });
 
 describe('with a content window', () => {
@@ -379,6 +400,44 @@ describe('with a content window', () => {
     await purgeExpiredContent(NOW);
     expect(db.assessments).toEqual([]);
     expect(pdfs.held.size).toBe(0);
+  });
+
+  it('works through more expired assessments than one batch holds', async () => {
+    const many = Array.from({ length: PURGE_BATCH + 3 }, () => piece(WS, 120));
+    const recent = piece(WS, 10);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result.assessments).toBe(many.length);
+    expect(ids(db.assessments)).toEqual([recent.assessment.id]);
+    // A full batch, then the three left over.
+    expect(fakePrisma.assessment.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('ends the pass when storage refuses a whole batch, keeping every row', async () => {
+    const a = piece(WS, 120);
+    const b = piece(WS, 130);
+    pdfs.refuse.add(a.assessment.id);
+    pdfs.refuse.add(b.assessment.id);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result.assessments).toBe(0);
+    expect(ids(db.assessments)).toEqual(ids([a.assessment, b.assessment]));
+    expect(fakePrisma.assessment.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes in one statement, touching no storage, where nothing can be cached', async () => {
+    pdfs.caching = false;
+    piece(WS, 120);
+    const recent = piece(WS, 10);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result.assessments).toBe(1);
+    expect(ids(db.assessments)).toEqual([recent.assessment.id]);
+    expect(fakePrisma.assessment.findMany).not.toHaveBeenCalled();
+    expect(pdfs.deletes).toEqual([]);
   });
 
   it('touches no other workspace', async () => {

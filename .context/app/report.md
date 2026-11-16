@@ -143,16 +143,34 @@ no report (still running, failed or cancelled).
    storage that keeps private files and reads them back, every request renders.
 
 **A PDF must not outlive its review.** Deleting a review and the retention
-purge delete its folder before the row. If storage refuses, the row stays and
+purge delete its folder before the row. Where storage cannot cache PDFs at all
+(none configured, or Vercel Blob), neither touches storage, and the purge stays
+one `deleteMany`. Otherwise the purge works in batches of 500, and ends a pass
+whose whole batch storage refused. If storage refuses, the row stays and
 the next attempt finishes it. Both sweep the folder again after the row,
 because a render that wrote between the two deletes would otherwise leave a
 file. A render also checks its review still exists after writing, and removes
 its file if not. Org erasure deletes the whole `orgs/{orgId}/` tree.
 
-**Cost.** Each render is a whole browser: at most two per process at once, and
-10 per caller per minute (`limiter.ts`). A cache hit counts towards neither. The
-Docker image installs Alpine's `chromium` (ledger row 15) and sets
-`PDF_CHROMIUM_PATH`. In development the Mac's Google Chrome is used. The
+**Cost, time and failure.** Each render is a whole browser. At most two run
+per process, eight more may wait, and beyond that the route answers 503
+`PDF_RENDER_BUSY`. A freed slot goes straight to the longest waiter, so the
+cap holds even when a request arrives at that moment (`createRenderSlots`). Each
+render has one 30-second deadline from launch to last byte, after which its
+browser is closed (500 `PDF_RENDER_FAILED`). The render token is minted when the
+render gets its slot, so time in the queue cannot expire it. A caller may start
+10 renders a minute (`limiter.ts`); a cache hit counts towards nothing. A
+review whose stored result cannot be read is 422 `REPORT_UNREADABLE`, since
+rendering again will not change it, and one deleted while it renders is 404.
+
+**Where the browser goes.** It opens the print page on loopback, the server's
+own `PORT` on 127.0.0.1 (`renderOrigin`), falling back to `getBaseUrl()` when no
+port is known. That keeps the token on the machine rather than sending it out
+through a CDN, and a CDN's redirect to a canonical host cannot break renders.
+
+**Where it runs.** The Docker image installs Alpine's `chromium` (ledger row 15) and sets `PDF_CHROMIUM_PATH`: the image grows from 126.5 MB to 460.5 MB
+(Chromium is 318 MB), and a report renders in about 0.9 s from a cold browser
+(measured in CI for t-31). In development the Mac's Google Chrome is used. The
 browser runs without its sandbox, which needs privileges the image does not
 have. That is acceptable only because it loads nothing but this app's own
 print page.

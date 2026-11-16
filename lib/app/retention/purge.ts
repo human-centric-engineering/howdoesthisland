@@ -28,7 +28,9 @@
  * are deleted before its row. One whose files storage would not delete is
  * kept for the next pass, so a PDF never outlives its window with nothing
  * left to find it by. They are swept once more after the rows go, for a
- * render that raced the purge (`sweepReportPdfs`).
+ * render that raced the purge (`sweepReportPdfs`). This runs in batches of
+ * {@link PURGE_BATCH}, and only where storage can cache PDFs at all;
+ * elsewhere expired assessments go in one `deleteMany`, as before.
  *
  * An unreadable stored window purges nothing on it (`./settings.ts`).
  *
@@ -39,7 +41,8 @@ import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { logger } from '@/lib/logging';
 import { readWorkspaceSettings } from '@/lib/app/retention/settings';
-import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
+import type { Prisma } from '@prisma/client';
+import { deleteReportPdfs, reportPdfStore, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -86,16 +89,10 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
   if (windows.retention) {
     const cutoff = before(windows.retention.days);
     const expired = { orgId, createdAt: { lt: cutoff }, ...settled(now) };
-    const ids = await withoutReportPdfs(
-      orgId,
-      await prisma.assessment.findMany({ where: expired, select: { id: true } })
-    );
-    if (ids.length > 0) {
-      ({ count: assessments } = await prisma.assessment.deleteMany({
-        where: { ...expired, id: { in: ids } },
-      }));
-      await sweepReportPdfs(orgId, ids);
-    }
+    assessments = reportPdfStore(orgId)
+      ? await purgeWithReportPdfs(orgId, expired)
+      : // No store that caches PDFs: there are no files to remove first.
+        (await prisma.assessment.deleteMany({ where: expired })).count;
     ({ count: contents } = await prisma.content.deleteMany({
       where: { orgId, createdAt: { lt: cutoff }, assessments: { none: {} } },
     }));
@@ -115,18 +112,56 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
   return { assessments, contents, replies };
 }
 
+/** Expired assessments taken per round when their PDFs go first. */
+export const PURGE_BATCH = 500;
+
+type ExpiredWhere = Prisma.AssessmentWhereInput;
+
+/**
+ * Delete expired assessments a batch at a time, each one's cached PDFs
+ * before its row. An assessment whose files storage refused is kept for the
+ * next pass and left out of later batches. A batch in which nothing could be
+ * cleared ends the pass: storage is down, and trying every remaining row
+ * would only fail the same way.
+ */
+async function purgeWithReportPdfs(orgId: string, expired: ExpiredWhere): Promise<number> {
+  const kept: string[] = [];
+  let deleted = 0;
+  for (;;) {
+    const batch = await prisma.assessment.findMany({
+      where: kept.length > 0 ? { ...expired, id: { notIn: kept } } : expired,
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: PURGE_BATCH,
+    });
+    if (batch.length === 0) break;
+    const cleared = await withoutReportPdfs(orgId, batch, kept);
+    if (cleared.length === 0) break;
+    deleted += (await prisma.assessment.deleteMany({ where: { ...expired, id: { in: cleared } } }))
+      .count;
+    await sweepReportPdfs(orgId, cleared);
+    if (batch.length < PURGE_BATCH) break;
+  }
+  return deleted;
+}
+
 /**
  * Delete each assessment's cached report PDFs, and return the ids whose files
- * are gone. One storage refused is left out and logged, so its row stays for
- * the next pass.
+ * are gone. One storage refused goes into `kept` and is logged, so its row
+ * stays for the next pass.
  */
-async function withoutReportPdfs(orgId: string, rows: { id: string }[]): Promise<string[]> {
+async function withoutReportPdfs(
+  orgId: string,
+  rows: { id: string }[],
+  kept: string[]
+): Promise<string[]> {
   const cleared: string[] = [];
   for (const { id } of rows) {
     try {
       await deleteReportPdfs(orgId, id);
       cleared.push(id);
     } catch (err) {
+      kept.push(id);
       logger.warn('Retention purge: kept an assessment whose report PDFs could not be deleted', {
         assessmentId: id,
         err,

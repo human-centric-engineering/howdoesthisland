@@ -201,9 +201,9 @@ describe('GET /api/v1/assessments/{id}/report.pdf', () => {
   it('hands the renderer a token for this assessment in this workspace', async () => {
     const a = done();
     await get(String(a.id));
-    const [id, token] = mocks.render.mock.calls[0] as [string, string];
+    const [id, mint] = mocks.render.mock.calls[0] as [string, () => string];
     expect(id).toBe(a.id);
-    expect(verifyRenderToken(token, String(a.id)).orgId).toBe(WS_A);
+    expect(verifyRenderToken(mint(), String(a.id)).orgId).toBe(WS_A);
   });
 
   it('renders again for a new run of the same id, under its own key', async () => {
@@ -302,18 +302,44 @@ describe('GET /api/v1/assessments/{id}/report.pdf', () => {
     expect((await get(String(cached.id))).status).toBe(200);
   });
 
-  it('removes the file it wrote if the review was deleted while it rendered', async () => {
+  it('404 for a review deleted while it rendered, removing the file it wrote', async () => {
     const a = done();
     mocks.render.mockImplementationOnce(async (id: string) => {
       fake.assessments.splice(fake.assessments.indexOf(a), 1);
       return Buffer.from(`%PDF ${id}`);
     });
-    expect((await get(String(a.id))).status).toBe(200);
+    expect(await errorOf(await get(String(a.id)))).toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    });
     expect(store.objects.size).toBe(0);
+  });
+
+  it('422 REPORT_UNREADABLE for a review whose result cannot be read, caching nothing', async () => {
+    const a = done();
+    mocks.render.mockRejectedValueOnce(new PdfRenderError('unreadable', 'cannot read'));
+    expect(await errorOf(await get(String(a.id)))).toMatchObject({
+      status: 422,
+      code: 'REPORT_UNREADABLE',
+    });
+    expect(store.objects.size).toBe(0);
+  });
+
+  it('503 PDF_RENDER_BUSY, with Retry-After, when the render queue is full', async () => {
+    const a = done();
+    mocks.render.mockRejectedValueOnce(new PdfRenderError('busy', 'full'));
+    const res = await get(String(a.id));
+    expect(res.headers.get('retry-after')).toBe('10');
+    expect(await errorOf(res)).toMatchObject({ status: 503, code: 'PDF_RENDER_BUSY' });
   });
 });
 
 describe('DELETE /api/v1/assessments/{id} and the cached PDF', () => {
+  it('a malformed id is still 404, touching no storage', async () => {
+    const res = await remove(new NextRequest(`${BASE}/..`, { method: 'DELETE' }), params('..'));
+    expect(await errorOf(res)).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
+
   it("deletes the review's cached PDFs with it, and no one else's", async () => {
     const a = done();
     const b = done();

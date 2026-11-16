@@ -6,8 +6,9 @@
  * workspace's id is not found, as for every assessments route.
  *
  * Two requests for the same uncached PDF in one process share one render.
- * A render checks its assessment is still there after writing the file, and
- * deletes the file if not. With the deleting side's sweep after the row
+ * A render checks its assessment is still there after writing the file. If
+ * not, it deletes the file and answers not found rather than serve the
+ * deleted review. With the deleting side's sweep after the row
  * (`sweepReportPdfs`), a delete that races a render cannot leave a PDF behind.
  */
 import { APIError, NotFoundError } from '@/lib/api/errors';
@@ -87,10 +88,9 @@ export async function getReportPdf(
   const limit = options.limit?.();
   if (limit && !limit.success) return { limited: limit };
   const render = (async () => {
-    const pdf = await renderReportPdf(id, mintRenderToken(id, orgId));
-    if (store && (await writeCachedPdf(store, key, pdf))) {
-      await dropIfDeleted(orgId, id);
-    }
+    const pdf = await renderReportPdf(id, () => mintRenderToken(id, orgId));
+    const written = store ? await writeCachedPdf(store, key, pdf) : false;
+    await refuseIfDeleted(orgId, id, written);
     return pdf;
   })();
   inFlight.set(key, render);
@@ -101,15 +101,23 @@ export async function getReportPdf(
   }
 }
 
-/** A file written for an assessment deleted mid-render goes too. */
-async function dropIfDeleted(orgId: string, id: string): Promise<void> {
+/**
+ * A review deleted while it rendered has no report to serve: its PDF is not
+ * returned, and the file just written for it goes too. Checked after the
+ * write, so with the deleting side's sweep (`sweepReportPdfs`) no file
+ * outlives the row.
+ */
+async function refuseIfDeleted(orgId: string, id: string, written: boolean): Promise<void> {
   const stillThere = await prisma.assessment.count({ where: { id, orgId } });
   if (stillThere > 0) return;
-  try {
-    await deleteReportPdfs(orgId, id);
-  } catch (err) {
-    logger.error('Report PDF: a file for a deleted review could not be removed', err, {
-      assessmentId: id,
-    });
+  if (written) {
+    try {
+      await deleteReportPdfs(orgId, id);
+    } catch (err) {
+      logger.error('Report PDF: a file for a deleted review could not be removed', err, {
+        assessmentId: id,
+      });
+    }
   }
+  throw new NotFoundError('Assessment not found');
 }

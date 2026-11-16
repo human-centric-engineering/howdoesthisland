@@ -102,6 +102,21 @@ describe('deleting', () => {
     expect(client.provider.deletePrefix).toHaveBeenCalledWith('orgs/org-a/reports/asm_1/');
   });
 
+  it('calls no storage where no PDF can have been cached', async () => {
+    // A provider that cannot keep a private file (Vercel Blob): nothing was written.
+    client.provider = provider({
+      capabilities: { privateObjects: false, download: false, signedUrls: false },
+      deletePrefix: vi.fn(async () => Promise.reject(new Error('should not be called'))),
+    });
+    await expect(deleteReportPdfs('org-a', 'asm_1')).resolves.toBeUndefined();
+  });
+
+  it('calls no storage for an id no assessment could have', async () => {
+    client.provider = provider();
+    for (const id of ['..', '.', 'a/b', '']) await deleteReportPdfs('org-a', id);
+    expect(client.provider.deletePrefix).not.toHaveBeenCalled();
+  });
+
   it('throws when storage reports the delete failed, so the caller keeps the row', async () => {
     client.provider = provider({
       deletePrefix: vi.fn(async (key: string) => ({ success: false, key })),

@@ -20,7 +20,11 @@
  * - 409 `REPORT_NOT_READY` — still queued or running, or it failed or was
  *   cancelled, so there is no report. `details.status` says which.
  * - 429 `RATE_LIMIT_EXCEEDED` — too many renders.
- * - 500 `PDF_RENDER_FAILED` — the renderer failed.
+ * - 404 also when the review is deleted while its PDF renders.
+ * - 422 `REPORT_UNREADABLE` — the stored result cannot be read (the web report
+ *   shows "can't be shown"), so no PDF can be made of it.
+ * - 500 `PDF_RENDER_FAILED` — the renderer failed or timed out.
+ * - 503 `PDF_RENDER_BUSY` — every render slot and the queue are full.
  */
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth/guards';
@@ -47,11 +51,7 @@ export const GET = withAuth<{ id: string }>(async (_request: NextRequest, sessio
     });
   } catch (err) {
     if (!(err instanceof PdfRenderError)) throw err;
-    logger.error('Report PDF could not be rendered', err, { assessmentId: id, reason: err.reason });
-    return errorResponse('The PDF could not be made. Try again shortly.', {
-      code: 'PDF_RENDER_FAILED',
-      status: 500,
-    });
+    return renderFailure(err, id);
   }
   if ('limited' in result) return createRateLimitResponse(result.limited);
 
@@ -67,3 +67,28 @@ export const GET = withAuth<{ id: string }>(async (_request: NextRequest, sessio
     },
   });
 }, assessRoute<{ id: string }>(REPORTS_SCOPE));
+
+/** How each render failure reaches the caller. */
+function renderFailure(err: PdfRenderError, assessmentId: string): Response {
+  if (err.reason === 'unreadable') {
+    // The same stored result the web report shows as "can't be shown":
+    // rendering again will not change it.
+    logger.warn('Report PDF: the review cannot be read', { assessmentId });
+    return errorResponse("This review's report can't be shown, so there is no PDF of it.", {
+      code: 'REPORT_UNREADABLE',
+      status: 422,
+    });
+  }
+  if (err.reason === 'busy') {
+    return errorResponse('Too many PDFs are being made. Try again shortly.', {
+      code: 'PDF_RENDER_BUSY',
+      status: 503,
+      headers: { 'Retry-After': '10' },
+    });
+  }
+  logger.error('Report PDF could not be rendered', err, { assessmentId, reason: err.reason });
+  return errorResponse('The PDF could not be made. Try again shortly.', {
+    code: 'PDF_RENDER_FAILED',
+    status: 500,
+  });
+}

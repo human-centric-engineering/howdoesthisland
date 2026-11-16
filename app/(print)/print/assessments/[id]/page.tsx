@@ -5,7 +5,7 @@ import { NotFoundError } from '@/lib/api/errors';
 import { loadReport } from '@/lib/app/reports/load';
 import { printReportSource } from '@/lib/app/reports/pdf/print-source';
 import { runAsReportOrg } from '@/lib/app/reports/pdf/report-org';
-import { PDF_READY_ATTRIBUTE } from '@/lib/app/reports/pdf/render';
+import { PDF_READY_ATTRIBUTE, PDF_UNREADABLE_ATTRIBUTE } from '@/lib/app/reports/pdf/render';
 import { RENDER_TOKEN_HEADER } from '@/lib/app/reports/pdf/render-token';
 import { Report } from '@/components/app/report/report';
 import { ReportUnreadable } from '@/components/app/report/report-states';
@@ -44,7 +44,15 @@ export default async function PrintReportPage({ params }: { params: Promise<{ id
   if (!entered.ok) notFound();
 
   const load = entered.value;
-  if (load.kind === 'unreadable') return <ReportUnreadable />;
+  // Marked, so the renderer refuses it as unreadable rather than as a failure
+  // worth trying again.
+  if (load.kind === 'unreadable') {
+    return (
+      <div {...{ [PDF_UNREADABLE_ATTRIBUTE]: '' }}>
+        <ReportUnreadable />
+      </div>
+    );
+  }
   // The route renders only a final review with a result, so anything else is
   // a race with a delete or a cancel: there is no report to print.
   if (load.kind !== 'ready') notFound();

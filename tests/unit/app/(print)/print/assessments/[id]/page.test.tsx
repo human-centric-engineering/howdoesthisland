@@ -109,6 +109,8 @@ describe('/print/assessments/[id]', () => {
     h.loadReport.mockResolvedValue({ kind: 'unreadable' });
     const { container } = render(await PrintReportPage({ params }));
     expect(container.querySelector('[data-pdf-ready]')).toBeNull();
+    // Marked, so the renderer answers it as unreadable rather than retryable.
+    expect(container.querySelector('[data-pdf-unreadable]')).not.toBeNull();
   });
 
   it('lets any other failure through', async () => {
