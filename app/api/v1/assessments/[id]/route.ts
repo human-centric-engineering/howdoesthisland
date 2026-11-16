@@ -2,7 +2,8 @@
  * One of the workspace's assessments (t-24).
  *
  * GET    /api/v1/assessments/{id} — the assessment, its judges and, once final, its result.
- * DELETE /api/v1/assessments/{id} — delete it, its judge runs, and its text.
+ * DELETE /api/v1/assessments/{id} — delete it, its judge runs, its text, and
+ *   its cached report PDFs (t-31).
  *
  * Authentication: a browser session, or an API key with the `assess` scope.
  * Delete works in any state: a run still going stores nothing more. Its
@@ -13,6 +14,8 @@
  * - 403 `FORBIDDEN` — an API key without the `assess` scope.
  * - 404 `NOT_FOUND` — no such assessment in this workspace. Another
  *   workspace's id reads the same, so an id is not confirmed to an outsider.
+ * - 500 — storage would not delete the cached PDFs; the assessment is kept,
+ *   so the delete can be retried.
  */
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth/guards';

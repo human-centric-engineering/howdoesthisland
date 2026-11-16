@@ -221,6 +221,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# HowDoesThisLand (t-31): headless Chromium renders report PDFs
+# (lib/app/reports/pdf/render.ts). Alpine's own build, since puppeteer's bundled
+# Chrome is glibc and will not run on musl. ttf-freefont covers the PDF
+# footer's fallback font; the report's own fonts are self-hosted by next/font.
+# Ledger: .context/app/platform-divergences.md.
+RUN apk add --no-cache chromium ttf-freefont
+ENV PDF_CHROMIUM_PATH=/usr/bin/chromium-browser
+
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

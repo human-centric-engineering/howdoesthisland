@@ -24,7 +24,8 @@ const { getServerSession, clearInvalidSession, loadReport } = vi.hoisted(() => (
 
 vi.mock('@/lib/auth/utils', () => ({ getServerSession }));
 vi.mock('@/lib/auth/clear-session', () => ({ clearInvalidSession }));
-vi.mock('@/lib/app/reports/load', () => ({ loadReport }));
+const apiReportSource = vi.hoisted(() => ({ assessment: vi.fn(), model: vi.fn() }));
+vi.mock('@/lib/app/reports/load', () => ({ loadReport, apiReportSource }));
 
 import ReportPage, { metadata } from '@/app/(protected)/assessments/[id]/page';
 
@@ -51,9 +52,34 @@ describe('/assessments/[id]', () => {
     });
     loadReport.mockResolvedValue({ kind: 'ready', view });
     const { container } = render(await ReportPage({ params }));
-    expect(loadReport).toHaveBeenCalledWith('asm_1');
+    // Read through the API, as the signed-in reader.
+    expect(loadReport).toHaveBeenCalledWith('asm_1', apiReportSource);
     expect(h1()).toBe('Q3 board briefing');
     expect(container.querySelector('article')?.getAttribute('data-variant')).toBe('web');
+  });
+
+  it('offers the PDF of a ready report, as a download kept off the printed page (t-31)', async () => {
+    const a = apiAssessment();
+    const view = buildReportView({
+      assessment: a,
+      result: reportResultSchema.parse(a.result),
+      model: reportModelSchema.parse(modelDocument(true)),
+    });
+    loadReport.mockResolvedValue({ kind: 'ready', view });
+    render(await ReportPage({ params }));
+    const link = screen.getByRole('link', { name: 'Download PDF' });
+    expect(link.getAttribute('href')).toBe('/api/v1/assessments/asm_1/report.pdf');
+    expect(link.hasAttribute('download')).toBe(true);
+    expect(link.closest('[data-print="hide"]')).not.toBeNull();
+  });
+
+  it('offers no PDF while there is no report', async () => {
+    loadReport.mockResolvedValue({
+      kind: 'pending',
+      assessment: apiAssessment({ status: 'running', result: null }),
+    });
+    render(await ReportPage({ params }));
+    expect(screen.queryByRole('link', { name: 'Download PDF' })).toBeNull();
   });
 
   it('renders each state the loader can answer', async () => {

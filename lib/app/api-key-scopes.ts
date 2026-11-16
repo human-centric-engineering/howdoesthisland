@@ -45,9 +45,10 @@
 /**
  * Extra scope names this app can mint and enforce. Empty = core scopes only.
  *
- * HowDoesThisLand (t-24): `assess`, enforced by every `assessments` route
- * (`lib/app/assessments/api/route-auth.ts`). `projects` and `reports` arrive
- * with the routes that enforce them (f-projects, f-sharing), so no key can be
- * minted with a scope nothing checks.
+ * HowDoesThisLand: `assess` (t-24), enforced by every `assessments` route,
+ * and `reports` (t-31), enforced by `GET /api/v1/assessments/{id}/report.pdf`
+ * (both in `lib/app/assessments/api/route-auth.ts`). `projects` arrives with
+ * the routes that enforce it (f-projects), so no key can be minted with a
+ * scope nothing checks.
  */
-export const APP_API_KEY_SCOPES: readonly string[] = ['assess'];
+export const APP_API_KEY_SCOPES: readonly string[] = ['assess', 'reports'];

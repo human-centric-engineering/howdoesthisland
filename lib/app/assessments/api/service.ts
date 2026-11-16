@@ -41,6 +41,7 @@ import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/priva
 import { assessableText } from '@/lib/app/assessments/text';
 import { POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
+import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
 import {
   isFinal,
@@ -371,9 +372,21 @@ export async function cancel(id: string): Promise<AssessmentDetail> {
  * assessment shares it. Allowed in any state: a run still going writes only
  * under its lease, to a row that is gone, so it stores nothing more. Its
  * cost rows stay, as the usage record.
+ *
+ * Its cached report PDFs go first (t-31). If storage refuses, the row stays
+ * and the delete fails, so trying again finishes it: the other order could
+ * leave a PDF of content that no longer exists, with nothing left to find it
+ * by. They are swept once more after the row, for a render that raced the
+ * delete (`sweepReportPdfs`).
  */
 export async function remove(id: string): Promise<{ deleted: true }> {
   const orgId = requireOrgId();
+  // Not found before anything else, so a missing id is 404 whatever state
+  // storage is in.
+  if ((await prisma.assessment.count({ where: { id, orgId } })) === 0) {
+    throw new NotFoundError('Assessment not found');
+  }
+  await deleteReportPdfs(orgId, id);
   await prisma.$transaction(async (tx) => {
     const row = await tx.assessment.findUnique({
       where: { id, orgId },
@@ -387,5 +400,6 @@ export async function remove(id: string): Promise<{ deleted: true }> {
       where: { id: row.contentId, orgId, assessments: { none: {} } },
     });
   });
+  await sweepReportPdfs(orgId, [id]);
   return { deleted: true };
 }

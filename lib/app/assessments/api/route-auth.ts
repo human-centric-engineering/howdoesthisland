@@ -12,10 +12,19 @@ import { API_KEY_SESSION_ID_PREFIX, isApiKeySession } from '@/lib/auth/api-keys'
 /** The API-key scope these routes enforce (`lib/app/api-key-scopes.ts`). */
 export const ASSESS_SCOPE = 'assess';
 
-/** The guard options every `assessments` route passes. */
-export function assessRoute<TParams = Record<string, string>>(): WithAuthOptions<TParams> {
+/**
+ * The API-key scope the report's PDF enforces (t-31). Separate from `assess`
+ * so a key that only fetches reports, for a script that files them, cannot
+ * start runs that spend.
+ */
+export const REPORTS_SCOPE = 'reports';
+
+/** The guard options every `assessments` route passes, with the scope it enforces. */
+export function assessRoute<TParams = Record<string, string>>(
+  scope: typeof ASSESS_SCOPE | typeof REPORTS_SCOPE = ASSESS_SCOPE
+): WithAuthOptions<TParams> {
   return {
-    scope: ASSESS_SCOPE,
+    scope,
     ownership: {
       decidedBy: 'nothing',
       because:

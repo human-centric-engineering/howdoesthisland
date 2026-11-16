@@ -224,6 +224,11 @@
     --color-border: #d6d4cc;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+    /* The page canvas, margins included, takes its colour from the root's
+       color-scheme, not from the tokens: without this, printing from dark
+       mode puts the paper on a dark page. */
+    color-scheme: light;
+    background: #ffffff;
   }
 
   /* The platform header and footer are not part of a report. These reach into
