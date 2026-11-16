@@ -225,6 +225,7 @@ model Assessment {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   judgeRuns          JudgeRun[]
+  shares             ReportShare[]
 
   @@index([orgId, status])
   /// The retention purge's content-window delete (t-26).
@@ -303,4 +304,33 @@ model JudgeReply {
 
   @@index([orgId, createdAt])
   @@map("app_judge_reply")
+}
+
+// ─── Share links (t-32, f-sharing) ───────────────────────────────────────────
+
+/// A link that opens one report, read-only, for someone without an account
+/// (`/r/{token}`). Design: .context/app/report.md (Share links). The token is
+/// 32 random bytes; only its SHA-256 is stored, so the link is shown once, when
+/// it is made. Tenant-owned (`orgId`, cascade, `org_isolation`); the FK to the
+/// assessment cascades, so a delete or the retention purge takes its links.
+model ReportShare {
+  id              String     @id @default(cuid())
+  orgId           String?
+  org             Org?       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assessmentId    String
+  assessment      Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  /// SHA-256 of the token, hex. The token itself is never stored.
+  tokenHash       String     @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  /// Times the link was opened, page or API.
+  viewCount       Int        @default(0)
+  /// Who made it. FK → user, ON DELETE SET NULL (the workspace keeps the link).
+  createdByUserId String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([assessmentId, createdAt])
+  @@index([orgId])
+  @@map("app_report_share")
 }

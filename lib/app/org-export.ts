@@ -140,6 +140,20 @@ export function initAppOrgSources(): void {
         fetch: ({ orgId }) =>
           prisma.judgeReply.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
+      {
+        model: 'ReportShare',
+        section: 'reportShares',
+        disposition: 'export',
+        description:
+          'Links made to share a report, with when each expires, whether it was revoked and how often it was opened.',
+        fetch: ({ orgId }) =>
+          prisma.reportShare.findMany({
+            where: ownedBy(orgId),
+            // The token's hash verifies a live link; an export must not carry it.
+            omit: { tokenHash: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+      },
     ],
     excluded: [],
   });

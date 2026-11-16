@@ -236,6 +236,8 @@ describe('reserved fork tiers', () => {
       'enum JudgeRunStatus {',
       // FORK (HowDoesThisLand): judge replies, apart for retention (t-26).
       'model JudgeReply {',
+      // FORK (HowDoesThisLand): share links (t-32).
+      'model ReportShare {',
     ]);
   });
 

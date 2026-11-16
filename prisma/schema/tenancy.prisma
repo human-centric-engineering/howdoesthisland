@@ -102,6 +102,7 @@ model Org {
   assessments          Assessment[]
   judgeRuns            JudgeRun[]
   judgeReplies         JudgeReply[]
+  reportShares         ReportShare[]
 
   @@map("org")
 }

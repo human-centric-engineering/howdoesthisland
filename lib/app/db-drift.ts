@@ -85,4 +85,12 @@ export function registerAppDriftProbes(): void {
       probe: constraintExists(constraint, 'ON DELETE SET NULL'),
     });
   }
+  // t-32: the hand-written FK from a share link to `user`. SET NULL: the link
+  // is the workspace's and outlives its maker's erasure.
+  registerAppDriftProbe({
+    name: 'app_report_share_createdByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_report_share',
+    probe: constraintExists('app_report_share_createdByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }
