@@ -7,9 +7,10 @@
  * (the signup-org seam, `lib/app/signup-org.ts`, does the joining). Before it
  * is handed back the workspace is:
  *
- * - **granted OpenAI**, the provider the judges run on. At `multi` every org
- *   but the install org starts approved for no provider, so without this the
- *   workspace could call no model at all;
+ * - **granted its providers** (`WORKSPACE_PROVIDER_SLUGS`): Anthropic, which
+ *   the judges and editor run on (D8, t-39), and OpenAI, which the embedder
+ *   runs on. At `multi` every org but the install org starts approved for no
+ *   provider, so without this the workspace could call no model at all;
  * - **given the default monthly AI budget**, $10 (D6, owner ruling on open
  *   question 2). There is no billing yet, and every assessment costs money;
  * - **re-reconciled for its platform agents.** `createOrg` gives the org its
@@ -37,14 +38,14 @@ import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-po
 import { forgetOrgCap } from '@/lib/orchestration/llm/spend-caps';
 import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
 import type { UninvitedSignup } from '@/lib/tenancy/signup-org';
-import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
+import { JUDGE_PROVIDER_SLUG, WORKSPACE_PROVIDER_SLUGS } from '@/lib/app/workspaces/provider-slug';
 import {
   APP_SETTINGS_KEY,
   withSettingsConflictRetry as withConflictRetry,
   writeAppSettings,
 } from '@/lib/app/workspaces/app-settings';
 
-export { APP_SETTINGS_KEY, WORKSPACE_PROVIDER_SLUG };
+export { APP_SETTINGS_KEY, WORKSPACE_PROVIDER_SLUGS };
 
 /** The monthly AI budget every new workspace starts with, in USD (D6). */
 export const WORKSPACE_MONTHLY_BUDGET_USD = 10;
@@ -134,27 +135,41 @@ export async function writeSignupWorkspaceMarker(orgId: string, marked: boolean)
   });
 }
 
-/** Approve the workspace for OpenAI. Returns whether the grant was written. */
+/**
+ * Approve the workspace for its providers (`WORKSPACE_PROVIDER_SLUGS`): those
+ * of them that exist. Returns whether a grant was written.
+ *
+ * A provider with no row is left out and logged at `error`; the judges'
+ * missing means the workspace's judges and editor have no model until a
+ * platform admin creates it and grants it on `/admin`.
+ */
 async function grantProvider(orgId: string): Promise<boolean> {
-  const provider = await prisma.aiProviderConfig.findUnique({
-    where: { slug: WORKSPACE_PROVIDER_SLUG },
-    select: { id: true },
+  const providers = await prisma.aiProviderConfig.findMany({
+    where: { slug: { in: [...WORKSPACE_PROVIDER_SLUGS] } },
+    select: { id: true, slug: true },
   });
-  if (!provider) {
-    logger.error('No provider to grant the new workspace; it can call no model', {
-      orgId,
-      providerSlug: WORKSPACE_PROVIDER_SLUG,
-    });
-    return false;
+  const missing = WORKSPACE_PROVIDER_SLUGS.filter((s) => !providers.some((p) => p.slug === s));
+  if (missing.length > 0) {
+    logger.error(
+      missing.includes(JUDGE_PROVIDER_SLUG)
+        ? 'The judges’ provider does not exist; the new workspace’s judges have no model'
+        : 'A workspace provider does not exist; the new workspace is not granted it',
+      { orgId, missing }
+    );
   }
+  if (providers.length === 0) return false;
+  // In the list's order, so the stored policy reads the same in every org.
+  const approved = WORKSPACE_PROVIDER_SLUGS.flatMap((s) =>
+    providers.filter((p) => p.slug === s).map((p) => p.id)
+  );
   // No jurisdiction restriction: none is ruled for this app yet.
-  await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved: [provider.id] }));
+  await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved }));
   return true;
 }
 
 /**
- * Give a newly created workspace what every workspace starts with: the
- * OpenAI grant and the default budget, then its platform agents again now the
+ * Give a newly created workspace what every workspace starts with: its
+ * provider grant and the default budget, then its platform agents again now the
  * grant exists. Shared by the signup workspace and the team workspace (t-8),
  * so the two cannot drift.
  *

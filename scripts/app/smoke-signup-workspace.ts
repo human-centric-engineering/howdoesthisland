@@ -16,17 +16,18 @@
  *   • exactly one membership: `OWNER` of a new org named for them, none in the
  *     install org;
  *   • the session's active org is that workspace;
- *   • the workspace is approved for OpenAI and has a $10 monthly budget;
+ *   • the workspace is approved for its providers (Anthropic and OpenAI,
+ *     `WORKSPACE_PROVIDER_SLUGS`) and has a $10 monthly budget;
  *   • its platform agents exist, and the clean-up assistant (the agent whose
- *     provider the platform picks) is bound to OpenAI, so it was given out
- *     with the grant in place, not before it.
+ *     provider the platform picks) is bound to one of them, so it was given
+ *     out with the grant in place, not before it.
  *
  * Then it runs the abandoned-workspace sweep with a clock past the grace
  * period: a memberless signup workspace is erased, and the two that were
  * joined are left alone, their marker cleared.
  *
- * Needs the setup in `.context/app/dev-environment.md` (the `openai` provider
- * row, OpenAI models seeded). Nothing reaches OpenAI. Email is off for the run
+ * Needs the setup in `.context/app/dev-environment.md` (the `anthropic` and
+ * `openai` provider rows, their models seeded). No provider is called. Email is off for the run
  * (`RESEND_API_KEY=`). Self-cleaning: every user and org it made is erased in
  * `finally`, by tracked id.
  *
@@ -42,7 +43,7 @@ import { readOrgProviderPolicy, readOrgQuotas } from '@/lib/tenancy/org-settings
 import { ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 import {
   WORKSPACE_MONTHLY_BUDGET_USD,
-  WORKSPACE_PROVIDER_SLUG,
+  WORKSPACE_PROVIDER_SLUGS,
   provisionSignupWorkspace,
 } from '@/lib/app/workspaces/provision';
 import { ABANDONED_AFTER_MS, sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
@@ -85,16 +86,18 @@ async function verify(userId: string, name: string): Promise<void> {
     `session active in the workspace (${sessions.length} session(s))`
   );
 
-  const provider = await system(() =>
-    prisma.aiProviderConfig.findUnique({
-      where: { slug: WORKSPACE_PROVIDER_SLUG },
+  const providers = await system(() =>
+    prisma.aiProviderConfig.findMany({
+      where: { slug: { in: [...WORKSPACE_PROVIDER_SLUGS] } },
       select: { id: true },
     })
   );
   const policy = readOrgProviderPolicy(membership.org.settings, { orgId });
   check(
-    provider !== null && policy.approved.length === 1 && policy.approved[0] === provider.id,
-    'approved for OpenAI, and nothing else'
+    providers.length === WORKSPACE_PROVIDER_SLUGS.length &&
+      policy.approved.length === providers.length &&
+      providers.every((p) => policy.approved.includes(p.id)),
+    `approved for ${WORKSPACE_PROVIDER_SLUGS.join(' and ')}, and nothing else`
   );
   check(
     readOrgQuotas(membership.org.settings, { orgId }).monthlyBudgetUsd ===
@@ -108,8 +111,8 @@ async function verify(userId: string, name: string): Promise<void> {
   check(agents.length > 0, `platform agents given out (${agents.length})`);
   const cleanup = agents.find((a) => a.slug === 'cleanup-agent');
   check(
-    cleanup?.provider === WORKSPACE_PROVIDER_SLUG,
-    `clean-up assistant bound to OpenAI (is "${cleanup?.provider ?? 'missing'}")`
+    cleanup !== undefined && WORKSPACE_PROVIDER_SLUGS.includes(cleanup.provider),
+    `clean-up assistant bound to a granted provider (is "${cleanup?.provider ?? 'missing'}")`
   );
 }
 

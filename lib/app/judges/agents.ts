@@ -27,7 +27,6 @@ import {
   HOWDOESTHISLAND_JUDGE_SLOTS,
   type HowDoesThisLandJudgeSlot,
 } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
-import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
 import type { TenancyClient } from '@/lib/db/tenancy-extension';
 import type {
   PlatformAgentBinding,
@@ -45,7 +44,7 @@ import { requireOrgId } from '@/lib/tenancy/context';
  * The provider the judges and editor default to (D8): the one every new
  * workspace is approved for, so a new workspace's agents can be bound.
  */
-export const JUDGE_PROVIDER_SLUG = WORKSPACE_PROVIDER_SLUG;
+export const JUDGE_PROVIDER_SLUG = 'openai'; // TEMP(t-39): switched once measured
 
 /** The interim judge model (D8), until k3 measures. */
 export const INTERIM_JUDGE_MODEL = 'gpt-4.1';

@@ -57,9 +57,12 @@ const fakePrisma = vi.hoisted(() => {
   const client = {
     org,
     aiProviderConfig: {
-      findUnique: vi.fn(({ where }: { where: { slug: string } }) =>
+      // Answers in the store's order, not the query's, as a database may.
+      findMany: vi.fn(({ where }: { where: { slug: { in: string[] } } }) =>
         Promise.resolve(
-          store.providers.has(where.slug) ? { id: store.providers.get(where.slug) } : null
+          [...store.providers]
+            .filter(([slug]) => where.slug.in.includes(slug))
+            .map(([slug, id]) => ({ slug, id }))
         )
       ),
     },
@@ -111,6 +114,9 @@ import { readOrgProviderPolicy, readOrgQuotas } from '@/lib/tenancy/org-settings
 import { appSignupOrgResolver } from '@/lib/app/signup-org';
 
 const OPENAI_ID = 'cmprov0000000000000openai';
+const ANTHROPIC_ID = 'cmprov000000000anthropic';
+/** The judges' provider first, then the embedder's. */
+const BOTH = [ANTHROPIC_ID, OPENAI_ID];
 const ada = { name: 'Ada Lovelace', email: 'ada@example.com' };
 
 /** createOrg as the lifecycle does it: a free slug gets a new org row. */
@@ -135,6 +141,7 @@ beforeEach(() => {
   store.settings.clear();
   store.providers.clear();
   store.providers.set('openai', OPENAI_ID);
+  store.providers.set('anthropic', ANTHROPIC_ID);
   store.failUpdate = false;
   store.conflicts = 0;
   store.conflictError = new Prisma.PrismaClientKnownRequestError('clash', {
@@ -175,7 +182,7 @@ describe('provisionSignupWorkspace', () => {
       name: 'Ada Lovelace’s workspace',
     });
     const settings = store.settings.get(orgId);
-    expect(readOrgProviderPolicy(settings)).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
     expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
     expect(settings).toMatchObject({ app: { signupWorkspace: true } });
   });
@@ -185,7 +192,7 @@ describe('provisionSignupWorkspace', () => {
 
     expect(mockReconcile).toHaveBeenCalledWith(orgId, 'app.signup-workspace');
     // What the reconcile saw was the granted policy, not the empty one.
-    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: BOTH });
     expect(events.indexOf('reconcile')).toBeGreaterThan(events.indexOf('forget-policy'));
     expect(mockForgetPolicy).toHaveBeenCalledWith(orgId);
     expect(mockForgetCap).toHaveBeenCalledWith(orgId);
@@ -214,7 +221,7 @@ describe('provisionSignupWorkspace', () => {
     await expect(provisionSignupWorkspace(ada)).rejects.toThrow('db down');
   });
 
-  it('without an OpenAI provider row, still returns the workspace, with no grant and no reconcile', async () => {
+  it('without any provider row, still returns the workspace, with no grant and no reconcile', async () => {
     store.providers.clear();
 
     const orgId = await provisionSignupWorkspace(ada);
@@ -223,8 +230,33 @@ describe('provisionSignupWorkspace', () => {
     expect(readOrgQuotas(store.settings.get(orgId))).toEqual({ monthlyBudgetUsd: 10 });
     expect(mockReconcile).not.toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalledWith(
-      'No provider to grant the new workspace; it can call no model',
-      expect.objectContaining({ orgId, providerSlug: 'openai' })
+      'The judges’ provider does not exist; the new workspace’s judges have no model',
+      expect.objectContaining({ orgId, missing: ['anthropic', 'openai'] })
+    );
+  });
+
+  it('without the judges’ provider row, grants the rest and says the judges have no model', async () => {
+    store.providers.delete('anthropic');
+
+    const orgId = await provisionSignupWorkspace(ada);
+
+    expect(readOrgProviderPolicy(store.settings.get(orgId))).toEqual({ approved: [OPENAI_ID] });
+    expect(mockReconcile).toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'The judges’ provider does not exist; the new workspace’s judges have no model',
+      expect.objectContaining({ orgId, missing: ['anthropic'] })
+    );
+  });
+
+  it('without the embedder’s provider row, grants the judges’ and says which is missing', async () => {
+    store.providers.delete('openai');
+
+    const orgId = await provisionSignupWorkspace(ada);
+
+    expect(readOrgProviderPolicy(store.settings.get(orgId))).toEqual({ approved: [ANTHROPIC_ID] });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'A workspace provider does not exist; the new workspace is not granted it',
+      expect.objectContaining({ orgId, missing: ['openai'] })
     );
   });
 
@@ -250,7 +282,7 @@ describe('provisionSignupWorkspace on a write clash', () => {
 
     const settings = store.settings.get(orgId);
     expect(settings).toMatchObject({ app: { signupWorkspace: true } });
-    expect(readOrgProviderPolicy(settings)).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
     expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
     expect(mockLogger.error).not.toHaveBeenCalled();
   });
@@ -324,7 +356,7 @@ describe('equipWorkspace', () => {
 
     expect(result).toEqual({ granted: true });
     const settings = store.settings.get(ORG_ID);
-    expect(readOrgProviderPolicy(settings)).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
     expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
   });
 
@@ -332,16 +364,14 @@ describe('equipWorkspace', () => {
     await equipWorkspace(ORG_ID, 'app.team-workspace');
 
     expect(mockReconcile).toHaveBeenCalledWith(ORG_ID, 'app.team-workspace');
-    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: BOTH });
   });
 
   it('runs the first steps before the grant', async () => {
     const order: string[] = [];
-    fakePrisma.aiProviderConfig.findUnique.mockImplementationOnce(({ where }) => {
+    fakePrisma.aiProviderConfig.findMany.mockImplementationOnce(() => {
       order.push('grant-lookup');
-      return Promise.resolve(
-        store.providers.has(where.slug) ? { id: store.providers.get(where.slug) } : null
-      );
+      return Promise.resolve([...store.providers].map(([slug, id]) => ({ slug, id })));
     });
     const first = vi.fn(() => {
       order.push('first');
