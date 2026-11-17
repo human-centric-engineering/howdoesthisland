@@ -37,6 +37,18 @@
  *
  * Full guide: CUSTOMIZATION.md §4 · lib/account-sections/registry.ts
  */
+import { registerAccountSection } from '@/lib/account-sections/registry';
+import { ApiKeysSection } from '@/components/app/account/api-keys-section';
+
+/**
+ * HowDoesThisLand: one section, on `/settings` only, linking to the API-keys
+ * page (t-43). A key is a setting rather than part of a profile.
+ */
 export function initAppAccountSections(): void {
-  // No app account sections by default.
+  registerAccountSection({
+    id: 'api-keys',
+    surfaces: ['settings'],
+    order: 10,
+    Component: ApiKeysSection,
+  });
 }
