@@ -15,6 +15,7 @@
  * version is never added to that list after the gate exists.
  */
 import type { CalibrationStore } from '@/lib/app/calibration/store';
+import { calibrationSnapshotSchema } from '@/lib/app/calibration/wire';
 import type { PublishGate } from '@/lib/app/frameworks/store';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 
@@ -82,4 +83,35 @@ export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): Publ
       return { ok: true, calibration: { ...snapshot } };
     },
   };
+}
+
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+/**
+ * What `publish` prints after publishing a gated draft (t-40): its agreement
+ * against the last published snapshot's, until an agreement floor exists.
+ * `current` is the snapshot just recorded; `previous` is what
+ * `FrameworkRepo.lastPublishedCalibration` read before the publish. Both are
+ * parsed here, and one that does not parse is reported, never thrown: this
+ * only reports, and the publish has already happened.
+ */
+export function agreementChangeLine(
+  current: unknown,
+  previous: { version: string; calibration: unknown } | null
+): string {
+  const now = calibrationSnapshotSchema.safeParse(current);
+  if (!now.success) return 'Agreement: the snapshot just recorded is unreadable.';
+  const head = `Agreement ${pct(now.data.agreement)}`;
+  if (!previous) return `${head}. No earlier published version has a calibration snapshot.`;
+  const before = calibrationSnapshotSchema.safeParse(previous.calibration);
+  if (!before.success) {
+    return `${head}. The snapshot of ${previous.version}, the last published version with one, is unreadable.`;
+  }
+  // Signed as `calibrate` prints a change between runs; rounded first, so a
+  // difference too small to show prints 0.0, not -0.0.
+  const pts = Math.round((now.data.agreement - before.data.agreement) * 1000) / 10;
+  return (
+    `${head}, against ${pct(before.data.agreement)} for ${previous.version}, the last published ` +
+    `version with a snapshot: ${pts > 0 ? '+' : ''}${pts.toFixed(1)} pts.`
+  );
 }

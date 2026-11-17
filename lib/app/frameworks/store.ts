@@ -133,12 +133,14 @@ export async function publishVersion(
   version: string,
   gate: PublishGate,
   now: Date = new Date()
-): Promise<{ outcome: PublishOutcome; version: StoredVersion }> {
+): Promise<{ outcome: PublishOutcome; version: StoredVersion; calibration: JsonObject | null }> {
   const existing = await repo.findVersion(slug, version);
   if (!existing) {
     throw new FrameworkStoreError('VERSION_NOT_FOUND', `No ${slug} version ${version} to publish.`);
   }
-  if (existing.status === 'PUBLISHED') return { outcome: 'already_published', version: existing };
+  if (existing.status === 'PUBLISHED') {
+    return { outcome: 'already_published', version: existing, calibration: null };
+  }
   if (existing.status !== 'DRAFT') {
     throw new FrameworkStoreError(
       'VERSION_NOT_DRAFT',
@@ -156,7 +158,11 @@ export async function publishVersion(
         'elsewhere). Run the publish again.'
     );
   }
-  return { outcome: 'published', version: { ...existing, status: 'PUBLISHED', publishedAt: now } };
+  return {
+    outcome: 'published',
+    version: { ...existing, status: 'PUBLISHED', publishedAt: now },
+    calibration: allowed.calibration,
+  };
 }
 
 const materialised = new Map<string, JsonObject>();

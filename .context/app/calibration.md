@@ -175,6 +175,20 @@ finished (`finishedAt`), since a run is stored when it starts. The publish write
 conditioned on the same `sourceSha256`, so a re-import between the check and the write
 does not publish uncalibrated content.
 
+Publishing a gated draft then prints its agreement against the snapshot of the most
+recently published (not retired) version that has one, and the difference in points
+(t-40):
+
+```
+howdoesthisland 0.7.0: published
+Agreement 82.5%, against 85.0% for 0.6.0, the last published version with a snapshot: -2.5 pts.
+```
+
+With no earlier snapshot it says so (0.5.1 has none). A stored snapshot that does not
+parse is reported as unreadable, not skipped for an older one. The line only reports:
+nothing refuses a publish on agreement until run-to-run noise is measured and a floor is
+set.
+
 0.5.1 was published before the gate existed, and the gate does not apply to it
 retroactively (a planning ruling). It is listed in `UNGATED_VERSIONS`, pinned to the
 sha256 of the file as published, so a new database still publishes that file from a draft,
