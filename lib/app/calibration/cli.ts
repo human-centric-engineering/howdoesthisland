@@ -22,7 +22,7 @@ import {
   type CalibrationMode,
   type RunCalibrationDeps,
 } from '@/lib/app/calibration/run';
-import { CHECK_KINDS, type Totals } from '@/lib/app/calibration/score';
+import { agreementPct, CHECK_KINDS, type Totals } from '@/lib/app/calibration/score';
 import { CalibrationRunningError } from '@/lib/app/calibration/store';
 import type { ExitCode } from '@/lib/app/frameworks/cli';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
@@ -54,7 +54,7 @@ function parseArgs(args: readonly string[]): { mode: CalibrationMode; version: s
   return { mode, version };
 }
 
-const pct = (x: number | null) => (x === null ? '–' : `${(x * 100).toFixed(1)}%`);
+const pct = (x: number | null) => (x === null ? '–' : agreementPct(x));
 const signed = (x: number | null) =>
   x === null ? '' : ` (${x > 0 ? '+' : ''}${(x * 100).toFixed(1)} pts)`;
 

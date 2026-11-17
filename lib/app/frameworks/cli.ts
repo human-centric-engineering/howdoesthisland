@@ -8,6 +8,7 @@
  * (`canChangeSharedSettings()`).
  */
 import { agreementChangeLine } from '@/lib/app/calibration/gate';
+import { logger } from '@/lib/logging';
 import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
 import type { FrameworkRepo } from '@/lib/app/frameworks/repo';
 import {
@@ -83,7 +84,14 @@ export async function runPublish(
       `framework publish: ${slug} ${version}`,
       async () => {
         // Read before publishing, so this version is never its own comparison.
-        const previous = await deps.repo.lastPublishedCalibration(slug);
+        // Only for the report line: a failed read must not stop the publish.
+        const previous = await deps.repo.lastPublishedCalibration(slug).catch((err: unknown) => {
+          logger.warn('Could not read the last published calibration snapshot', {
+            slug,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return 'unavailable' as const;
+        });
         return { result: await publishVersion(deps.repo, slug, version, deps.gate), previous };
       }
     );

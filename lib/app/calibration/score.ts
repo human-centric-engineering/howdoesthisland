@@ -152,6 +152,10 @@ export interface Totals {
 
 /** Rounds to four places, as every agreement figure is. */
 export const round4 = (x: number): number => Math.round(x * 10_000) / 10_000;
+/** An agreement in tenths of a percent, rounded once: what every printed figure shows. */
+export const agreementTenths = (x: number): number => Math.round(x * 1000);
+/** An agreement as printed, `82.5%`, by `calibrate` and `publish` alike. */
+export const agreementPct = (x: number): string => `${(agreementTenths(x) / 10).toFixed(1)}%`;
 const emptyTally = (): Tally => ({ ok: 0, near: 0, miss: 0, n: 0 });
 
 export function tally(rows: readonly { checks: readonly Check[] }[], judgeFailures = 0): Totals {

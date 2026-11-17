@@ -188,6 +188,27 @@ describe('runPublish() reports the agreement change (t-40)', () => {
     );
   });
 
+  it('publishes when the last snapshot cannot be read, and says there is no comparison', async () => {
+    deps.gate = gateWith({ '0.7.0': 0.825 });
+    repo.lastPublishedCalibration = () => Promise.reject(new Error('connection reset'));
+    lines.length = 0;
+    expect(await runPublish(['howdoesthisland', '0.7.0'], deps)).toBe(0);
+    expect(lines).toEqual([
+      'howdoesthisland 0.7.0: published',
+      'Agreement 82.5%. The last published snapshot could not be read, so there is no comparison.',
+    ]);
+    expect([...repo.versions.values()].find((v) => v.version === '0.7.0')?.status).toBe(
+      'PUBLISHED'
+    );
+  });
+
+  it('says when the two scored a different number of checks', () => {
+    const before = { ...snapshot(0.85), checks: 48 };
+    expect(agreementChangeLine(snapshot(0.825), { version: '0.6.0', calibration: before })).toMatch(
+      /-2\.5 pts \(not like for like: 48 checks then, 40 now\)\.$/
+    );
+  });
+
   it('reports an unreadable stored snapshot, and publishes anyway', async () => {
     deps.gate = gateWith({ '0.6.0': 0.85, '0.7.0': 0.825 });
     await runPublish(['howdoesthisland', '0.6.0'], deps);

@@ -184,12 +184,14 @@ howdoesthisland 0.7.0: published
 Agreement 82.5%, against 85.0% for 0.6.0, the last published version with a snapshot: -2.5 pts.
 ```
 
-When the two snapshots were taken on different calibration sets or with different judge
-models, the line ends `(not like for like: …)` naming which, since the points then
-compare two measures, not two versions. With no earlier snapshot it says so (0.5.1 has none). A stored snapshot that does not
-parse is reported as unreadable, not skipped for an older one. The line only reports:
-nothing refuses a publish on agreement until run-to-run noise is measured and a floor is
-set.
+When the two snapshots were taken on different calibration sets, over a different number
+of checks, or with different judge models, the line ends `(not like for like: …)` naming
+which, since the points then compare two measures, not two versions. With no earlier
+snapshot it says so (0.5.1 has none). A stored snapshot that does not parse is reported as
+unreadable, not skipped for an older one. If the earlier snapshot cannot be read at all,
+the version still publishes and the line says there is no comparison. The line only
+reports: nothing refuses a publish on agreement until run-to-run noise is measured and a
+floor is set.
 
 0.5.1 was published before the gate existed, and the gate does not apply to it
 retroactively (a planning ruling). It is listed in `UNGATED_VERSIONS`, pinned to the
