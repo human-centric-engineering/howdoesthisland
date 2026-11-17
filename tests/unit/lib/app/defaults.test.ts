@@ -837,6 +837,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         // totals recorder (t-37).
         'scripts/app/calibrate.ts',
         'scripts/app/calibration/record-prototype.ts',
+        // FORK (HowDoesThisLand): and the judge-model measurement tool and the
+        // judge-provider grant (t-39).
+        'scripts/app/calibration/measure-judge-model.ts',
+        'scripts/app/grant-judge-provider.ts',
       ]);
       // FORK (HowDoesThisLand): pinned to our two repo-reading tests, the
       // prototype import guard and the baseline drift check (t-12).
