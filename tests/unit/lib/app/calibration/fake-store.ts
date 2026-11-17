@@ -70,10 +70,10 @@ export function fakeCalibrationStore(
       created.push({ ...start, ...results });
       return { ...start, ...results, createdAt: run.createdAt, frameworkVersion };
     }),
-    failRun: vi.fn(async (id: string, error: string) => {
+    failRun: vi.fn(async (id: string, error: string, costUsd: number) => {
       const run = runs.get(id);
       if (run?.status === 'running') {
-        runs.set(id, { ...run, status: 'failed', error, finishedAt: now() });
+        runs.set(id, { ...run, status: 'failed', error, costUsd, finishedAt: now() });
       }
     }),
     latestRun: vi.fn(async () => previous),

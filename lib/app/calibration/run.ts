@@ -83,30 +83,32 @@ export interface ScoreSetInput {
   startedByUserId?: string | null;
   /** The judges' fan-out. Required in ai mode; tests stub it. */
   runJudges?: typeof RunJudges;
+  /** Told each judge call's cost as it lands, so a run that fails part-way knows what it spent. */
+  onCost?: (usd: number) => void;
 }
 
-/** Runs every case of the set and scores it. Throws {@link CalibrationError} on a context the engine refuses. */
-export async function scoreSet(input: ScoreSetInput): Promise<ScoredSet> {
-  const { engine, mode } = input;
+type CaseContext = Extract<ReturnType<HowDoesThisLandEngine['parseContext']>, { ok: true }>['ctx'];
+
+/**
+ * What a run of `cases` in `mode` needs from the engine, checked before
+ * anything is spent: the judge slots it runs, and every case's context as the
+ * engine parses it. Throws {@link CalibrationError}: `NO_JUDGES` for an AI run
+ * with none (it would be the quick scan under another name, and would still
+ * let a draft publish), `INVALID_CONTEXT` for a case the version refuses.
+ */
+function prepare(
+  engine: HowDoesThisLandEngine,
+  cases: readonly CalibrationCase[],
+  mode: CalibrationMode
+): { slots: readonly string[]; contexts: CaseContext[] } {
   const slots = mode === 'ai' ? engine.activeJudgeSlots('full') : [];
-  if (mode === 'ai' && !input.runJudges) throw new Error('ai mode needs runJudges');
-  // An AI run with no judges would be the quick scan under another name, and
-  // would still let a draft publish.
   if (mode === 'ai' && slots.length === 0) {
     throw new CalibrationError(
       'NO_JUDGES',
       'This version has no judges to run, so ai mode cannot.'
     );
   }
-
-  const rows: CaseRow[] = [];
-  const models = new Map<string, Set<string>>();
-  let costUsd = 0;
-  let failures = 0;
-
-  // One case at a time: each case already runs its judges in parallel
-  // (JUDGES_IN_FLIGHT), and the agents' rate limits are per minute.
-  for (const c of input.cases) {
+  const contexts = cases.map((c) => {
     const parsed = engine.parseContext(caseContext(c));
     if (!parsed.ok) {
       throw new CalibrationError(
@@ -115,7 +117,29 @@ export async function scoreSet(input: ScoreSetInput): Promise<ScoredSet> {
         parsed.issues.map((i) => `${c.id}.context.${i.path}: ${i.message}`)
       );
     }
-    const ctx = parsed.ctx;
+    return parsed.ctx;
+  });
+  return { slots, contexts };
+}
+
+/**
+ * Runs every case of the set and scores it. Throws {@link CalibrationError},
+ * before any judge is called, on a set the version cannot run.
+ */
+export async function scoreSet(input: ScoreSetInput): Promise<ScoredSet> {
+  const { engine, mode } = input;
+  if (mode === 'ai' && !input.runJudges) throw new Error('ai mode needs runJudges');
+  const { slots, contexts } = prepare(engine, input.cases, mode);
+
+  const rows: CaseRow[] = [];
+  const models = new Map<string, Set<string>>();
+  let costUsd = 0;
+  let failures = 0;
+
+  // One case at a time: each case already runs its judges in parallel
+  // (JUDGES_IN_FLIGHT), and the agents' rate limits are per minute.
+  for (const [i, c] of input.cases.entries()) {
+    const ctx = contexts[i];
     const quick = engine.quickScan(c.text, ctx);
     const outputs: Record<string, unknown> = {};
     const judgeFailures: CaseRow['judgeFailures'] = [];
@@ -135,12 +159,14 @@ export async function scoreSet(input: ScoreSetInput): Promise<ScoredSet> {
         if (j.ok) {
           outputs[j.slot] = j.reply.output;
           costUsd += j.reply.costUsd;
+          input.onCost?.(j.reply.costUsd);
           const used = models.get(j.slot) ?? new Set<string>();
           used.add(`${j.reply.provider}/${j.reply.model}`);
           models.set(j.slot, used);
         } else {
           judgeFailures.push({ slot: j.slot, code: j.code });
           costUsd += j.spend?.costUsd ?? 0;
+          input.onCost?.(j.spend?.costUsd ?? 0);
         }
       }
       // A judge the fan-out never started (it was stopped) is a failure too.
@@ -222,13 +248,9 @@ export async function startCalibration(
   }
 
   const engine = createHowDoesThisLandEngine(input.model, { culture: true });
-  // Checked before the run is stored, so a version that cannot run leaves no row.
-  if (mode === 'ai' && engine.activeJudgeSlots('full').length === 0) {
-    throw new CalibrationError(
-      'NO_JUDGES',
-      'This version has no judges to run, so ai mode cannot.'
-    );
-  }
+  // Checked before the run is stored, so a set the version cannot run leaves
+  // no row and spends nothing.
+  prepare(engine, set.cases, mode);
   // Web Crypto, so this module runs in any realm (lib/app/** may not import node:crypto).
   const runId = globalThis.crypto.randomUUID();
   const frameworkVersion = `${version.frameworkSlug}@${version.version}`;
@@ -250,6 +272,7 @@ export async function startCalibration(
     });
   }, HEARTBEAT_MS);
 
+  let spent = 0;
   const work = async (): Promise<CalibrationOutcome> => {
     const scored = await deps.runAsInstallOrg(() =>
       scoreSet({
@@ -260,6 +283,7 @@ export async function startCalibration(
         runId,
         runJudges: deps.runJudges,
         startedByUserId,
+        onCost: (usd) => (spent += usd),
       })
     );
     // The complete run stored before this one started, as the admin page
@@ -282,7 +306,8 @@ export async function startCalibration(
     .catch(async (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       try {
-        await deps.store.failRun(runId, message);
+        // What its judges cost before it failed, as their AiCostLog rows say.
+        await deps.store.failRun(runId, message, Math.round(spent * 1_000_000) / 1_000_000);
       } catch (failErr) {
         // The run's own error is the one to surface; the row stops beating
         // and is shown as stopped.

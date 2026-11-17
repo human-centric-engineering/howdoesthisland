@@ -102,11 +102,14 @@ function SnapshotLine({ version }: { version: AdminVersionWire }) {
 }
 
 function VersionCard({
+  slug,
   version,
   selectedRunId,
   onSelect,
   onStarted,
 }: {
+  /** The framework's slug, as the list gave it. */
+  slug: string;
   version: AdminVersionWire;
   selectedRunId: string | null;
   onSelect: (id: string) => void;
@@ -125,7 +128,7 @@ function VersionCard({
     try {
       const started = startedRunSchema.parse(
         await apiClient.post<unknown>(
-          `${ADMIN_FRAMEWORKS_PATH}/howdoesthisland/versions/${encodeURIComponent(version.version)}/calibration-runs`,
+          `${ADMIN_FRAMEWORKS_PATH}/${encodeURIComponent(slug)}/versions/${encodeURIComponent(version.version)}/calibration-runs`,
           { body: { mode } }
         )
       );
@@ -257,7 +260,9 @@ function VersionCard({
                       <KindCell key={kind} run={run} kind={kind} />
                     ))}
                     <TableCell className="text-right tabular-nums">
-                      {run.mode === 'ai' && run.status !== 'running'
+                      {/* A running run has not finished spending, and a stopped
+                          one never recorded what it spent. */}
+                      {run.mode === 'ai' && run.status !== 'running' && run.status !== 'stopped'
                         ? `$${run.costUsd.toFixed(2)}`
                         : '–'}
                     </TableCell>
@@ -320,6 +325,7 @@ export function CalibrationPanel({ initial }: { initial: FrameworkCalibrationWir
       {data.versions.map((version) => (
         <VersionCard
           key={version.id}
+          slug={data.slug}
           version={version}
           selectedRunId={selectedRunId}
           onSelect={setSelectedRunId}

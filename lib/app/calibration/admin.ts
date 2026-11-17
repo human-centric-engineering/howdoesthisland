@@ -6,8 +6,8 @@
  * is what a run is for), newest first, each with its stored calibration
  * snapshot and its runs. Each complete run carries its change from the run
  * before it of the same mode, against any version, as the CLI prints it
- * (`compare.ts`); the runs are the store's newest `LIST_LIMIT`, so the oldest
- * listed may compare with nothing although an older run exists.
+ * (`compare.ts`); the runs are each version's newest `LIST_LIMIT`, so the
+ * oldest listed may compare with nothing although an older run exists.
  *
  * **Running, and stopped.** A run is stored `RUNNING` when it starts and
  * finishes in the background, beating while it runs. A `RUNNING` run whose
@@ -76,7 +76,7 @@ export interface AdminVersion {
   publishedAt: Date | null;
   /** What was copied in at publish (`gate.ts`); null for a draft, or a version published before the gate. */
   calibration: CalibrationSnapshot | null;
-  /** A calibration set is written for this version, so it can be run from the page. */
+  /** A calibration set is written for this version and it is not retired, so it can be run from the page. */
   runnable: boolean;
   /** Newest first. */
   runs: AdminRun[];
@@ -193,7 +193,7 @@ export async function listFrameworkCalibration(
       createdAt: v.createdAt,
       publishedAt: v.publishedAt,
       calibration: snapshot.success ? snapshot.data : null,
-      runnable: BUNDLED_SET_VERSIONS.includes(v.version),
+      runnable: v.status !== 'RETIRED' && BUNDLED_SET_VERSIONS.includes(v.version),
       runs: runs
         .filter((r) => r.frameworkVersionId === v.id)
         .map(({ startedByUserId, heartbeatAt, ...r }) => ({
@@ -221,8 +221,8 @@ export interface StartedRun {
  * Starts a run of `version` in `mode`, recorded as started by `userId`.
  *
  * Errors: 404 `NOT_FOUND` (no such version); 409 `CALIBRATION_SET_MISSING`
- * (no set is written for it), `CALIBRATION_REFUSED` (the set does not fit the
- * version, or it has no judges for an AI run), `CALIBRATION_RUNNING` (an AI
+ * (no set is written for it), `CALIBRATION_REFUSED` (the version is retired,
+ * the set does not fit it, or it has no judges for an AI run), `CALIBRATION_RUNNING` (an AI
  * run of it is still running).
  */
 export async function startCalibrationRun(
@@ -235,6 +235,14 @@ export async function startCalibrationRun(
     return v ? { v, model: await materialise(deps.repo, howDoesThisLand, v.id) } : null;
   });
   if (!found) throw new NotFoundError(`No ${slug} version ${input.version}.`);
+  // A retired version can never publish or be used again: a run of it would
+  // only spend.
+  if (found.v.status === 'RETIRED') {
+    throw new APIError(`${input.version} is retired.`, 'CALIBRATION_REFUSED', 409, {
+      reason: 'RETIRED',
+      problems: [],
+    });
+  }
 
   const set = await loadBundledSet(input.version);
   if (!set) {
@@ -245,9 +253,8 @@ export async function startCalibrationRun(
     );
   }
 
-  let started;
   try {
-    started = await startCalibration(
+    const started = await startCalibration(
       {
         version: found.v,
         model: found.model,
@@ -261,6 +268,13 @@ export async function startCalibrationRun(
         runAsInstallOrg: (fn) => runAsOrg(INSTALL_ORG_ID, fn),
       }
     );
+    if (input.mode === 'quick') {
+      // Inside the try, so a quick run's refusal is answered as one too.
+      await started.done;
+      return { runId: started.runId, status: 'complete' };
+    }
+    keepRunningAfterResponse(started.done, 'app: calibration run', { runId: started.runId });
+    return { runId: started.runId, status: 'running' };
   } catch (err) {
     if (err instanceof CalibrationRunningError) {
       throw new APIError(
@@ -278,11 +292,4 @@ export async function startCalibrationRun(
     }
     throw err;
   }
-
-  if (input.mode === 'quick') {
-    await started.done;
-    return { runId: started.runId, status: 'complete' };
-  }
-  keepRunningAfterResponse(started.done, 'app: calibration run', { runId: started.runId });
-  return { runId: started.runId, status: 'running' };
 }

@@ -137,8 +137,8 @@ export interface CalibrationStore {
   touchRun(id: string): Promise<void>;
   /** `RUNNING` → `COMPLETE`, with its results. */
   finishRun(id: string, results: RunResults): Promise<StoredRun>;
-  /** `RUNNING` → `FAILED`, with why. */
-  failRun(id: string, error: string): Promise<void>;
+  /** `RUNNING` → `FAILED`, with why and what its judges cost before it failed. */
+  failRun(id: string, error: string, costUsd: number): Promise<void>;
   /** The newest complete run of `mode` against any version of the framework, stored before `before`. */
   latestRun(where: {
     frameworkSlug: string;
@@ -149,10 +149,14 @@ export interface CalibrationStore {
   aiRunsOf(frameworkVersionId: string): Promise<StoredRun[]>;
 }
 
-/** The most runs {@link CalibrationRunLister.listRuns} returns. */
+/** The most runs of one version {@link CalibrationRunLister.listRuns} returns. */
 export const LIST_LIMIT = 100;
 
-/** The admin page's read (t-38): the framework's newest runs, of any status, newest first. */
+/**
+ * The admin page's read (t-38): each of the framework's versions' newest
+ * {@link LIST_LIMIT} runs, of any status, newest first. Per version, so a
+ * busy draft cannot push an older version's runs off the page.
+ */
 export interface CalibrationRunLister {
   listRuns(frameworkSlug: string): Promise<ListedRun[]>;
 }
@@ -322,11 +326,16 @@ export const prismaCalibrationStore: CalibrationStore & CalibrationRunLister = {
       )
     ),
 
-  failRun: (id, error) =>
+  failRun: (id, error, costUsd) =>
     system('fail a run', async () => {
       await prisma.calibrationRun.updateMany({
         where: { id, status: 'RUNNING' },
-        data: { status: 'FAILED', error: error.slice(0, 2000), finishedAt: new Date() },
+        data: {
+          status: 'FAILED',
+          error: error.slice(0, 2000),
+          costUsd,
+          finishedAt: new Date(),
+        },
       });
     }),
 
@@ -357,12 +366,24 @@ export const prismaCalibrationStore: CalibrationStore & CalibrationRunLister = {
 
   listRuns: (frameworkSlug) =>
     system('list the runs', async () => {
-      const rows = await prisma.calibrationRun.findMany({
-        where: { frameworkVersion: { framework: { slug: frameworkSlug } } },
-        orderBy: { createdAt: 'desc' },
-        take: LIST_LIMIT,
-        select: listSelect,
+      const versions = await prisma.frameworkVersion.findMany({
+        where: { framework: { slug: frameworkSlug } },
+        select: { id: true },
       });
-      return rows.map(toListed);
+      // One read per version: a framework has a handful.
+      const perVersion = await Promise.all(
+        versions.map((v) =>
+          prisma.calibrationRun.findMany({
+            where: { frameworkVersionId: v.id },
+            orderBy: { createdAt: 'desc' },
+            take: LIST_LIMIT,
+            select: listSelect,
+          })
+        )
+      );
+      return perVersion
+        .flat()
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map(toListed);
     }),
 };

@@ -68,6 +68,29 @@ describe('CalibrationPanel', () => {
     expect(screen.getByRole('button', { name: 'AI run running' })).toBeDisabled();
   });
 
+  it('shows a failed AI run’s cost, and a dash for a stopped one’s, which was never recorded', () => {
+    const failed = run({
+      id: 'f',
+      mode: 'ai',
+      status: 'failed',
+      totals: null,
+      rows: null,
+      costUsd: 0.5,
+    });
+    const stopped = run({
+      id: 's',
+      mode: 'ai',
+      status: 'stopped',
+      totals: null,
+      rows: null,
+      costUsd: 0,
+    });
+    render(<CalibrationPanel initial={framework([version({ runs: [failed, stopped] })])} />);
+    const [, failedRow, stoppedRow] = screen.getAllByRole('row');
+    expect(failedRow.textContent).toContain('$0.50');
+    expect(stoppedRow.textContent).not.toContain('$');
+  });
+
   it('describes each version’s calibration', () => {
     render(
       <CalibrationPanel
@@ -112,6 +135,7 @@ describe('CalibrationPanel', () => {
 
     await waitFor(() => expect(screen.getByText('Cases')).toBeInTheDocument());
     expect(apiClient.post).toHaveBeenCalledWith(
+      // The slug the list gave, not one written into the panel.
       '/api/v1/admin/frameworks/howdoesthisland/versions/0.5.1/calibration-runs',
       { body: { mode: 'quick' } }
     );

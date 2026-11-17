@@ -43,6 +43,7 @@ import {
   type CalibrationAdminDeps,
 } from '@/lib/app/calibration/admin';
 import { STOPPED_AFTER_MS } from '@/lib/app/calibration/store';
+import { CalibrationError } from '@/lib/app/calibration/run';
 import { tally } from '@/lib/app/calibration/score';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { importVersion } from '@/lib/app/frameworks/store';
@@ -188,6 +189,33 @@ describe('startCalibrationRun()', () => {
     await vi.waitFor(() => expect(fake.runs.get(started.runId)?.status).toBe('complete'));
   });
 
+  it('refuses a retired version, storing and spending nothing', async () => {
+    const v = await repo.findVersion('howdoesthisland', '0.5.1');
+    if (!v) throw new Error('missing fixture');
+    vi.spyOn(repo, 'findVersion').mockResolvedValue({ ...v, status: 'RETIRED' });
+    await expect(
+      startCalibrationRun({ version: '0.5.1', mode: 'ai', userId: 'admin-1' }, deps)
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'CALIBRATION_REFUSED',
+      details: { reason: 'RETIRED' },
+    });
+    expect(fake.store.startRun).not.toHaveBeenCalled();
+  });
+
+  it('answers a quick run refused while it runs as a refusal, not a 500', async () => {
+    fake.store.latestRun.mockRejectedValueOnce(
+      new CalibrationError('INVALID_CONTEXT', 'Case ev01 is not one this version accepts.')
+    );
+    await expect(
+      startCalibrationRun({ version: '0.5.1', mode: 'quick', userId: 'admin-1' }, deps)
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'CALIBRATION_REFUSED',
+      details: { reason: 'INVALID_CONTEXT' },
+    });
+  });
+
   it('answers 404 for a version that is not imported, storing nothing', async () => {
     await expect(
       startCalibrationRun({ version: '9.9.9', mode: 'quick', userId: 'admin-1' }, deps)
@@ -272,6 +300,16 @@ describe('listFrameworkCalibration()', () => {
           publishedAt: null,
           calibration: null,
         },
+        // A set is written for it, but a retired version is not run.
+        {
+          id: 'retired-v',
+          version: '0.5.1',
+          status: 'RETIRED',
+          sourceSha256: 'old-file',
+          createdAt: NOW,
+          publishedAt: NOW,
+          calibration: null,
+        },
       ],
     });
     const rows = [
@@ -323,6 +361,11 @@ describe('listFrameworkCalibration()', () => {
     expect(v.runs.find((r) => r.id === 'long')?.status).toBe('running');
     expect(v.status).toBe('draft');
     expect(v.calibration).toBeNull();
+    expect(v.runnable).toBe(true);
+    expect((await listFrameworkCalibration(deps)).versions[1]).toMatchObject({
+      status: 'retired',
+      runnable: false,
+    });
   });
 });
 

@@ -16,8 +16,9 @@
  * - 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (not a platform admin).
  * - 404 `NOT_FOUND` — no such framework or version.
  * - 409 `CALIBRATION_SET_MISSING` — no calibration set is written for the version.
- * - 409 `CALIBRATION_REFUSED` — the set does not fit the version, or it has no
- *   judges for an AI run. `details.reason` and `details.problems` say why.
+ * - 409 `CALIBRATION_REFUSED` — the version is retired, the set does not fit
+ *   it, or it has no judges for an AI run. Nothing is stored or spent.
+ *   `details.reason` and `details.problems` say why.
  * - 409 `CALIBRATION_RUNNING` — an AI run of the version is still running.
  */
 import type { NextRequest } from 'next/server';

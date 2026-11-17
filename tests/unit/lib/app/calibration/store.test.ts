@@ -18,6 +18,7 @@ const db = vi.hoisted(() => {
   const tx = { calibrationRun };
   return {
     calibrationRun,
+    frameworkVersion: { findMany: vi.fn() },
     $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>, _opts?: unknown) => fn(tx)),
   };
 });
@@ -173,29 +174,66 @@ describe('prismaCalibrationStore', () => {
 
   it('fails only a running run, keeping why', async () => {
     db.calibrationRun.updateMany.mockResolvedValue({ count: 1 });
-    await store.failRun('cal-1', 'provider unreachable');
+    await store.failRun('cal-1', 'provider unreachable', 0.42);
     expect(db.calibrationRun.updateMany).toHaveBeenCalledWith({
       where: { id: 'cal-1', status: 'RUNNING' },
-      data: expect.objectContaining({ status: 'FAILED', error: 'provider unreachable' }),
+      data: expect.objectContaining({
+        status: 'FAILED',
+        error: 'provider unreachable',
+        costUsd: 0.42,
+      }),
     });
   });
 
-  it('lists the framework’s runs of every status, a running one without results', async () => {
-    db.calibrationRun.findMany.mockResolvedValue([
-      dbRow({ id: 'cal-2', status: 'RUNNING', totals: null, rows: null, judgeModels: {} }),
-      dbRow({ status: 'COMPLETE', startedByUserId: 'admin-1', error: null, finishedAt: null }),
-    ]);
-    const listed = await store.listRuns('howdoesthisland');
-    expect(db.calibrationRun.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { frameworkVersion: { framework: { slug: 'howdoesthisland' } } },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      })
+  it('lists each version’s newest runs of every status, merged newest first', async () => {
+    db.frameworkVersion.findMany.mockResolvedValue([{ id: 'ver-1' }, { id: 'ver-0' }]);
+    db.calibrationRun.findMany.mockImplementation(
+      async ({ where }: { where: { frameworkVersionId: string } }) =>
+        where.frameworkVersionId === 'ver-1'
+          ? [
+              dbRow({
+                id: 'cal-2',
+                status: 'RUNNING',
+                totals: null,
+                rows: null,
+                judgeModels: {},
+                createdAt: new Date('2026-11-16T14:00:00Z'),
+              }),
+              dbRow({
+                status: 'COMPLETE',
+                startedByUserId: 'admin-1',
+                error: null,
+                finishedAt: null,
+                createdAt: new Date('2026-11-16T12:00:00Z'),
+              }),
+            ]
+          : [
+              dbRow({
+                id: 'cal-old',
+                frameworkVersionId: 'ver-0',
+                status: 'COMPLETE',
+                createdAt: new Date('2026-11-16T13:00:00Z'),
+              }),
+            ]
     );
-    expect(listed[0]).toMatchObject({ id: 'cal-2', status: 'running', totals: null, rows: null });
-    expect(listed[1]).toMatchObject({ status: 'complete', startedByUserId: 'admin-1' });
-    expect(listed[1].totals).toEqual(run.totals);
+    const listed = await store.listRuns('howdoesthisland');
+    expect(db.frameworkVersion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { framework: { slug: 'howdoesthisland' } } })
+    );
+    // Each version's own newest runs, so a busy version cannot crowd out another.
+    for (const id of ['ver-1', 'ver-0']) {
+      expect(db.calibrationRun.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { frameworkVersionId: id },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        })
+      );
+    }
+    expect(listed.map((r) => r.id)).toEqual(['cal-2', 'cal-old', 'cal-1']);
+    expect(listed[0]).toMatchObject({ status: 'running', totals: null, rows: null });
+    expect(listed[2]).toMatchObject({ status: 'complete', startedByUserId: 'admin-1' });
+    expect(listed[2].totals).toEqual(run.totals);
   });
 
   it('reads the newest complete run of a mode across the framework’s versions', async () => {

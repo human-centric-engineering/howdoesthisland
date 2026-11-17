@@ -327,6 +327,46 @@ describe('startCalibration() (t-38)', () => {
     expect(store.finishRun).not.toHaveBeenCalled();
   });
 
+  it('records what a failed run’s judges had cost', async () => {
+    const { store, runs } = fakeStore();
+    const answering = stubJudges();
+    let calls = 0;
+    const judges = vi.fn<typeof RunJudges>(async (input) => {
+      // The first case is answered and billed; the second throws.
+      if (calls++ > 0) throw new Error('provider unreachable');
+      return answering(input);
+    });
+    const { runId, done } = await startCalibration(
+      { version: VERSION, model, set, mode: 'ai' },
+      deps(store, judges).d
+    );
+    await expect(done).rejects.toThrow('provider unreachable');
+    const run = runs.get(runId);
+    expect(run?.status).toBe('failed');
+    expect(run?.costUsd).toBeGreaterThan(0);
+    expect(store.failRun).toHaveBeenCalledWith(runId, 'provider unreachable', run?.costUsd);
+  });
+
+  it('refuses a case whose context the version rejects, before storing or spending', async () => {
+    const { store } = fakeStore();
+    const judges = stubJudges();
+    const broken = structuredClone(set);
+    const last = broken.cases.at(-1);
+    if (!last) throw new Error('empty set');
+    last.content_type = 'not-a-content-type';
+    const err: unknown = await startCalibration(
+      { version: VERSION, model, set: broken, mode: 'ai' },
+      deps(store, judges).d
+    ).catch((e: unknown) => e);
+    // The last case, so a check made case by case as the run went would
+    // already have spent on every case before it.
+    expect(err).toBeInstanceOf(CalibrationError);
+    const problems = (err as CalibrationError).problems;
+    expect(problems.some((p) => p.startsWith(`${last.id}.context.`))).toBe(true);
+    expect(store.startRun).not.toHaveBeenCalled();
+    expect(judges).not.toHaveBeenCalled();
+  });
+
   it('rejects with the run’s own error when recording the failure fails too', async () => {
     const { store } = fakeStore();
     store.failRun.mockRejectedValueOnce(new Error('database unreachable'));
