@@ -13,16 +13,19 @@
  * definition also reads, and the codec holds every imported version to). A
  * slot added there needs only its description here, which the type requires.
  *
- * **Binding (D8).** Judges run on `gpt-4.1` and the editor on `gpt-5` until
- * k3 picks models by measurement. They are a `defaultBinding`, not
- * `defaults.provider/model`: while a workspace has not chosen a model itself
- * the platform owns the binding (`AiAgent.bindingOwner`), so k3's choice
- * moves every such workspace with it; one that has chosen keeps its choice.
+ * **Binding (D8).** The judges and the editor run on Claude Sonnet 5.5
+ * (t-39: the current Claude generation, by owner ruling; Sonnet over Haiku by
+ * calibration, `.context/app/judge-models.md`). They are a `defaultBinding`,
+ * not `defaults.provider/model`: while a workspace has not chosen a model
+ * itself the platform owns the binding (`AiAgent.bindingOwner`), so a change
+ * of default moves every such workspace with it; one that has chosen keeps
+ * its choice.
  * What a workspace may choose is its role's approved list
  * (`approved-models.ts`, j4): the `bindingRule` refuses anything else on
  * Sunrise's agent routes, and the app's own route offers only the list.
  */
 import { refuseUnapproved, roleOfSlot } from '@/lib/app/judges/approved-models';
+import { JUDGE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
 import {
   HOWDOESTHISLAND_JUDGE_SLOTS,
   type HowDoesThisLandJudgeSlot,
@@ -44,13 +47,16 @@ import { requireOrgId } from '@/lib/tenancy/context';
  * The provider the judges and editor default to (D8): the one every new
  * workspace is approved for, so a new workspace's agents can be bound.
  */
-export const JUDGE_PROVIDER_SLUG = 'openai'; // TEMP(t-39): switched once measured
+export { JUDGE_PROVIDER_SLUG };
 
-/** The interim judge model (D8), until k3 measures. */
-export const INTERIM_JUDGE_MODEL = 'gpt-4.1';
+/** The judges' default model (D8, t-39). */
+export const DEFAULT_JUDGE_MODEL = 'claude-sonnet-5-5';
 
-/** The interim editor model (D8), until k3 measures. */
-export const INTERIM_EDITOR_MODEL = 'gpt-5';
+/**
+ * The editor's default model (D8, t-39). Calibration does not exercise the
+ * editor, so this is a judgement, not a measurement: the judges' model.
+ */
+export const DEFAULT_EDITOR_MODEL = 'claude-sonnet-5-5';
 
 /**
  * The app's slug prefix. Core's platform agents use names like
@@ -91,7 +97,7 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
 
 /**
  * Reply ceilings: the most one call may produce, sized for each agent's
- * largest job on a frontier reasoning model, not for the interim models.
+ * largest job on a reasoning model.
  *
  * A reasoning model's thinking counts against this cap, so each leaves room
  * for thinking on top of the reply; a cap that only fits the reply comes back
@@ -113,20 +119,20 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  *   fit its thinking and its reply in 32,768, so a rewrite call (rw1) sets a
  *   low reasoning effort rather than relying on the ceiling.
  * - A workspace that binds an agent to a model with a lower output limit
- *   (`gpt-4o`, 16,384; an older Claude Haiku, 8,192) has that agent's calls
+ *   (`gpt-4o`, 16,384) has that agent's calls
  *   refused, and cannot lower this code-owned cap. So workspaces choose
  *   only from an approved list per role (`approved-models.ts`, j4), and the
  *   judge call takes its ceiling from the entry, within that model's limit.
  *
  * These are ceilings. A call sizes its own `maxTokens` under them (§8.3: per
- * judge slot in j2, from the text's length for rewrites in rw1), and k3
- * measures it. A judge call's timeout is the approved entry's, not the
- * slot's, so a slower reasoning model is not cut short (`runJudge`, j4).
- * Reasoning effort is left to the provider's default (medium on OpenAI's
- * reasoning models, none on Claude) until k3 chooses it; these ceilings hold
- * the reply at that default.
+ * judge slot in j2, from the text's length for rewrites in rw1). A judge
+ * call's timeout and reasoning effort are the approved entry's, not the
+ * slot's (`runJudge`, j4). The judge's ceiling is 32,768, not the 16,384 a
+ * non-thinking model needs: Claude thinks on every call, and its thinking
+ * counts against the cap (t-39 measured a judge's largest reply, thinking
+ * included, at about 4k, and the influence judge's at about 9k).
  */
-const JUDGE_MAX_TOKENS = 16_384;
+const JUDGE_MAX_TOKENS = 32_768;
 const INFLUENCE_MAX_TOKENS = 32_768;
 const EDITOR_MAX_TOKENS = 32_768;
 
@@ -219,7 +225,7 @@ function providerReachableOnce(
 }
 
 /**
- * The binding for one of these agents: the interim `model` on the default
+ * The binding for one of these agents: the default `model` on the default
  * provider, when the model is active and offers chat, the org may use that
  * provider, and it has a key. Otherwise `null`, and the agent inherits at run time.
  *
@@ -230,10 +236,10 @@ function providerReachableOnce(
  * the binding, by the maintenance job every pass (see `defaultBinding`). So it
  * throws, leaving the binding as it is, when a rule whose answer would matter
  * cannot be asked (see {@link providerReachable}). A workspace is approved for
- * OpenAI only after `createOrg`'s own reconcile, which therefore answers
+ * its providers only after `createOrg`'s own reconcile, which therefore answers
  * `null`; the reconcile provisioning runs after the grant then binds it.
  */
-export async function pickInterimBinding(
+export async function pickDefaultBinding(
   model: string,
   db: TenancyClient,
   catalogue: PlatformAgentCatalogue
@@ -267,7 +273,7 @@ function judgeAgent(slot: HowDoesThisLandJudgeSlot): PlatformAgentDefinition {
     },
     capabilities: [],
     knowledgeTags: [],
-    defaultBinding: (db, catalogue) => pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue),
+    defaultBinding: (db, catalogue) => pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue),
     bindingRule: (binding) => refuseUnapproved(roleOfSlot(slot), binding),
   };
 }
@@ -286,7 +292,7 @@ const EDITOR_AGENT: PlatformAgentDefinition = {
   },
   capabilities: [],
   knowledgeTags: [],
-  defaultBinding: (db, catalogue) => pickInterimBinding(INTERIM_EDITOR_MODEL, db, catalogue),
+  defaultBinding: (db, catalogue) => pickDefaultBinding(DEFAULT_EDITOR_MODEL, db, catalogue),
   bindingRule: (binding) => refuseUnapproved('editor', binding),
 };
 

@@ -21,14 +21,14 @@ import type { AiProviderConfig, AiProviderModel } from '@prisma/client';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import {
   EDITOR_AGENT_SLUG,
-  INTERIM_EDITOR_MODEL,
-  INTERIM_JUDGE_MODEL,
+  DEFAULT_EDITOR_MODEL,
+  DEFAULT_JUDGE_MODEL,
   JUDGE_PROVIDER_SLUG,
   judgeAgentDefinitions,
-  pickInterimBinding,
+  pickDefaultBinding,
 } from '@/lib/app/judges/agents';
 import { MAX_TEXT_CHARS } from '@/lib/app/intake/extract-text';
-import { WORKSPACE_PROVIDER_SLUG } from '@/lib/app/workspaces/provision';
+import { WORKSPACE_PROVIDER_SLUGS } from '@/lib/app/workspaces/provision';
 import type { TenancyClient } from '@/lib/db/tenancy-extension';
 import {
   CORE_PLATFORM_AGENTS,
@@ -118,9 +118,14 @@ describe('judgeAgentDefinitions', () => {
     }
   });
 
-  it('gives the influence judge a larger reply ceiling than the other judges', () => {
+  it('never gives the influence judge, the largest report, less room than another judge', () => {
     const tokens = (slug: string) => definitions.find((d) => d.slug === slug)!.agent.maxTokens;
-    expect(tokens('hdtl-judge-influence')).toBeGreaterThan(tokens('hdtl-judge-ethos'));
+    expect(tokens('hdtl-judge-influence')).toBeGreaterThanOrEqual(tokens('hdtl-judge-ethos'));
+  });
+
+  it('gives a judge room to think on Claude as well as to reply (t-39)', () => {
+    const tokens = (slug: string) => definitions.find((d) => d.slug === slug)!.agent.maxTokens;
+    expect(tokens('hdtl-judge-ethos')).toBe(32_768);
   });
 
   it('lets the editor rewrite the longest text the app accepts, with as much again to think', () => {
@@ -178,20 +183,26 @@ describe('initAppPlatformAgents (the real seam)', () => {
 });
 
 describe('the default provider', () => {
-  it('is the provider every new workspace is approved for', () => {
-    expect(JUDGE_PROVIDER_SLUG).toBe(WORKSPACE_PROVIDER_SLUG);
+  it('is Anthropic, one of the providers every new workspace is approved for', () => {
+    expect(JUDGE_PROVIDER_SLUG).toBe('anthropic');
+    expect(WORKSPACE_PROVIDER_SLUGS).toContain(JUDGE_PROVIDER_SLUG);
+  });
+
+  it('defaults the judges and the editor to Claude Sonnet 5.5', () => {
+    expect(DEFAULT_JUDGE_MODEL).toBe('claude-sonnet-5-5');
+    expect(DEFAULT_EDITOR_MODEL).toBe('claude-sonnet-5-5');
   });
 });
 
-// ─── pickInterimBinding ────────────────────────────────────────────────────
+// ─── pickDefaultBinding ────────────────────────────────────────────────────
 
 function provider(overrides: Partial<AiProviderConfig> = {}): AiProviderConfig {
   return {
-    id: 'prov-openai',
-    slug: 'openai',
-    name: 'OpenAI',
-    providerType: 'openai-compatible',
-    apiKeyEnvVar: 'T17_OPENAI_KEY',
+    id: 'prov-anthropic',
+    slug: 'anthropic',
+    name: 'Anthropic',
+    providerType: 'anthropic',
+    apiKeyEnvVar: 'T17_ANTHROPIC_KEY',
     isLocal: false,
     isActive: true,
     ...overrides,
@@ -200,7 +211,7 @@ function provider(overrides: Partial<AiProviderConfig> = {}): AiProviderConfig {
 
 function model(modelId: string, overrides: Partial<AiProviderModel> = {}): AiProviderModel {
   return {
-    providerSlug: 'openai',
+    providerSlug: 'anthropic',
     modelId,
     isActive: true,
     capabilities: ['chat'],
@@ -220,66 +231,66 @@ function catalogue(
 
 const db = {} as TenancyClient; // test-review:accept as_cast — the pick reads only the catalogue
 
-describe('pickInterimBinding', () => {
-  const both = [model(INTERIM_JUDGE_MODEL), model(INTERIM_EDITOR_MODEL)];
+describe('pickDefaultBinding', () => {
+  const both = [model(DEFAULT_JUDGE_MODEL), model(DEFAULT_EDITOR_MODEL)];
 
   beforeEach(() => {
-    process.env.T17_OPENAI_KEY = 'sk-test';
+    process.env.T17_ANTHROPIC_KEY = 'sk-test';
     mockPolicy.apply.mockReset();
     mockPolicy.apply.mockImplementation(async (slugs) => slugs);
   });
   afterEach(() => {
-    delete process.env.T17_OPENAI_KEY;
+    delete process.env.T17_ANTHROPIC_KEY;
     resetProviderEligibility();
     resetProviderCredentialResolver();
   });
 
-  it('binds the interim model on OpenAI when the org may use it and it has a key', async () => {
+  it('binds the default model on Anthropic when the org may use it and it has a key', async () => {
     const pick = catalogue([provider()], both);
-    await expect(pickInterimBinding(INTERIM_JUDGE_MODEL, db, pick)).resolves.toEqual({
-      provider: 'openai',
-      model: 'gpt-4.1',
+    await expect(pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, pick)).resolves.toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
     });
-    await expect(pickInterimBinding(INTERIM_EDITOR_MODEL, db, pick)).resolves.toEqual({
-      provider: 'openai',
-      model: 'gpt-5',
+    await expect(pickDefaultBinding(DEFAULT_EDITOR_MODEL, db, pick)).resolves.toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
     });
   });
 
   it('ignores other providers, even ones offering the same model id', async () => {
     const pick = catalogue(
-      [provider({ id: 'prov-azure', slug: 'azure-openai' })],
-      [model(INTERIM_JUDGE_MODEL, { providerSlug: 'azure-openai' })]
+      [provider({ id: 'prov-bedrock', slug: 'bedrock' })],
+      [model(DEFAULT_JUDGE_MODEL, { providerSlug: 'bedrock' })]
     );
-    await expect(pickInterimBinding(INTERIM_JUDGE_MODEL, db, pick)).resolves.toBeNull();
+    await expect(pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, pick)).resolves.toBeNull();
   });
 
-  it('answers null when OpenAI is not active', async () => {
+  it('answers null when Anthropic is not active', async () => {
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([], both))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([], both))
     ).resolves.toBeNull();
   });
 
-  it('answers null when the org is not approved for OpenAI', async () => {
+  it('answers null when the org is not approved for Anthropic', async () => {
     mockPolicy.apply.mockImplementation(async () => []);
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], both))
     ).resolves.toBeNull();
   });
 
-  it('answers null when OpenAI has no key', async () => {
-    delete process.env.T17_OPENAI_KEY;
+  it('answers null when Anthropic has no key', async () => {
+    delete process.env.T17_ANTHROPIC_KEY;
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], both))
     ).resolves.toBeNull();
   });
 
-  it('answers null when the interim model is not active', async () => {
+  it('answers null when the default model is not active', async () => {
     await expect(
-      pickInterimBinding(
-        INTERIM_JUDGE_MODEL,
+      pickDefaultBinding(
+        DEFAULT_JUDGE_MODEL,
         db,
-        catalogue([provider()], [model(INTERIM_EDITOR_MODEL)])
+        catalogue([provider()], [model('claude-haiku-5-5')])
       )
     ).resolves.toBeNull();
   });
@@ -287,7 +298,7 @@ describe('pickInterimBinding', () => {
   it('throws, rather than answering null, when the org policy cannot be read', async () => {
     mockPolicy.apply.mockRejectedValue(new Error('db down'));
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], both))
     ).rejects.toBeInstanceOf(ProviderSeamUnavailableError);
   });
 
@@ -296,16 +307,16 @@ describe('pickInterimBinding', () => {
       throw new Error('policy service down');
     });
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], both))
     ).rejects.toBeInstanceOf(ProviderSeamUnavailableError);
   });
 
-  it('answers null when the interim model does not offer chat', async () => {
+  it('answers null when the default model does not offer chat', async () => {
     await expect(
-      pickInterimBinding(
-        INTERIM_JUDGE_MODEL,
+      pickDefaultBinding(
+        DEFAULT_JUDGE_MODEL,
         db,
-        catalogue([provider()], [model(INTERIM_JUDGE_MODEL, { capabilities: ['embedding'] })])
+        catalogue([provider()], [model(DEFAULT_JUDGE_MODEL, { capabilities: ['embedding'] })])
       )
     ).resolves.toBeNull();
   });
@@ -316,13 +327,13 @@ describe('pickInterimBinding', () => {
     });
     registerProviderCredentialResolver(resolver);
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], []))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], []))
     ).resolves.toBeNull();
     expect(resolver).not.toHaveBeenCalled();
     expect(mockPolicy.apply).not.toHaveBeenCalled();
   });
 
-  it('asks whether the org can reach OpenAI once for all ten agents, not once each', async () => {
+  it('asks whether the org can reach Anthropic once for all ten agents, not once each', async () => {
     const resolver = vi.fn(async () => ({ apiKey: 'sk-vault', identity: 'vault' }));
     registerProviderCredentialResolver(resolver);
     const pick = catalogue([provider()], both);
@@ -330,12 +341,12 @@ describe('pickInterimBinding', () => {
       judgeAgentDefinitions().map((d) => d.defaultBinding!(db, pick))
     );
     expect(bindings).toHaveLength(10);
-    expect(bindings.every((b) => b?.provider === 'openai')).toBe(true);
+    expect(bindings.every((b) => b?.provider === 'anthropic')).toBe(true);
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(mockPolicy.apply).toHaveBeenCalledTimes(1);
 
     // A new catalogue is a new pass, which asks again.
-    await pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both));
+    await pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], both));
     expect(resolver).toHaveBeenCalledTimes(2);
   });
 
@@ -352,12 +363,12 @@ describe('pickInterimBinding', () => {
     expect(resolver).toHaveBeenCalledTimes(1);
   });
 
-  it('throws when the credential resolver fails for OpenAI', async () => {
+  it('throws when the credential resolver fails for Anthropic', async () => {
     registerProviderCredentialResolver(async () => {
       throw new Error('vault down');
     });
     await expect(
-      pickInterimBinding(INTERIM_JUDGE_MODEL, db, catalogue([provider()], both))
+      pickDefaultBinding(DEFAULT_JUDGE_MODEL, db, catalogue([provider()], both))
     ).rejects.toBeInstanceOf(ProviderSeamUnavailableError);
   });
 });

@@ -100,21 +100,38 @@ describe('listJudgeModels', () => {
     const ethos = list.find((c) => c.key === 'judge_ethos');
     // Anthropic's are approved but not available; gpt-4o-mini is available but not approved.
     expect(ethos?.options.map((o) => o.model)).toEqual(['gpt-4.1', 'gpt-5', 'gpt-4o']);
-    expect(ethos?.options.find((o) => o.isDefault)?.model).toBe('gpt-4.1');
+    // The default (Claude Sonnet 5.5) is not available here, so no option is marked.
+    expect(ethos?.options.some((o) => o.isDefault)).toBe(false);
     const editor = list.find((c) => c.key === 'editor');
     expect(editor?.options.map((o) => o.model)).toEqual(['gpt-5', 'gpt-4.1']);
-    expect(editor?.options.find((o) => o.isDefault)?.model).toBe('gpt-5');
+  });
+
+  it('marks the default, first, where the workspace has Anthropic', async () => {
+    const list = await listJudgeModels(ORG, () =>
+      Promise.resolve([
+        ...OPENAI,
+        ...['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'].map((model) => ({
+          provider: 'anthropic',
+          model,
+        })),
+      ])
+    );
+    const ethos = list.find((c) => c.key === 'judge_ethos');
+    expect(ethos?.options[0]).toMatchObject({ model: 'claude-sonnet-5-5', isDefault: true });
+    expect(ethos?.options.filter((o) => o.isDefault)).toHaveLength(1);
+    const editor = list.find((c) => c.key === 'editor');
+    expect(editor?.options[0]).toMatchObject({ model: 'claude-sonnet-5-5', isDefault: true });
   });
 
   it('follows the availability input, so another source can replace it', async () => {
     const list = await listJudgeModels(ORG, () =>
-      Promise.resolve([{ provider: 'anthropic', model: 'claude-haiku-4.5' }])
+      Promise.resolve([{ provider: 'anthropic', model: 'claude-haiku-5-5' }])
     );
     expect(list.find((c) => c.key === 'judge_ethos')?.options.map((o) => o.model)).toEqual([
-      'claude-haiku-4.5',
+      'claude-haiku-5-5',
     ]);
-    // Approved for a judge, not for the influence judge.
-    expect(list.find((c) => c.key === 'judge_influence')?.options).toEqual([]);
+    // Approved for the judges, not for the editor.
+    expect(list.find((c) => c.key === 'editor')?.options).toEqual([]);
   });
 
   it('shows names and a trade-off only: no token, temperature or effort fields', async () => {
@@ -163,7 +180,7 @@ describe('chooseJudgeModel refuses', () => {
   });
 
   it('an approved model the workspace does not have available', async () => {
-    await expect(choose('claude-sonnet-4')).rejects.toThrow('not available in this workspace');
+    await expect(choose('claude-sonnet-5-5')).rejects.toThrow('not available in this workspace');
     expect(db.update).not.toHaveBeenCalled();
   });
 
@@ -249,18 +266,18 @@ describe('chooseJudgeModel on an approved, available model', () => {
       })
     );
     const both = () =>
-      Promise.resolve([...OPENAI, { provider: 'anthropic', model: 'claude-sonnet-4' }]);
+      Promise.resolve([...OPENAI, { provider: 'anthropic', model: 'claude-sonnet-5-5' }]);
     await chooseJudgeModel({
       orgId: ORG,
       key: 'judge_ethos',
-      model: 'claude-sonnet-4',
+      model: 'claude-sonnet-5-5',
       userId: 'user-1',
       availability: both,
     });
 
     expect(db.update.mock.calls[0][0].data).toEqual({
       provider: 'anthropic',
-      model: 'claude-sonnet-4',
+      model: 'claude-sonnet-5-5',
       bindingOwner: 'org',
       fallbackProviders: ['groq'],
     });
@@ -270,11 +287,11 @@ describe('chooseJudgeModel on an approved, available model', () => {
   it('audits the fallbacks it drops', async () => {
     db.findFirst.mockResolvedValue(agentRow({ fallbackProviders: ['anthropic', 'groq'] }));
     const both = () =>
-      Promise.resolve([...OPENAI, { provider: 'anthropic', model: 'claude-sonnet-4' }]);
+      Promise.resolve([...OPENAI, { provider: 'anthropic', model: 'claude-sonnet-5-5' }]);
     await chooseJudgeModel({
       orgId: ORG,
       key: 'judge_ethos',
-      model: 'claude-sonnet-4',
+      model: 'claude-sonnet-5-5',
       userId: 'user-1',
       availability: both,
     });

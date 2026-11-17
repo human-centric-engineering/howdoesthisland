@@ -716,13 +716,15 @@ describe('runJudge holds the call to the approved entry for the bound model (j4)
     expect(chat).not.toHaveBeenCalled();
   });
 
-  it('refuses a model approved for a judge but not for the influence judge', async () => {
+  it('refuses a model taken off the lists (t-39), and sends its successor', async () => {
     bindTo('anthropic', 'claude-haiku-4.5');
     expect((await refusal(run({}, 'judge_influence'))).code).toBe('model_not_approved');
+    expect((await refusal(run())).code).toBe('model_not_approved');
     expect(chat).not.toHaveBeenCalled();
 
+    bindTo('anthropic', 'claude-haiku-5-5');
     chat.mockResolvedValueOnce(response(JSON.stringify(ethosReply())));
-    await expect(run()).resolves.toMatchObject({ model: 'claude-haiku-4.5' });
+    await expect(run()).resolves.toMatchObject({ model: 'claude-haiku-5-5' });
   });
 
   it('sends the influence judge on a 16,384-token model no more than that model can produce', async () => {
