@@ -16,9 +16,13 @@
  *   new workspace's has it, and keeps the rest of its policy (other
  *   providers, any jurisdictions), read and written in one serializable
  *   transaction so a concurrent grant is not lost. The install org is
- *   skipped: at `multi` its policy is open. So is an org approved for no
- *   provider at all: every workspace is made with one, so an empty list was
- *   set by a platform admin, and is reported rather than overridden.
+ *   skipped: at `multi` its policy is open. **Only a policy the app wrote is
+ *   changed**: OpenAI alone (what a workspace was given before t-39), or
+ *   nothing (a workspace whose grant failed when it was made), with no
+ *   jurisdiction restriction. Any other policy may be a platform admin's
+ *   choice (other providers, a jurisdiction, a provider left off on
+ *   purpose), so it is reported for an admin to decide on `/admin`, never
+ *   overridden.
  * - **Handing back stale choices.** A judge or editor a workspace bound to a
  *   model no longer on its role's approved list (the Claude 4.x entries t-39
  *   removed) would have every call refused. Such a binding is handed back to
@@ -47,6 +51,9 @@ import { ORG_PROVIDERS_KEY, readOrgProviderPolicy } from '@/lib/tenancy/org-sett
 import { orgProviderPolicySchema } from '@/lib/validations/tenancy';
 import { isRecord } from '@/lib/utils';
 
+/** The provider every workspace was approved for, alone, before t-39. */
+const PREVIOUS_PROVIDER_SLUG = 'openai';
+
 export type GrantOutcome = 'granted' | 'already' | 'restricted' | 'missing';
 
 export interface GrantSummary {
@@ -54,17 +61,23 @@ export interface GrantSummary {
   providerSlug: string | null;
   granted: string[];
   already: string[];
-  /** Orgs approved for no provider at all, left as a platform admin set them. */
+  /** Orgs whose policy the app did not write, left for an admin to decide. */
   restricted: string[];
 }
 
 /**
- * Put `providerId` first on one org's approved providers. `missing` when the
- * org does not exist, `restricted` when it is approved for no provider (left
- * alone). The read and the write are one serializable transaction, retried on
- * a clash with a concurrent settings write.
+ * Put `providerId` first on one org's approved providers, when the org's
+ * policy is one the app wrote: approved for nothing, or for `appDefault`
+ * alone (the providers a workspace was given before), with no jurisdiction
+ * restriction. `restricted` for any other policy, left alone; `missing` when
+ * the org does not exist. The read and the write are one serializable
+ * transaction, retried on a clash with a concurrent settings write.
  */
-export async function grantProviderToOrg(orgId: string, providerId: string): Promise<GrantOutcome> {
+export async function grantProviderToOrg(
+  orgId: string,
+  providerId: string,
+  appDefault: readonly string[]
+): Promise<GrantOutcome> {
   // System scope: an org's settings are written by a platform operator here,
   // from no org's context.
   return withSettingsConflictRetry(() =>
@@ -75,7 +88,12 @@ export async function grantProviderToOrg(orgId: string, providerId: string): Pro
           if (!row) return 'missing';
           const policy = readOrgProviderPolicy(row.settings, { orgId });
           if (policy.approved.includes(providerId)) return 'already';
-          if (policy.approved.length === 0) return 'restricted';
+          const appWritten =
+            !policy.jurisdictions &&
+            (policy.approved.length === 0 ||
+              (policy.approved.length === appDefault.length &&
+                policy.approved.every((id) => appDefault.includes(id))));
+          if (!appWritten) return 'restricted';
           const settings: Record<string, unknown> = isRecord(row.settings)
             ? { ...row.settings }
             : {};
@@ -106,6 +124,14 @@ export async function grantJudgeProviderToAllOrgs(): Promise<GrantSummary> {
     })
   );
   if (!provider) return { providerSlug: null, granted: [], already: [], restricted: [] };
+  // What a workspace was approved for before the judges moved: OpenAI alone.
+  const previous = await runAsSystem('judge provider grant: previous default', () =>
+    prisma.aiProviderConfig.findUnique({
+      where: { slug: PREVIOUS_PROVIDER_SLUG },
+      select: { id: true },
+    })
+  );
+  const appDefault = previous ? [previous.id] : [];
 
   // Suspended orgs too: one reinstated later should find its judges working.
   const orgs = await runAsSystem('judge provider grant: orgs', () =>
@@ -118,7 +144,7 @@ export async function grantJudgeProviderToAllOrgs(): Promise<GrantSummary> {
     restricted: [],
   };
   for (const { id } of orgs) {
-    const outcome = await grantProviderToOrg(id, provider.id);
+    const outcome = await grantProviderToOrg(id, provider.id, appDefault);
     if (outcome !== 'missing') summary[outcome].push(id);
   }
   return summary;

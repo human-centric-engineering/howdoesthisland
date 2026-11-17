@@ -47,7 +47,7 @@ import { provisionSignupWorkspace } from '@/lib/app/workspaces/provision';
 
 /**
  * HowDoesThisLand (t-7, D1): every uninvited signup gets a workspace of its
- * own, granted OpenAI and the default budget. The orgs it creates for a signup
+ * own, granted Anthropic and OpenAI and the default budget. The orgs it creates for a signup
  * that then fails are erased by the sweep in `lib/app/workspaces/sweep.ts`,
  * registered in `lib/app/jobs.ts`.
  */

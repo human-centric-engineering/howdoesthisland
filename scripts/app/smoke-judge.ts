@@ -79,7 +79,7 @@ async function main(): Promise<number> {
   const org = await system(() => createWorkspaceOrg('Smoke judge', `smoke-judge-${Date.now()}`));
   try {
     const { granted } = await system(() => equipWorkspace(org.id, 'smoke:judge'));
-    check(granted, 'the workspace is approved for its providers');
+    check(granted, 'the workspace is approved for the judges’ provider');
     // Without the grant the call would fail at the provider gate, or bill
     // against a set-up the app never runs; the workspace is still erased.
     if (!granted) return 1;

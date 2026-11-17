@@ -322,9 +322,9 @@ describe('runDevTenancySetup', () => {
     expect(results.map((r) => [r.step, r.outcome])).toEqual([
       ['app role', 'unchanged'],
       ['policies', 'unchanged'],
-      ['Anthropic provider', 'unchanged'],
       ['OpenAI provider', 'unchanged'],
       ['embedding model', 'unchanged'],
+      ['Anthropic provider', 'unchanged'],
       ['drift check', 'unchanged'],
     ]);
     expect(runNpm.mock.calls).toEqual([['db:tenancy:enable'], ['db:drift-check']]);

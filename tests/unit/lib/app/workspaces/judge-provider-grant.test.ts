@@ -49,9 +49,17 @@ beforeEach(() => {
     'ws-eu': { providers: { approved: [OPENAI_ID], jurisdictions: ['EU'] } },
     'ws-done': { providers: { approved: [OPENAI_ID, ANTHROPIC_ID] } },
     'ws-none': { providers: { approved: [] } },
+    'ws-curated': { providers: { approved: [OPENAI_ID, 'prov-mistral'] } },
   };
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
-  db.aiProviderConfig.findUnique.mockResolvedValue({ id: ANTHROPIC_ID });
+  db.aiProviderConfig.findUnique.mockImplementation(
+    async ({ where }: { where: { slug: string } }) =>
+      where.slug === 'anthropic'
+        ? { id: ANTHROPIC_ID }
+        : where.slug === 'openai'
+          ? { id: OPENAI_ID }
+          : null
+  );
   db.org.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
     where.id in settingsOf ? { settings: settingsOf[where.id] } : null
   );
@@ -66,11 +74,12 @@ beforeEach(() => {
     { id: 'ws-eu' },
     { id: 'ws-done' },
     { id: 'ws-none' },
+    { id: 'ws-curated' },
   ]);
 });
 
 describe('grantJudgeProviderToAllOrgs()', () => {
-  it('puts the judges’ provider first for every org but the install org, keeping the rest', async () => {
+  it('grants the judges’ provider, first, only where the app wrote the policy, keeping the rest', async () => {
     const summary = await grantJudgeProviderToAllOrgs();
 
     expect(db.aiProviderConfig.findUnique).toHaveBeenCalledWith(
@@ -79,22 +88,26 @@ describe('grantJudgeProviderToAllOrgs()', () => {
     expect(db.org.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: { not: 'install' } } })
     );
-    // In a new workspace's order; other settings slices survive, and so does
-    // a jurisdiction restriction.
+    // OpenAI alone (the old default): granted, in a new workspace's order,
+    // other settings slices kept.
     expect(settingsOf['ws-openai']).toEqual({
       providers: { approved: [ANTHROPIC_ID, OPENAI_ID] },
       app: { kept: true },
     });
+    // Nothing at all (a grant that failed when it was made): granted.
+    expect(settingsOf['ws-none']).toEqual({ providers: { approved: [ANTHROPIC_ID] } });
+    // A jurisdiction, or a provider the app never grants: an admin's choice, left alone.
     expect(settingsOf['ws-eu']).toEqual({
-      providers: { approved: [ANTHROPIC_ID, OPENAI_ID], jurisdictions: ['EU'] },
+      providers: { approved: [OPENAI_ID], jurisdictions: ['EU'] },
     });
-    // An org approved for nothing was set so by an admin: reported, not overridden.
-    expect(settingsOf['ws-none']).toEqual({ providers: { approved: [] } });
+    expect(settingsOf['ws-curated']).toEqual({
+      providers: { approved: [OPENAI_ID, 'prov-mistral'] },
+    });
     expect(summary).toEqual({
       providerSlug: 'anthropic',
-      granted: ['ws-openai', 'ws-eu'],
+      granted: ['ws-openai', 'ws-none'],
       already: ['ws-done'],
-      restricted: ['ws-none'],
+      restricted: ['ws-eu', 'ws-curated'],
     });
   });
 
@@ -104,7 +117,7 @@ describe('grantJudgeProviderToAllOrgs()', () => {
     for (const call of db.$transaction.mock.calls) {
       expect(call[1]).toEqual({ isolationLevel: 'Serializable' });
     }
-    expect(db.$transaction).toHaveBeenCalledTimes(4);
+    expect(db.$transaction).toHaveBeenCalledTimes(5);
     // The running build may not approve the new default yet.
     expect(reconcile).not.toHaveBeenCalled();
     expect(db.org.update).not.toHaveBeenCalledWith(
@@ -128,21 +141,27 @@ describe('grantJudgeProviderToAllOrgs()', () => {
 
 describe('grantProviderToOrg()', () => {
   it('answers missing for an org that does not exist, writing nothing', async () => {
-    await expect(grantProviderToOrg('gone', ANTHROPIC_ID)).resolves.toBe('missing');
+    await expect(grantProviderToOrg('gone', ANTHROPIC_ID, [OPENAI_ID])).resolves.toBe('missing');
     expect(db.org.update).not.toHaveBeenCalled();
   });
 
-  it('leaves an org with no policy at all alone, as approved for nothing', async () => {
+  it('grants an org with no settings at all, as approved for nothing', async () => {
     settingsOf['ws-new'] = null;
-    await expect(grantProviderToOrg('ws-new', ANTHROPIC_ID)).resolves.toBe('restricted');
-    expect(db.org.update).not.toHaveBeenCalled();
+    await expect(grantProviderToOrg('ws-new', ANTHROPIC_ID, [OPENAI_ID])).resolves.toBe('granted');
+    expect(settingsOf['ws-new']).toEqual({ providers: { approved: [ANTHROPIC_ID] } });
+  });
+
+  it('treats OpenAI alone as an admin’s choice where OpenAI has no row to compare with', async () => {
+    await expect(grantProviderToOrg('ws-openai', ANTHROPIC_ID, [])).resolves.toBe('restricted');
   });
 
   it('retries a transaction that clashed with another, on a fresh read', async () => {
     db.$transaction.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError('clash', { code: 'P2034', clientVersion: 'x' })
     );
-    await expect(grantProviderToOrg('ws-openai', ANTHROPIC_ID)).resolves.toBe('granted');
+    await expect(grantProviderToOrg('ws-openai', ANTHROPIC_ID, [OPENAI_ID])).resolves.toBe(
+      'granted'
+    );
     expect(db.$transaction).toHaveBeenCalledTimes(2);
   });
 });

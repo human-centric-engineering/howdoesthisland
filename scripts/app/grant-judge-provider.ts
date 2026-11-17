@@ -39,8 +39,8 @@ async function main(): Promise<number> {
   );
   if (summary.restricted.length > 0) {
     out(
-      `${summary.restricted.length} org(s) approved for no provider were left as an admin set ` +
-        `them (grant on /admin if meant): ${summary.restricted.join(', ')}`
+      `${summary.restricted.length} org(s) with a provider policy the app did not write were ` +
+        `left for an admin (grant on /admin if meant): ${summary.restricted.join(', ')}`
     );
   }
   const released = await releaseUnapprovedBindings();

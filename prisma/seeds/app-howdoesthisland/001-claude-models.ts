@@ -1,8 +1,5 @@
 import type { SeedUnit } from '@/prisma/runner';
 import { serviceAccountWhere } from '@/lib/auth/account';
-import { reconcilePlatformAgents } from '@/lib/orchestration/agents/reconcile-platform-agents';
-import { createPlatformAgentCatalogue } from '@/lib/orchestration/agents/platform-agents';
-import { listActiveOrgIds } from '@/lib/tenancy/context';
 
 /**
  * The current generation of Claude models in the provider-model matrix
@@ -22,11 +19,9 @@ import { listActiveOrgIds } from '@/lib/tenancy/context';
  * updated on re-seed; one an admin has edited (`isDefault: false`) is left.
  *
  * Runs after `021-platform-agents`, since app directories sort after the
- * numbered core seeds, so on a fresh database that reconcile binds the judges
- * before their default model exists, to nothing. This seed therefore
- * reconciles every active org once its rows are written, as 021 does, so the
- * judges are bound to Claude Sonnet 5.5 when seeding ends rather than when the
- * maintenance job next runs.
+ * numbered core seeds. On a fresh database that reconcile therefore binds the
+ * judges before these rows exist; the platform-agent maintenance job, or the
+ * next reconcile, moves them on.
  */
 const MODELS = [
   {
@@ -118,20 +113,6 @@ const unit: SeedUnit = {
       written++;
     }
     logger.info(`✅ Claude models: ${written} written, ${skipped} skipped (admin-customised)`);
-
-    // As 021: one catalogue for every org, and one org's failure does not stop
-    // the rest or fail the deploy; the maintenance job retries it.
-    const catalogue = createPlatformAgentCatalogue();
-    for (const orgId of await listActiveOrgIds(prisma)) {
-      try {
-        await reconcilePlatformAgents(orgId, { db: prisma, log: logger, catalogue });
-      } catch (err) {
-        logger.error(`  ✗ ${orgId}: platform agents not reconciled; the maintenance job retries`, {
-          orgId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
   },
 };
 

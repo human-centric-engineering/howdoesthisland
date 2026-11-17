@@ -296,9 +296,11 @@ export async function runDevTenancySetup(deps: SetupDeps): Promise<StepResult[]>
   results.push(await ensureAppRole(deps.probeAppRole, deps.runNpm));
   results.push(enablePolicies(deps.runNpm));
   const db = deps.db();
-  results.push(await ensureAnthropicProvider(db));
+  // The embedder's steps first, so a problem with the judges' provider does
+  // not stop the embedder being set up.
   results.push(await ensureOpenAiProvider(db));
   results.push(await ensureEmbeddingModel(db));
+  results.push(await ensureAnthropicProvider(db));
   results.push(runDriftCheck(deps.runNpm));
   return results;
 }

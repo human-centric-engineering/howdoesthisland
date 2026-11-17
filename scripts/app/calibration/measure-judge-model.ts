@@ -139,7 +139,8 @@ async function main(): Promise<number> {
   const slugs = HOWDOESTHISLAND_JUDGE_SLOTS.map(judgeAgentSlug);
   const saved = await runAsSystem('measure: read bindings', () =>
     prisma.aiAgent.findMany({
-      where: { orgId: INSTALL_ORG_ID, slug: { in: slugs } },
+      // The live agents the judges run on, as `model-choice.ts` reads them.
+      where: { orgId: INSTALL_ORG_ID, slug: { in: slugs }, isSystem: true, deletedAt: null },
       select: { id: true, provider: true, model: true, bindingOwner: true },
     })
   );
@@ -147,15 +148,6 @@ async function main(): Promise<number> {
     out(`The install org has ${saved.length} of the ${slugs.length} judge agents.`);
     return 1;
   }
-  await runAsSystem('measure: bind candidate', () =>
-    prisma.aiAgent.updateMany({
-      where: { id: { in: saved.map((a) => a.id) } },
-      data: { provider: judge.provider, model: judge.model, bindingOwner: 'org' },
-    })
-  );
-  out(
-    `Judges bound to ${judge.provider}/${judge.model} (effort ${judge.settings.reasoningEffort ?? 'default'}).`
-  );
   // Once only, whichever comes first: the run ending, or an interrupt.
   let restored: Promise<void> | null = null;
   const restore = () =>
@@ -180,9 +172,19 @@ async function main(): Promise<number> {
       // 128 + the signal's number, as a shell reports it (SIGINT 130, SIGTERM 143).
       .finally(() => process.exit(signal === 'SIGTERM' ? 143 : 130));
   };
+  // In place before the bind, so an interrupt during it is restored too.
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   try {
+    await runAsSystem('measure: bind candidate', () =>
+      prisma.aiAgent.updateMany({
+        where: { id: { in: saved.map((a) => a.id) } },
+        data: { provider: judge.provider, model: judge.model, bindingOwner: 'org' },
+      })
+    );
+    out(
+      `Judges bound to ${judge.provider}/${judge.model} (effort ${judge.settings.reasoningEffort ?? 'default'}).`
+    );
     if (args.probe) return await probe(args.version, args.case);
     const started = Date.now();
     const code = await runCalibrate(['--mode', 'ai', '--version', args.version], {
