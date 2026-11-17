@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('@/lib/api/client', async (importOriginal) => ({
@@ -116,15 +116,40 @@ describe('ApiKeysManager', () => {
     });
 
     it('says so when there are no keys', () => {
-      setup([]);
+      setup([], { workspaceName: null });
       expect(yourKeys()).toHaveTextContent('You haven’t made any keys yet.');
+    });
+
+    it('says the list is this workspace’s, since core lists only its keys', () => {
+      setup([], { workspaceName: 'Acme copy desk' });
+      expect(yourKeys()).toHaveTextContent('The keys you made in Acme copy desk');
+      expect(yourKeys()).toHaveTextContent('A key made in another workspace is listed there.');
+      expect(yourKeys()).toHaveTextContent('You haven’t made any keys in this workspace yet.');
+    });
+
+    it('marks a key Expired once it lapses while the page is open', () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+      vi.setSystemTime(new Date('2026-11-17T12:00:00.000Z'));
+      setup([row({ expiresAt: '2026-11-17T12:00:30.000Z' })], {
+        renderedAt: '2026-11-17T12:00:00.000Z',
+      });
+      expect(within(yourKeys()).getAllByRole('row')[1]).toHaveTextContent('Active');
+
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(within(yourKeys()).getAllByRole('row')[1]).toHaveTextContent('Expired');
     });
   });
 
   describe('the workspace a key acts in', () => {
     it('names the active workspace', () => {
       setup();
-      expect(screen.getByText('Acme copy desk').tagName).toBe('STRONG');
+      // Named in the make-a-key card and again over the list it scopes.
+      const named = screen.getAllByText('Acme copy desk');
+      expect(named).toHaveLength(2);
+      expect(named.every((el) => el.tagName === 'STRONG')).toBe(true);
+      expect(named[0]?.parentElement).toHaveTextContent('A key acts as you, in Acme copy desk');
     });
 
     it('names none when there is no workspace to name', () => {
@@ -294,6 +319,11 @@ describe('ApiKeysManager', () => {
       expect(alert).toHaveTextContent('The key was made');
       expect(alert).not.toHaveTextContent('Try again');
       expect(nameInput()).toHaveValue('');
+
+      // Dismissing the panel takes the warning that points at it with it.
+      await user.click(screen.getByRole('button', { name: 'I’ve saved it' }));
+      expect(screen.queryByTestId('new-api-key')).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('says the key was made, and to revoke it, when the response has no value to show', async () => {
@@ -326,6 +356,52 @@ describe('ApiKeysManager', () => {
   });
 
   describe('revoking a key', () => {
+    async function revokeFirst(user: ReturnType<typeof userEvent.setup>, name: string) {
+      await user.click(within(yourKeys()).getAllByRole('button', { name: `Revoke ${name}` })[0]);
+      const dialog = await screen.findByRole('alertdialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    }
+
+    it('moves focus on each revoke, even of two keys with one name', async () => {
+      vi.mocked(apiClient.delete).mockResolvedValue({ message: 'API key revoked' });
+      const { user } = setup([row({ id: 'key-1', name: 'CI' }), row({ id: 'key-2', name: 'CI' })]);
+      const heading = () => screen.getByRole('heading', { name: 'Your keys' });
+
+      await revokeFirst(user, 'CI');
+      await waitFor(() => expect(heading()).toHaveFocus());
+      heading().blur();
+
+      await revokeFirst(user, 'CI');
+      expect(apiClient.delete).toHaveBeenLastCalledWith('/api/v1/user/api-keys/key-2');
+      await waitFor(() => expect(heading()).toHaveFocus());
+    });
+
+    it('drops the revoked line once a new key is being made', async () => {
+      vi.mocked(apiClient.delete).mockResolvedValue({ message: 'API key revoked' });
+      vi.mocked(apiClient.post).mockResolvedValue({
+        key: {
+          id: 'key-new',
+          name: 'Next',
+          keyPrefix: 'sk_newp1234',
+          scopes: ['assess'],
+          orgId: 'org-1',
+          expiresAt: null,
+          createdAt: '2026-11-17T12:00:00.000Z',
+          rawKey: 'sk_next',
+        },
+      });
+      const { user } = setup([row({ name: 'Old' })]);
+
+      await revokeFirst(user, 'Old');
+      expect(within(yourKeys()).getByRole('status')).toHaveTextContent('Revoked “Old”.');
+
+      await user.type(nameInput(), 'Next');
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+      await screen.findByTestId('new-api-key');
+      expect(within(yourKeys()).getByRole('status')).toHaveTextContent('');
+    });
+
     it('revokes after confirming, and marks the row revoked', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ message: 'API key revoked' });
       const { user } = setup();

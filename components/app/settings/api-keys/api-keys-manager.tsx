@@ -112,7 +112,13 @@ export function ApiKeysManager({
 
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
-  const [revokedName, setRevokedName] = useState<string | null>(null);
+  // The key itself, not its name: two keys may share one, and revoking the
+  // second must still move focus and change what the status line says.
+  const [revoked, setRevoked] = useState<{ id: string; name: string } | null>(null);
+  // From the server's render time, so hydration draws the server's badges;
+  // then from this clock each minute, so a key that lapses while the page is
+  // open stops saying Active.
+  const [now, setNow] = useState(() => new Date(renderedAt));
   const keysHeading = useRef<HTMLHeadingElement>(null);
   const revoke = useSaveFailure({
     fallback: 'The key could not be revoked. Try again in a moment.',
@@ -138,6 +144,7 @@ export function ApiKeysManager({
       });
     if (create.block(problems)) return;
 
+    setRevoked(null);
     setCreating(true);
     let sent: unknown;
     try {
@@ -181,7 +188,7 @@ export function ApiKeysManager({
     }
   };
 
-  const handleRevoke = async (keyId: string) => {
+  const handleRevoke = async (keyId: string, keyName: string) => {
     setRevoking(true);
     try {
       await apiClient.delete(apiKeyEndpoint(keyId));
@@ -190,7 +197,7 @@ export function ApiKeysManager({
         all.map((k) => (k.id === keyId ? { ...k, revokedAt: k.revokedAt ?? at } : k))
       );
       setRevokeId(null);
-      setRevokedName(keys.find((k) => k.id === keyId)?.name ?? null);
+      setRevoked({ id: keyId, name: keyName });
     } catch (err) {
       revoke.report(err);
     } finally {
@@ -202,12 +209,15 @@ export function ApiKeysManager({
   // nowhere to return; send it to the list's heading, where the status line
   // says what happened. After Radix's own deferred restore, hence the timer.
   useEffect(() => {
-    if (revokedName === null) return;
+    if (revoked === null) return;
     const timer = setTimeout(() => keysHeading.current?.focus(), 0);
     return () => clearTimeout(timer);
-  }, [revokedName]);
+  }, [revoked]);
 
-  const now = new Date(renderedAt);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -236,7 +246,15 @@ export function ApiKeysManager({
                 <Copy className="mr-2 h-4 w-4" />
                 Copy key
               </Button>
-              <Button type="button" size="sm" onClick={() => setShown(null)}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setShown(null);
+                  // A fallback warning by Save points at this panel; it goes too.
+                  create.clear();
+                }}
+              >
                 I&rsquo;ve saved it
               </Button>
               {copied === 'yes' ? (
@@ -390,10 +408,20 @@ export function ApiKeysManager({
           Your keys
         </h2>
         <p role="status" className="text-sm">
-          {revokedName === null ? null : <>Revoked &ldquo;{revokedName}&rdquo;.</>}
+          {revoked === null ? null : <>Revoked &ldquo;{revoked.name}&rdquo;.</>}
         </p>
+        {workspaceName ? (
+          <p className="text-muted-foreground text-sm">
+            The keys you made in <strong>{workspaceName}</strong>, and any platform keys. A key made
+            in another workspace is listed there.
+          </p>
+        ) : null}
         {keys.length === 0 ? (
-          <p className="text-muted-foreground text-sm">You haven&rsquo;t made any keys yet.</p>
+          <p className="text-muted-foreground text-sm">
+            {workspaceName
+              ? 'You haven’t made any keys in this workspace yet.'
+              : 'You haven’t made any keys yet.'}
+          </p>
         ) : (
           <Table>
             <TableHeader>
@@ -470,7 +498,9 @@ export function ApiKeysManager({
                               <AlertDialogAction
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                 {...revokeDialog.actionProps()}
-                                onClick={(e) => revokeDialog.confirm(e, () => handleRevoke(key.id))}
+                                onClick={(e) =>
+                                  revokeDialog.confirm(e, () => handleRevoke(key.id, key.name))
+                                }
                               >
                                 {revoking ? 'Revoking…' : 'Revoke'}
                               </AlertDialogAction>

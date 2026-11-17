@@ -71,6 +71,8 @@ session; their rules are core's (`.context/orchestration/api-keys.md`).
   words are in `SCOPE_DESCRIPTIONS` (`components/app/settings/api-keys/schemas.ts`); a
   scope added to the seam without words is still offered, under its own name.
 - **Workspace:** a key is bound to the workspace the request was made in, so the page
-  names the active one. A platform key (no workspace) is labelled as such.
+  names the active one, and so does the list: core lists only the active workspace's keys
+  (and platform keys), so a key made elsewhere is listed there. A platform key (no
+  workspace) is labelled as such.
 - **Expiry:** 30 days, 90 days (the default), a year, or none, sent as an ISO datetime.
 - The new key's value is shown once and never stored by the page.
