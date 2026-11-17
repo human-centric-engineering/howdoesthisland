@@ -120,6 +120,18 @@ export class FakeFrameworkRepo implements FrameworkRepo {
     // Shuffled, so compose() is proved to order by position, not by storage.
     return Promise.resolve(v ? [...v.nodes].reverse() : []);
   }
+
+  lastPublishedCalibration(
+    slug: string
+  ): Promise<{ version: string; calibration: unknown } | null> {
+    // As the real one orders: publishedAt desc, nulls last, then newest created
+    // (insertion order reversed, which a stable sort keeps on a tie).
+    const v = [...this.versions.values()]
+      .reverse()
+      .filter((x) => x.frameworkSlug === slug && x.status === 'PUBLISHED' && x.calibration !== null)
+      .sort((a, b) => (b.publishedAt?.getTime() ?? -1) - (a.publishedAt?.getTime() ?? -1))[0];
+    return Promise.resolve(v ? { version: v.version, calibration: v.calibration } : null);
+  }
 }
 
 /**

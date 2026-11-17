@@ -15,6 +15,8 @@
  * version is never added to that list after the gate exists.
  */
 import type { CalibrationStore } from '@/lib/app/calibration/store';
+import { agreementPct, agreementTenths } from '@/lib/app/calibration/score';
+import { calibrationSnapshotSchema } from '@/lib/app/calibration/wire';
 import type { PublishGate } from '@/lib/app/frameworks/store';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 
@@ -82,4 +84,58 @@ export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): Publ
       return { ok: true, calibration: { ...snapshot } };
     },
   };
+}
+
+/** Judge models as a comparable key: kinds and their models in a fixed order. */
+const modelsKey = (m: Record<string, string[]>) =>
+  JSON.stringify(
+    Object.keys(m)
+      .sort()
+      .map((k) => [k, [...m[k]].sort()])
+  );
+
+/**
+ * What `publish` prints after publishing a gated draft (t-40): its agreement
+ * against the last published snapshot's, until an agreement floor exists.
+ * `current` is the snapshot just recorded; `previous` is what
+ * `FrameworkRepo.lastPublishedCalibration` read before the publish, or
+ * `'unavailable'` when that read failed. Both are
+ * parsed here, and one that does not parse is reported, never thrown: this
+ * only reports, and the publish has already happened.
+ */
+export function agreementChangeLine(
+  current: unknown,
+  previous: { version: string; calibration: unknown } | null | 'unavailable'
+): string {
+  const now = calibrationSnapshotSchema.safeParse(current);
+  if (!now.success) return 'Agreement: the snapshot just recorded is unreadable.';
+  const head = `Agreement ${agreementPct(now.data.agreement)}`;
+  if (previous === 'unavailable') {
+    return `${head}. The last published snapshot could not be read, so there is no comparison.`;
+  }
+  if (!previous) return `${head}. No earlier published version has a calibration snapshot.`;
+  const before = calibrationSnapshotSchema.safeParse(previous.calibration);
+  if (!before.success) {
+    return `${head}. The snapshot of ${previous.version}, the last published version with one, is unreadable.`;
+  }
+  // The difference of the two printed figures, signed as `calibrate` prints
+  // a change between runs. A difference of integers: never -0.0.
+  const pts = (agreementTenths(now.data.agreement) - agreementTenths(before.data.agreement)) / 10;
+  // A different set, number of checks or judge is a different measure: say so.
+  const unlike = [
+    now.data.setVersion !== before.data.setVersion
+      ? `calibration set ${before.data.setVersion} then, ${now.data.setVersion} now`
+      : null,
+    now.data.checks !== before.data.checks
+      ? `${before.data.checks} checks then, ${now.data.checks} now`
+      : null,
+    modelsKey(now.data.judgeModels) !== modelsKey(before.data.judgeModels)
+      ? 'different judge models'
+      : null,
+  ].filter((x): x is string => x !== null);
+  return (
+    `${head}, against ${agreementPct(before.data.agreement)} for ${previous.version}, the last published ` +
+    `version with a snapshot: ${pts > 0 ? '+' : ''}${pts.toFixed(1)} pts` +
+    (unlike.length ? ` (not like for like: ${unlike.join('; ')}).` : '.')
+  );
 }

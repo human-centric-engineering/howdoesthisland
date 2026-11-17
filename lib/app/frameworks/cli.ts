@@ -7,6 +7,8 @@
  * write from inside a customer's workspace cannot change it
  * (`canChangeSharedSettings()`).
  */
+import { agreementChangeLine } from '@/lib/app/calibration/gate';
+import { logger } from '@/lib/logging';
 import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
 import type { FrameworkRepo } from '@/lib/app/frameworks/repo';
 import {
@@ -64,7 +66,9 @@ export async function runImport(args: readonly string[], deps: CliDeps): Promise
 
 /**
  * `publish <slug> <version>`. A draft publishes only if `gate` allows it: the
- * calibration gate (`lib/app/calibration/gate.ts`, t-37).
+ * calibration gate (`lib/app/calibration/gate.ts`, t-37). Publishing a gated
+ * draft also prints its agreement against the last published snapshot's
+ * (t-40), which only reports: it never refuses a publish.
  */
 export async function runPublish(
   args: readonly string[],
@@ -76,10 +80,24 @@ export async function runPublish(
     return 2;
   }
   try {
-    const result = await deps.runAsSystem(`framework publish: ${slug} ${version}`, () =>
-      publishVersion(deps.repo, slug, version, deps.gate)
+    const { result, previous } = await deps.runAsSystem(
+      `framework publish: ${slug} ${version}`,
+      async () => {
+        // Read before publishing, so this version is never its own comparison.
+        // Only for the report line: a failed read must not stop the publish.
+        const previous = await deps.repo.lastPublishedCalibration(slug).catch((err: unknown) => {
+          logger.warn('Could not read the last published calibration snapshot', {
+            slug,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return 'unavailable' as const;
+        });
+        return { result: await publishVersion(deps.repo, slug, version, deps.gate), previous };
+      }
     );
     deps.out(`${slug} ${version}: ${result.outcome.replace('_', ' ')}`);
+    // Null on a no-op and on a version published before the gate: nothing to report.
+    if (result.calibration) deps.out(agreementChangeLine(result.calibration, previous));
     return 0;
   } catch (err) {
     return refused(err, deps.out);

@@ -152,6 +152,14 @@ export interface Totals {
 
 /** Rounds to four places, as every agreement figure is. */
 export const round4 = (x: number): number => Math.round(x * 10_000) / 10_000;
+/**
+ * An agreement in tenths of a percent: what every printed figure shows. From
+ * basis points, since an agreement is stored to four places and `0.5005 * 1000`
+ * is 500.4999… in floating point.
+ */
+export const agreementTenths = (x: number): number => Math.round(Math.round(x * 10_000) / 10);
+/** An agreement as printed, `82.5%`, by `calibrate` and `publish` alike. */
+export const agreementPct = (x: number): string => `${(agreementTenths(x) / 10).toFixed(1)}%`;
 const emptyTally = (): Tally => ({ ok: 0, near: 0, miss: 0, n: 0 });
 
 export function tally(rows: readonly { checks: readonly Check[] }[], judgeFailures = 0): Totals {

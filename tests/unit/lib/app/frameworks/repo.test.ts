@@ -15,7 +15,12 @@ const tx = vi.hoisted(() => ({
 }));
 const db = vi.hoisted(() => ({
   $transaction: vi.fn(),
-  frameworkVersion: { findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
+  frameworkVersion: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+  },
   frameworkNode: { findMany: vi.fn() },
 }));
 vi.mock('@/lib/db/client', () => ({ prisma: db }));
@@ -101,6 +106,29 @@ describe('reads', () => {
     expect(db.frameworkNode.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { versionId: 'ver-1' } })
     );
+  });
+
+  it('reads the newest published snapshot, passing over versions published without one (t-40)', async () => {
+    db.frameworkVersion.findMany.mockResolvedValue([
+      { version: '0.7.0', calibration: null },
+      { version: '0.6.0', calibration: { agreement: 0.85 } },
+      { version: '0.5.1', calibration: null },
+    ]);
+    expect(await repo.lastPublishedCalibration('howdoesthisland')).toEqual({
+      version: '0.6.0',
+      calibration: { agreement: 0.85 },
+    });
+    expect(db.frameworkVersion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: 'PUBLISHED', framework: { slug: 'howdoesthisland' } },
+        orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      })
+    );
+  });
+
+  it('answers null when no published version has a snapshot', async () => {
+    db.frameworkVersion.findMany.mockResolvedValue([{ version: '0.5.1', calibration: null }]);
+    expect(await repo.lastPublishedCalibration('howdoesthisland')).toBeNull();
   });
 });
 

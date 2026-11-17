@@ -62,6 +62,12 @@ export interface FrameworkRepo {
     calibration: JsonObject | null
   ): Promise<boolean>;
   readNodes(versionId: string): Promise<NodeRecord[]>;
+  /**
+   * The most recently published version of the framework that recorded a
+   * calibration snapshot, and that snapshot unparsed (t-40), or null. Retired
+   * versions are not considered.
+   */
+  lastPublishedCalibration(slug: string): Promise<{ version: string; calibration: unknown } | null>;
 }
 
 /** Long enough for ~700 records and ~1,500 links in one transaction. */
@@ -221,5 +227,17 @@ export const prismaFrameworkRepo: FrameworkRepo = {
       },
       orderBy: [{ kind: 'asc' }, { position: 'asc' }],
     });
+  },
+
+  async lastPublishedCalibration(slug) {
+    // A framework has a handful of versions: filtering SQL NULL in JS avoids `Prisma.DbNull`.
+    const rows = await prisma.frameworkVersion.findMany({
+      where: { status: 'PUBLISHED', framework: { slug } },
+      select: { version: true, calibration: true },
+      // Deterministic on ties; a row with no publishedAt is never "the last".
+      orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+    });
+    const row = rows.find((r) => r.calibration !== null);
+    return row ? { version: row.version, calibration: row.calibration } : null;
   },
 };
