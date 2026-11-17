@@ -1,5 +1,5 @@
 /**
- * Approve existing workspaces for the judges' provider (t-39).
+ * Get existing workspaces ready for the judges' provider (t-39).
  *
  * A new workspace is granted `WORKSPACE_PROVIDER_SLUGS` when it is made
  * (`provision.ts`). One made before the judges moved to Anthropic (D8, ruled
@@ -9,19 +9,34 @@
  * nothing, and every judge call is then refused. So every such workspace is
  * granted the judges' provider before the change of default reaches it.
  *
- * Adds to the org's approved list and keeps the rest of its policy (other
- * providers, any jurisdictions). The install org is skipped: at `multi` its
- * policy is open, so it needs no grant. Each grant clears the org's cached
- * policy and reconciles its platform agents, as the admin grant route does.
+ * Two writes, both safe to make while the previous build is still serving,
+ * since neither moves a binding itself:
+ *
+ * - **The grant.** Adds the provider to each org's approved list and keeps
+ *   the rest of its policy (other providers, any jurisdictions), read and
+ *   written in one serializable transaction so a concurrent grant is not
+ *   lost. The install org is skipped: at `multi` its policy is open.
+ * - **Handing back stale choices.** A judge or editor a workspace bound to a
+ *   model no longer on its role's approved list (the Claude 4.x entries t-39
+ *   removed) would have every call refused. Such a binding is handed back to
+ *   the platform (`bindingOwner: 'platform'`), so the reconcile moves it to the
+ *   default.
+ *
+ * Neither reconciles. The build being deployed does, through the
+ * platform-agent maintenance job, once it is serving: reconciling from here
+ * would bind agents to models the running build does not approve yet.
  */
+import type { Prisma } from '@prisma/client';
+import { EDITOR_AGENT_SLUG, judgeAgentSlug } from '@/lib/app/judges/agents';
+import { approvedEntry, roleOfSlot, type JudgeRole } from '@/lib/app/judges/approved-models';
+import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
 import { withSettingsConflictRetry } from '@/lib/app/workspaces/app-settings';
 import { JUDGE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
 import { prisma } from '@/lib/db/client';
-import { logger } from '@/lib/logging';
-import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-policy';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { runAsSystem } from '@/lib/tenancy/context';
-import { readOrgProviderPolicy, writeOrgProviderPolicy } from '@/lib/tenancy/org-settings';
+import { ORG_PROVIDERS_KEY, readOrgProviderPolicy } from '@/lib/tenancy/org-settings';
+import { isRecord } from '@/lib/utils';
 
 export type GrantOutcome = 'granted' | 'already' | 'missing';
 
@@ -34,24 +49,37 @@ export interface GrantSummary {
 
 /**
  * Add `providerId` to one org's approved providers. `missing` when the org
- * does not exist. Retried on a clash with a concurrent settings write, each
- * try on a fresh read.
+ * does not exist. The read and the write are one serializable transaction,
+ * retried on a clash with a concurrent settings write.
  */
 export async function grantProviderToOrg(orgId: string, providerId: string): Promise<GrantOutcome> {
   // System scope: an org's settings are written by a platform operator here,
   // from no org's context.
   return withSettingsConflictRetry(() =>
-    runAsSystem('judge provider grant', async (): Promise<GrantOutcome> => {
-      const org = await prisma.org.findUnique({ where: { id: orgId }, select: { settings: true } });
-      if (!org) return 'missing';
-      const policy = readOrgProviderPolicy(org.settings, { orgId });
-      if (policy.approved.includes(providerId)) return 'already';
-      const written = await writeOrgProviderPolicy(orgId, {
-        ...policy,
-        approved: [...policy.approved, providerId],
-      });
-      return written ? 'granted' : 'missing';
-    })
+    runAsSystem('judge provider grant', () =>
+      prisma.$transaction(
+        async (tx): Promise<GrantOutcome> => {
+          const row = await tx.org.findUnique({ where: { id: orgId }, select: { settings: true } });
+          if (!row) return 'missing';
+          const policy = readOrgProviderPolicy(row.settings, { orgId });
+          if (policy.approved.includes(providerId)) return 'already';
+          const settings: Record<string, unknown> = isRecord(row.settings)
+            ? { ...row.settings }
+            : {};
+          // Stored as `writeOrgProviderPolicy` stores it: no key when there is
+          // no jurisdiction restriction.
+          settings[ORG_PROVIDERS_KEY] = policy.jurisdictions
+            ? { approved: [...policy.approved, providerId], jurisdictions: policy.jurisdictions }
+            : { approved: [...policy.approved, providerId] };
+          await tx.org.update({
+            where: { id: orgId },
+            data: { settings: settings as Prisma.InputJsonObject },
+          });
+          return 'granted';
+        },
+        { isolationLevel: 'Serializable' }
+      )
+    )
   );
 }
 
@@ -65,26 +93,50 @@ export async function grantJudgeProviderToAllOrgs(): Promise<GrantSummary> {
   );
   if (!provider) return { providerSlug: null, granted: [], already: [] };
 
+  // Suspended orgs too: one reinstated later should find its judges working.
   const orgs = await runAsSystem('judge provider grant: orgs', () =>
     prisma.org.findMany({ where: { id: { not: INSTALL_ORG_ID } }, select: { id: true } })
   );
   const summary: GrantSummary = { providerSlug: JUDGE_PROVIDER_SLUG, granted: [], already: [] };
   for (const { id } of orgs) {
     const outcome = await grantProviderToOrg(id, provider.id);
+    if (outcome === 'granted') summary.granted.push(id);
     if (outcome === 'already') summary.already.push(id);
-    if (outcome !== 'granted') continue;
-    summary.granted.push(id);
-    forgetOrgProviderPolicy(id);
-    // Never throws; the maintenance job catches up on a failure.
-    await import('@/lib/orchestration/agents/reconcile-platform-agents')
-      .then(({ tryReconcilePlatformAgents }) =>
-        tryReconcilePlatformAgents(id, 'app: judge provider grant')
-      )
-      .catch((error: unknown) => {
-        logger.error('Granted org not reconciled; the maintenance job catches up', error, {
-          orgId: id,
-        });
-      });
   }
   return summary;
+}
+
+/** Each of the app's agents by slug, with the role whose approved list it is held to. */
+function rolesBySlug(): Map<string, JudgeRole> {
+  const roles = new Map<string, JudgeRole>(
+    HOWDOESTHISLAND_JUDGE_SLOTS.map((slot) => [judgeAgentSlug(slot), roleOfSlot(slot)])
+  );
+  roles.set(EDITOR_AGENT_SLUG, 'editor');
+  return roles;
+}
+
+/**
+ * Hand back to the platform every judge or editor a workspace bound to a model
+ * no longer on its role's approved list. Returns the agents' ids.
+ */
+export async function releaseUnapprovedBindings(): Promise<string[]> {
+  const roles = rolesBySlug();
+  const chosen = await runAsSystem('judge provider grant: chosen bindings', () =>
+    prisma.aiAgent.findMany({
+      where: { slug: { in: [...roles.keys()] }, bindingOwner: 'org' },
+      select: { id: true, slug: true, provider: true, model: true },
+    })
+  );
+  const stale = chosen.filter((a) => {
+    const role = roles.get(a.slug);
+    return role !== undefined && !approvedEntry(role, { provider: a.provider, model: a.model });
+  });
+  if (stale.length === 0) return [];
+  await runAsSystem('judge provider grant: release stale bindings', () =>
+    prisma.aiAgent.updateMany({
+      where: { id: { in: stale.map((a) => a.id) }, bindingOwner: 'org' },
+      data: { bindingOwner: 'platform' },
+    })
+  );
+  return stale.map((a) => a.id);
 }

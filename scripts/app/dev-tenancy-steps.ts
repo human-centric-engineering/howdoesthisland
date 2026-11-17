@@ -31,6 +31,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { KNOWN_PROVIDERS } from '@/lib/orchestration/llm/known-providers';
+import { JUDGE_PROVIDER_SLUG } from '@/lib/app/workspaces/provider-slug';
 
 /** The platform's default app-role name, which this app must not use. */
 export const PLATFORM_DEFAULT_ROLE = 'sunrise_app';
@@ -38,8 +39,8 @@ export const PLATFORM_DEFAULT_ROLE = 'sunrise_app';
 /** The provider the app's embedder runs on. */
 export const PROVIDER_SLUG = 'openai';
 
-/** The provider the app's judges and editor run on (D8, t-39). */
-export const JUDGES_PROVIDER_SLUG = 'anthropic';
+/** The provider the app's judges and editor run on (D8, t-39): the app's own constant. */
+export const JUDGES_PROVIDER_SLUG = JUDGE_PROVIDER_SLUG;
 
 /** The embedding model, by its `AiProviderModel.slug` from seed 009. */
 export const EMBEDDING_MODEL_SLUG = 'openai-text-embedding-3-small';

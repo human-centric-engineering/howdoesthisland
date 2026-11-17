@@ -53,8 +53,19 @@ function parseArgs(argv: string[]): z.infer<typeof argsSchema> {
   const raw: Record<string, string | boolean> = {};
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
-    if (flag === '--probe') raw.probe = true;
-    else if (flag.startsWith('--') && argv[i + 1] !== undefined) raw[flag.slice(2)] = argv[++i];
+    if (flag === '--probe') {
+      raw.probe = true;
+      continue;
+    }
+    const value = argv[i + 1];
+    // A flag followed by another flag has no value: bad usage, not a value of `--probe`.
+    if (!flag.startsWith('--') || value === undefined || value.startsWith('--')) {
+      throw new Error(
+        `Bad usage at "${flag}": expected --model <id> [--version <v>] [--case <id>] [--probe]`
+      );
+    }
+    raw[flag.slice(2)] = value;
+    i++;
   }
   return argsSchema.parse(raw);
 }
@@ -145,6 +156,31 @@ async function main(): Promise<number> {
   out(
     `Judges bound to ${judge.provider}/${judge.model} (effort ${judge.settings.reasoningEffort ?? 'default'}).`
   );
+  // Once only, whichever comes first: the run ending, or an interrupt.
+  let restored: Promise<void> | null = null;
+  const restore = () =>
+    (restored ??= runAsSystem('measure: restore bindings', () =>
+      prisma.$transaction(
+        saved.map((a) =>
+          prisma.aiAgent.update({
+            where: { id: a.id },
+            data: { provider: a.provider, model: a.model, bindingOwner: a.bindingOwner },
+          })
+        )
+      )
+    ).then(() => out('Judge bindings restored.')));
+  // `finally` does not run when the process is interrupted, which would leave
+  // the install org's judges on the candidate, owned by the org, for good.
+  const onSignal = (signal: NodeJS.Signals) => {
+    out(`${signal}: restoring the judge bindings before exiting.`);
+    restore()
+      .catch((err: unknown) => {
+        console.error('Could not restore the judge bindings; they were:', saved, err);
+      })
+      .finally(() => process.exit(130));
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   try {
     if (args.probe) return await probe(args.version, args.case);
     const started = Date.now();
@@ -160,17 +196,7 @@ async function main(): Promise<number> {
     out(`Wall time ${((Date.now() - started) / 60_000).toFixed(1)} min.`);
     return code;
   } finally {
-    await runAsSystem('measure: restore bindings', () =>
-      prisma.$transaction(
-        saved.map((a) =>
-          prisma.aiAgent.update({
-            where: { id: a.id },
-            data: { provider: a.provider, model: a.model, bindingOwner: a.bindingOwner },
-          })
-        )
-      )
-    );
-    out('Judge bindings restored.');
+    await restore();
   }
 }
 

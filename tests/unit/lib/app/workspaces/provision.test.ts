@@ -367,6 +367,14 @@ describe('equipWorkspace', () => {
     expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: BOTH });
   });
 
+  it('reports the workspace granted only when the judges’ provider is among the grant', async () => {
+    await expect(equipWorkspace(ORG_ID, 'src')).resolves.toEqual({ granted: true });
+    store.providers.delete('anthropic');
+    // OpenAI alone is still written and reconciled for, but the judges cannot run.
+    await expect(equipWorkspace(ORG_ID, 'src')).resolves.toEqual({ granted: false });
+    expect(mockReconcile).toHaveBeenCalledTimes(2);
+  });
+
   it('runs the first steps before the grant', async () => {
     const order: string[] = [];
     fakePrisma.aiProviderConfig.findMany.mockImplementationOnce(() => {

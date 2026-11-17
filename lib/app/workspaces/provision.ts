@@ -143,7 +143,7 @@ export async function writeSignupWorkspaceMarker(orgId: string, marked: boolean)
  * missing means the workspace's judges and editor have no model until a
  * platform admin creates it and grants it on `/admin`.
  */
-async function grantProvider(orgId: string): Promise<boolean> {
+async function grantProvider(orgId: string): Promise<{ written: boolean; judges: boolean }> {
   const providers = await prisma.aiProviderConfig.findMany({
     where: { slug: { in: [...WORKSPACE_PROVIDER_SLUGS] } },
     select: { id: true, slug: true },
@@ -157,14 +157,14 @@ async function grantProvider(orgId: string): Promise<boolean> {
       { orgId, missing }
     );
   }
-  if (providers.length === 0) return false;
+  if (providers.length === 0) return { written: false, judges: false };
   // In the list's order, so the stored policy reads the same in every org.
   const approved = WORKSPACE_PROVIDER_SLUGS.flatMap((s) =>
     providers.filter((p) => p.slug === s).map((p) => p.id)
   );
   // No jurisdiction restriction: none is ruled for this app yet.
   await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved }));
-  return true;
+  return { written: true, judges: providers.some((p) => p.slug === JUDGE_PROVIDER_SLUG) };
 }
 
 /**
@@ -197,7 +197,10 @@ export async function equipWorkspace(
 
   for (const [step, run] of firstSteps) await attempt(step, run);
   // Read off the grant's own call, not off a step label a caller could reuse.
-  const granted = (await attempt('grant', () => grantProvider(orgId))) === true;
+  const grant = await attempt('grant', () => grantProvider(orgId));
+  // `granted` means the judges can run: their provider was granted. Another
+  // provider alone is still a grant worth reconciling for.
+  const granted = grant?.judges === true;
   await attempt('budget', () =>
     withConflictRetry(() =>
       writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })
@@ -214,7 +217,7 @@ export async function equipWorkspace(
   // The agents were given out before the grant; give them out again now it
   // exists. Never throws; the maintenance job catches up on a failure.
   // Imported on use, as `createOrg` does; an import failure is logged too.
-  if (granted) {
+  if (grant?.written) {
     await import('@/lib/orchestration/agents/reconcile-platform-agents')
       .then(({ tryReconcilePlatformAgents }) => tryReconcilePlatformAgents(orgId, source))
       .catch((error: unknown) => {

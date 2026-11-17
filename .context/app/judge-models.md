@@ -74,4 +74,7 @@ Left for the end-of-project checks, with no paid run before then:
 2. Seed the models (`npm run db:seed`, unit `app-howdoesthisland/001-claude-models`).
 3. Run `scripts/app/grant-judge-provider.ts` **before** deploying the build: a workspace
    not approved for Anthropic would have its judges bound to nothing, not left on OpenAI.
-   New workspaces are approved for Anthropic and OpenAI when they are made.
+   It also hands back to the platform any judge or editor a workspace bound to a model no
+   longer approved (the Claude 4.x entries). It moves no binding itself, so the running
+   build is unaffected; the new build's maintenance job rebinds once it is serving. New
+   workspaces are approved for Anthropic and OpenAI when they are made.
