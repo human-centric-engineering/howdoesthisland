@@ -10,6 +10,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+
+const log = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger: log }));
 import type { runJudges as RunJudges } from '@/lib/app/assessments/fan-out';
 import {
   CalibrationError,
@@ -19,7 +22,7 @@ import {
   type RunCalibrationDeps,
 } from '@/lib/app/calibration/run';
 import { calibrationSetSchema, type CalibrationSet } from '@/lib/app/calibration/schema';
-import type { CalibrationStore, StoredRun } from '@/lib/app/calibration/store';
+import { HEARTBEAT_MS, type CalibrationStore, type StoredRun } from '@/lib/app/calibration/store';
 import { fakeCalibrationStore } from '@/tests/unit/lib/app/calibration/fake-store';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
@@ -210,9 +213,12 @@ describe('runCalibration()', () => {
       startedByUserId: null,
     });
     expect(created[0].id).toMatch(/^[0-9a-f-]{36}$/);
+    // The run before it is the complete one stored before this one started.
+    const { createdAt } = await store.startRun.mock.results[0].value;
     expect(store.latestRun).toHaveBeenCalledWith({
       frameworkSlug: 'howdoesthisland',
       mode: 'quick',
+      before: createdAt,
     });
     expect(out.comparison).toBeNull();
   });
@@ -319,5 +325,79 @@ describe('startCalibration() (t-38)', () => {
     await expect(done).rejects.toThrow('provider unreachable');
     expect(runs.get(runId)).toMatchObject({ status: 'failed', error: 'provider unreachable' });
     expect(store.finishRun).not.toHaveBeenCalled();
+  });
+
+  it('rejects with the run’s own error when recording the failure fails too', async () => {
+    const { store } = fakeStore();
+    store.failRun.mockRejectedValueOnce(new Error('database unreachable'));
+    const judges = vi.fn<typeof RunJudges>(async () => {
+      throw new Error('provider unreachable');
+    });
+    const { runId, done } = await startCalibration(
+      { version: VERSION, model, set, mode: 'ai' },
+      deps(store, judges).d
+    );
+    await expect(done).rejects.toThrow('provider unreachable');
+    expect(log.error).toHaveBeenCalledWith(
+      'calibration: could not record a failed run',
+      expect.objectContaining({ message: 'database unreachable' }),
+      { runId }
+    );
+  });
+
+  it('beats while the run is running, and stops beating once it settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const { store } = fakeStore();
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const answering = stubJudges();
+      const judges = vi.fn<typeof RunJudges>(async (input) => {
+        await gate;
+        return answering(input);
+      });
+      const { runId, done } = await startCalibration(
+        { version: VERSION, model, set, mode: 'ai' },
+        deps(store, judges).d
+      );
+      await vi.advanceTimersByTimeAsync(2 * HEARTBEAT_MS);
+      expect(store.touchRun).toHaveBeenCalledTimes(2);
+      expect(store.touchRun).toHaveBeenCalledWith(runId);
+      release();
+      await done;
+      await vi.advanceTimersByTimeAsync(3 * HEARTBEAT_MS);
+      expect(store.touchRun).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('logs a missed beat without failing the run', async () => {
+    vi.useFakeTimers();
+    try {
+      const { store, runs } = fakeStore();
+      store.touchRun.mockRejectedValueOnce(new Error('blip'));
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const answering = stubJudges();
+      const judges = vi.fn<typeof RunJudges>(async (input) => {
+        await gate;
+        return answering(input);
+      });
+      const { runId, done } = await startCalibration(
+        { version: VERSION, model, set, mode: 'ai' },
+        deps(store, judges).d
+      );
+      await vi.advanceTimersByTimeAsync(HEARTBEAT_MS);
+      expect(log.warn).toHaveBeenCalledWith('calibration: heartbeat failed', {
+        runId,
+        error: 'Error: blip',
+      });
+      release();
+      await done;
+      expect(runs.get(runId)?.status).toBe('complete');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

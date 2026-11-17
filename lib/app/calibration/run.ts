@@ -32,7 +32,7 @@ import {
   type CalibrationSet,
 } from '@/lib/app/calibration/schema';
 import { scoreCase, tally, type Check, type Totals } from '@/lib/app/calibration/score';
-import type { CalibrationStore, StoredRun } from '@/lib/app/calibration/store';
+import { HEARTBEAT_MS, type CalibrationStore, type StoredRun } from '@/lib/app/calibration/store';
 import {
   createHowDoesThisLandEngine,
   type Assessment,
@@ -42,6 +42,7 @@ import {
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 import type { JsonObject } from '@/lib/app/frameworks/types';
+import { logger } from '@/lib/logging';
 import type { runJudges as RunJudges } from '@/lib/app/assessments/fan-out';
 
 export type CalibrationMode = 'quick' | 'ai';
@@ -232,7 +233,7 @@ export async function startCalibration(
   const runId = globalThis.crypto.randomUUID();
   const frameworkVersion = `${version.frameworkSlug}@${version.version}`;
   const startedByUserId = input.startedByUserId ?? null;
-  await deps.store.startRun({
+  const { createdAt } = await deps.store.startRun({
     id: runId,
     frameworkVersionId: version.id,
     sourceSha256: version.sourceSha256,
@@ -240,6 +241,14 @@ export async function startCalibration(
     mode,
     startedByUserId,
   });
+
+  // Beats while this process is running the run, so a run whose process went
+  // away is seen to have stopped (store.ts). A missed beat is not a failed run.
+  const beat = setInterval(() => {
+    deps.store.touchRun(runId).catch((err: unknown) => {
+      logger.warn('calibration: heartbeat failed', { runId, error: String(err) });
+    });
+  }, HEARTBEAT_MS);
 
   const work = async (): Promise<CalibrationOutcome> => {
     const scored = await deps.runAsInstallOrg(() =>
@@ -253,8 +262,13 @@ export async function startCalibration(
         startedByUserId,
       })
     );
-    // Read before this run is finished, so it is the run before this one.
-    const previous = await deps.store.latestRun({ frameworkSlug: version.frameworkSlug, mode });
+    // The complete run stored before this one started, as the admin page
+    // pairs them: a run started after this one is not the run before it.
+    const previous = await deps.store.latestRun({
+      frameworkSlug: version.frameworkSlug,
+      mode,
+      before: createdAt,
+    });
     const run = await deps.store.finishRun(runId, {
       judgeModels: scored.judgeModels,
       totals: scored.totals,
@@ -264,11 +278,19 @@ export async function startCalibration(
     return { run, comparison: previous ? compareRuns(previous, scored) : null };
   };
 
-  const done = work().catch(async (err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
-    await deps.store.failRun(runId, message);
-    throw err;
-  });
+  const done = work()
+    .catch(async (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        await deps.store.failRun(runId, message);
+      } catch (failErr) {
+        // The run's own error is the one to surface; the row stops beating
+        // and is shown as stopped.
+        logger.error('calibration: could not record a failed run', failErr, { runId });
+      }
+      throw err;
+    })
+    .finally(() => clearInterval(beat));
   return { runId, done };
 }
 

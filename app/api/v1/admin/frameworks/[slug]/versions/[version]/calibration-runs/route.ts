@@ -36,7 +36,8 @@ import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition
 /**
  * Long enough for an AI run the response did not wait for to carry on under
  * `after()`, as an assessment does. A whole set can take longer on a
- * serverless host; such a run is shown as stopped (`STOPPED_AFTER_MS`).
+ * serverless host; such a run stops beating and is shown as stopped
+ * (`STOPPED_AFTER_MS` in `lib/app/calibration/store.ts`).
  */
 export const maxDuration = 300;
 

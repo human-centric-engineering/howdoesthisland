@@ -100,7 +100,20 @@ counted as changed.
 A run is stored `RUNNING` when it starts, then `COMPLETE` with its results or `FAILED`
 with `error`. `totals` and `rows` are null until it is complete. Only a complete run is
 read back for comparing or for the gate, so a run that is still going, or one that died,
-never counts.
+never counts. A run is compared with the newest complete run of its mode stored _before
+it started_, so the comparison printed when it finishes matches the one the admin page
+shows, even when two runs overlap.
+
+While a run is running, the process running it touches its `heartbeatAt` every
+`HEARTBEAT_MS` (30s). A `RUNNING` run whose beat is older than `STOPPED_AFTER_MS` (2
+minutes) is **stopped**: the process went away (a deploy, a serverless time limit, a
+Ctrl-C). Nothing rewrites the row; it just stops counting as running. A long CLI run keeps
+beating, so it is not taken for stopped however long it takes.
+
+**Only one AI run of a version runs at a time**, from the CLI or the page. `startRun`
+takes a transaction-scoped advisory lock on the version, looks for an AI run of it that is
+still beating, and throws `CalibrationRunningError` if there is one. Two starts at once
+cannot both pass the check.
 
 | Module       | Does                                                                                                   |
 | ------------ | ------------------------------------------------------------------------------------------------------ |
@@ -130,11 +143,10 @@ call's cost row. Publishing is still done from the command line.
 - **Quick** is waited for, and answers 201 once it is complete.
 - **AI** answers 202 once the run is stored, and carries on under `after()`
   (`maxDuration` 300), as an assessment does. The page reads the list again every few
-  seconds while a run is running. Only one AI run of a version can run at a time
-  (409 `CALIBRATION_RUNNING`).
-- **A run that has been `RUNNING` for over an hour is shown as `stopped`**
-  (`STOPPED_AFTER_MS`). That happens when the process running it went away. Nothing
-  rewrites the row; it just stops blocking the next AI run. **A whole AI run can take
+  seconds while a run is running. A second AI run of a version that is still running is
+  answered 409 `CALIBRATION_RUNNING`.
+- **A run whose beat has stopped is shown as `stopped`**, two minutes after its process
+  went away, and it stops blocking the next AI run. **A whole AI run can take
   longer than a serverless function is allowed to live**, because the 26 cases run
   one after another. On Vercel, start AI runs from the CLI or a long-running server.
 

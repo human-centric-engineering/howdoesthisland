@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runCalibrate, type CalibrateDeps } from '@/lib/app/calibration/cli';
-import type { NewRun, StoredRun } from '@/lib/app/calibration/store';
+import { CalibrationRunningError, type NewRun, type StoredRun } from '@/lib/app/calibration/store';
 import { fakeCalibrationStore } from '@/tests/unit/lib/app/calibration/fake-store';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { importVersion } from '@/lib/app/frameworks/store';
@@ -119,5 +119,14 @@ describe('runCalibrate()', () => {
     const args = ['--mode', 'quick', '--version', '0.6.0'];
     expect(await runCalibrate(args, deps)).toBe(1);
     expect(lines.pop()).toBe('The calibration set is written for model 0.5.1, not 0.6.0.');
+  });
+
+  it('exits 1 when an AI run of the version is still running, spending nothing', async () => {
+    deps.store.startRun = vi.fn(async () => {
+      throw new CalibrationRunningError('cal-0');
+    });
+    expect(await runCalibrate(['--mode', 'ai', '--version', '0.5.1'], deps)).toBe(1);
+    expect(lines.pop()).toBe('An AI run of this version is still running (cal-0).');
+    expect(deps.runJudges).not.toHaveBeenCalled();
   });
 });

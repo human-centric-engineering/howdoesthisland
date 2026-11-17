@@ -10,17 +10,17 @@
  * listed may compare with nothing although an older run exists.
  *
  * **Running, and stopped.** A run is stored `RUNNING` when it starts and
- * finishes in the background. A `RUNNING` run older than
- * {@link STOPPED_AFTER_MS} is shown as `stopped`: the process running it went
- * away (a deploy, or a serverless host's time limit) and it will never
- * finish. Nothing rewrites it; it simply stops counting as running, so it no
- * longer blocks another AI run of the version.
+ * finishes in the background, beating while it runs. A `RUNNING` run whose
+ * beat is older than `STOPPED_AFTER_MS` is shown as `stopped`: the process
+ * running it went away (a deploy, or a serverless host's time limit) and it
+ * will never finish. Nothing rewrites it; it simply stops counting as
+ * running, so it no longer blocks another AI run of the version (store.ts).
  *
  * **Starting one.** A quick run is free and takes well under a second, so it
  * is waited for and returned complete. An AI run calls every judge on every
  * case (26 × 9) against the install org's budget, and returns as soon as it
  * is stored: it carries on with `keepRunningAfterResponse`, as an assessment
- * does. One AI run of a version at a time. The admin who starts it is
+ * does. One AI run of a version at a time, which the store enforces. The admin who starts it is
  * `startedByUserId`, on the run and on each judge call's cost row.
  *
  * Publishing stays the CLI's (`scripts/app/frameworks/publish.ts`); this never
@@ -37,9 +37,11 @@ import {
   type CalibrationMode,
   type RunCalibrationDeps,
 } from '@/lib/app/calibration/run';
-import { loadBundledSet } from '@/lib/app/calibration/sets';
+import { BUNDLED_SET_VERSIONS, loadBundledSet } from '@/lib/app/calibration/sets';
 import { calibrationSnapshotSchema } from '@/lib/app/calibration/wire';
 import {
+  CalibrationRunningError,
+  hasStopped,
   prismaCalibrationStore,
   type CalibrationRunLister,
   type CalibrationStore,
@@ -53,12 +55,9 @@ import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { runAsOrg, runAsSystem } from '@/lib/tenancy/context';
 import type { z } from 'zod';
 
-/** A run still `RUNNING` this long after it started is shown as stopped. */
-export const STOPPED_AFTER_MS = 60 * 60 * 1000;
-
 export type AdminRunStatus = 'running' | 'complete' | 'failed' | 'stopped';
 
-export interface AdminRun extends Omit<ListedRun, 'status' | 'startedByUserId'> {
+export interface AdminRun extends Omit<ListedRun, 'status' | 'startedByUserId' | 'heartbeatAt'> {
   status: AdminRunStatus;
   /** Who started it, or null for the CLI (or a user since deleted). */
   startedBy: { id: string; name: string } | null;
@@ -108,9 +107,9 @@ const defaultDeps: CalibrationAdminDeps = {
   now: () => new Date(),
 };
 
-function statusOf(run: Pick<ListedRun, 'status' | 'createdAt'>, now: Date): AdminRunStatus {
+function statusOf(run: Pick<ListedRun, 'status' | 'heartbeatAt'>, now: Date): AdminRunStatus {
   if (run.status !== 'running') return run.status;
-  return now.getTime() - run.createdAt.getTime() > STOPPED_AFTER_MS ? 'stopped' : 'running';
+  return hasStopped(run.heartbeatAt, now) ? 'stopped' : 'running';
 }
 
 /** Each complete run's comparison with the complete run of its mode before it. */
@@ -147,8 +146,8 @@ export async function listFrameworkCalibration(
 ): Promise<FrameworkCalibration> {
   const slug = howDoesThisLand.slug;
   const now = deps.now();
-  const [framework, runs] = await runAsSystem('calibration admin: list', () =>
-    Promise.all([
+  const [framework, runs, starters] = await runAsSystem('calibration admin: list', async () => {
+    const [framework, runs] = await Promise.all([
       prisma.framework.findUnique({
         where: { slug },
         select: {
@@ -168,49 +167,47 @@ export async function listFrameworkCalibration(
         },
       }),
       deps.store.listRuns(slug),
-    ])
-  );
-
-  // One query for every starter's name, not one per run.
-  const starterIds = [
-    ...new Set(runs.flatMap((r) => (r.startedByUserId ? [r.startedByUserId] : []))),
-  ];
-  const starters = starterIds.length
-    ? await prisma.user.findMany({
-        where: { id: { in: starterIds } },
-        select: { id: true, name: true },
-      })
-    : [];
+    ]);
+    // One query for every starter's name, not one per run.
+    const starterIds = [
+      ...new Set(runs.flatMap((r) => (r.startedByUserId ? [r.startedByUserId] : []))),
+    ];
+    const starters = starterIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: starterIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    return [framework, runs, starters] as const;
+  });
   const nameOf = new Map(starters.map((u) => [u.id, u.name]));
   const compared = comparisons(runs);
 
-  const versions = await Promise.all(
-    (framework?.versions ?? []).map(async (v): Promise<AdminVersion> => {
-      const snapshot = snapshotSchema.safeParse(v.calibration);
-      return {
-        id: v.id,
-        version: v.version,
-        status: VERSION_STATUS[v.status],
-        sourceSha256: v.sourceSha256,
-        createdAt: v.createdAt,
-        publishedAt: v.publishedAt,
-        calibration: snapshot.success ? snapshot.data : null,
-        runnable: (await loadBundledSet(v.version)) !== null,
-        runs: runs
-          .filter((r) => r.frameworkVersionId === v.id)
-          .map(({ startedByUserId, ...r }) => ({
-            ...r,
-            status: statusOf(r, now),
-            startedBy:
-              startedByUserId && nameOf.has(startedByUserId)
-                ? { id: startedByUserId, name: nameOf.get(startedByUserId) ?? '' }
-                : null,
-            ofCurrentFile: r.sourceSha256 === v.sourceSha256,
-            comparison: compared.get(r.id) ?? null,
-          })),
-      };
-    })
-  );
+  const versions = (framework?.versions ?? []).map((v): AdminVersion => {
+    const snapshot = snapshotSchema.safeParse(v.calibration);
+    return {
+      id: v.id,
+      version: v.version,
+      status: VERSION_STATUS[v.status],
+      sourceSha256: v.sourceSha256,
+      createdAt: v.createdAt,
+      publishedAt: v.publishedAt,
+      calibration: snapshot.success ? snapshot.data : null,
+      runnable: BUNDLED_SET_VERSIONS.includes(v.version),
+      runs: runs
+        .filter((r) => r.frameworkVersionId === v.id)
+        .map(({ startedByUserId, heartbeatAt, ...r }) => ({
+          ...r,
+          status: statusOf({ status: r.status, heartbeatAt }, now),
+          startedBy:
+            startedByUserId && nameOf.has(startedByUserId)
+              ? { id: startedByUserId, name: nameOf.get(startedByUserId) ?? '' }
+              : null,
+          ofCurrentFile: r.sourceSha256 === v.sourceSha256,
+          comparison: compared.get(r.id) ?? null,
+        })),
+    };
+  });
   return { slug, name: framework?.name ?? howDoesThisLand.name, versions };
 }
 
@@ -248,24 +245,6 @@ export async function startCalibrationRun(
     );
   }
 
-  if (input.mode === 'ai') {
-    const now = deps.now();
-    const running = (await deps.store.listRuns(slug)).find(
-      (r) =>
-        r.frameworkVersionId === found.v.id && r.mode === 'ai' && statusOf(r, now) === 'running'
-    );
-    if (running) {
-      throw new APIError(
-        `An AI run of ${input.version} is still running.`,
-        'CALIBRATION_RUNNING',
-        409,
-        {
-          runId: running.id,
-        }
-      );
-    }
-  }
-
   let started;
   try {
     started = await startCalibration(
@@ -283,6 +262,14 @@ export async function startCalibrationRun(
       }
     );
   } catch (err) {
+    if (err instanceof CalibrationRunningError) {
+      throw new APIError(
+        `An AI run of ${input.version} is still running.`,
+        'CALIBRATION_RUNNING',
+        409,
+        { runId: err.runId }
+      );
+    }
     if (err instanceof CalibrationError) {
       throw new APIError(err.message, 'CALIBRATION_REFUSED', 409, {
         reason: err.code,

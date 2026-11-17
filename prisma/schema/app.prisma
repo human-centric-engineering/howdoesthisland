@@ -361,7 +361,7 @@ model CalibrationRun {
   /// page finishes in the background, and the page shows it running), then
   /// `COMPLETE` with its results, or `FAILED` with `error`. Only a
   /// `COMPLETE` run is compared with or lets a draft publish.
-  status             CalibrationRunStatus @default(COMPLETE)
+  status             CalibrationRunStatus
   /// The provider and model each judge answered with, by slot. `{}` for `QUICK`.
   judgeModels        Json
   /// Agreement by kind of expectation (`lib/app/calibration/score.ts`). Null until `COMPLETE`.
@@ -371,6 +371,10 @@ model CalibrationRun {
   /// Why a `FAILED` run stopped.
   error              String?
   finishedAt         DateTime?
+  /// Touched every `HEARTBEAT_MS` while the run is alive
+  /// (`lib/app/calibration/store.ts`). A `RUNNING` run whose beat is older
+  /// than `STOPPED_AFTER_MS` is stopped: the process running it went away.
+  heartbeatAt        DateTime             @default(now())
   /// What the judge calls cost, summed from each reply's and each billed
   /// failure's cost (the same figures runJudge wrote to `AiCostLog`).
   costUsd            Float                @default(0)
@@ -379,6 +383,7 @@ model CalibrationRun {
   createdAt          DateTime             @default(now())
 
   @@index([frameworkVersionId, mode, createdAt])
+  @@index([frameworkVersionId, mode, status])
   @@index([mode, createdAt])
   @@index([orgId])
   @@map("app_calibration_run")

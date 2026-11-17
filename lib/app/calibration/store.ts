@@ -8,6 +8,18 @@
  * `COMPLETE` run is read back as a {@link StoredRun}: the comparison and the
  * publish gate never see one that has not finished.
  *
+ * **Alive, and stopped.** A running run's `heartbeatAt` is touched every
+ * {@link HEARTBEAT_MS} by the process running it ({@link CalibrationStore.touchRun}).
+ * One whose beat is older than {@link STOPPED_AFTER_MS} is stopped: that
+ * process went away (a deploy, a serverless host's time limit, a Ctrl-C) and
+ * it will never finish. Nothing rewrites it; it stops counting as running.
+ *
+ * **One AI run of a version at a time.** {@link CalibrationStore.startRun}
+ * checks that none of the version's AI runs is still alive and stores the new
+ * one in a single `SERIALIZABLE` transaction, so two starts at once cannot
+ * both pass the check: the loser's transaction fails, is tried again, and
+ * then sees the other. It throws {@link CalibrationRunningError} when one is.
+ *
  * A run is the install org's (`orgId` = `INSTALL_ORG_ID`), and every read and
  * write here is made in the system scope, because the CLI that runs it and
  * the publish that reads it are not inside any workspace. The stored
@@ -19,10 +31,47 @@ import type { RunForComparison } from '@/lib/app/calibration/compare';
 import type { Totals } from '@/lib/app/calibration/score';
 import { rowsSchema, totalsSchema } from '@/lib/app/calibration/wire';
 import { prisma } from '@/lib/db/client';
+import { isSerializableConflict } from '@/lib/db/serializable-conflict';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { runAsSystem } from '@/lib/tenancy/context';
+import { isRecord } from '@/lib/utils';
 
 export { rowsSchema, totalsSchema };
+
+/** How often a running run's process touches its `heartbeatAt`. */
+export const HEARTBEAT_MS = 30_000;
+
+/** A `RUNNING` run whose beat is older than this is stopped. Several beats, so a slow write is not a stop. */
+export const STOPPED_AFTER_MS = 4 * HEARTBEAT_MS;
+
+/** Whether a `RUNNING` run has stopped beating, as of `now`. */
+export function hasStopped(heartbeatAt: Date, now: Date): boolean {
+  return now.getTime() - heartbeatAt.getTime() > STOPPED_AFTER_MS;
+}
+
+/** Tries at starting a run; a concurrent start of the same version clears on a retry. */
+const START_ATTEMPTS = 5;
+
+/**
+ * Whether a start lost a `SERIALIZABLE` clash with a concurrent one. Through
+ * the pg driver adapter, a clash inside an interactive transaction arrives as
+ * a `DriverAdapterError` whose `cause.kind` is `TransactionWriteConflict`,
+ * not as `P2034` (seen against the dev database), so both are recognised.
+ */
+function lostStartRace(err: unknown): boolean {
+  if (isSerializableConflict(err)) return true;
+  if (!(err instanceof Error) || err.name !== 'DriverAdapterError') return false;
+  const cause: unknown = err.cause;
+  return isRecord(cause) && cause.kind === 'TransactionWriteConflict';
+}
+
+/** An AI run of the version is still running, so another may not start. */
+export class CalibrationRunningError extends Error {
+  constructor(readonly runId: string) {
+    super(`An AI run of this version is still running (${runId}).`);
+    this.name = 'CalibrationRunningError';
+  }
+}
 
 /** What a run is stored with when it starts. */
 export interface RunStart {
@@ -62,6 +111,8 @@ export interface ListedRun {
   error: string | null;
   startedByUserId: string | null;
   createdAt: Date;
+  /** The running process's last beat. */
+  heartbeatAt: Date;
   finishedAt: Date | null;
 }
 
@@ -76,14 +127,24 @@ export interface StoredRun extends RunForComparison {
 }
 
 export interface CalibrationStore {
-  /** Stores the run as `RUNNING`, with no results. */
-  startRun(run: RunStart): Promise<void>;
+  /**
+   * Stores the run as `RUNNING`, with no results, and returns when it was
+   * stored. Throws {@link CalibrationRunningError} for an AI run of a version
+   * one of whose AI runs is still alive.
+   */
+  startRun(run: RunStart): Promise<{ createdAt: Date }>;
+  /** Touches a running run's `heartbeatAt`. */
+  touchRun(id: string): Promise<void>;
   /** `RUNNING` → `COMPLETE`, with its results. */
   finishRun(id: string, results: RunResults): Promise<StoredRun>;
   /** `RUNNING` → `FAILED`, with why. */
   failRun(id: string, error: string): Promise<void>;
-  /** The newest complete run of `mode` against any version of the framework. */
-  latestRun(where: { frameworkSlug: string; mode: 'quick' | 'ai' }): Promise<StoredRun | null>;
+  /** The newest complete run of `mode` against any version of the framework, stored before `before`. */
+  latestRun(where: {
+    frameworkSlug: string;
+    mode: 'quick' | 'ai';
+    before: Date;
+  }): Promise<StoredRun | null>;
   /** All of a version's complete AI runs, newest first. */
   aiRunsOf(frameworkVersionId: string): Promise<StoredRun[]>;
 }
@@ -134,6 +195,7 @@ const listSelect = {
   status: true,
   error: true,
   startedByUserId: true,
+  heartbeatAt: true,
   finishedAt: true,
 } satisfies Prisma.CalibrationRunSelect;
 
@@ -141,6 +203,7 @@ interface ListRow extends RunRow {
   status: 'RUNNING' | 'COMPLETE' | 'FAILED';
   error: string | null;
   startedByUserId: string | null;
+  heartbeatAt: Date;
   finishedAt: Date | null;
 }
 
@@ -161,6 +224,7 @@ function toListed(row: ListRow): ListedRun {
     error: row.error,
     startedByUserId: row.startedByUserId,
     createdAt: row.createdAt,
+    heartbeatAt: row.heartbeatAt,
     finishedAt: row.finishedAt,
   };
 }
@@ -187,19 +251,54 @@ const system = <T>(reason: string, fn: () => Promise<T>) =>
 export const prismaCalibrationStore: CalibrationStore & CalibrationRunLister = {
   startRun: (run) =>
     system('start a run', async () => {
-      await prisma.calibrationRun.create({
-        data: {
-          id: run.id,
-          orgId: INSTALL_ORG_ID,
-          frameworkVersionId: run.frameworkVersionId,
-          sourceSha256: run.sourceSha256,
-          setVersion: run.setVersion,
-          mode: MODE[run.mode],
-          status: 'RUNNING',
-          judgeModels: {},
-          startedByUserId: run.startedByUserId,
-        },
-        select: { id: true },
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await prisma.$transaction(
+            async (tx) => {
+              if (run.mode === 'ai') {
+                const alive = await tx.calibrationRun.findFirst({
+                  where: {
+                    frameworkVersionId: run.frameworkVersionId,
+                    mode: 'AI',
+                    status: 'RUNNING',
+                    heartbeatAt: { gte: new Date(Date.now() - STOPPED_AFTER_MS) },
+                  },
+                  select: { id: true },
+                });
+                if (alive) throw new CalibrationRunningError(alive.id);
+              }
+              return tx.calibrationRun.create({
+                data: {
+                  id: run.id,
+                  orgId: INSTALL_ORG_ID,
+                  frameworkVersionId: run.frameworkVersionId,
+                  sourceSha256: run.sourceSha256,
+                  setVersion: run.setVersion,
+                  mode: MODE[run.mode],
+                  status: 'RUNNING',
+                  judgeModels: {},
+                  startedByUserId: run.startedByUserId,
+                  // This process's clock, as every later beat is.
+                  heartbeatAt: new Date(),
+                },
+                select: { createdAt: true },
+              });
+            },
+            // The check and the insert commit together or not at all: a start
+            // racing this one fails here and, tried again, sees this run.
+            { isolationLevel: 'Serializable' }
+          );
+        } catch (err) {
+          if (attempt >= START_ATTEMPTS || !lostStartRace(err)) throw err;
+        }
+      }
+    }),
+
+  touchRun: (id) =>
+    system('touch a run', async () => {
+      await prisma.calibrationRun.updateMany({
+        where: { id, status: 'RUNNING' },
+        data: { heartbeatAt: new Date() },
       });
     }),
 
@@ -231,12 +330,13 @@ export const prismaCalibrationStore: CalibrationStore & CalibrationRunLister = {
       });
     }),
 
-  latestRun: ({ frameworkSlug, mode }) =>
+  latestRun: ({ frameworkSlug, mode, before }) =>
     system('read the last run', async () => {
       const row = await prisma.calibrationRun.findFirst({
         where: {
           mode: MODE[mode],
           status: COMPLETE,
+          createdAt: { lt: before },
           frameworkVersion: { framework: { slug: frameworkSlug } },
         },
         orderBy: { createdAt: 'desc' },

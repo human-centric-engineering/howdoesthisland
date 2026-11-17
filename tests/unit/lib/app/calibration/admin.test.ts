@@ -16,10 +16,16 @@ const db = vi.hoisted(() => ({
 }));
 const scopes = vi.hoisted(() => [] as string[]);
 vi.mock('@/lib/db/client', () => ({ prisma: db }));
+let inSystem = 0;
 vi.mock('@/lib/tenancy/context', () => ({
-  runAsSystem: (_reason: string, fn: () => Promise<unknown>) => {
+  runAsSystem: async (_reason: string, fn: () => Promise<unknown>) => {
     scopes.push('system');
-    return fn();
+    inSystem++;
+    try {
+      return await fn();
+    } finally {
+      inSystem--;
+    }
   },
   runAsOrg: (orgId: string, fn: () => Promise<unknown>) => {
     scopes.push(`org:${orgId}`);
@@ -34,9 +40,9 @@ import type { runJudges as RunJudges } from '@/lib/app/assessments/fan-out';
 import {
   listFrameworkCalibration,
   startCalibrationRun,
-  STOPPED_AFTER_MS,
   type CalibrationAdminDeps,
 } from '@/lib/app/calibration/admin';
+import { STOPPED_AFTER_MS } from '@/lib/app/calibration/store';
 import { tally } from '@/lib/app/calibration/score';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { importVersion } from '@/lib/app/frameworks/store';
@@ -85,7 +91,11 @@ beforeEach(async () => {
   await importVersion(repo, howDoesThisLand, readFileSync(MODEL, 'utf8'));
   fake = fakeCalibrationStore(null, { now: () => NOW });
   deps = { store: fake.store, repo, runJudges: vi.fn(), now: () => NOW };
-  db.user.findMany.mockResolvedValue([{ id: 'admin-1', name: 'Ada Admin' }]);
+  db.user.findMany.mockImplementation(async () => {
+    // The starters' names are read in the system scope, as the runs are.
+    if (inSystem === 0) throw new Error('user read outside the system scope');
+    return [{ id: 'admin-1', name: 'Ada Admin' }];
+  });
 });
 
 describe('startCalibrationRun()', () => {
@@ -148,7 +158,7 @@ describe('startCalibrationRun()', () => {
     await vi.waitFor(() => expect(fake.runs.get(first.runId)?.status).toBe('complete'));
   });
 
-  it('does not count a run that has outlived its process as running', async () => {
+  it('does not count a run whose process stopped beating as running', async () => {
     fake.runs.set('old', {
       id: 'old',
       frameworkVersionId: (await repo.findVersion('howdoesthisland', '0.5.1'))?.id ?? '',
@@ -164,6 +174,7 @@ describe('startCalibrationRun()', () => {
       error: null,
       startedByUserId: null,
       createdAt: new Date(NOW.getTime() - STOPPED_AFTER_MS - 1),
+      heartbeatAt: new Date(NOW.getTime() - STOPPED_AFTER_MS - 1),
       finishedAt: null,
     });
     const { judges, release } = gatedJudges();
@@ -247,7 +258,7 @@ describe('listFrameworkCalibration()', () => {
     expect(db.user.findMany).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a run still running past the limit as stopped', async () => {
+  it('shows a running run whose beat has stopped as stopped, and one still beating as running', async () => {
     const version = await repo.findVersion('howdoesthisland', '0.5.1');
     db.framework.findUnique.mockResolvedValue({
       name: 'HowDoesThisLand',
@@ -287,7 +298,15 @@ describe('listFrameworkCalibration()', () => {
       error: null,
       startedByUserId: 'gone-user',
       createdAt: new Date(NOW.getTime() - STOPPED_AFTER_MS - 1),
+      heartbeatAt: new Date(NOW.getTime() - STOPPED_AFTER_MS - 1),
       finishedAt: null,
+    });
+    // A long run that is still beating is running, however long ago it started.
+    fake.runs.set('long', {
+      ...(fake.runs.get('stale') ?? never()),
+      id: 'long',
+      createdAt: new Date(NOW.getTime() - 10 * STOPPED_AFTER_MS),
+      heartbeatAt: new Date(NOW.getTime() - 1000),
     });
     fake.runs.set('done', {
       ...(fake.runs.get('stale') ?? never()),
@@ -301,6 +320,7 @@ describe('listFrameworkCalibration()', () => {
     const stale = v.runs.find((r) => r.id === 'stale');
     // A user who is gone is shown as nobody, not as an id.
     expect(stale).toMatchObject({ status: 'stopped', startedBy: null, ofCurrentFile: false });
+    expect(v.runs.find((r) => r.id === 'long')?.status).toBe('running');
     expect(v.status).toBe('draft');
     expect(v.calibration).toBeNull();
   });

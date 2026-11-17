@@ -23,6 +23,7 @@ import {
   type RunCalibrationDeps,
 } from '@/lib/app/calibration/run';
 import { CHECK_KINDS, type Totals } from '@/lib/app/calibration/score';
+import { CalibrationRunningError } from '@/lib/app/calibration/store';
 import type { ExitCode } from '@/lib/app/frameworks/cli';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import type { FrameworkRepo } from '@/lib/app/frameworks/repo';
@@ -139,7 +140,7 @@ export async function runCalibrate(
     printTotals(run.totals, comparison, deps.out);
     return 0;
   } catch (err) {
-    if (err instanceof CalibrationError) {
+    if (err instanceof CalibrationError || err instanceof CalibrationRunningError) {
       deps.out(err.message);
       return 1;
     }
