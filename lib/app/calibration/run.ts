@@ -47,9 +47,13 @@ import type { runJudges as RunJudges } from '@/lib/app/assessments/fan-out';
 
 export type CalibrationMode = 'quick' | 'ai';
 
+/** Dollars to the millionth, as every cost here is stored. */
+const roundUsd = (usd: number) => Math.round(usd * 1_000_000) / 1_000_000;
+
 export class CalibrationError extends Error {
   constructor(
-    readonly code: 'SET_MISMATCH' | 'DANGLING_REFERENCES' | 'INVALID_CONTEXT' | 'NO_JUDGES',
+    readonly code:
+      'RETIRED' | 'SET_MISMATCH' | 'DANGLING_REFERENCES' | 'INVALID_CONTEXT' | 'NO_JUDGES',
     message: string,
     readonly problems: readonly string[] = []
   ) {
@@ -85,6 +89,8 @@ export interface ScoreSetInput {
   runJudges?: typeof RunJudges;
   /** Told each judge call's cost as it lands, so a run that fails part-way knows what it spent. */
   onCost?: (usd: number) => void;
+  /** What {@link prepare} gave for these cases and mode, when the caller already checked them. */
+  prepared?: Prepared;
 }
 
 type CaseContext = Extract<ReturnType<HowDoesThisLandEngine['parseContext']>, { ok: true }>['ctx'];
@@ -96,11 +102,16 @@ type CaseContext = Extract<ReturnType<HowDoesThisLandEngine['parseContext']>, { 
  * with none (it would be the quick scan under another name, and would still
  * let a draft publish), `INVALID_CONTEXT` for a case the version refuses.
  */
+interface Prepared {
+  slots: readonly string[];
+  contexts: CaseContext[];
+}
+
 function prepare(
   engine: HowDoesThisLandEngine,
   cases: readonly CalibrationCase[],
   mode: CalibrationMode
-): { slots: readonly string[]; contexts: CaseContext[] } {
+): Prepared {
   const slots = mode === 'ai' ? engine.activeJudgeSlots('full') : [];
   if (mode === 'ai' && slots.length === 0) {
     throw new CalibrationError(
@@ -129,7 +140,7 @@ function prepare(
 export async function scoreSet(input: ScoreSetInput): Promise<ScoredSet> {
   const { engine, mode } = input;
   if (mode === 'ai' && !input.runJudges) throw new Error('ai mode needs runJudges');
-  const { slots, contexts } = prepare(engine, input.cases, mode);
+  const { slots, contexts } = input.prepared ?? prepare(engine, input.cases, mode);
 
   const rows: CaseRow[] = [];
   const models = new Map<string, Set<string>>();
@@ -232,6 +243,11 @@ export async function startCalibration(
   deps: RunCalibrationDeps
 ): Promise<StartedCalibration> {
   const { version, set, mode } = input;
+  // A retired version can never publish or be used again: a run of it would
+  // only spend. Refused here, so the CLI and the page both refuse it.
+  if (version.status === 'RETIRED') {
+    throw new CalibrationError('RETIRED', `${version.version} is retired, so it is not run.`);
+  }
   if (set.meta.model !== version.version) {
     throw new CalibrationError(
       'SET_MISMATCH',
@@ -250,7 +266,7 @@ export async function startCalibration(
   const engine = createHowDoesThisLandEngine(input.model, { culture: true });
   // Checked before the run is stored, so a set the version cannot run leaves
   // no row and spends nothing.
-  prepare(engine, set.cases, mode);
+  const prepared = prepare(engine, set.cases, mode);
   // Web Crypto, so this module runs in any realm (lib/app/** may not import node:crypto).
   const runId = globalThis.crypto.randomUUID();
   const frameworkVersion = `${version.frameworkSlug}@${version.version}`;
@@ -267,7 +283,7 @@ export async function startCalibration(
   // Beats while this process is running the run, so a run whose process went
   // away is seen to have stopped (store.ts). A missed beat is not a failed run.
   const beat = setInterval(() => {
-    deps.store.touchRun(runId).catch((err: unknown) => {
+    deps.store.touchRun(runId, roundUsd(spent)).catch((err: unknown) => {
       logger.warn('calibration: heartbeat failed', { runId, error: String(err) });
     });
   }, HEARTBEAT_MS);
@@ -284,6 +300,7 @@ export async function startCalibration(
         runJudges: deps.runJudges,
         startedByUserId,
         onCost: (usd) => (spent += usd),
+        prepared,
       })
     );
     // The complete run stored before this one started, as the admin page
@@ -307,7 +324,7 @@ export async function startCalibration(
       const message = err instanceof Error ? err.message : String(err);
       try {
         // What its judges cost before it failed, as their AiCostLog rows say.
-        await deps.store.failRun(runId, message, Math.round(spent * 1_000_000) / 1_000_000);
+        await deps.store.failRun(runId, message, roundUsd(spent));
       } catch (failErr) {
         // The run's own error is the one to surface; the row stops beating
         // and is shown as stopped.

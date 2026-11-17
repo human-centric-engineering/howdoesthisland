@@ -127,6 +127,7 @@ function comparisons(runs: readonly ListedRun[]): Map<string, RunComparison | nu
             {
               id: previous.id,
               createdAt: previous.createdAt,
+              finishedAt: previous.finishedAt,
               frameworkVersion: previous.frameworkVersion,
               totals: previous.totals,
               rows: previous.rows,
@@ -235,14 +236,6 @@ export async function startCalibrationRun(
     return v ? { v, model: await materialise(deps.repo, howDoesThisLand, v.id) } : null;
   });
   if (!found) throw new NotFoundError(`No ${slug} version ${input.version}.`);
-  // A retired version can never publish or be used again: a run of it would
-  // only spend.
-  if (found.v.status === 'RETIRED') {
-    throw new APIError(`${input.version} is retired.`, 'CALIBRATION_REFUSED', 409, {
-      reason: 'RETIRED',
-      problems: [],
-    });
-  }
 
   const set = await loadBundledSet(input.version);
   if (!set) {

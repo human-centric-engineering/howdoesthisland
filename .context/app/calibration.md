@@ -111,7 +111,9 @@ While a run is running, the process running it touches its `heartbeatAt` every
 `HEARTBEAT_MS` (30s). A `RUNNING` run whose beat is older than `STOPPED_AFTER_MS` (2
 minutes) is **stopped**: the process went away (a deploy, a serverless time limit, a
 Ctrl-C). Nothing rewrites the row; it just stops counting as running. A long CLI run keeps
-beating, so it is not taken for stopped however long it takes.
+beating, so it is not taken for stopped however long it takes. Each beat also records what
+the run's judges have cost so far, so a stopped run still shows what it spent by its last
+beat.
 
 **Only one AI run of a version runs at a time**, from the CLI or the page. `startRun`
 takes a transaction-scoped advisory lock on the version, looks for an AI run of it that is
@@ -168,7 +170,8 @@ listed there.
 - complete (no judge failed, and at least one check scored).
 
 On publish the newest such run's snapshot is copied into `FrameworkVersion.calibration`:
-`{ runId, ranAt, agreement, setVersion, checks, judgeModels }`. The publish write is
+`{ runId, ranAt, agreement, setVersion, checks, judgeModels }`. `ranAt` is when the run
+finished (`finishedAt`), since a run is stored when it starts. The publish write is
 conditioned on the same `sourceSha256`, so a re-import between the check and the write
 does not publish uncalibrated content.
 

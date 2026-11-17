@@ -327,6 +327,19 @@ describe('startCalibration() (t-38)', () => {
     expect(store.finishRun).not.toHaveBeenCalled();
   });
 
+  it('refuses a retired version before storing or spending, from any caller', async () => {
+    const { store } = fakeStore();
+    const judges = stubJudges();
+    await expect(
+      startCalibration(
+        { version: { ...VERSION, status: 'RETIRED' }, model, set, mode: 'ai' },
+        deps(store, judges).d
+      )
+    ).rejects.toMatchObject({ code: 'RETIRED' });
+    expect(store.startRun).not.toHaveBeenCalled();
+    expect(judges).not.toHaveBeenCalled();
+  });
+
   it('records what a failed run’s judges had cost', async () => {
     const { store, runs } = fakeStore();
     const answering = stubJudges();
@@ -402,7 +415,8 @@ describe('startCalibration() (t-38)', () => {
       );
       await vi.advanceTimersByTimeAsync(2 * HEARTBEAT_MS);
       expect(store.touchRun).toHaveBeenCalledTimes(2);
-      expect(store.touchRun).toHaveBeenCalledWith(runId);
+      // Nothing answered yet, so nothing spent.
+      expect(store.touchRun).toHaveBeenCalledWith(runId, 0);
       release();
       await done;
       await vi.advanceTimersByTimeAsync(3 * HEARTBEAT_MS);

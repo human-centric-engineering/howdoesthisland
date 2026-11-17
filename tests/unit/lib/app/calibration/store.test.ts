@@ -150,12 +150,12 @@ describe('prismaCalibrationStore', () => {
     expect(db.calibrationRun.create).toHaveBeenCalledTimes(1);
   });
 
-  it('touches only a running run’s beat', async () => {
+  it('touches only a running run’s beat, with what it has spent so far', async () => {
     db.calibrationRun.updateMany.mockResolvedValue({ count: 1 });
-    await store.touchRun('cal-1');
+    await store.touchRun('cal-1', 0.25);
     expect(db.calibrationRun.updateMany).toHaveBeenCalledWith({
       where: { id: 'cal-1', status: 'RUNNING' },
-      data: { heartbeatAt: expect.any(Date) },
+      data: { heartbeatAt: expect.any(Date), costUsd: 0.25 },
     });
   });
 

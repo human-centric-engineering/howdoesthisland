@@ -260,9 +260,9 @@ function VersionCard({
                       <KindCell key={kind} run={run} kind={kind} />
                     ))}
                     <TableCell className="text-right tabular-nums">
-                      {/* A running run has not finished spending, and a stopped
-                          one never recorded what it spent. */}
-                      {run.mode === 'ai' && run.status !== 'running' && run.status !== 'stopped'
+                      {/* A running run has not finished spending. A stopped one
+                          shows what it had spent by its last beat. */}
+                      {run.mode === 'ai' && run.status !== 'running'
                         ? `$${run.costUsd.toFixed(2)}`
                         : '–'}
                     </TableCell>
@@ -284,15 +284,19 @@ function VersionCard({
 export function CalibrationPanel({ initial }: { initial: FrameworkCalibrationWire }) {
   const [data, setData] = useState(initial);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  // A run was started and the list has not been read since: poll until it is.
+  const [unseenStart, setUnseenStart] = useState(false);
 
   const reload = useCallback(async () => {
     const [framework] = frameworkCalibrationSchema
       .array()
       .parse(await apiClient.get<unknown>(ADMIN_FRAMEWORKS_PATH));
     if (framework) setData(framework);
+    setUnseenStart(false);
   }, []);
 
-  const anyRunning = data.versions.some((v) => v.runs.some((r) => r.status === 'running'));
+  const anyRunning =
+    unseenStart || data.versions.some((v) => v.runs.some((r) => r.status === 'running'));
   useEffect(() => {
     if (!anyRunning) return;
     const timer = setInterval(() => {
@@ -305,8 +309,9 @@ export function CalibrationPanel({ initial }: { initial: FrameworkCalibrationWir
   const onStarted = useCallback(
     async (runId: string) => {
       setSelectedRunId(runId);
+      setUnseenStart(true);
       // The run started; a failed read of the list is not a failed start, and
-      // the next poll (or a reload of the page) shows it.
+      // the polling, which runs until the list is read, shows it.
       await reload().catch(() => undefined);
     },
     [reload]

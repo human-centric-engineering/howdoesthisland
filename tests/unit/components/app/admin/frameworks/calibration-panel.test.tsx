@@ -68,7 +68,7 @@ describe('CalibrationPanel', () => {
     expect(screen.getByRole('button', { name: 'AI run running' })).toBeDisabled();
   });
 
-  it('shows a failed AI run’s cost, and a dash for a stopped one’s, which was never recorded', () => {
+  it('shows what a failed or stopped AI run had spent', () => {
     const failed = run({
       id: 'f',
       mode: 'ai',
@@ -83,12 +83,13 @@ describe('CalibrationPanel', () => {
       status: 'stopped',
       totals: null,
       rows: null,
-      costUsd: 0,
+      costUsd: 0.3,
     });
     render(<CalibrationPanel initial={framework([version({ runs: [failed, stopped] })])} />);
     const [, failedRow, stoppedRow] = screen.getAllByRole('row');
     expect(failedRow.textContent).toContain('$0.50');
-    expect(stoppedRow.textContent).not.toContain('$');
+    // Recorded on its last beat.
+    expect(stoppedRow.textContent).toContain('$0.30');
   });
 
   it('describes each version’s calibration', () => {
@@ -157,6 +158,27 @@ describe('CalibrationPanel', () => {
     expect(screen.queryByText('Cases')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Show this quick run's cases/ }));
     expect(screen.getByText('Cases')).toBeInTheDocument();
+  });
+
+  it('keeps reading the list after a start until a read succeeds', async () => {
+    vi.useFakeTimers();
+    const started = run({ id: 'new-run', mode: 'ai', status: 'running', totals: null, rows: null });
+    vi.mocked(apiClient.post).mockResolvedValue({ runId: 'new-run', status: 'running' });
+    vi.mocked(apiClient.get)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue([framework([version({ runs: [started] })])]);
+    render(<CalibrationPanel initial={framework()} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'AI run' }));
+    });
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    // Nothing on the page is running yet, but the start has not been seen.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'AI run running' })).toBeDisabled();
   });
 
   it('reads the list again while a run is running, and stops once none is', async () => {

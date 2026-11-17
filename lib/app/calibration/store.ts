@@ -133,8 +133,11 @@ export interface CalibrationStore {
    * one of whose AI runs is still alive.
    */
   startRun(run: RunStart): Promise<{ createdAt: Date }>;
-  /** Touches a running run's `heartbeatAt`. */
-  touchRun(id: string): Promise<void>;
+  /**
+   * Touches a running run's `heartbeatAt`, and records what its judges have
+   * cost so far, so a run whose process went away still says what it spent.
+   */
+  touchRun(id: string, costUsd: number): Promise<void>;
   /** `RUNNING` → `COMPLETE`, with its results. */
   finishRun(id: string, results: RunResults): Promise<StoredRun>;
   /** `RUNNING` → `FAILED`, with why and what its judges cost before it failed. */
@@ -177,6 +180,7 @@ const select = {
   rows: true,
   costUsd: true,
   createdAt: true,
+  finishedAt: true,
   frameworkVersion: { select: { version: true } },
 } satisfies Prisma.CalibrationRunSelect;
 
@@ -191,6 +195,7 @@ interface RunRow {
   rows: unknown;
   costUsd: number;
   createdAt: Date;
+  finishedAt: Date | null;
   frameworkVersion: { version: string };
 }
 
@@ -246,6 +251,7 @@ function toStored(row: RunRow): StoredRun {
     rows: rowsSchema.parse(row.rows),
     costUsd: row.costUsd,
     createdAt: row.createdAt,
+    finishedAt: row.finishedAt,
   };
 }
 
@@ -294,15 +300,17 @@ export const prismaCalibrationStore: CalibrationStore & CalibrationRunLister = {
           );
         } catch (err) {
           if (attempt >= START_ATTEMPTS || !lostStartRace(err)) throw err;
+          // A jittered pause, so starts that clashed do not retry in step.
+          await new Promise((resolve) => setTimeout(resolve, Math.random() * 50 * attempt));
         }
       }
     }),
 
-  touchRun: (id) =>
+  touchRun: (id, costUsd) =>
     system('touch a run', async () => {
       await prisma.calibrationRun.updateMany({
         where: { id, status: 'RUNNING' },
-        data: { heartbeatAt: new Date() },
+        data: { heartbeatAt: new Date(), costUsd },
       });
     }),
 

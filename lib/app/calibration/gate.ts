@@ -72,7 +72,8 @@ export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): Publ
       }
       const snapshot: CalibrationSnapshot = {
         runId: run.id,
-        ranAt: run.createdAt.toISOString(),
+        // When it finished: since t-38 a run is stored when it starts.
+        ranAt: (run.finishedAt ?? run.createdAt).toISOString(),
         agreement: run.totals.agreement,
         setVersion: run.setVersion,
         checks: run.totals.checks,

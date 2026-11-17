@@ -51,9 +51,9 @@ export function fakeCalibrationStore(
       });
       return { createdAt };
     }),
-    touchRun: vi.fn(async (id: string) => {
+    touchRun: vi.fn(async (id: string, costUsd: number) => {
       const run = runs.get(id);
-      if (run?.status === 'running') runs.set(id, { ...run, heartbeatAt: now() });
+      if (run?.status === 'running') runs.set(id, { ...run, heartbeatAt: now(), costUsd });
     }),
     finishRun: vi.fn(async (id: string, results: Parameters<CalibrationStore['finishRun']>[1]) => {
       const run = runs.get(id);
