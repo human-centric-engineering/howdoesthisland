@@ -40,11 +40,17 @@ function setup(
   {
     workspaceName = 'Acme copy desk',
     available = AVAILABLE,
-  }: { workspaceName?: string | null; available?: string[] } = {}
+    renderedAt = new Date().toISOString(),
+  }: { workspaceName?: string | null; available?: string[]; renderedAt?: string } = {}
 ) {
   const user = userEvent.setup();
   render(
-    <ApiKeysManager initialKeys={keys} availableScopes={available} workspaceName={workspaceName} />
+    <ApiKeysManager
+      initialKeys={keys}
+      availableScopes={available}
+      workspaceName={workspaceName}
+      renderedAt={renderedAt}
+    />
   );
   return { user };
 }
@@ -85,6 +91,18 @@ describe('ApiKeysManager', () => {
       expect(rows[1]).toHaveTextContent('Run reviews, Download and list reports');
       expect(rows[1]).toHaveTextContent('Revoked');
       expect(rows[2]).toHaveTextContent('Expired');
+    });
+
+    it("reads expiry against the server's render time, not the browser clock", () => {
+      // The browser clock is past the key's expiry; the server rendered before it.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-12-01T00:00:00.000Z'));
+      setup([row({ expiresAt: '2026-11-20T00:00:00.000Z' })], {
+        renderedAt: '2026-11-17T12:00:00.000Z',
+      });
+      const rows = within(yourKeys()).getAllByRole('row').slice(1);
+      expect(rows[0]).toHaveTextContent('Active');
+      expect(rows[0]).not.toHaveTextContent('Expired');
     });
 
     it('offers no revoke on a revoked key', () => {
@@ -235,7 +253,7 @@ describe('ApiKeysManager', () => {
       await user.click(await screen.findByRole('button', { name: /Copy key/ }));
 
       expect(writeText).toHaveBeenCalledWith('sk_copy_this');
-      expect(await screen.findByRole('status')).toHaveTextContent('Copied.');
+      expect(await screen.findByText('Copied.')).toHaveAttribute('role', 'status');
     });
 
     it('blocks a key with no name or nothing ticked, without calling the API', async () => {
@@ -247,6 +265,49 @@ describe('ApiKeysManager', () => {
       expect(alert).toHaveTextContent('Give the key a name.');
       expect(alert).toHaveTextContent('Choose at least one thing it can do.');
       expect(apiClient.post).not.toHaveBeenCalled();
+    });
+
+    it('takes focus to the first scope when only the scopes are missing', async () => {
+      const { user } = setup([]);
+      await user.type(nameInput(), 'No scopes');
+      await user.click(screen.getByLabelText('Run reviews')); // untick the default
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Choose at least one thing it can do.'
+      );
+      await waitFor(() => expect(screen.getByLabelText('Run reviews')).toHaveFocus());
+    });
+
+    it('still shows the value of a key it made but cannot fully read, and says not to retry', async () => {
+      // 201 with a row the page's schema refuses (no keyPrefix): the key exists.
+      vi.mocked(apiClient.post).mockResolvedValue({
+        key: { id: 'key-new', name: 'Drifted', scopes: ['assess'], rawKey: 'sk_drifted_secret' },
+      });
+      const { user } = setup([]);
+
+      await user.type(nameInput(), 'Drifted');
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+
+      expect(await screen.findByTestId('new-api-key')).toHaveTextContent('sk_drifted_secret');
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('The key was made');
+      expect(alert).not.toHaveTextContent('Try again');
+      expect(nameInput()).toHaveValue('');
+    });
+
+    it('says the key was made, and to revoke it, when the response has no value to show', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue({ unexpected: true });
+      const { user } = setup([]);
+
+      await user.type(nameInput(), 'Lost');
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('The key was made');
+      expect(alert).toHaveTextContent('revoke it');
+      expect(alert).not.toHaveTextContent('Try again');
+      expect(screen.queryByTestId('new-api-key')).toBeNull();
     });
 
     it("shows the API's refusal by Save and shows no key", async () => {
@@ -281,6 +342,9 @@ describe('ApiKeysManager', () => {
       const rows = within(yourKeys()).getAllByRole('row').slice(1);
       expect(rows[0]).toHaveTextContent('Revoked');
       expect(within(yourKeys()).queryByRole('button', { name: /Revoke/ })).toBeNull();
+      // Its button is gone, so focus lands on the list, which says what happened.
+      expect(within(yourKeys()).getByRole('status')).toHaveTextContent('Revoked “CI checks”.');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Your keys' })).toHaveFocus());
     });
 
     it('does not revoke when cancelled', async () => {

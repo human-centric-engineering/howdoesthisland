@@ -77,6 +77,7 @@ describe('ApiKeysPage', () => {
       initialKeys: [KEY],
       availableScopes: ['chat', 'assess'],
       workspaceName: 'Acme',
+      renderedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
     expect(screen.getByRole('heading', { level: 1, name: 'API keys' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');

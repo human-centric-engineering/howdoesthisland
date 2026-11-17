@@ -12,7 +12,7 @@
  * page's: the page shows what the server says and nothing more.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle, Copy } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -60,6 +60,7 @@ import {
   expiresAtFor,
   keyState,
   mintedApiKeySchema,
+  mintedRawKeySchema,
   offeredScopes,
   SCOPE_DESCRIPTIONS,
   scopeLabel,
@@ -76,6 +77,11 @@ export interface ApiKeysManagerProps {
    * (one shared organisation, or the active one could not be read).
    */
   workspaceName: string | null;
+  /**
+   * When the server rendered the page (ISO). Each key's Active/Expired state
+   * is read against it, so the server and the browser draw the same badge.
+   */
+  renderedAt: string;
 }
 
 const NAME_MAX = 200;
@@ -86,6 +92,7 @@ export function ApiKeysManager({
   initialKeys,
   availableScopes,
   workspaceName,
+  renderedAt,
 }: ApiKeysManagerProps) {
   const scopes = offeredScopes(availableScopes);
   const [keys, setKeys] = useState(initialKeys);
@@ -105,6 +112,8 @@ export function ApiKeysManager({
 
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
+  const [revokedName, setRevokedName] = useState<string | null>(null);
+  const keysHeading = useRef<HTMLHeadingElement>(null);
   const revoke = useSaveFailure({
     fallback: 'The key could not be revoked. Try again in a moment.',
     fields: NO_SERVER_FIELDS,
@@ -123,27 +132,44 @@ export function ApiKeysManager({
     const problems: Array<{ field: string; message: string }> = [];
     if (!name.trim()) problems.push({ field: 'api-key-name', message: 'Give the key a name.' });
     if (picked.length === 0)
-      problems.push({ field: 'api-key-scopes', message: 'Choose at least one thing it can do.' });
+      problems.push({
+        field: `api-key-scope-${scopes[0]}`,
+        message: 'Choose at least one thing it can do.',
+      });
     if (create.block(problems)) return;
 
     setCreating(true);
+    let sent: unknown;
     try {
       const expiresAt = expiresAtFor(expiry, new Date());
-      const { key } = mintedApiKeySchema.parse(
-        await apiClient.post<unknown>(API_KEYS_ENDPOINT, {
-          body: { name: name.trim(), scopes: picked, ...(expiresAt ? { expiresAt } : {}) },
-        })
-      );
-      const { rawKey, ...row } = key;
-      setKeys((all) => [{ ...row, lastUsedAt: null, revokedAt: null }, ...all]);
-      setShown({ name: key.name, rawKey });
-      setCopied(null);
-      setName('');
+      sent = await apiClient.post<unknown>(API_KEYS_ENDPOINT, {
+        body: { name: name.trim(), scopes: picked, ...(expiresAt ? { expiresAt } : {}) },
+      });
     } catch (err) {
       create.report(err);
+      return;
     } finally {
       setCreating(false);
     }
+
+    // The key exists from here on, so no failure below may say "try again":
+    // that would mint a second key whose value nobody holds.
+    setName('');
+    setCopied(null);
+    const minted = mintedApiKeySchema.safeParse(sent);
+    if (minted.success) {
+      const { rawKey, ...row } = minted.data.key;
+      setKeys((all) => [{ ...row, lastUsedAt: null, revokedAt: null }, ...all]);
+      setShown({ name: row.name, rawKey });
+      return;
+    }
+    const raw = mintedRawKeySchema.safeParse(sent);
+    if (raw.success) setShown(raw.data.key);
+    create.show(
+      raw.success
+        ? 'The key was made, but this page could not add it to the list. Copy its value above, then reload to see it listed.'
+        : 'The key was made, but this page could not read it back. Reload to see it listed, and revoke it, since its value cannot be shown again.'
+    );
   };
 
   const copy = async (rawKey: string) => {
@@ -164,6 +190,7 @@ export function ApiKeysManager({
         all.map((k) => (k.id === keyId ? { ...k, revokedAt: k.revokedAt ?? at } : k))
       );
       setRevokeId(null);
+      setRevokedName(keys.find((k) => k.id === keyId)?.name ?? null);
     } catch (err) {
       revoke.report(err);
     } finally {
@@ -171,7 +198,16 @@ export function ApiKeysManager({
     }
   };
 
-  const now = new Date();
+  // A revoked row loses its Revoke button and dialog together, so focus has
+  // nowhere to return; send it to the list's heading, where the status line
+  // says what happened. After Radix's own deferred restore, hence the timer.
+  useEffect(() => {
+    if (revokedName === null) return;
+    const timer = setTimeout(() => keysHeading.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [revokedName]);
+
+  const now = new Date(renderedAt);
 
   return (
     <div className="space-y-6">
@@ -345,9 +381,17 @@ export function ApiKeysManager({
       </Card>
 
       <section aria-labelledby="api-keys-heading" className="space-y-3">
-        <h2 id="api-keys-heading" className="text-lg font-semibold">
+        <h2
+          id="api-keys-heading"
+          ref={keysHeading}
+          tabIndex={-1}
+          className="text-lg font-semibold outline-none"
+        >
           Your keys
         </h2>
+        <p role="status" className="text-sm">
+          {revokedName === null ? null : <>Revoked &ldquo;{revokedName}&rdquo;.</>}
+        </p>
         {keys.length === 0 ? (
           <p className="text-muted-foreground text-sm">You haven&rsquo;t made any keys yet.</p>
         ) : (

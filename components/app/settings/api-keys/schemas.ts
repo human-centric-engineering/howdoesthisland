@@ -43,6 +43,14 @@ export const mintedApiKeySchema = z.object({
 });
 
 /**
+ * The least of a mint response that still lets the page show the new key's
+ * value, for when the full shape above cannot be read: the key exists by then.
+ */
+export const mintedRawKeySchema = z.object({
+  key: z.object({ name: z.string(), rawKey: z.string() }),
+});
+
+/**
  * What each of the app's scopes lets a key do, in the words the product uses.
  * Keyed by `APP_API_KEY_SCOPES`; a scope added there without a line here is
  * still offered, under its own name.
