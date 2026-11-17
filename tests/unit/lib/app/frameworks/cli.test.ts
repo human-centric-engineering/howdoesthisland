@@ -202,6 +202,13 @@ describe('runPublish() reports the agreement change (t-40)', () => {
     );
   });
 
+  it('rounds a stored half-tenth up, as four-place agreements often are', () => {
+    // 0.5005 * 1000 is 500.4999… in floating point.
+    expect(
+      agreementChangeLine(snapshot(0.5005), { version: '0.6.0', calibration: snapshot(0.5) })
+    ).toMatch(/^Agreement 50\.1%, against 50\.0% .*: \+0\.1 pts\.$/);
+  });
+
   it('says when the two scored a different number of checks', () => {
     const before = { ...snapshot(0.85), checks: 48 };
     expect(agreementChangeLine(snapshot(0.825), { version: '0.6.0', calibration: before })).toMatch(
