@@ -115,6 +115,11 @@ describe('ApiKeysManager', () => {
       expect(yourKeys()).toHaveTextContent('Platform key: not tied to one workspace');
     });
 
+    it('does not talk about workspaces on a platform key where none is named', () => {
+      setup([row({ orgId: null, scopes: ['admin'] })], { workspaceName: null });
+      expect(yourKeys()).not.toHaveTextContent('workspace');
+    });
+
     it('says so when there are no keys', () => {
       setup([], { workspaceName: null });
       expect(yourKeys()).toHaveTextContent('You haven’t made any keys yet.');
@@ -279,6 +284,64 @@ describe('ApiKeysManager', () => {
 
       expect(writeText).toHaveBeenCalledWith('sk_copy_this');
       expect(await screen.findByText('Copied.')).toHaveAttribute('role', 'status');
+    });
+
+    it('says to copy it by hand when the clipboard refuses, in a region there before the press', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue({
+        key: {
+          id: 'key-new',
+          name: 'No clipboard',
+          keyPrefix: 'sk_newp1234',
+          scopes: ['assess'],
+          orgId: 'org-1',
+          expiresAt: null,
+          createdAt: '2026-11-17T12:00:00.000Z',
+          rawKey: 'sk_by_hand',
+        },
+      });
+      const { user } = setup([]);
+      vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+
+      await user.type(nameInput(), 'No clipboard');
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+      const panel = (await screen.findByTestId('new-api-key')).closest('[class*="border-amber"]');
+      // Empty but mounted, so what goes in it is announced.
+      const region = within(panel as HTMLElement).getByRole('status');
+      expect(region).toBeEmptyDOMElement();
+
+      await user.click(screen.getByRole('button', { name: /Copy key/ }));
+      await waitFor(() =>
+        expect(region).toHaveTextContent(
+          'Couldn’t copy it here. Select the key and copy it yourself.'
+        )
+      );
+    });
+
+    it("clears an earlier key's panel when a new key cannot be read back at all", async () => {
+      vi.mocked(apiClient.post)
+        .mockResolvedValueOnce({
+          key: {
+            id: 'key-a',
+            name: 'First',
+            keyPrefix: 'sk_aaaa1234',
+            scopes: ['assess'],
+            orgId: 'org-1',
+            expiresAt: null,
+            createdAt: '2026-11-17T12:00:00.000Z',
+            rawKey: 'sk_first_secret',
+          },
+        })
+        .mockResolvedValueOnce({ unexpected: true });
+      const { user } = setup([]);
+
+      await user.type(nameInput(), 'First');
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+      expect(await screen.findByTestId('new-api-key')).toHaveTextContent('sk_first_secret');
+
+      await user.type(nameInput(), 'Second');
+      await user.click(screen.getByRole('button', { name: 'Make key' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('The key was made');
+      expect(screen.queryByTestId('new-api-key')).toBeNull();
     });
 
     it('blocks a key with no name or nothing ticked, without calling the API', async () => {

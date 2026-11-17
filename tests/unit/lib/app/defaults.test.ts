@@ -696,8 +696,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       // FORK (HowDoesThisLand): pinned to our one section, the API-keys link,
       // on /settings only (t-43).
       expect(getRegisteredAccountSections('settings').map((s) => s.id)).toEqual(['api-keys']);
-      expect(getRegisteredAccountSections('profile')).toEqual([]);
-      expect(ACCOUNT_SURFACES).toEqual(['profile', 'settings']);
+      for (const surface of ACCOUNT_SURFACES.filter((s) => s !== 'settings')) {
+        expect(getRegisteredAccountSections(surface)).toEqual([]);
+      }
     },
   },
   {

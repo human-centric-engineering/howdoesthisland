@@ -53,6 +53,7 @@ import { SaveError } from '@/components/forms/form-error';
 import { apiClient } from '@/lib/api/client';
 import { NO_SERVER_FIELDS, useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useCommittedDialog } from '@/lib/hooks/use-committed-dialog';
+import { useCopyToClipboard } from '@/lib/hooks/use-copy-to-clipboard';
 import {
   API_KEYS_ENDPOINT,
   apiKeyEndpoint,
@@ -104,7 +105,8 @@ export function ApiKeysManager({
   const [expiry, setExpiry] = useState<ExpiryChoice>('90');
   const [creating, setCreating] = useState(false);
   const [shown, setShown] = useState<{ name: string; rawKey: string } | null>(null);
-  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+  const { copied, copy } = useCopyToClipboard();
+  const [copyFailed, setCopyFailed] = useState(false);
   const create = useSaveFailure({
     fallback: 'The key could not be made. Try again in a moment.',
     fields: NO_SERVER_FIELDS,
@@ -162,7 +164,7 @@ export function ApiKeysManager({
     // The key exists from here on, so no failure below may say "try again":
     // that would mint a second key whose value nobody holds.
     setName('');
-    setCopied(null);
+    setCopyFailed(false);
     const minted = mintedApiKeySchema.safeParse(sent);
     if (minted.success) {
       const { rawKey, ...row } = minted.data.key;
@@ -171,21 +173,13 @@ export function ApiKeysManager({
       return;
     }
     const raw = mintedRawKeySchema.safeParse(sent);
-    if (raw.success) setShown(raw.data.key);
+    // Unreadable: clear any earlier key's panel, or it reads as this one's.
+    setShown(raw.success ? raw.data.key : null);
     create.show(
       raw.success
         ? 'The key was made, but this page could not add it to the list. Copy its value above, then reload to see it listed.'
         : 'The key was made, but this page could not read it back. Reload to see it listed, and revoke it, since its value cannot be shown again.'
     );
-  };
-
-  const copy = async (rawKey: string) => {
-    try {
-      await navigator.clipboard.writeText(rawKey);
-      setCopied('yes');
-    } catch {
-      setCopied('failed');
-    }
   };
 
   const handleRevoke = async (keyId: string, keyName: string) => {
@@ -215,8 +209,14 @@ export function ApiKeysManager({
   }, [revoked]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(timer);
+    // Once now, for a page restored from a cache, then each minute.
+    const tick = () => setNow(new Date());
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
   }, []);
 
   return (
@@ -241,7 +241,7 @@ export function ApiKeysManager({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void copy(shown.rawKey)}
+                onClick={() => void copy(shown.rawKey).then((ok) => setCopyFailed(!ok))}
               >
                 <Copy className="mr-2 h-4 w-4" />
                 Copy key
@@ -257,16 +257,17 @@ export function ApiKeysManager({
               >
                 I&rsquo;ve saved it
               </Button>
-              {copied === 'yes' ? (
-                <p className="flex items-center gap-2 text-sm" role="status">
-                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  Copied.
-                </p>
-              ) : copied === 'failed' ? (
-                <p className="text-sm" role="status">
-                  Couldn&rsquo;t copy it here. Select the key and copy it yourself.
-                </p>
-              ) : null}
+              {/* Always mounted, so a screen reader announces what goes in it. */}
+              <p className="flex items-center gap-2 text-sm" role="status">
+                {copied ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    Copied.
+                  </>
+                ) : copyFailed ? (
+                  <>Couldn&rsquo;t copy it here. Select the key and copy it yourself.</>
+                ) : null}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -444,7 +445,8 @@ export function ApiKeysManager({
                   <TableRow key={key.id}>
                     <TableCell className="font-medium">
                       {key.name}
-                      {key.orgId === null ? (
+                      {/* Workspaces are named only where there are several. */}
+                      {key.orgId === null && workspaceName ? (
                         <span className="text-muted-foreground block text-xs">
                           Platform key: not tied to one workspace
                         </span>
