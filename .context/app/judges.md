@@ -67,9 +67,9 @@ shared the same way, so a resolver that is down is asked once, not ten times.
 ## Reply ceilings
 
 Each agent's `maxTokens` is a ceiling sized for its largest job on a frontier
-reasoning model, with room for thinking, which counts against the cap: 32,768
-for a judge (Claude thinks on every call), and for the influence judge (13
-perspectives × 6 levers) and the editor, whose rewrite repeats the whole text (up to 40,000 characters,
+reasoning model, with room for thinking, which counts against the cap: 16,384
+for a judge, 32,768 for the influence judge (13 perspectives × 6 levers) and
+for the editor, whose rewrite repeats the whole text (up to 40,000 characters,
 about 10,000 tokens). Only tokens produced are billed, so headroom costs
 nothing unless used. 32,768 is the top, because it is `gpt-4.1`'s output limit.
 A call never asks a model for more than that model can produce: it takes the

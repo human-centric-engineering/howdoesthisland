@@ -4,7 +4,7 @@
  * The creator is its founding `OWNER`, written in the same transaction as the
  * org (`createOrg`'s `ownerUserId`), so it is never memberless and never
  * carries the signup marker the sweep looks for. It is then equipped exactly
- * as a signup workspace is (`equipWorkspace`): OpenAI granted, the default
+ * as a signup workspace is (`equipWorkspace`): Anthropic and OpenAI granted, the default
  * monthly budget, platform agents reconciled.
  *
  * **The cap.** A person may own at most {@link MAX_OWNED_WORKSPACES}

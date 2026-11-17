@@ -1,13 +1,15 @@
 /**
  * Smoke: an assessment run end to end in a fresh workspace, at
- * `TENANCY_MODE=multi`, against real OpenAI (t-22).
+ * `TENANCY_MODE=multi`, against the real judges' provider (Anthropic since
+ * t-39, so it needs `ANTHROPIC_API_KEY`) (t-22). A paid check: left for the
+ * end-of-project AI checks (t-42), not run while building.
  *
  *   npx tsx --env-file=.env.local scripts/smoke/assessment.ts
  *
  * What the unit tests cannot show, because they fake the store and the judges:
  *
  *   • a freshly provisioned workspace can run judges with no admin step
- *     (`equipWorkspace` grants OpenAI and creates its agents);
+ *     (`equipWorkspace` grants Anthropic and OpenAI and creates its agents);
  *   • the claim's serializable transaction, the lease writes and the JudgeRun
  *     upserts work as the restricted app role, under the `org_isolation`
  *     policy;
@@ -84,7 +86,7 @@ async function main(): Promise<number> {
   );
   try {
     const { granted } = await system(() => equipWorkspace(orgA.id, 'smoke:assessment'));
-    check(granted, 'the fresh workspace is approved for OpenAI, with no admin step');
+    check(granted, 'the fresh workspace is approved for the judges’ provider, with no admin step');
     if (!granted) return 1;
 
     // ── A run that completes ──────────────────────────────────────────────

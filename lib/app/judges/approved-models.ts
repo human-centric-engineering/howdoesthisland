@@ -96,11 +96,12 @@ const REASONING_LARGE_TIMEOUT_MS = 300_000;
 
 /**
  * Claude thinks on every call, and the thinking counts against the ceiling,
- * so each role gets the agent's full ceiling (32,768) and a reasoning
- * model's timeout. Medium effort throughout.
+ * so each role gets the agent's full ceiling (16,384 for a judge, 32,768 for
+ * the influence judge and the editor) and a reasoning model's timeout. Medium
+ * effort throughout.
  */
 const CLAUDE_JUDGE = {
-  maxTokens: 32_768,
+  maxTokens: 16_384,
   reasoningEffort: 'medium',
   timeoutMs: REASONING_JUDGE_TIMEOUT_MS,
 } as const;

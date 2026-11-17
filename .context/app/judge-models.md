@@ -26,15 +26,17 @@ instead, and what was measured to decide it (t-39, D8). Code:
 ## Settings
 
 Every Claude entry runs at **medium effort**, the depth the candidates were compared at,
-with a **32,768-token ceiling** (the agent's own, `agents.ts`) and a reasoning model's
-timeout: 180 s for a judge, 300 s for the influence judge and the editor.
+with the agent's own ceiling (`agents.ts`: 16,384 for a judge, 32,768 for the influence
+judge and the editor) and a reasoning model's timeout: 180 s for a judge, 300 s for the
+influence judge and the editor.
 
-The judge ceiling went from 16,384 to 32,768 because Claude thinks on every call and the
-thinking counts against the cap. 32,768 stays the top for every agent, because it is
-GPT-4.1's output limit and nothing clamps an agent's ceiling to the model's on Sunrise's
-own routes. The slot's own size (`JUDGE_LIMITS`, 8,192 for most judges, 24,576 for
-influence) still bounds a judge call; the largest reply measured, thinking included, was
-about 4k for a judge and 9k for the influence judge, all finishing normally.
+Claude thinks on every call and the thinking counts against the cap. The ceilings were
+left as they were because they hold it: a judge call is bounded by its slot's own size
+(`JUDGE_LIMITS`, 8,192 for most judges, 24,576 for influence), and the largest reply
+measured, thinking included, was about 4k for a judge and 9k for the influence judge, all
+finishing normally. A judge's 16,384 also fits GPT-4o, the lowest output limit on the
+judges' list, and 32,768 is GPT-4.1's, the top for every agent, since nothing clamps an
+agent's ceiling to the model's on Sunrise's own routes.
 
 ## What was measured
 
@@ -72,7 +74,9 @@ Left for the end-of-project checks, with no paid run before then:
 1. Create the `anthropic` provider row (`scripts/app/dev-tenancy.ts` in development,
    `/admin/orchestration/providers` elsewhere), and set `ANTHROPIC_API_KEY`.
 2. Seed the models (`npm run db:seed`, unit `app-howdoesthisland/001-claude-models`).
-3. Run `scripts/app/grant-judge-provider.ts` **before** deploying the build: a workspace
+3. Run `scripts/app/grant-judge-provider.ts` **before** deploying the build, and **again
+   once it is serving** (the previous build can make a workspace, or a stale choice, in
+   between): a workspace
    not approved for Anthropic would have its judges bound to nothing, not left on OpenAI.
    It also hands back to the platform any judge or editor a workspace bound to a model no
    longer approved (the Claude 4.x entries). It moves no binding itself, so the running

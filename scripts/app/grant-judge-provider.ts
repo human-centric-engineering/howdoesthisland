@@ -3,9 +3,10 @@
  *
  *   npx tsx --env-file=.env.local scripts/app/grant-judge-provider.ts
  *
- * Run once per environment **before** a build whose judges default to a new
- * provider is deployed there: a workspace not approved for it would have its
- * judges bound to nothing. It also hands back to the platform any judge a
+ * Run in each environment **before** a build whose judges default to a new
+ * provider is deployed there, **and again once it is serving**: a workspace
+ * not approved for it would have its judges bound to nothing, and the
+ * previous build can make one, or a stale choice, in between. It also hands back to the platform any judge a
  * workspace bound to a model the new build no longer approves. It moves no
  * binding itself, so the running build is unaffected; the new build's
  * maintenance job rebinds once it is serving. See
@@ -36,6 +37,12 @@ async function main(): Promise<number> {
     `${summary.providerSlug}: granted to ${summary.granted.length} org(s), ` +
       `${summary.already.length} already approved.`
   );
+  if (summary.restricted.length > 0) {
+    out(
+      `${summary.restricted.length} org(s) approved for no provider were left as an admin set ` +
+        `them (grant on /admin if meant): ${summary.restricted.join(', ')}`
+    );
+  }
   const released = await releaseUnapprovedBindings();
   out(`${released.length} agent(s) on a model no longer approved handed back to the platform.`);
   return 0;

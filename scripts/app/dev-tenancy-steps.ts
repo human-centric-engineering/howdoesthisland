@@ -39,9 +39,6 @@ export const PLATFORM_DEFAULT_ROLE = 'sunrise_app';
 /** The provider the app's embedder runs on. */
 export const PROVIDER_SLUG = 'openai';
 
-/** The provider the app's judges and editor run on (D8, t-39): the app's own constant. */
-export const JUDGES_PROVIDER_SLUG = JUDGE_PROVIDER_SLUG;
-
 /** The embedding model, by its `AiProviderModel.slug` from seed 009. */
 export const EMBEDDING_MODEL_SLUG = 'openai-text-embedding-3-small';
 
@@ -194,7 +191,7 @@ export function ensureOpenAiProvider(db: SetupDb): Promise<StepResult> {
 }
 
 export function ensureAnthropicProvider(db: SetupDb): Promise<StepResult> {
-  return ensureProvider(db, JUDGES_PROVIDER_SLUG, 'Anthropic provider');
+  return ensureProvider(db, JUDGE_PROVIDER_SLUG, 'Anthropic provider');
 }
 
 async function ensureProvider(db: SetupDb, slug: string, step: string): Promise<StepResult> {

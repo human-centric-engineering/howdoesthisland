@@ -127,12 +127,13 @@ const JUDGE_DESCRIPTIONS: Record<HowDoesThisLandJudgeSlot, string> = {
  * These are ceilings. A call sizes its own `maxTokens` under them (§8.3: per
  * judge slot in j2, from the text's length for rewrites in rw1). A judge
  * call's timeout and reasoning effort are the approved entry's, not the
- * slot's (`runJudge`, j4). The judge's ceiling is 32,768, not the 16,384 a
- * non-thinking model needs: Claude thinks on every call, and its thinking
- * counts against the cap (t-39 measured a judge's largest reply, thinking
- * included, at about 4k, and the influence judge's at about 9k).
+ * slot's (`runJudge`, j4). Claude thinks on every call and its thinking counts
+ * against the cap; t-39 measured a judge's largest reply, thinking included,
+ * at about 4k (inside the slot's own 8,192) and the influence judge's at about
+ * 9k, so these ceilings hold Claude too. A judge's stays at 16,384 so it fits
+ * every model on the judges' list, `gpt-4o` included.
  */
-const JUDGE_MAX_TOKENS = 32_768;
+const JUDGE_MAX_TOKENS = 16_384;
 const INFLUENCE_MAX_TOKENS = 32_768;
 const EDITOR_MAX_TOKENS = 32_768;
 

@@ -4,6 +4,17 @@
  * has edited.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const reconcile = vi.hoisted(() => vi.fn());
+const activeOrgs = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/orchestration/agents/reconcile-platform-agents', () => ({
+  reconcilePlatformAgents: reconcile,
+}));
+vi.mock('@/lib/orchestration/agents/platform-agents', () => ({
+  createPlatformAgentCatalogue: () => ({ catalogue: true }),
+}));
+vi.mock('@/lib/tenancy/context', () => ({ listActiveOrgIds: activeOrgs }));
+
 import unit from '@/prisma/seeds/app-howdoesthisland/001-claude-models';
 import { APPROVED_MODELS } from '@/lib/app/judges/approved-models';
 
@@ -22,6 +33,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   prisma.user.findFirst.mockResolvedValue({ id: 'system' });
   prisma.aiProviderModel.findUnique.mockResolvedValue(null);
+  activeOrgs.mockResolvedValue(['install', 'ws-1']);
+  reconcile.mockResolvedValue({});
 });
 
 describe('app-howdoesthisland/001-claude-models', () => {
@@ -68,6 +81,24 @@ describe('app-howdoesthisland/001-claude-models', () => {
     const slugs = prisma.aiProviderModel.upsert.mock.calls.map(([arg]) => arg.where.slug);
     expect(slugs).not.toContain('anthropic-claude-opus-5-5');
     expect(slugs).toHaveLength(2);
+  });
+
+  it('reconciles every active org once its rows are written, so the judges bind on a fresh database', async () => {
+    await run();
+    expect(reconcile.mock.calls.map(([orgId]) => orgId)).toEqual(['install', 'ws-1']);
+    expect(reconcile.mock.invocationCallOrder[0]).toBeGreaterThan(
+      prisma.aiProviderModel.upsert.mock.invocationCallOrder.at(-1) ?? Infinity
+    );
+  });
+
+  it('carries on past an org whose reconcile fails, logging it', async () => {
+    reconcile.mockRejectedValueOnce(new Error('db blip'));
+    await run();
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('install'),
+      expect.objectContaining({ orgId: 'install', error: 'db blip' })
+    );
   });
 
   it('refuses to run before the system owner exists', async () => {

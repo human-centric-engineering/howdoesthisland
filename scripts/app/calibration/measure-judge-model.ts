@@ -177,7 +177,8 @@ async function main(): Promise<number> {
       .catch((err: unknown) => {
         console.error('Could not restore the judge bindings; they were:', saved, err);
       })
-      .finally(() => process.exit(130));
+      // 128 + the signal's number, as a shell reports it (SIGINT 130, SIGTERM 143).
+      .finally(() => process.exit(signal === 'SIGTERM' ? 143 : 130));
   };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);

@@ -118,14 +118,14 @@ describe('judgeAgentDefinitions', () => {
     }
   });
 
-  it('never gives the influence judge, the largest report, less room than another judge', () => {
+  it('gives the influence judge a larger reply ceiling than the other judges', () => {
     const tokens = (slug: string) => definitions.find((d) => d.slug === slug)!.agent.maxTokens;
-    expect(tokens('hdtl-judge-influence')).toBeGreaterThanOrEqual(tokens('hdtl-judge-ethos'));
+    expect(tokens('hdtl-judge-influence')).toBeGreaterThan(tokens('hdtl-judge-ethos'));
   });
 
-  it('gives a judge room to think on Claude as well as to reply (t-39)', () => {
+  it('keeps a judge within gpt-4o’s output limit, the lowest on the judges’ list (t-39)', () => {
     const tokens = (slug: string) => definitions.find((d) => d.slug === slug)!.agent.maxTokens;
-    expect(tokens('hdtl-judge-ethos')).toBe(32_768);
+    expect(tokens('hdtl-judge-ethos')).toBe(16_384);
   });
 
   it('lets the editor rewrite the longest text the app accepts, with as much again to think', () => {

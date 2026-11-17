@@ -48,6 +48,7 @@ beforeEach(() => {
     'ws-openai': { providers: { approved: [OPENAI_ID] }, app: { kept: true } },
     'ws-eu': { providers: { approved: [OPENAI_ID], jurisdictions: ['EU'] } },
     'ws-done': { providers: { approved: [OPENAI_ID, ANTHROPIC_ID] } },
+    'ws-none': { providers: { approved: [] } },
   };
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => Promise<unknown>) => fn(db));
   db.aiProviderConfig.findUnique.mockResolvedValue({ id: ANTHROPIC_ID });
@@ -60,11 +61,16 @@ beforeEach(() => {
       return {};
     }
   );
-  db.org.findMany.mockResolvedValue([{ id: 'ws-openai' }, { id: 'ws-eu' }, { id: 'ws-done' }]);
+  db.org.findMany.mockResolvedValue([
+    { id: 'ws-openai' },
+    { id: 'ws-eu' },
+    { id: 'ws-done' },
+    { id: 'ws-none' },
+  ]);
 });
 
 describe('grantJudgeProviderToAllOrgs()', () => {
-  it('adds the judges’ provider to every org but the install org, keeping the rest', async () => {
+  it('puts the judges’ provider first for every org but the install org, keeping the rest', async () => {
     const summary = await grantJudgeProviderToAllOrgs();
 
     expect(db.aiProviderConfig.findUnique).toHaveBeenCalledWith(
@@ -73,18 +79,22 @@ describe('grantJudgeProviderToAllOrgs()', () => {
     expect(db.org.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: { not: 'install' } } })
     );
-    // Other settings slices survive, and so does a jurisdiction restriction.
+    // In a new workspace's order; other settings slices survive, and so does
+    // a jurisdiction restriction.
     expect(settingsOf['ws-openai']).toEqual({
-      providers: { approved: [OPENAI_ID, ANTHROPIC_ID] },
+      providers: { approved: [ANTHROPIC_ID, OPENAI_ID] },
       app: { kept: true },
     });
     expect(settingsOf['ws-eu']).toEqual({
-      providers: { approved: [OPENAI_ID, ANTHROPIC_ID], jurisdictions: ['EU'] },
+      providers: { approved: [ANTHROPIC_ID, OPENAI_ID], jurisdictions: ['EU'] },
     });
+    // An org approved for nothing was set so by an admin: reported, not overridden.
+    expect(settingsOf['ws-none']).toEqual({ providers: { approved: [] } });
     expect(summary).toEqual({
       providerSlug: 'anthropic',
       granted: ['ws-openai', 'ws-eu'],
       already: ['ws-done'],
+      restricted: ['ws-none'],
     });
   });
 
@@ -94,7 +104,7 @@ describe('grantJudgeProviderToAllOrgs()', () => {
     for (const call of db.$transaction.mock.calls) {
       expect(call[1]).toEqual({ isolationLevel: 'Serializable' });
     }
-    expect(db.$transaction).toHaveBeenCalledTimes(3);
+    expect(db.$transaction).toHaveBeenCalledTimes(4);
     // The running build may not approve the new default yet.
     expect(reconcile).not.toHaveBeenCalled();
     expect(db.org.update).not.toHaveBeenCalledWith(
@@ -109,6 +119,7 @@ describe('grantJudgeProviderToAllOrgs()', () => {
       providerSlug: null,
       granted: [],
       already: [],
+      restricted: [],
     });
     expect(db.org.findMany).not.toHaveBeenCalled();
     expect(db.org.update).not.toHaveBeenCalled();
@@ -121,10 +132,10 @@ describe('grantProviderToOrg()', () => {
     expect(db.org.update).not.toHaveBeenCalled();
   });
 
-  it('starts an org with no policy from an empty list', async () => {
+  it('leaves an org with no policy at all alone, as approved for nothing', async () => {
     settingsOf['ws-new'] = null;
-    await expect(grantProviderToOrg('ws-new', ANTHROPIC_ID)).resolves.toBe('granted');
-    expect(settingsOf['ws-new']).toEqual({ providers: { approved: [ANTHROPIC_ID] } });
+    await expect(grantProviderToOrg('ws-new', ANTHROPIC_ID)).resolves.toBe('restricted');
+    expect(db.org.update).not.toHaveBeenCalled();
   });
 
   it('retries a transaction that clashed with another, on a fresh read', async () => {
@@ -148,9 +159,10 @@ describe('releaseUnapprovedBindings()', () => {
     ]);
 
     await expect(releaseUnapprovedBindings()).resolves.toEqual(['a1', 'a2']);
+    // Only the live system agents a workspace can choose for.
     expect(db.aiAgent.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ bindingOwner: 'org' }),
+        where: expect.objectContaining({ bindingOwner: 'org', isSystem: true, deletedAt: null }),
       })
     );
     expect(db.aiAgent.updateMany).toHaveBeenCalledWith({
