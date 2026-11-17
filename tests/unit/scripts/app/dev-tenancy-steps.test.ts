@@ -14,6 +14,7 @@ import {
   SetupError,
   ensureAppRole,
   ensureEmbeddingModel,
+  ensureAnthropicProvider,
   ensureOpenAiProvider,
   enablePolicies,
   parseEnv,
@@ -260,6 +261,44 @@ describe('ensureEmbeddingModel', () => {
   });
 });
 
+describe('ensureAnthropicProvider', () => {
+  it('creates the judges’ provider row from the known Anthropic provider when missing', async () => {
+    const mocks = makeDb();
+    mocks.db.aiProviderConfig.findUnique.mockResolvedValue(null);
+    const result = await ensureAnthropicProvider(mocks.client);
+    expect(result).toEqual({
+      step: 'Anthropic provider',
+      outcome: 'created',
+      detail: 'key from ANTHROPIC_API_KEY',
+    });
+    expect(mocks.db.aiProviderConfig.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { slug: 'anthropic' } })
+    );
+    expect(mocks.db.aiProviderConfig.create).toHaveBeenCalledWith({
+      data: {
+        name: 'Anthropic',
+        slug: 'anthropic',
+        providerType: 'anthropic',
+        baseUrl: null,
+        apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+        isLocal: false,
+        isActive: true,
+      },
+    });
+  });
+
+  it('names the Anthropic row in its refusal of an inactive one', async () => {
+    const mocks = makeDb();
+    mocks.db.aiProviderConfig.findUnique.mockResolvedValue({
+      isActive: false,
+      apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    });
+    await expect(ensureAnthropicProvider(mocks.client)).rejects.toThrow(
+      'the "anthropic" provider exists but is inactive'
+    );
+  });
+});
+
 describe('runDevTenancySetup', () => {
   it('runs every step in order and reports a second run as unchanged', async () => {
     const mocks = makeDb();
@@ -283,6 +322,7 @@ describe('runDevTenancySetup', () => {
     expect(results.map((r) => [r.step, r.outcome])).toEqual([
       ['app role', 'unchanged'],
       ['policies', 'unchanged'],
+      ['Anthropic provider', 'unchanged'],
       ['OpenAI provider', 'unchanged'],
       ['embedding model', 'unchanged'],
       ['drift check', 'unchanged'],

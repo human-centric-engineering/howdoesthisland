@@ -15,9 +15,10 @@
  *     alone. Otherwise `db:tenancy:role -- --create` makes it, or re-grants it
  *     after a `db:reset` dropped its grants.
  *  3. **Policies.** `db:tenancy:enable`, which is idempotent on its own.
- *  4. **OpenAI provider row.** Created from the platform's known-provider entry
- *     if missing. No seed creates it (the provider models are seeded, the
- *     provider row is not), and the embedder needs it.
+ *  4. **Provider rows.** Anthropic's, which the judges and editor run on
+ *     (D8, t-39), and OpenAI's, which the embedder runs on. Each is created
+ *     from the platform's known-provider entry if missing: no seed creates a
+ *     provider row (the provider models are seeded, the providers are not).
  *  5. **Active embedding model.** `text-embedding-3-small` (1536 dimensions,
  *     the size of the vector columns), set if none is set. A different model
  *     already set is reported, not overwritten: changing it means re-embedding.
@@ -34,8 +35,11 @@ import { KNOWN_PROVIDERS } from '@/lib/orchestration/llm/known-providers';
 /** The platform's default app-role name, which this app must not use. */
 export const PLATFORM_DEFAULT_ROLE = 'sunrise_app';
 
-/** The provider the app's judges and embedder run on (D8). */
+/** The provider the app's embedder runs on. */
 export const PROVIDER_SLUG = 'openai';
+
+/** The provider the app's judges and editor run on (D8, t-39). */
+export const JUDGES_PROVIDER_SLUG = 'anthropic';
 
 /** The embedding model, by its `AiProviderModel.slug` from seed 009. */
 export const EMBEDDING_MODEL_SLUG = 'openai-text-embedding-3-small';
@@ -184,22 +188,30 @@ export type SetupDb = Pick<
   'aiProviderConfig' | 'aiProviderModel' | 'aiOrchestrationSettings'
 >;
 
-export async function ensureOpenAiProvider(db: SetupDb): Promise<StepResult> {
-  const known = KNOWN_PROVIDERS.find((p) => p.slug === PROVIDER_SLUG);
-  if (!known) throw new SetupError(`no known provider "${PROVIDER_SLUG}"`);
+export function ensureOpenAiProvider(db: SetupDb): Promise<StepResult> {
+  return ensureProvider(db, PROVIDER_SLUG, 'OpenAI provider');
+}
+
+export function ensureAnthropicProvider(db: SetupDb): Promise<StepResult> {
+  return ensureProvider(db, JUDGES_PROVIDER_SLUG, 'Anthropic provider');
+}
+
+async function ensureProvider(db: SetupDb, slug: string, step: string): Promise<StepResult> {
+  const known = KNOWN_PROVIDERS.find((p) => p.slug === slug);
+  if (!known) throw new SetupError(`no known provider "${slug}"`);
 
   const existing = await db.aiProviderConfig.findUnique({
-    where: { slug: PROVIDER_SLUG },
+    where: { slug },
     select: { isActive: true, apiKeyEnvVar: true },
   });
   if (existing) {
     if (!existing.isActive) {
       throw new SetupError(
-        `the "${PROVIDER_SLUG}" provider exists but is inactive; reactivate it at /admin/orchestration/providers`
+        `the "${slug}" provider exists but is inactive; reactivate it at /admin/orchestration/providers`
       );
     }
     return {
-      step: 'OpenAI provider',
+      step,
       outcome: 'unchanged',
       detail: `active, key from ${existing.apiKeyEnvVar ?? '(none)'}`,
     };
@@ -217,7 +229,7 @@ export async function ensureOpenAiProvider(db: SetupDb): Promise<StepResult> {
       isActive: true,
     },
   });
-  return { step: 'OpenAI provider', outcome: 'created', detail: `key from ${apiKeyEnvVar}` };
+  return { step, outcome: 'created', detail: `key from ${apiKeyEnvVar}` };
 }
 
 export async function ensureEmbeddingModel(db: SetupDb): Promise<StepResult> {
@@ -286,6 +298,7 @@ export async function runDevTenancySetup(deps: SetupDeps): Promise<StepResult[]>
   results.push(await ensureAppRole(deps.probeAppRole, deps.runNpm));
   results.push(enablePolicies(deps.runNpm));
   const db = deps.db();
+  results.push(await ensureAnthropicProvider(db));
   results.push(await ensureOpenAiProvider(db));
   results.push(await ensureEmbeddingModel(db));
   results.push(runDriftCheck(deps.runNpm));
