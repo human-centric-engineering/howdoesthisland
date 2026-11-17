@@ -36,13 +36,18 @@ describe('FrameworksPage', () => {
 
   it('says so when no framework comes back', async () => {
     vi.mocked(serverFetch).mockResolvedValue(apiSuccess([]));
-    const { unmount } = render(await FrameworksPage());
-    expect(screen.getByText('No frameworks could be loaded.')).toBeInTheDocument();
-    unmount();
-    // A body that is not a list is not read as one.
-    vi.mocked(serverFetch).mockResolvedValue(apiSuccess({ versions: [] }));
     render(await FrameworksPage());
     expect(screen.getByText('No frameworks could be loaded.')).toBeInTheDocument();
+  });
+
+  it('refuses a body that is not the list, rather than rendering it', async () => {
+    vi.mocked(serverFetch).mockResolvedValue(apiSuccess({ versions: [] }));
+    await expect(FrameworksPage()).rejects.toThrow();
+    // A list whose run lacks its fields is refused too, at the boundary.
+    vi.mocked(serverFetch).mockResolvedValue(
+      apiSuccess([{ slug: 'howdoesthisland', name: 'HowDoesThisLand', versions: [{ id: 'v' }] }])
+    );
+    await expect(FrameworksPage()).rejects.toThrow();
   });
 
   it('throws to the error boundary when the load fails', async () => {

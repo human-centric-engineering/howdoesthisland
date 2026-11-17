@@ -33,6 +33,8 @@ import {
   type AdminRunWire,
   type AdminVersionWire,
   type FrameworkCalibrationWire,
+  frameworkCalibrationSchema,
+  startedRunSchema,
 } from '@/lib/app/calibration/wire';
 
 const POLL_MS = 5000;
@@ -121,9 +123,11 @@ function VersionCard({
     save.clear();
     setPending(mode);
     try {
-      const started = await apiClient.post<{ runId: string }>(
-        `${ADMIN_FRAMEWORKS_PATH}/howdoesthisland/versions/${encodeURIComponent(version.version)}/calibration-runs`,
-        { body: { mode } }
+      const started = startedRunSchema.parse(
+        await apiClient.post<unknown>(
+          `${ADMIN_FRAMEWORKS_PATH}/howdoesthisland/versions/${encodeURIComponent(version.version)}/calibration-runs`,
+          { body: { mode } }
+        )
       );
       await onStarted(started.runId);
     } catch (err) {
@@ -277,7 +281,9 @@ export function CalibrationPanel({ initial }: { initial: FrameworkCalibrationWir
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [framework] = await apiClient.get<FrameworkCalibrationWire[]>(ADMIN_FRAMEWORKS_PATH);
+    const [framework] = frameworkCalibrationSchema
+      .array()
+      .parse(await apiClient.get<unknown>(ADMIN_FRAMEWORKS_PATH));
     if (framework) setData(framework);
   }, []);
 

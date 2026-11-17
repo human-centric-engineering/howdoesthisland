@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { CalibrationPanel } from '@/components/app/admin/frameworks/calibration-panel';
 import { FieldHelp } from '@/components/ui/field-help';
 import { requireServerData } from '@/lib/api/server-load';
-import { ADMIN_FRAMEWORKS_PATH, type FrameworkCalibrationWire } from '@/lib/app/calibration/wire';
+import { ADMIN_FRAMEWORKS_PATH, frameworkCalibrationSchema } from '@/lib/app/calibration/wire';
 
 export const metadata: Metadata = {
   title: 'Frameworks',
@@ -19,8 +19,10 @@ export const metadata: Metadata = {
  * empty list.
  */
 export default async function FrameworksPage() {
-  const { data } = await requireServerData<FrameworkCalibrationWire[]>(ADMIN_FRAMEWORKS_PATH);
-  const framework = Array.isArray(data) ? data[0] : undefined;
+  const { data } = await requireServerData<unknown>(ADMIN_FRAMEWORKS_PATH);
+  // Checked at the boundary: a body that is not the list throws to the error
+  // boundary here rather than at render.
+  const [framework] = frameworkCalibrationSchema.array().parse(data);
 
   return (
     <div className="space-y-6">
