@@ -77,20 +77,55 @@ const CLAUDE_HAIKU_4_5 = {
   outputLimit: 64_000,
 };
 
+/** The current Claude generation (D8 as ruled 2026-11-17). Each writes up to 128K. */
+const CLAUDE_HAIKU_5_5 = {
+  provider: 'anthropic',
+  model: 'claude-haiku-5-5',
+  label: 'Claude Haiku 5.5',
+  outputLimit: 128_000,
+};
+const CLAUDE_SONNET_5_5 = {
+  provider: 'anthropic',
+  model: 'claude-sonnet-5-5',
+  label: 'Claude Sonnet 5.5',
+  outputLimit: 128_000,
+};
+const CLAUDE_OPUS_5_5 = {
+  provider: 'anthropic',
+  model: 'claude-opus-5-5',
+  label: 'Claude Opus 5.5',
+  outputLimit: 128_000,
+};
+
 /** Two minutes for a judge, four for the larger jobs, longer on a reasoning model. */
 const JUDGE_TIMEOUT_MS = 120_000;
 const LARGE_TIMEOUT_MS = 240_000;
 const REASONING_JUDGE_TIMEOUT_MS = 180_000;
 const REASONING_LARGE_TIMEOUT_MS = 300_000;
 
-const settings = (maxTokens: number, timeoutMs: number): ApprovedModelSettings => ({
-  maxTokens,
-  reasoningEffort: null,
-  timeoutMs,
-});
+const settings = (
+  maxTokens: number,
+  timeoutMs: number,
+  reasoningEffort: ApprovedModelSettings['reasoningEffort'] = null
+): ApprovedModelSettings => ({ maxTokens, reasoningEffort, timeoutMs });
 
 export const APPROVED_MODELS: Readonly<Record<JudgeRole, readonly ApprovedModel[]>> = {
   judge: [
+    {
+      ...CLAUDE_HAIKU_5_5,
+      tradeoff: 'Fast and very cheap.',
+      settings: settings(32_768, REASONING_JUDGE_TIMEOUT_MS, 'medium'),
+    },
+    {
+      ...CLAUDE_SONNET_5_5,
+      tradeoff: 'Balanced.',
+      settings: settings(32_768, REASONING_JUDGE_TIMEOUT_MS, 'medium'),
+    },
+    {
+      ...CLAUDE_OPUS_5_5,
+      tradeoff: 'The most careful.',
+      settings: settings(32_768, REASONING_LARGE_TIMEOUT_MS, 'medium'),
+    },
     {
       ...GPT_4_1,
       tradeoff: 'The default: quick and consistent.',
@@ -119,6 +154,21 @@ export const APPROVED_MODELS: Readonly<Record<JudgeRole, readonly ApprovedModel[
   ],
   influence: [
     {
+      ...CLAUDE_HAIKU_5_5,
+      tradeoff: 'Fast and very cheap.',
+      settings: settings(64_000, REASONING_LARGE_TIMEOUT_MS, 'medium'),
+    },
+    {
+      ...CLAUDE_SONNET_5_5,
+      tradeoff: 'Balanced.',
+      settings: settings(64_000, REASONING_LARGE_TIMEOUT_MS, 'medium'),
+    },
+    {
+      ...CLAUDE_OPUS_5_5,
+      tradeoff: 'The most careful.',
+      settings: settings(64_000, REASONING_LARGE_TIMEOUT_MS, 'medium'),
+    },
+    {
       ...GPT_4_1,
       tradeoff: 'The default: quick and consistent.',
       settings: settings(32_768, LARGE_TIMEOUT_MS),
@@ -140,6 +190,16 @@ export const APPROVED_MODELS: Readonly<Record<JudgeRole, readonly ApprovedModel[
     },
   ],
   editor: [
+    {
+      ...CLAUDE_SONNET_5_5,
+      tradeoff: 'Balanced.',
+      settings: settings(64_000, REASONING_LARGE_TIMEOUT_MS, 'medium'),
+    },
+    {
+      ...CLAUDE_OPUS_5_5,
+      tradeoff: 'The most careful.',
+      settings: settings(64_000, REASONING_LARGE_TIMEOUT_MS, 'medium'),
+    },
     {
       ...GPT_5,
       tradeoff: 'The default: the most careful rewrites.',
