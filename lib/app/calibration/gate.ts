@@ -85,7 +85,17 @@ export function calibrationGate(store: Pick<CalibrationStore, 'aiRunsOf'>): Publ
   };
 }
 
-const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+/** Agreement in tenths of a percent, rounded once, so the printed difference is the printed figures'. */
+const tenths = (x: number) => Math.round(x * 1000);
+const pct = (x: number) => `${(tenths(x) / 10).toFixed(1)}%`;
+
+/** Judge models as a comparable key: kinds and their models in a fixed order. */
+const modelsKey = (m: Record<string, string[]>) =>
+  JSON.stringify(
+    Object.keys(m)
+      .sort()
+      .map((k) => [k, [...m[k]].sort()])
+  );
 
 /**
  * What `publish` prints after publishing a gated draft (t-40): its agreement
@@ -107,11 +117,21 @@ export function agreementChangeLine(
   if (!before.success) {
     return `${head}. The snapshot of ${previous.version}, the last published version with one, is unreadable.`;
   }
-  // Signed as `calibrate` prints a change between runs; rounded first, so a
-  // difference too small to show prints 0.0, not -0.0.
-  const pts = Math.round((now.data.agreement - before.data.agreement) * 1000) / 10;
+  // The difference of the two printed figures, signed as `calibrate` prints
+  // a change between runs. A difference of integers: never -0.0.
+  const pts = (tenths(now.data.agreement) - tenths(before.data.agreement)) / 10;
+  // A different set or judge is a different measure: say so beside the number.
+  const unlike = [
+    now.data.setVersion !== before.data.setVersion
+      ? `calibration set ${before.data.setVersion} then, ${now.data.setVersion} now`
+      : null,
+    modelsKey(now.data.judgeModels) !== modelsKey(before.data.judgeModels)
+      ? 'different judge models'
+      : null,
+  ].filter((x): x is string => x !== null);
   return (
     `${head}, against ${pct(before.data.agreement)} for ${previous.version}, the last published ` +
-    `version with a snapshot: ${pts > 0 ? '+' : ''}${pts.toFixed(1)} pts.`
+    `version with a snapshot: ${pts > 0 ? '+' : ''}${pts.toFixed(1)} pts` +
+    (unlike.length ? ` (not like for like: ${unlike.join('; ')}).` : '.')
   );
 }

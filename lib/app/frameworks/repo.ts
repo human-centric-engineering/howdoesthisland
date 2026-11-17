@@ -234,7 +234,8 @@ export const prismaFrameworkRepo: FrameworkRepo = {
     const rows = await prisma.frameworkVersion.findMany({
       where: { status: 'PUBLISHED', framework: { slug } },
       select: { version: true, calibration: true },
-      orderBy: { publishedAt: 'desc' },
+      // Deterministic on ties; a row with no publishedAt is never "the last".
+      orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
     });
     const row = rows.find((r) => r.calibration !== null);
     return row ? { version: row.version, calibration: row.calibration } : null;

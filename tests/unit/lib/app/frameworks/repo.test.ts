@@ -121,7 +121,7 @@ describe('reads', () => {
     expect(db.frameworkVersion.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { status: 'PUBLISHED', framework: { slug: 'howdoesthisland' } },
-        orderBy: { publishedAt: 'desc' },
+        orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       })
     );
   });

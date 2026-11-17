@@ -161,6 +161,33 @@ describe('runPublish() reports the agreement change (t-40)', () => {
     ).toMatch(/: 0\.0 pts\.$/);
   });
 
+  it('prints the difference of the two printed figures, not of the unrounded ones', () => {
+    // Unrounded: 0.8144 - 0.8056 = 0.88 pts, which would print +0.9 under 81.4% and 80.6%.
+    expect(
+      agreementChangeLine(snapshot(0.8144), { version: '0.6.0', calibration: snapshot(0.8056) })
+    ).toBe(
+      'Agreement 81.4%, against 80.6% for 0.6.0, the last published version with a snapshot: +0.8 pts.'
+    );
+  });
+
+  it('says when the two were measured on a different set or by different judges', () => {
+    const before = {
+      ...snapshot(0.85),
+      setVersion: '0.5.1',
+      judgeModels: { appeal: ['claude-opus-5-5'] },
+    };
+    expect(agreementChangeLine(snapshot(0.825), { version: '0.6.0', calibration: before })).toBe(
+      'Agreement 82.5%, against 85.0% for 0.6.0, the last published version with a snapshot: ' +
+        '-2.5 pts (not like for like: calibration set 0.5.1 then, 0.6.0 now; different judge models).'
+    );
+    // The same models listed in another order are the same judges.
+    const now = { ...snapshot(0.825), judgeModels: { appeal: ['b', 'a'], fit: ['c'] } };
+    const then = { ...snapshot(0.85), judgeModels: { fit: ['c'], appeal: ['a', 'b'] } };
+    expect(agreementChangeLine(now, { version: '0.6.0', calibration: then })).toMatch(
+      /-2\.5 pts\.$/
+    );
+  });
+
   it('reports an unreadable stored snapshot, and publishes anyway', async () => {
     deps.gate = gateWith({ '0.6.0': 0.85, '0.7.0': 0.825 });
     await runPublish(['howdoesthisland', '0.6.0'], deps);

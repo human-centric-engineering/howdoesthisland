@@ -177,14 +177,16 @@ does not publish uncalibrated content.
 
 Publishing a gated draft then prints its agreement against the snapshot of the most
 recently published (not retired) version that has one, and the difference in points
-(t-40):
+between the two printed figures (t-40):
 
 ```
 howdoesthisland 0.7.0: published
 Agreement 82.5%, against 85.0% for 0.6.0, the last published version with a snapshot: -2.5 pts.
 ```
 
-With no earlier snapshot it says so (0.5.1 has none). A stored snapshot that does not
+When the two snapshots were taken on different calibration sets or with different judge
+models, the line ends `(not like for like: …)` naming which, since the points then
+compare two measures, not two versions. With no earlier snapshot it says so (0.5.1 has none). A stored snapshot that does not
 parse is reported as unreadable, not skipped for an older one. The line only reports:
 nothing refuses a publish on agreement until run-to-run noise is measured and a floor is
 set.
