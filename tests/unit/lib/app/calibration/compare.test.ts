@@ -37,6 +37,11 @@ const previous = {
 };
 
 describe('compareRuns()', () => {
+  it('dates the previous run by when it finished, when it recorded that', () => {
+    const finished = { ...previous, finishedAt: new Date('2026-11-16T10:12:00Z') };
+    expect(compareRuns(finished, run(before)).previousRanAt).toBe('2026-11-16T10:12:00.000Z');
+  });
+
   it('reports no change against an identical run', () => {
     const c = compareRuns(previous, run(before));
     expect(c).toMatchObject({

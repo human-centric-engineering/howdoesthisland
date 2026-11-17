@@ -5,7 +5,8 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runCalibrate, type CalibrateDeps } from '@/lib/app/calibration/cli';
-import type { CalibrationStore, NewRun, StoredRun } from '@/lib/app/calibration/store';
+import { CalibrationRunningError, type NewRun, type StoredRun } from '@/lib/app/calibration/store';
+import { fakeCalibrationStore } from '@/tests/unit/lib/app/calibration/fake-store';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { importVersion } from '@/lib/app/frameworks/store';
 import { FakeFrameworkRepo } from '@/tests/unit/lib/app/frameworks/fake-repo';
@@ -22,16 +23,11 @@ beforeEach(async () => {
   repo = new FakeFrameworkRepo();
   await importVersion(repo, howDoesThisLand, readFileSync(MODEL, 'utf8'));
   lines = [];
-  created = [];
   previous = null;
-  const store: CalibrationStore = {
-    createRun: async (run) => {
-      created.push(run);
-      return { ...run, createdAt: new Date('2026-11-16T12:00:00Z'), frameworkVersion: '0.5.1' };
-    },
-    latestRun: async () => previous,
-    aiRunsOf: async () => [],
-  };
+  const fake = fakeCalibrationStore();
+  fake.store.latestRun.mockImplementation(async () => previous);
+  created = fake.created;
+  const store = fake.store;
   deps = {
     repo,
     store,
@@ -123,5 +119,14 @@ describe('runCalibrate()', () => {
     const args = ['--mode', 'quick', '--version', '0.6.0'];
     expect(await runCalibrate(args, deps)).toBe(1);
     expect(lines.pop()).toBe('The calibration set is written for model 0.5.1, not 0.6.0.');
+  });
+
+  it('exits 1 when an AI run of the version is still running, spending nothing', async () => {
+    deps.store.startRun = vi.fn(async () => {
+      throw new CalibrationRunningError('cal-0');
+    });
+    expect(await runCalibrate(['--mode', 'ai', '--version', '0.5.1'], deps)).toBe(1);
+    expect(lines.pop()).toBe('An AI run of this version is still running (cal-0).');
+    expect(deps.runJudges).not.toHaveBeenCalled();
   });
 });

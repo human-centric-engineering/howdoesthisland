@@ -26,7 +26,10 @@ export interface ScoredRow {
 
 export interface RunForComparison {
   id: string;
+  /** When it started (and was stored, t-38). */
   createdAt: Date;
+  /** When it finished; null for a run stored before t-38 recorded it. */
+  finishedAt?: Date | null;
   frameworkVersion: string;
   totals: Totals;
   rows: readonly ScoredRow[];
@@ -108,7 +111,7 @@ export function compareRuns(
 
   return {
     previousRunId: previous.id,
-    previousRanAt: previous.createdAt.toISOString(),
+    previousRanAt: (previous.finishedAt ?? previous.createdAt).toISOString(),
     previousFrameworkVersion: previous.frameworkVersion,
     agreement: current.totals.agreement,
     previousAgreement: previous.totals.agreement,

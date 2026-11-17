@@ -346,31 +346,44 @@ model ReportShare {
 /// cascade, `org_isolation`), written in the system scope by
 /// lib/app/calibration/store.ts. Keeps no Assessment rows.
 model CalibrationRun {
-  id                 String           @id @default(cuid())
+  id                 String               @id @default(cuid())
   orgId              String?
-  org                Org?             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org                Org?                 @relation(fields: [orgId], references: [id], onDelete: Cascade)
   frameworkVersionId String
-  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Cascade)
+  frameworkVersion   FrameworkVersion     @relation(fields: [frameworkVersionId], references: [id], onDelete: Cascade)
   /// The version's `sourceSha256` when it ran: a draft re-imported since is
   /// different content, and the run no longer counts for it.
   sourceSha256       String
   /// The calibration set's `meta.version`.
   setVersion         String
   mode               CalibrationMode
+  /// `RUNNING` from the moment it starts (t-38: a run started from the admin
+  /// page finishes in the background, and the page shows it running), then
+  /// `COMPLETE` with its results, or `FAILED` with `error`. Only a
+  /// `COMPLETE` run is compared with or lets a draft publish.
+  status             CalibrationRunStatus
   /// The provider and model each judge answered with, by slot. `{}` for `QUICK`.
   judgeModels        Json
-  /// Agreement by kind of expectation (`lib/app/calibration/score.ts`).
-  totals             Json
-  /// Each case's scored expectations.
-  rows               Json
+  /// Agreement by kind of expectation (`lib/app/calibration/score.ts`). Null until `COMPLETE`.
+  totals             Json?
+  /// Each case's scored expectations. Null until `COMPLETE`.
+  rows               Json?
+  /// Why a `FAILED` run stopped.
+  error              String?
+  finishedAt         DateTime?
+  /// Touched every `HEARTBEAT_MS` while the run is alive
+  /// (`lib/app/calibration/store.ts`). A `RUNNING` run whose beat is older
+  /// than `STOPPED_AFTER_MS` is stopped: the process running it went away.
+  heartbeatAt        DateTime             @default(now())
   /// What the judge calls cost, summed from each reply's and each billed
   /// failure's cost (the same figures runJudge wrote to `AiCostLog`).
-  costUsd            Float            @default(0)
+  costUsd            Float                @default(0)
   /// Who started it. FK → user, ON DELETE SET NULL. Null from the CLI.
   startedByUserId    String?
-  createdAt          DateTime         @default(now())
+  createdAt          DateTime             @default(now())
 
   @@index([frameworkVersionId, mode, createdAt])
+  @@index([frameworkVersionId, mode, status])
   @@index([mode, createdAt])
   @@index([orgId])
   @@map("app_calibration_run")
@@ -379,4 +392,10 @@ model CalibrationRun {
 enum CalibrationMode {
   QUICK
   AI
+}
+
+enum CalibrationRunStatus {
+  RUNNING
+  COMPLETE
+  FAILED
 }

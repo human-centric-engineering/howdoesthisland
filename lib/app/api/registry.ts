@@ -28,6 +28,11 @@
  * envelope, and its docblock lists the codes.
  */
 import { z } from 'zod';
+import {
+  calibrationRunParamsSchema,
+  startCalibrationRunSchema,
+} from '@/lib/app/calibration/validations';
+import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
 import { orgIdParamSchema } from '@/lib/validations/tenancy';
 import { ORG_OWNER_ROLE, ORG_ROLES } from '@/lib/tenancy/roles';
 import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
@@ -75,11 +80,15 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
  *   admin may be acting: `anywhere`, or only `entered` — acting in this very
  *   workspace, which for a customer's means under its support grant.
  *
+ * - `platform-admin` — a platform admin, by session or by an API key with
+ *   the `admin` scope (`withAdminAuth`).
+ *
  * `apiKeyScope` is the scope an API key needs, or `null` when the route
  * refuses API keys and wants a browser session.
  */
 export type RouteAuth =
   | { who: 'anyone' }
+  | { who: 'platform-admin' }
   | { who: 'signed-in'; apiKeyScope: string | null }
   | {
       who: 'workspace-admin';
@@ -646,5 +655,25 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: WORKSPACE_ADMIN_ENTERED,
     request: { params: judgeModelParamsSchema, body: chooseJudgeModelSchema },
     response: { status: 200, data: judgeModelChoiceSchema },
+  },
+
+  // Calibration, for platform admins (t-38). Publishing stays a CLI action.
+  {
+    method: 'GET',
+    path: '/api/v1/admin/frameworks',
+    summary:
+      'List every framework version with its calibration snapshot and runs, each with its agreement and its change from the run before.',
+    auth: { who: 'platform-admin' },
+    request: {},
+    response: { status: 200, data: z.array(frameworkCalibrationSchema) },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/frameworks/{slug}/versions/{version}/calibration-runs',
+    summary:
+      'Start a calibration run of a version: a quick run answers once complete, an AI run once started.',
+    auth: { who: 'platform-admin' },
+    request: { params: calibrationRunParamsSchema, body: startCalibrationRunSchema },
+    response: { status: [201, 202], data: startedRunSchema },
   },
 ];

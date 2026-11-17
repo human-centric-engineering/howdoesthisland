@@ -97,16 +97,68 @@ mode (against any version), with every check whose result changed, worse ones fi
 (`compare.ts`). A check whose expected value changed between the two runs' sets is not
 counted as changed.
 
-| Module       | Does                                                                       |
-| ------------ | -------------------------------------------------------------------------- |
-| `score.ts`   | scores one case's expectations (`ok`/`near`/`miss`), and sums them         |
-| `run.ts`     | `scoreSet` runs the cases; `runCalibration` checks, runs, stores, compares |
-| `compare.ts` | the change from the previous run                                           |
-| `store.ts`   | the table's only writer; reads JSON back through Zod                       |
-| `gate.ts`    | the publish gate                                                           |
-| `cli.ts`     | the command behind `scripts/app/calibrate.ts`                              |
+Before a run is stored, the set is checked against the version: its model version, the
+ids it names, every case's context, and (for an AI run) that the version has judges. A set
+that does not fit, or a retired version, is refused with nothing stored and nothing spent.
+A run is stored `RUNNING` when it starts, then `COMPLETE` with its results or `FAILED`
+with `error` and what its judges had cost so far. `totals` and `rows` are null until it is complete. Only a complete run is
+read back for comparing or for the gate, so a run that is still going, or one that died,
+never counts. A run is compared with the newest complete run of its mode stored _before
+it started_, so the comparison printed when it finishes matches the one the admin page
+shows, even when two runs overlap.
+
+While a run is running, the process running it touches its `heartbeatAt` every
+`HEARTBEAT_MS` (30s). A `RUNNING` run whose beat is older than `STOPPED_AFTER_MS` (2
+minutes) is **stopped**: the process went away (a deploy, a serverless time limit, a
+Ctrl-C). Nothing rewrites the row; it just stops counting as running. A long CLI run keeps
+beating, so it is not taken for stopped however long it takes. Each beat also records what
+the run's judges have cost so far, so a stopped run still shows what it spent by its last
+beat.
+
+**Only one AI run of a version runs at a time**, from the CLI or the page. `startRun`
+takes a transaction-scoped advisory lock on the version, looks for an AI run of it that is
+still beating, and throws `CalibrationRunningError` if there is one. Two starts at once
+cannot both pass the check.
+
+| Module       | Does                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| `score.ts`   | scores one case's expectations (`ok`/`near`/`miss`), and sums them                                     |
+| `run.ts`     | `scoreSet` runs the cases; `startCalibration` checks, stores and starts; `runCalibration` waits for it |
+| `compare.ts` | the change from the previous run                                                                       |
+| `store.ts`   | the table's only writer; reads JSON back through Zod                                                   |
+| `wire.ts`    | the JSON shapes, with no database import (the route registry uses them)                                |
+| `gate.ts`    | the publish gate                                                                                       |
+| `cli.ts`     | the command behind `scripts/app/calibrate.ts`                                                          |
+| `sets.ts`    | the sets bundled for the routes                                                                        |
+| `admin.ts`   | what the admin page lists, and starting a run from it                                                  |
 
 `agreement` is every `ok` over every check. `near` does not count as agreement.
+
+## The admin page
+
+`/admin/frameworks` (platform admins only) lists every version, drafts included, with
+its calibration snapshot and its runs. Each run shows its agreement overall and for
+appeals, groups, flags and duties, with the change from the run before it of the same
+mode. Pick a run to see what changed and every case's misses. The page reads
+`GET /api/v1/admin/frameworks`. It starts runs with
+`POST /api/v1/admin/frameworks/howdoesthisland/versions/<v>/calibration-runs`
+`{ mode }`, which records the caller as `startedByUserId` on the run and on each judge
+call's cost row. Publishing is still done from the command line.
+
+- **Quick** is waited for, and answers 201 once it is complete.
+- **AI** answers 202 once the run is stored, and carries on under `after()`
+  (`maxDuration` 300), as an assessment does. The page reads the list again every few
+  seconds while a run is running. A second AI run of a version that is still running is
+  answered 409 `CALIBRATION_RUNNING`.
+- **A run whose beat has stopped is shown as `stopped`**, two minutes after its process
+  went away, and it stops blocking the next AI run. **A whole AI run can take
+  longer than a serverless function is allowed to live**, because the 26 cases run
+  one after another. On Vercel, start AI runs from the CLI or a long-running server.
+
+The routes cannot read `data/eval-<v>.json` from disk, because a Vercel function holds
+only the files the bundler traced. So each set is imported in `sets.ts`, and
+`tests/unit/lib/app/calibration/sets.test.ts` fails on any `eval-*.json` that is not
+listed there.
 
 ## The publish gate
 
@@ -118,7 +170,8 @@ counted as changed.
 - complete (no judge failed, and at least one check scored).
 
 On publish the newest such run's snapshot is copied into `FrameworkVersion.calibration`:
-`{ runId, ranAt, agreement, setVersion, checks, judgeModels }`. The publish write is
+`{ runId, ranAt, agreement, setVersion, checks, judgeModels }`. `ranAt` is when the run
+finished (`finishedAt`), since a run is stored when it starts. The publish write is
 conditioned on the same `sourceSha256`, so a re-import between the check and the write
 does not publish uncalibrated content.
 

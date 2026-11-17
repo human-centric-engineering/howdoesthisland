@@ -75,9 +75,13 @@ import type {
   SharedReport,
 } from '@/lib/app/reports/share/service';
 import type { PaginationMeta } from '@/types/api';
+import type { FrameworkCalibration, StartedRun } from '@/lib/app/calibration/admin';
+import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
 
 /** The route directories this fork added under `app/api/v1/`. */
 const APP_ROUTE_DIRS = [
+  // The app's own directory inside core's `admin` (t-38).
+  'admin/frameworks',
   'assessments',
   'frameworks',
   'scan',
@@ -340,6 +344,10 @@ describe('response schemas match what the services return', () => {
       Wire<CreatedReportShare>
     >();
     expectTypeOf<z.infer<typeof sharedAssessmentSchema>>().toEqualTypeOf<Wire<SharedAssessment>>();
+    expectTypeOf<z.infer<typeof frameworkCalibrationSchema>>().toEqualTypeOf<
+      Wire<FrameworkCalibration>
+    >();
+    expectTypeOf<z.infer<typeof startedRunSchema>>().toEqualTypeOf<Wire<StartedRun>>();
     // The route answers 422 rather than send a `null` model.
     expectTypeOf<z.infer<typeof sharedReportSchema>>().toEqualTypeOf<
       Wire<Omit<SharedReport, 'model'> & { model: NonNullable<SharedReport['model']> }>
