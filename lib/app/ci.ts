@@ -165,6 +165,24 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'it from there and writes tests/fixtures/app/calibration/. Nothing ' +
       'imports it; parity.test.ts checks what it wrote.',
   },
+  {
+    // HowDoesThisLand (t-39), by name.
+    pattern: 'scripts/app/calibration/measure-judge-model.ts',
+    reason:
+      "a development tool run by hand that rebinds the install org's judges and " +
+      'calls the real providers (a paid run, left to the end-of-project checks, ' +
+      't-42). Its work is the calibration runner and runJudges, which are gated ' +
+      'and tested; what it adds is argument parsing and the bind-and-restore.',
+  },
+  {
+    // HowDoesThisLand (t-39), by name.
+    pattern: 'scripts/app/grant-judge-provider.ts',
+    reason:
+      'a thin entry point run by hand once per environment. It calls ' +
+      'grantJudgeProviderToAllOrgs, which stays gated and is tested in ' +
+      'tests/unit/lib/app/workspaces/judge-provider-grant.test.ts, and prints ' +
+      'its summary.',
+  },
 ];
 
 /** One test that must run regardless of what the module graph says. */

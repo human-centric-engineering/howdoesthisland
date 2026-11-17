@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   EDITOR_AGENT_SLUG,
-  INTERIM_EDITOR_MODEL,
-  INTERIM_JUDGE_MODEL,
+  DEFAULT_EDITOR_MODEL,
+  DEFAULT_JUDGE_MODEL,
   JUDGE_PROVIDER_SLUG,
   judgeAgentDefinitions,
   judgeAgentSlug,
@@ -72,13 +72,45 @@ describe('every approved entry', () => {
   });
 });
 
-describe('the interim models are approved for their roles', () => {
+describe('the defaults are approved for their roles', () => {
   it('the judges’ and the editor’s defaults are on their lists', () => {
     const on = (role: (typeof JUDGE_ROLES)[number], model: string) =>
       approvedEntry(role, { provider: JUDGE_PROVIDER_SLUG, model });
-    expect(on('judge', INTERIM_JUDGE_MODEL)).toBeDefined();
-    expect(on('influence', INTERIM_JUDGE_MODEL)).toBeDefined();
-    expect(on('editor', INTERIM_EDITOR_MODEL)).toBeDefined();
+    expect(on('judge', DEFAULT_JUDGE_MODEL)).toBeDefined();
+    expect(on('influence', DEFAULT_JUDGE_MODEL)).toBeDefined();
+    expect(on('editor', DEFAULT_EDITOR_MODEL)).toBeDefined();
+  });
+
+  it('lists each role’s default first, so a workspace sees it at the top', () => {
+    expect(APPROVED_MODELS.judge[0].model).toBe(DEFAULT_JUDGE_MODEL);
+    expect(APPROVED_MODELS.influence[0].model).toBe(DEFAULT_JUDGE_MODEL);
+    expect(APPROVED_MODELS.editor[0].model).toBe(DEFAULT_EDITOR_MODEL);
+  });
+});
+
+describe('the Claude entries (t-39)', () => {
+  const claude = JUDGE_ROLES.flatMap((role) =>
+    APPROVED_MODELS[role].filter((e) => e.provider === 'anthropic').map((e) => ({ role, e }))
+  );
+
+  it('are the current generation only, by the API’s dashed ids', () => {
+    expect(new Set(claude.map(({ e }) => e.model))).toEqual(
+      new Set(['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'])
+    );
+  });
+
+  it('run at medium effort, with a reasoning model’s timeout', () => {
+    for (const { role, e } of claude) {
+      expect(e.settings.reasoningEffort, `${role} ${e.model}`).toBe('medium');
+      expect(e.settings.timeoutMs, `${role} ${e.model}`).toBeGreaterThanOrEqual(180_000);
+    }
+  });
+
+  it('offer Haiku to the judges and not to the editor', () => {
+    const on = (role: (typeof JUDGE_ROLES)[number]) =>
+      APPROVED_MODELS[role].some((e) => e.model === 'claude-haiku-5-5');
+    expect(on('judge') && on('influence')).toBe(true);
+    expect(on('editor')).toBe(false);
   });
 });
 
@@ -108,10 +140,12 @@ describe('each agent’s bindingRule', () => {
     const ethos = definition(judgeAgentSlug('judge_ethos'));
     const influence = definition(judgeAgentSlug('judge_influence'));
     const editor = definition(EDITOR_AGENT_SLUG);
-    const haiku = { provider: 'anthropic', model: 'claude-haiku-4.5' };
+    const haiku = { provider: 'anthropic', model: 'claude-haiku-5-5' };
+    const oldHaiku = { provider: 'anthropic', model: 'claude-haiku-4.5' };
 
     expect(ethos.bindingRule?.(haiku)).toBeNull();
-    expect(influence.bindingRule?.(haiku)).toContain('not approved for the influence judge');
+    expect(influence.bindingRule?.(haiku)).toBeNull();
+    expect(ethos.bindingRule?.(oldHaiku)).toContain('not approved for this judge');
     expect(editor.bindingRule?.({ provider: 'openai', model: 'gpt-5' })).toBeNull();
     expect(editor.bindingRule?.(haiku)).toContain('not approved for the editor');
   });

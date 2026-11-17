@@ -1,7 +1,7 @@
 /**
  * Tests: the judge and editor agents through the REAL reconcile (t-17).
  *
- * A new workspace gets all ten, bound to OpenAI on the interim models, and a
+ * A new workspace gets all ten, bound to Anthropic on Claude Sonnet 5.5, and a
  * second reconcile writes nothing. Driven, as core's own reconcile tests are,
  * against an in-memory stand-in for the delegates the reconcile touches, so
  * "writes nothing" is a fact about state rather than about what a mock was
@@ -168,10 +168,13 @@ beforeEach(() => {
   __resetPlatformAgentsForTests();
   forgetOrgProviderPolicy(ORG);
   process.env.T17_OPENAI_KEY = 'sk-test';
+  process.env.T17_ANTHROPIC_KEY = 'sk-ant-test';
   const s = fake.state;
   s.seq = 0;
-  // A new workspace, approved for OpenAI as provisioning approves it.
-  s.orgs = new Map([[ORG, { id: ORG, settings: { providers: { approved: ['prov-openai'] } } }]]);
+  // A new workspace, approved for its two providers as provisioning approves it.
+  s.orgs = new Map([
+    [ORG, { id: ORG, settings: { providers: { approved: ['prov-anthropic', 'prov-openai'] } } }],
+  ]);
   s.agents = [];
   s.versions = [];
   s.providers = [
@@ -186,8 +189,26 @@ beforeEach(() => {
       jurisdiction: null,
       createdAt: new Date(0),
     },
+    {
+      id: 'prov-anthropic',
+      slug: 'anthropic',
+      name: 'Anthropic',
+      providerType: 'anthropic',
+      apiKeyEnvVar: 'T17_ANTHROPIC_KEY',
+      isLocal: false,
+      isActive: true,
+      jurisdiction: null,
+      createdAt: new Date(0),
+    },
   ];
   s.models = [
+    {
+      id: 'm0',
+      providerSlug: 'anthropic',
+      modelId: 'claude-sonnet-5-5',
+      isActive: true,
+      capabilities: ['chat'],
+    },
     {
       id: 'm1',
       providerSlug: 'openai',
@@ -203,10 +224,11 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.T17_OPENAI_KEY;
+  delete process.env.T17_ANTHROPIC_KEY;
 });
 
 describe('reconciling a new workspace', () => {
-  it('creates all ten agents, bound to OpenAI on the interim models', async () => {
+  it('creates all ten agents, bound to Anthropic on Claude Sonnet 5.5', async () => {
     const result = await reconcilePlatformAgents(ORG);
 
     expect(result.created).toEqual(SLUGS);
@@ -214,7 +236,7 @@ describe('reconciling a new workspace', () => {
     const bindings = Object.fromEntries(
       agentsOf(ORG).map((a) => [a.slug, [a.provider, a.model, a.bindingOwner]])
     );
-    const judge = ['openai', 'gpt-4.1', 'platform'];
+    const judge = ['anthropic', 'claude-sonnet-5-5', 'platform'];
     expect(bindings).toEqual({
       'hdtl-judge-ethos': judge,
       'hdtl-judge-pathos': judge,
@@ -225,7 +247,7 @@ describe('reconciling a new workspace', () => {
       'hdtl-judge-craft': judge,
       'hdtl-judge-audience': judge,
       'hdtl-judge-culture': judge,
-      [EDITOR_AGENT_SLUG]: ['openai', 'gpt-5', 'platform'],
+      [EDITOR_AGENT_SLUG]: ['anthropic', 'claude-sonnet-5-5', 'platform'],
     });
     // Each a system instance, made by the service account, in the workspace.
     for (const a of agentsOf(ORG)) {
@@ -244,7 +266,7 @@ describe('reconciling a new workspace', () => {
     expect(fake.state.writes).toEqual([]);
   });
 
-  it('creates them inheriting when the workspace is not yet approved for OpenAI', async () => {
+  it('creates them inheriting when the workspace is not yet approved for Anthropic', async () => {
     // createOrg's own reconcile runs before provisioning writes the grant.
     fake.state.orgs.get(ORG)!.settings = null;
 
@@ -253,6 +275,16 @@ describe('reconciling a new workspace', () => {
     expect(result.created).toEqual(SLUGS);
     for (const a of agentsOf(ORG)) {
       expect([a.provider, a.model]).toEqual(['', '']);
+    }
+  });
+
+  it('binds nothing in a workspace approved for OpenAI alone, which is why existing ones are granted Anthropic first', async () => {
+    fake.state.orgs.get(ORG)!.settings = { providers: { approved: ['prov-openai'] } };
+
+    await reconcilePlatformAgents(ORG);
+
+    for (const a of agentsOf(ORG)) {
+      expect([a.provider, a.model], String(a.slug)).toEqual(['', '']);
     }
   });
 });

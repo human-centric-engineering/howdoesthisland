@@ -1,13 +1,17 @@
 /**
- * Smoke: one judge run against real OpenAI, in a dev workspace (t-19).
+ * Smoke: one judge run against the real provider, in a dev workspace (t-19).
+ *
+ * A PAID check (a few cents on Claude Sonnet 5.5): left for the end-of-project
+ * checks, not run while building.
  *
  *   npm run smoke:judge
  *
  * What the unit tests cannot show, because they script the provider:
  *
- *   • a new workspace's ethos judge is bound to OpenAI, and `runJudge` finds
+ *   • a new workspace's ethos judge is bound to the judges' provider
+ *     (`JUDGE_PROVIDER_SLUG`, Anthropic since t-39), and `runJudge` finds
  *     it by slug inside that workspace's context at `TENANCY_MODE=multi`;
- *   • OpenAI accepts the slot's schema in strict mode, and its reply passes
+ *   • the provider accepts the slot's schema in strict mode, and its reply passes
  *     the engine's post-validation;
  *   • the cost row is written in the workspace, priced, with the judge and
  *     framework version in its metadata.
@@ -15,7 +19,7 @@
  * Judges the baseline's eval case ev01 (a landing page) on framework 0.5.1,
  * which must be imported and published (`smoke-framework-store.ts` leaves it
  * so). Needs the setup in `.context/app/dev-environment.md`, including
- * `OPENAI_API_KEY`. Costs one judge call, about a cent. Self-cleaning: the
+ * the judges' provider's key (`ANTHROPIC_API_KEY`). Costs one judge call. Self-cleaning: the
  * workspace, and with it the cost row, is erased in `finally`.
  *
  * Exit 0 passed, 1 a check failed.
@@ -26,7 +30,7 @@ import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { prismaFrameworkRepo as repo } from '@/lib/app/frameworks/repo';
 import { materialise } from '@/lib/app/frameworks/store';
-import { judgeAgentSlug } from '@/lib/app/judges/agents';
+import { JUDGE_PROVIDER_SLUG, judgeAgentSlug } from '@/lib/app/judges/agents';
 import { runJudge } from '@/lib/app/judges/run-judge';
 import { createWorkspaceOrg, equipWorkspace } from '@/lib/app/workspaces/provision';
 import { prisma } from '@/lib/db/client';
@@ -75,7 +79,7 @@ async function main(): Promise<number> {
   const org = await system(() => createWorkspaceOrg('Smoke judge', `smoke-judge-${Date.now()}`));
   try {
     const { granted } = await system(() => equipWorkspace(org.id, 'smoke:judge'));
-    check(granted, 'the workspace is approved for OpenAI');
+    check(granted, 'the workspace is approved for the judges’ provider');
     // Without the grant the call would fail at the provider gate, or bill
     // against a set-up the app never runs; the workspace is still erased.
     if (!granted) return 1;
@@ -86,7 +90,7 @@ async function main(): Promise<number> {
         select: { provider: true, model: true },
       });
       check(
-        agent?.provider === 'openai' && agent.model.length > 0,
+        agent?.provider === JUDGE_PROVIDER_SLUG && agent.model.length > 0,
         `its ${SLOT} agent is bound to ${agent?.provider}/${agent?.model}`
       );
 

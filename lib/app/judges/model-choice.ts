@@ -20,8 +20,8 @@
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import {
   EDITOR_AGENT_SLUG,
-  INTERIM_EDITOR_MODEL,
-  INTERIM_JUDGE_MODEL,
+  DEFAULT_EDITOR_MODEL,
+  DEFAULT_JUDGE_MODEL,
   judgeAgentSlug,
 } from '@/lib/app/judges/agents';
 import {
@@ -63,9 +63,9 @@ export const CHOOSABLE_AGENTS: readonly ChoosableAgent[] = [
     key: slot,
     slug: judgeAgentSlug(slot),
     role: roleOfSlot(slot),
-    defaultModel: INTERIM_JUDGE_MODEL,
+    defaultModel: DEFAULT_JUDGE_MODEL,
   })),
-  { key: 'editor', slug: EDITOR_AGENT_SLUG, role: 'editor', defaultModel: INTERIM_EDITOR_MODEL },
+  { key: 'editor', slug: EDITOR_AGENT_SLUG, role: 'editor', defaultModel: DEFAULT_EDITOR_MODEL },
 ];
 
 /** A model a workspace may choose, as it sees it. */
