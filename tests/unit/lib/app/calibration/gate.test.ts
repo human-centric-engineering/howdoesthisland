@@ -104,7 +104,7 @@ describe('calibrationGate()', () => {
       aiRun({ id: 'run-2', finishedAt: new Date('2026-11-16T12:12:00Z') }),
     ]);
     const out = await gate.check(DRAFT);
-    expect(out.ok && out.calibration.ranAt).toBe('2026-11-16T12:12:00.000Z');
+    expect(out.ok && out.calibration?.ranAt).toBe('2026-11-16T12:12:00.000Z');
   });
 
   it('allows the newest complete run of the draft as it is, with its snapshot', async () => {
