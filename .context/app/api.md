@@ -56,3 +56,21 @@ it reads any app directory.
   service type, so they are checked by reading the handler.
 
 Not in scope here: generating OpenAPI (`dp2`).
+
+## API keys
+
+People make, list and revoke their own keys at `/settings/api-keys` (t-43), linked from
+the foot of `/settings` through `lib/app/account-sections.ts`. The page is a shell over
+core's self-service routes (`GET`/`POST /api/v1/user/api-keys`,
+`DELETE /api/v1/user/api-keys/{keyId}`), which refuse an API key and want a browser
+session; their rules are core's (`.context/orchestration/api-keys.md`).
+
+- **Scopes offered:** the app's own (`APP_API_KEY_SCOPES`: `assess`, `reports`) that the
+  install can mint, nothing else. Core's `chat`, `analytics`, `knowledge` and `webhook`
+  reach nothing this product serves, and `admin` is a platform credential. Each scope's
+  words are in `SCOPE_DESCRIPTIONS` (`components/app/settings/api-keys/schemas.ts`); a
+  scope added to the seam without words is still offered, under its own name.
+- **Workspace:** a key is bound to the workspace the request was made in, so the page
+  names the active one. A platform key (no workspace) is labelled as such.
+- **Expiry:** 30 days, 90 days (the default), a year, or none, sent as an ISO datetime.
+- The new key's value is shown once and never stored by the page.
