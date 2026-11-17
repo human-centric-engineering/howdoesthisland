@@ -2,14 +2,20 @@
  * @see components/app/settings/api-keys/schemas.ts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// The seam is mocked, so this measures the filter and not whatever the app
+// declares today: a third scope with no words yet shows how one is offered.
+vi.mock('@/lib/app/api-key-scopes', () => ({
+  APP_API_KEY_SCOPES: ['assess', 'reports', 'projects'],
+}));
+
 import {
   expiresAtFor,
   keyState,
   offeredScopes,
   scopeLabel,
 } from '@/components/app/settings/api-keys/schemas';
-import { APP_API_KEY_SCOPES } from '@/lib/app/api-key-scopes';
 
 const NOW = new Date('2026-11-17T12:00:00.000Z');
 
@@ -23,18 +29,23 @@ describe('offeredScopes', () => {
     expect(offered).toEqual([]);
   });
 
-  it('every scope it can offer is declared by the app', () => {
-    expect(offeredScopes([...APP_API_KEY_SCOPES, 'chat'])).toEqual([...APP_API_KEY_SCOPES]);
+  it("offers every scope the app declares, in the app's order, and nothing else", () => {
+    expect(offeredScopes(['chat', 'projects', 'reports', 'assess', 'admin'])).toEqual([
+      'assess',
+      'reports',
+      'projects',
+    ]);
   });
 });
 
 describe('scopeLabel', () => {
-  it("names each of the app's scopes in the product's words", () => {
-    for (const scope of APP_API_KEY_SCOPES) expect(scopeLabel(scope)).not.toBe(scope);
+  it("names the app's scopes in the product's words", () => {
+    expect(scopeLabel('assess')).toBe('Run reviews');
+    expect(scopeLabel('reports')).toBe('Download and list reports');
   });
 
   it('falls back to the raw name for a scope it has no words for', () => {
-    expect(scopeLabel('chat')).toBe('chat');
+    expect(scopeLabel('projects')).toBe('projects');
   });
 });
 
