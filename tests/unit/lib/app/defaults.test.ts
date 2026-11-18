@@ -693,7 +693,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAccountSectionRegistryForTests();
       // The read triggers the lazy init, so this exercises the REAL seam.
-      for (const surface of ACCOUNT_SURFACES) {
+      // FORK (HowDoesThisLand): pinned to our one section, the API-keys link,
+      // on /settings only (t-43).
+      expect(getRegisteredAccountSections('settings').map((s) => s.id)).toEqual(['api-keys']);
+      for (const surface of ACCOUNT_SURFACES.filter((s) => s !== 'settings')) {
         expect(getRegisteredAccountSections(surface)).toEqual([]);
       }
     },
