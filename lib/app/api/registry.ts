@@ -4,8 +4,9 @@
  *
  * The API is the product, so its contract is written down here rather than
  * read off the handlers. Each entry gives a route's method, path, request and
- * response Zod schemas, who may call it, and a one-line summary. `dp2`
- * publishes it as OpenAPI; nothing generates OpenAPI yet.
+ * response Zod schemas, who may call it, and a one-line summary.
+ * `lib/app/api/openapi.ts` publishes it as OpenAPI 3.1 at
+ * `GET /api/v1/openapi.json` (t-44).
  *
  * **Request schemas are the handlers' own.** Each one is imported from where
  * its handler (or the service behind it) parses with it, never restated, so
@@ -142,6 +143,11 @@ export interface RouteContract {
      * the envelope; `data` describes its bytes. Errors are still the envelope.
      */
     file?: 'application/pdf';
+    /**
+     * `false`: the body is `data` itself, as JSON, not the success envelope
+     * (the OpenAPI document). Errors are still the envelope.
+     */
+    envelope?: false;
   };
 }
 
@@ -286,15 +292,28 @@ export const assessmentSummarySchema = z.object({
   completedAt: isoDateTime.nullable(),
 });
 
-/**
- * `AssessmentDetail`. `context` and `result` are the framework's own shapes,
- * so open here; `dp2` documents HowDoesThisLand's.
+/*
+ * An assessment's `context` and `result` are each framework's own shapes, so
+ * open here: nothing parses an answer with them. Each place they appear has
+ * its own instance, which `lib/app/api/openapi.ts` swaps for the schema of
+ * what HowDoesThisLand serves there (t-44).
  */
+
+/** Who the text is for, defaults applied. */
+export const assessmentContextField = z.unknown();
+/** A result that is always there: the quick scan's, a run kept nowhere. */
+export const assessmentResultField = z.unknown();
+/** A stored assessment's result: `null` until it is final. */
+export const storedResultField = z.unknown();
+/** A shared report's result: only what the report reads. */
+export const sharedResultField = z.unknown();
+
+/** `AssessmentDetail`. */
 export const assessmentDetailSchema = assessmentSummarySchema.extend({
   /** The copy assessed; the result's offsets point into it. */
   text: z.string(),
-  context: z.unknown(),
-  result: z.unknown(),
+  context: assessmentContextField,
+  result: storedResultField,
   judgeRuns: z.array(judgeRunViewSchema),
 });
 
@@ -326,9 +345,8 @@ export const sharedAssessmentSchema = assessmentDetailSchema
     createdAt: true,
     completedAt: true,
     text: true,
-    result: true,
   })
-  .extend({ judgeRuns: z.array(sharedJudgeRunSchema) });
+  .extend({ result: sharedResultField, judgeRuns: z.array(sharedJudgeRunSchema) });
 
 // `reportShareSchema` and `createdReportShareSchema` live with the share
 // routes' request schemas, which the share panel imports in the browser.
@@ -356,8 +374,8 @@ export const ephemeralAssessmentSchema = z.object({
   overall: z.number().nullable(),
   band: z.string().nullable(),
   costUsd: z.number(),
-  context: z.unknown(),
-  result: z.unknown(),
+  context: assessmentContextField,
+  result: assessmentResultField,
   judgeRuns: z.array(judgeRunViewSchema),
 });
 
@@ -367,8 +385,8 @@ export const quickScanViewSchema = z.object({
   wordCount: z.number().int(),
   overall: z.number().nullable(),
   band: z.string().nullable(),
-  context: z.unknown(),
-  result: z.unknown(),
+  context: assessmentContextField,
+  result: assessmentResultField,
 });
 
 /** `PaginationMeta` in `lib/api/responses.ts`. */
@@ -404,6 +422,18 @@ export const reportPdfSchema = z
   .string()
   .meta({ format: 'binary', description: 'The report, as a PDF document' });
 
+/**
+ * The OpenAPI 3.1 document `GET /api/v1/openapi.json` serves, bare
+ * (`envelope: false`). Its shape is the OpenAPI specification's.
+ */
+export const openApiDocumentSchema = z
+  .looseObject({
+    openapi: z.string(),
+    info: z.looseObject({ title: z.string(), version: z.string() }),
+    paths: z.record(z.string(), z.unknown()),
+  })
+  .meta({ description: 'This API, as an OpenAPI 3.1 document.' });
+
 // --- The routes ------------------------------------------------------------
 
 const frameworkParams = z.object({ slug: slugParam });
@@ -429,6 +459,17 @@ const WORKSPACE_ADMIN_ENTERED: RouteAuth = {
 };
 
 export const APP_ROUTES: readonly RouteContract[] = [
+  // This contract, as OpenAPI (t-44).
+  {
+    method: 'GET',
+    path: '/api/v1/openapi.json',
+    summary:
+      'Get this API as an OpenAPI 3.1 document, generated from the schemas it validates with.',
+    auth: { who: 'anyone' },
+    request: {},
+    response: { status: 200, data: openApiDocumentSchema, conditional: true, envelope: false },
+  },
+
   // Frameworks (t-11): public, read-only, conditional GETs.
   {
     method: 'GET',
