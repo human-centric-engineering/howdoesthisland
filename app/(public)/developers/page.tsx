@@ -130,7 +130,7 @@ function RouteLinks({ ops }: { ops: Operation[] }) {
         <li key={op.operationId}>
           <a
             href={`#${operationAnchor(op.operationId)}`}
-            className="font-mono text-xs hover:underline"
+            className="font-mono text-xs break-all hover:underline"
           >
             {op.method} {op.path}
           </a>
@@ -142,26 +142,28 @@ function RouteLinks({ ops }: { ops: Operation[] }) {
 
 function ErrorTable({ rows }: { rows: [number, string, string][] }) {
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left">
-          <th className="py-1 pr-4">Status</th>
-          <th className="py-1 pr-4">Code</th>
-          <th className="py-1">Means</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(([status, code, meaning]) => (
-          <tr key={code} className="border-t align-top">
-            <td className="py-1 pr-4 font-mono">{status}</td>
-            <td className="py-1 pr-4 font-mono text-xs">{code}</td>
-            <td className="py-1">
-              <Prose>{meaning}</Prose>
-            </td>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left">
+            <th className="py-1 pr-4">Status</th>
+            <th className="py-1 pr-4">Code</th>
+            <th className="py-1">Means</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(([status, code, meaning]) => (
+            <tr key={code} className="border-t align-top">
+              <td className="py-1 pr-4 font-mono">{status}</td>
+              <td className="py-1 pr-4 font-mono text-xs">{code}</td>
+              <td className="py-1">
+                <Prose>{meaning}</Prose>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -174,7 +176,7 @@ export default function DevelopersPage() {
   const baseUrl = env.NEXT_PUBLIC_APP_URL;
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12 [&_:not(pre)>code]:text-[0.875em]">
+    <div className="container mx-auto max-w-4xl px-4 py-12 [&_:not(pre)>code]:text-[0.875em] [&_:not(pre)>code]:[overflow-wrap:anywhere]">
       <header className="space-y-3">
         <p className="hd-slug">Developers</p>
         <h1 className="hd-wordmark text-4xl">The HowDoesThisLand API</h1>
@@ -299,26 +301,28 @@ export default function DevelopersPage() {
             in seconds, with <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code> and{' '}
             <code>X-RateLimit-Reset</code>.
           </p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left">
-                <th className="py-1 pr-4">What</th>
-                <th className="py-1 pr-4">Per minute</th>
-                <th className="py-1">Counted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {RATE_LIMITS.map(([what, perMinute, keyedOn]) => (
-                <tr key={what} className="border-t align-top">
-                  <td className="py-1 pr-4">
-                    <Prose>{what}</Prose>
-                  </td>
-                  <td className="py-1 pr-4 font-mono">{perMinute}</td>
-                  <td className="py-1">{keyedOn}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th className="py-1 pr-4">What</th>
+                  <th className="py-1 pr-4">Per minute</th>
+                  <th className="py-1">Counted</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {RATE_LIMITS.map(([what, perMinute, keyedOn]) => (
+                  <tr key={what} className="border-t align-top">
+                    <td className="py-1 pr-4">
+                      <Prose>{what}</Prose>
+                    </td>
+                    <td className="py-1 pr-4 font-mono">{perMinute}</td>
+                    <td className="py-1">{keyedOn}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p>
             Copy is reviewed up to {MAX_CONTENT_CHARS.toLocaleString('en-GB')} characters; longer is
             refused rather than cut.

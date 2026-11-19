@@ -138,7 +138,7 @@ export function ApiReference({ document }: { document: OpenApiDocument }) {
               <li key={op.operationId}>
                 <a
                   href={`#${operationAnchor(op.operationId)}`}
-                  className="font-mono text-xs hover:underline"
+                  className="font-mono text-xs break-all hover:underline"
                 >
                   {op.method} {op.path.replace(/^\/api\/v1/, '')}
                 </a>
