@@ -118,21 +118,35 @@ function constraints(schema: JsonSchemaNode): string[] {
   if (s.exclusiveMaximum !== null) out.push(`< ${s.exclusiveMaximum}`);
   range(s.minLength, s.maxLength, ' chars');
   range(s.minItems, s.maxItems, ' items');
-  if (s.pattern) out.push(`pattern ${s.pattern}`);
+  // A format already says what zod's pattern for it spells out.
+  if (s.pattern && !s.format) out.push(`pattern ${s.pattern}`);
   if (s.hasDefault) out.push(`default ${json(s.defaultValue)}`);
   return out;
 }
 
 /** The schema's own children: an object's fields, an array's item, a union's variants. */
+/** What a schema nests: an object's fields, a union's variants, or an array's or map's member. */
+function nested(schema: JsonSchemaNode): JsonSchemaNode | 'fields' | 'variants' | null {
+  const s = read(schema);
+  if (s.properties && s.properties.length > 0) return 'fields';
+  if (s.nullableOf) return nested(s.nullableOf) === null ? null : s.nullableOf;
+  if (s.variants) return 'variants';
+  const inner = s.type === 'array' ? s.items : s.type === 'object' ? s.additional : null;
+  return inner && nested(inner) !== null ? inner : null;
+}
+
+/** The schema's own children: an object's fields, an array's item, a union's variants. */
 function Children({ schema, depth }: { schema: JsonSchemaNode; depth: number }) {
   const s = read(schema);
+  const kind = nested(schema);
+  if (kind === null) return null;
   if (depth >= MAX_DEPTH) {
     return <p className="text-muted-foreground text-xs">Nested further; see the JSON document.</p>;
   }
-  if (s.properties && s.properties.length > 0) {
+  if (kind === 'fields') {
     return (
       <ul className="space-y-2 border-l pl-4">
-        {s.properties.map(([name, child]) => (
+        {(s.properties ?? []).map(([name, child]) => (
           <Field
             key={name}
             name={name}
@@ -144,22 +158,16 @@ function Children({ schema, depth }: { schema: JsonSchemaNode; depth: number }) 
       </ul>
     );
   }
-  if (s.nullableOf) return <Children schema={s.nullableOf} depth={depth} />;
-  if (s.variants) {
+  if (kind === 'variants') {
     return (
       <ol className="space-y-2 border-l pl-4">
-        {s.variants.map((variant, i) => (
+        {(s.variants ?? []).map((variant, i) => (
           <Field key={i} name={`option ${i + 1}`} schema={variant} depth={depth + 1} />
         ))}
       </ol>
     );
   }
-  const inner = s.type === 'array' ? s.items : s.type === 'object' ? s.additional : null;
-  if (inner) {
-    const ri = read(inner);
-    if (ri.properties || ri.variants) return <Children schema={inner} depth={depth + 1} />;
-  }
-  return null;
+  return <Children schema={kind} depth={depth + 1} />;
 }
 
 /** The named schema a type links to: its own `$ref`, an array's, or a nullable's. */

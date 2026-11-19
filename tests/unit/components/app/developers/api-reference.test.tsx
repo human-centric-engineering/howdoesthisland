@@ -175,6 +175,14 @@ describe('what a field shows', () => {
                     properties: {
                       slug: { type: 'string', pattern: '^[a-z]+$' },
                       weight: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 },
+                      at: { type: 'string', format: 'date-time', pattern: '^LONG-REGEX$' },
+                      grid: {
+                        type: 'array',
+                        items: {
+                          type: 'array',
+                          items: { type: 'object', properties: { cell: { type: 'string' } } },
+                        },
+                      },
                     },
                   },
                 },
@@ -190,5 +198,10 @@ describe('what a field shows', () => {
     expect(text).toContain('pattern ^[a-z]+$');
     expect(text).toContain('> 0');
     expect(text).toContain('< 1');
+    expect(text).toContain('date-time');
+    expect(text).not.toContain('LONG-REGEX');
+    expect(text).toContain('array of array of object');
+    expect(text).toContain('cell');
+    expect(text).not.toContain('Nested further');
   });
 });

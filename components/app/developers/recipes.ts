@@ -34,11 +34,26 @@ export interface Recipe {
   body: Record<string, unknown>;
   /** What to read from the answer, and what to do next. */
   then: string[];
-  /** A shell script that does the whole job, where curl alone is not enough. */
-  script?: string;
+  /** A shell script that does the whole job, where curl alone is not enough, and its file name. */
+  script?: { name: string; body: string };
 }
 
 const ASSESSMENTS = '/api/v1/assessments';
+
+/** The other readers the CFO recipe suggests: exec role ids in the shipped model (test). */
+export const CFO_ALTERNATE_ROLES = ['cto', 'procurement'] as const;
+
+/** The first review in Getting started: the free quick scan, kept nowhere. */
+export const FIRST_REVIEW: Pick<Recipe, 'method' | 'path' | 'scope' | 'body'> = {
+  method: 'POST',
+  path: ASSESSMENTS,
+  scope: 'assess',
+  body: {
+    source: { text: 'Save two hours a week on reporting. Try it free for 30 days.' },
+    profile: 'quick',
+    store: false,
+  },
+};
 
 export const RECIPES: readonly Recipe[] = [
   {
@@ -78,7 +93,7 @@ export const RECIPES: readonly Recipe[] = [
       wait: true,
     },
     then: [
-      'Read `overall` and `band`, then the notes in `result`. To see how the same briefing lands with the CTO or the procurement lead, send it again with `role` set to `cto` or `procurement`.',
+      `Read \`overall\` and \`band\`, then the notes in \`result\`. To see how the same briefing lands with the CTO or the procurement lead, send it again with \`role\` set to \`${CFO_ALTERNATE_ROLES[0]}\` or \`${CFO_ALTERNATE_ROLES[1]}\`.`,
       'The ids a `context` takes are the framework version’s own: `GET /api/v1/frameworks/howdoesthisland/versions/{version}/content_type` and `…/exec_role` list them. An id the version does not have is refused with `CONTEXT_INVALID`, before anything runs.',
     ],
   },
@@ -99,7 +114,9 @@ export const RECIPES: readonly Recipe[] = [
       'The answer is a 200 with `stored: false`, `overall` and `band`. Copy that cannot be scored at all is refused with a 422 `NOT_SCORABLE`; the script below fails the build on any answer but a 200, and on an `overall` of `null`.',
       'For a stricter gate, leave out `profile` to use every AI reviewer. That is charged, and counts against the per-minute cap.',
     ],
-    script: `#!/usr/bin/env bash
+    script: {
+      name: 'gate-copy.sh',
+      body: `#!/usr/bin/env bash
 # Fail when the copy in $1 scores under $THRESHOLD (default 60).
 set -euo pipefail
 THRESHOLD="\${THRESHOLD:-60}"
@@ -123,6 +140,7 @@ if [ "$score" = "null" ]; then
 fi
 echo "$1 scores $score (threshold $THRESHOLD)"
 awk -v s="$score" -v t="$THRESHOLD" 'BEGIN { exit !(s >= t) }'`,
+    },
   },
 ];
 

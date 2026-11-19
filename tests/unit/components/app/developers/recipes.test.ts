@@ -12,12 +12,20 @@
 import { describe, expect, it } from 'vitest';
 import { APP_ROUTES } from '@/lib/app/api/registry';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
-import { RECIPES, curlFor } from '@/components/app/developers/recipes';
+import {
+  CFO_ALTERNATE_ROLES,
+  FIRST_REVIEW,
+  RECIPES,
+  curlFor,
+} from '@/components/app/developers/recipes';
 import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-fixtures';
 
 const engine = createHowDoesThisLandEngine(loadModel(), { culture: true });
 
-describe.each(RECIPES.map((r) => [r.title, r] as const))('%s', (_title, recipe) => {
+describe.each([
+  ...RECIPES.map((r) => [r.title, r] as const),
+  ['Getting started', FIRST_REVIEW] as const,
+])('%s', (_title, recipe) => {
   const route = APP_ROUTES.find((r) => r.method === recipe.method && r.path === recipe.path);
 
   it('calls a route the registry declares, needing the scope the recipe names', () => {
@@ -42,6 +50,18 @@ describe.each(RECIPES.map((r) => [r.title, r] as const))('%s', (_title, recipe) 
     const curl = curlFor(recipe);
     const json = curl.slice(curl.indexOf("<<'JSON'\n") + 8, curl.lastIndexOf('\nJSON'));
     expect(JSON.parse(json)).toEqual(recipe.body);
+  });
+});
+
+describe('the other readers the CFO recipe suggests', () => {
+  it.each(CFO_ALTERNATE_ROLES)('%s is an exec role in the shipped model', (role) => {
+    const parsed = engine.parseContext({ contentType: 'exec_briefing', role });
+    expect(parsed.ok ? [] : parsed.issues).toEqual([]);
+  });
+
+  it('are the ones the recipe names', () => {
+    const cfo = RECIPES.find((r) => r.id === 'recipe-cfo-briefing');
+    for (const role of CFO_ALTERNATE_ROLES) expect(cfo?.then.join(' ')).toContain(`\`${role}\``);
   });
 });
 

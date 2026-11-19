@@ -7,12 +7,13 @@
  * document lacks; the scope table under Authentication is read from the same
  * document. Limits are read from the constants the limiters use.
  *
- * Public and static: no session is read, so it renders the same signed in or
- * out. Prose says "review" and "AI reviewers" (app-plan, "The words we use");
+ * Public: no session is read, so it renders the same signed in or out. It
+ * renders per request so the limits are the running server's. Prose says "review" and "AI reviewers" (app-plan, "The words we use");
  * routes and fields are quoted as the API names them.
  */
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { connection } from 'next/server';
 import { env } from '@/lib/env';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { openApiDocument } from '@/lib/app/api/openapi';
@@ -31,7 +32,7 @@ import {
   type Operation,
 } from '@/components/app/developers/operations';
 import { Prose } from '@/components/app/developers/prose';
-import { RECIPES, curlFor } from '@/components/app/developers/recipes';
+import { FIRST_REVIEW, RECIPES, curlFor } from '@/components/app/developers/recipes';
 
 const description =
   'How to call the HowDoesThisLand API: keys, errors and limits, recipes, and the full reference.';
@@ -52,15 +53,7 @@ const SECTIONS = [
 
 const OPENAPI_PATH = '/api/v1/openapi.json';
 
-const FIRST_REQUEST = curlFor({
-  method: 'POST',
-  path: '/api/v1/assessments',
-  body: {
-    source: { text: 'Save two hours a week on reporting. Try it free for 30 days.' },
-    profile: 'quick',
-    store: false,
-  },
-});
+const FIRST_REQUEST = curlFor(FIRST_REVIEW);
 
 const SUCCESS_ENVELOPE = `{
   "success": true,
@@ -84,7 +77,11 @@ const COMMON_ERRORS: [status: number, code: string, meaning: string][] = [
     'The body, query or path does not parse. `details` says where. A frameworks route answers a path that does not parse with `404`.',
   ],
   [401, 'UNAUTHORIZED', 'No key or session, or a key that is revoked or expired.'],
-  [403, 'FORBIDDEN', 'The key lacks the scope the route needs, or the route takes no keys.'],
+  [
+    403,
+    'FORBIDDEN',
+    'The key lacks the scope the route needs, or the route takes no keys; or you are not the workspace or platform admin the route needs.',
+  ],
   [404, 'NOT_FOUND', 'Nothing by that id in your workspace.'],
   [429, 'RATE_LIMIT_EXCEEDED', 'Over a limit below. Wait for `Retry-After` seconds.'],
 ];
@@ -99,7 +96,7 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [
     422,
     'TEXT_TOO_LONG',
-    `Over ${MAX_CONTENT_CHARS.toLocaleString('en-GB')} characters. Copy is refused, never cut.`,
+    `Over ${MAX_CONTENT_CHARS.toLocaleString('en-GB')} characters. Copy is refused, never cut. Pasted text over twice that fails to parse first, as \`400 VALIDATION_ERROR\`.`,
   ],
   [422, 'URL_NOT_ALLOWED', 'The page’s address is one the server will not fetch.'],
   [422, 'FETCH_FAILED', 'The page could not be fetched.'],
@@ -200,7 +197,10 @@ function ErrorTable({ rows }: { rows: [number, string, string][] }) {
   );
 }
 
-export default function DevelopersPage() {
+export default async function DevelopersPage() {
+  // At request time, not build time: the caps below are read from the
+  // environment the server runs with (`RATE_LIMIT_*`), as the proxy reads them.
+  await connection();
   const document = openApiDocument();
   const operations = readOperations(document);
   // Every scope a route in the document asks for, in the document's order.
@@ -390,7 +390,9 @@ export default function DevelopersPage() {
                   </li>
                 ))}
               </ul>
-              {recipe.script ? <CodeBlock label="gate-copy.sh">{recipe.script}</CodeBlock> : null}
+              {recipe.script ? (
+                <CodeBlock label={recipe.script.name}>{recipe.script.body}</CodeBlock>
+              ) : null}
             </article>
           ))}
         </section>
