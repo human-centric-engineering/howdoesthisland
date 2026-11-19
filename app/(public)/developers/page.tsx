@@ -30,6 +30,7 @@ import {
   readOperations,
   type Operation,
 } from '@/components/app/developers/operations';
+import { Prose } from '@/components/app/developers/prose';
 import { RECIPES, curlFor } from '@/components/app/developers/recipes';
 
 const description =
@@ -122,18 +123,6 @@ const RATE_LIMITS: [what: string, perMinute: number, keyedOn: string][] = [
   ['Opening a shared report', SHARED_REPORT_VIEWS_PER_MINUTE, 'Per IP address'],
 ];
 
-/** `code` spans in a sentence written with backticks. */
-function Prose({ children }: { children: string }) {
-  const parts = children.split(/(`[^`]+`)/);
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.startsWith('`') && part.endsWith('`') ? <code key={i}>{part.slice(1, -1)}</code> : part
-      )}
-    </>
-  );
-}
-
 function RouteLinks({ ops }: { ops: Operation[] }) {
   return (
     <ul className="space-y-0.5">
@@ -185,7 +174,7 @@ export default function DevelopersPage() {
   const baseUrl = env.NEXT_PUBLIC_APP_URL;
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12">
+    <div className="container mx-auto max-w-4xl px-4 py-12 [&_:not(pre)>code]:text-[0.875em]">
       <header className="space-y-3">
         <p className="hd-slug">Developers</p>
         <h1 className="hd-wordmark text-4xl">The HowDoesThisLand API</h1>

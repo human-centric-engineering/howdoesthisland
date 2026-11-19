@@ -17,6 +17,7 @@ import {
   readOperations,
   type Operation,
 } from '@/components/app/developers/operations';
+import { Prose } from '@/components/app/developers/prose';
 import { SchemaView } from '@/components/app/developers/schema-view';
 
 /** Who may call an operation, in a few words. */
@@ -40,9 +41,15 @@ function OperationEntry({ op }: { op: Operation }) {
           <span className="font-semibold">{op.method}</span>
           <span className="break-all">{op.path}</span>
         </h4>
-        <p>{op.summary}</p>
+        <p>
+          <Prose>{op.summary}</Prose>
+        </p>
         <p className="hd-slug">{callerLabel(op)}</p>
-        {op.description ? <p className="text-muted-foreground text-sm">{op.description}</p> : null}
+        {op.description ? (
+          <p className="text-muted-foreground text-sm">
+            <Prose>{op.description}</Prose>
+          </p>
+        ) : null}
       </header>
 
       {op.parameters.length > 0 ? (
@@ -56,7 +63,11 @@ function OperationEntry({ op }: { op: Operation }) {
                   in {p.in}
                   {p.required ? ' · required' : ''}
                 </span>
-                {p.description ? <p className="text-muted-foreground">{p.description}</p> : null}
+                {p.description ? (
+                  <p className="text-muted-foreground">
+                    <Prose>{p.description}</Prose>
+                  </p>
+                ) : null}
                 <div className="mt-1 pl-4">
                   <SchemaView schema={p.schema} />
                 </div>
@@ -76,7 +87,7 @@ function OperationEntry({ op }: { op: Operation }) {
       {success.map(([status, response]) => (
         <section key={status} className="space-y-2">
           <h5 className="text-sm font-semibold">
-            {status} {response.description}
+            {status} <Prose>{response.description}</Prose>
           </h5>
           {Object.entries(response.content ?? {}).map(([type, media]) => (
             <div key={type} className="space-y-1">
@@ -103,7 +114,9 @@ function OperationEntry({ op }: { op: Operation }) {
             {failures.map(([status, response]) => (
               <div key={status} className="contents">
                 <dt className="font-mono">{status}</dt>
-                <dd className="text-muted-foreground">{response.description}</dd>
+                <dd className="text-muted-foreground">
+                  <Prose>{response.description}</Prose>
+                </dd>
               </div>
             ))}
           </dl>

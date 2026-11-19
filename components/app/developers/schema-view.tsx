@@ -11,6 +11,7 @@
  * rendering without end.
  */
 import { z } from 'zod';
+import { Prose } from '@/components/app/developers/prose';
 import { componentAnchor, type JsonSchemaNode } from '@/components/app/developers/operations';
 
 const MAX_DEPTH = 8;
@@ -174,7 +175,9 @@ function Field({
         ) : null}
       </div>
       {s.description ? (
-        <p className="text-muted-foreground mt-0.5 text-sm">{s.description}</p>
+        <p className="text-muted-foreground mt-0.5 text-sm">
+          <Prose>{s.description}</Prose>
+        </p>
       ) : null}
       <Children schema={schema} depth={depth} />
     </li>
@@ -192,7 +195,11 @@ export function SchemaView({ schema }: { schema: JsonSchemaNode }) {
           <span className="text-muted-foreground text-xs">{constraints(schema).join(' · ')}</span>
         ) : null}
       </div>
-      {s.description ? <p className="text-muted-foreground text-sm">{s.description}</p> : null}
+      {s.description ? (
+        <p className="text-muted-foreground text-sm">
+          <Prose>{s.description}</Prose>
+        </p>
+      ) : null}
       <Children schema={schema} depth={0} />
     </div>
   );
