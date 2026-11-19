@@ -80,4 +80,18 @@ describe('DevelopersPage', () => {
     expect(auth.textContent).toContain('Browser session only');
     expect(auth.textContent).toContain('No key needed');
   });
+
+  it('lists every route that needs a caller under exactly one scope or session group', () => {
+    const { container } = render(<DevelopersPage />);
+    const auth = container.querySelector('#authentication') as HTMLElement;
+    const listed = [...auth.querySelectorAll('a[href^="#op-"]')].map((a) => a.textContent);
+    const reference = [...container.querySelectorAll('[data-operation]')].map((el) =>
+      el.getAttribute('data-operation')
+    );
+
+    expect([...listed].sort()).toEqual([...reference].sort());
+    expect(listed).toContain(
+      'POST /api/v1/admin/frameworks/{slug}/versions/{version}/calibration-runs'
+    );
+  });
 });

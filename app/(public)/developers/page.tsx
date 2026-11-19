@@ -258,27 +258,32 @@ export default function DevelopersPage() {
                 <RouteLinks ops={byScope(scope)} />
               </div>
             ))}
-            {sessionOnly.length > 0 ? (
-              <div className="space-y-1">
-                <h3 className="font-semibold">Browser session only</h3>
-                <p className="text-muted-foreground text-sm">
-                  Managing workspaces, invitations and the AI reviewers’ models is done signed in on
-                  the site. These routes answer a key with <code>403</code>; a platform admin’s{' '}
-                  <code>admin</code> key reaches the admin routes among them.
-                </p>
-                <RouteLinks ops={sessionOnly} />
-              </div>
-            ) : null}
-            {anonymous.length > 0 ? (
-              <div className="space-y-1">
-                <h3 className="font-semibold">No key needed</h3>
-                <p className="text-muted-foreground text-sm">
-                  The frameworks the reviews score against, the free quick scan, shared reports and
-                  this API’s own description.
-                </p>
-                <RouteLinks ops={anonymous} />
-              </div>
-            ) : null}
+            <div className="space-y-1">
+              <h3 className="font-semibold">
+                <code>admin</code> · Platform admins
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                For the people who run HowDoesThisLand, not for its customers: only a platform admin
+                can make a key with this scope.
+              </p>
+              <RouteLinks ops={byScope('admin')} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-semibold">Browser session only</h3>
+              <p className="text-muted-foreground text-sm">
+                Managing workspaces, invitations and the AI reviewers’ models is done signed in on
+                the site. These routes answer a key with <code>403</code>.
+              </p>
+              <RouteLinks ops={sessionOnly} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-semibold">No key needed</h3>
+              <p className="text-muted-foreground text-sm">
+                The frameworks the reviews score against, the free quick scan, shared reports and
+                this API’s own description.
+              </p>
+              <RouteLinks ops={anonymous} />
+            </div>
           </div>
         </section>
 
