@@ -95,7 +95,7 @@ function toSchema(schema: z.ZodType, io: 'input' | 'output'): JsonSchema {
     override: ({ zodSchema, jsonSchema }) => {
       const swapped = FRAMEWORK_FIELDS.get(zodSchema);
       if (!swapped) return;
-      for (const k of Object.keys(jsonSchema)) delete (jsonSchema as JsonObject)[k];
+      for (const k of Object.keys(jsonSchema)) Reflect.deleteProperty(jsonSchema, k);
       Object.assign(jsonSchema, swapped);
     },
   });
@@ -187,12 +187,17 @@ function canForbid(auth: RouteAuth): boolean {
   return true;
 }
 
+/** What `parameters()` reads of an object schema's JSON Schema. */
+const objectSchemaShape = z.object({
+  properties: z.record(z.string(), z.looseObject({})).default({}),
+  required: z.array(z.string()).default([]),
+});
+
 /** The object schema's top-level properties as OpenAPI parameters. */
 function parameters(schema: z.ZodType, where: 'path' | 'query'): JsonObject[] {
-  const json = toSchema(schema, 'input');
-  const props = (json.properties ?? {}) as Record<string, JsonSchema>;
-  const required = new Set((json.required ?? []) as string[]);
-  return Object.entries(props).map(([name, s]) => ({
+  const json = objectSchemaShape.parse(toSchema(schema, 'input'));
+  const required = new Set(json.required);
+  return Object.entries(json.properties).map(([name, s]) => ({
     name,
     in: where,
     required: where === 'path' || required.has(name),
