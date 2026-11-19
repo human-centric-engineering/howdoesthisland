@@ -10,14 +10,13 @@
  * the caller's IP when anonymous (`lib/security/rate-limit-policy.ts`).
  */
 import { handleAPIError } from '@/lib/api/errors';
-import { checkConditional, computeETag } from '@/lib/api/etag';
+import { checkConditional } from '@/lib/api/etag';
 import { DEFAULT_CACHE_CONTROL } from '@/lib/api/responses';
-import { openApiDocument } from '@/lib/app/api/openapi';
+import { publishedOpenApi } from '@/lib/app/api/openapi';
 
 export const GET = (request: Request): Response => {
   try {
-    const document = openApiDocument();
-    const etag = computeETag(document);
+    const { document, etag } = publishedOpenApi();
     const notModified = checkConditional(request, etag);
     if (notModified) return notModified;
     return Response.json(document, {

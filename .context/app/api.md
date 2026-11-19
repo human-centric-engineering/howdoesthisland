@@ -76,7 +76,8 @@ with no further step.
   `assessmentResultField`, `storedResultField`, `sharedResultField`), which the generator
   swaps for HowDoesThisLand's schemas in `lib/app/frameworks/howdoesthisland/engine/wire.ts`.
   The registry stays open on purpose: the report parses `result` with its own looser
-  schema, which an older stored result still passes. A shared report's `result` is the
+  schema, which an older stored result still passes. For the same reason the document's
+  `AssessmentContext` and `AssessmentResult` forbid no key they do not name. A shared report's `result` is the
   report's allowlist (`reportResultSchema`), not the whole result.
 - **Kept honest by:** validation against the official OpenAPI 3.1 schema (vendored at
   `tests/fixtures/openapi-3.1-schema.json`) with ajv's 2020-12 build, which fails a broken

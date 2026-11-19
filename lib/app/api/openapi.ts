@@ -6,14 +6,16 @@
  * zod 4's `z.toJSONSchema` (JSON Schema 2020-12, OpenAPI 3.1's own dialect),
  * so the document cannot say something the handlers do not enforce. Request
  * schemas are converted as their input (what a caller sends, before defaults
- * and coercion), responses as their output.
+ * and coercion), responses as their output. The two framework components
+ * below are the exception: nothing checks a stored result on the way out,
+ * so they are converted as input, which forbids no key they do not name.
  *
  * **What each registry property becomes:**
  * - `auth` → the operation's `security`: none for `anyone`; a session
  *   cookie, or a bearer API key holding `apiKeyScope` where one is accepted;
  *   a session or a key with the `admin` scope for a platform admin. A 401
- *   for every route that needs a caller, and a 403 for one that also needs a
- *   role or a scope.
+ *   and a 403 for every route that needs a caller: one that refuses API keys
+ *   answers a key with 403.
  * - `params` / `query` / `body` → parameters and the request body, with a
  *   400 `VALIDATION_ERROR`; `invalidParamsStatus: 404` answers a bad path
  *   with a 404 instead.
@@ -37,6 +39,7 @@
  * (`lib/app/frameworks/howdoesthisland/engine/wire.ts`), as components.
  */
 import { z } from 'zod';
+import { computeETag } from '@/lib/api/etag';
 import {
   APP_ROUTES,
   assessmentContextField,
@@ -180,11 +183,24 @@ function security(auth: RouteAuth): JsonObject[] {
   }
 }
 
-/** Needs a role or a scope, beyond being signed in: a 403 is possible. */
-function canForbid(auth: RouteAuth): boolean {
-  if (auth.who === 'anyone') return false;
-  if (auth.who === 'signed-in') return auth.apiKeyScope !== null;
-  return true;
+/**
+ * Why a caller who is signed in can still be refused. Every route that needs a
+ * caller can answer 403: one that refuses API keys refuses them with it.
+ */
+function forbiddenNote(auth: Exclude<RouteAuth, { who: 'anyone' }>): string {
+  const role =
+    auth.who === 'signed-in'
+      ? null
+      : auth.who === 'platform-admin'
+        ? 'not a platform admin'
+        : 'not an admin of the workspace';
+  const key =
+    auth.who === 'platform-admin'
+      ? 'an API key without the `admin` scope'
+      : auth.apiKeyScope
+        ? `an API key without the \`${auth.apiKeyScope}\` scope`
+        : 'an API key, which this route refuses';
+  return `\`FORBIDDEN\`: ${role ? `${role}, or ` : ''}${key}.`;
 }
 
 /** What `parameters()` reads of an object schema's JSON Schema. */
@@ -245,11 +261,9 @@ function operation(route: RouteContract): JsonObject {
   const validated =
     (request.params !== undefined && !paramsFail404) || request.query || request.body;
   if (validated) responses['400'] = errorRef('`VALIDATION_ERROR`: the request does not parse.');
-  if (auth.who !== 'anyone') responses['401'] = errorRef('`UNAUTHORIZED`: no caller.');
-  if (canForbid(auth)) {
-    responses['403'] = errorRef(
-      '`FORBIDDEN`: the caller lacks the role, or the API key the scope.'
-    );
+  if (auth.who !== 'anyone') {
+    responses['401'] = errorRef('`UNAUTHORIZED`: no caller.');
+    responses['403'] = errorRef(forbiddenNote(auth));
   }
   if (paramsFail404) {
     responses['404'] = errorRef('`NOT_FOUND`: the path names nothing, or does not parse.');
@@ -324,14 +338,20 @@ export function buildOpenApiDocument(
       title: 'HowDoesThisLand API',
       version: API_VERSION,
       description:
-        'Assess how a text lands with its reader. Generated from the route registry; every request and response schema is the one the server validates with. HEAD is answered on every GET, and is not listed.',
+        'Assess how a text lands with its reader. Generated from the route registry; every request schema is the one the server validates with, and every response schema describes what it sends. HEAD is answered on every GET, and is not listed.',
     },
     paths,
     components: {
       schemas: {
         Error: ERROR_ENVELOPE,
-        AssessmentContext: toSchema(engineContextSchema, 'output'),
-        AssessmentResult: toSchema(engineResultSchema, 'output'),
+        // As input, so neither forbids a key it does not name: a result
+        // stored by an earlier engine is served as it was stored.
+        AssessmentContext: toSchema(engineContextSchema, 'input'),
+        AssessmentResult: {
+          ...toSchema(engineResultSchema, 'input'),
+          description:
+            "HowDoesThisLand's assembled assessment, as the current engine builds it. One stored by an earlier engine is served as it was stored, and may differ.",
+        },
         SharedReportResult: {
           ...toSchema(reportResultSchema, 'output'),
           description:
@@ -342,9 +362,9 @@ export function buildOpenApiDocument(
         session: {
           type: 'apiKey',
           in: 'cookie',
-          name: 'better-auth.session_token',
+          name: '__Secure-better-auth.session_token',
           description:
-            'A browser session, set by signing in. Over HTTPS the cookie is `__Secure-better-auth.session_token`.',
+            'A browser session, set by signing in. Over plain HTTP (local development) the cookie is `better-auth.session_token`.',
         },
         apiKey: {
           type: 'http',
@@ -357,10 +377,19 @@ export function buildOpenApiDocument(
   };
 }
 
-let cached: OpenApiDocument | null = null;
+let cached: { document: OpenApiDocument; etag: string } | null = null;
 
-/** The registry's document, built once per process: the registry is fixed at build time. */
-export function openApiDocument(): OpenApiDocument {
-  cached ??= buildOpenApiDocument();
+/**
+ * The registry's document and its `ETag`, built once per process: the
+ * registry is fixed at build time.
+ */
+export function publishedOpenApi(): { document: OpenApiDocument; etag: string } {
+  if (!cached) {
+    const document = buildOpenApiDocument();
+    cached = { document, etag: computeETag(document) };
+  }
   return cached;
 }
+
+/** The registry's document. */
+export const openApiDocument = (): OpenApiDocument => publishedOpenApi().document;

@@ -345,10 +345,10 @@ describe('what each auth kind becomes', () => {
   const cases: [string, RouteAuth, unknown[], string[], RegExp | null][] = [
     ['anyone', { who: 'anyone' }, [], [], null],
     [
-      'signed-in, sessions only',
+      'signed-in, sessions only (a key is refused with 403)',
       { who: 'signed-in', apiKeyScope: null },
       [{ session: [] }],
-      ['401'],
+      ['401', '403'],
       /API keys are refused/,
     ],
     [
@@ -381,6 +381,11 @@ describe('what each auth kind becomes', () => {
     ],
   ];
 
+  it('says why a session-only route answers 403', () => {
+    const responses = responsesOf(route({ auth: { who: 'signed-in', apiKeyScope: null } }));
+    expect(responses['403']?.description).toMatch(/an API key, which this route refuses/);
+  });
+
   it.each(cases)('%s', (_name, auth, security, statuses, note) => {
     const r = route({ auth });
     const op = opOf(r);
@@ -396,7 +401,8 @@ describe('what each auth kind becomes', () => {
   it('declares the two schemes the requirements name', () => {
     const schemes = buildOpenApiDocument([]).components.securitySchemes;
     expect(schemes).toMatchObject({
-      session: { type: 'apiKey', in: 'cookie' },
+      // The name it has over HTTPS, as every deployment serves it.
+      session: { type: 'apiKey', in: 'cookie', name: '__Secure-better-auth.session_token' },
       apiKey: { type: 'http', scheme: 'bearer' },
     });
   });
@@ -449,6 +455,15 @@ describe("an assessment's context and result", () => {
       properties: { editor: { oneOf: expect.any(Array) } },
     });
     expect(schemas.SharedReportResult).toMatchObject({ type: 'object' });
+  });
+
+  // Nothing checks a stored result on the way out, and an older one may hold
+  // a key the current engine does not write.
+  it('forbids no key the context or result schema does not name', () => {
+    const schemas = z.record(z.string(), z.unknown()).parse(doc.components.schemas);
+    for (const name of ['AssessmentContext', 'AssessmentResult']) {
+      expect(collect(schemas[name], 'additionalProperties'), name).not.toContain(false);
+    }
   });
 
   it('leaves no assessment route with an open context or result', () => {
