@@ -237,6 +237,7 @@
     "@vitejs/plugin-react": "^6.3.0",
     "@vitest/coverage-v8": "^5.1.0",
     "@vitest/ui": "^5.1.0",
+    "ajv": "^8.18.0",
     "autoprefixer": "^10.6.2",
     "dotenv": "^18.0.10",
     "eslint": "^9.39.5",
