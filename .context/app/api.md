@@ -1,20 +1,19 @@
 # The app's API contract
 
 The API is the product (D12), so every route this app serves under `/api/v1/` is
-declared in one place: `APP_ROUTES` in `lib/app/api/registry.ts`. `dp2` will
-publish it as OpenAPI. Until then it is the contract that reviews and later
-tasks read.
+declared in one place: `APP_ROUTES` in `lib/app/api/registry.ts`, and published from
+there as OpenAPI 3.1 at `GET /api/v1/openapi.json` (see [The OpenAPI document](#the-openapi-document)).
 
 ## What an entry says
 
-| Field      | What goes in it                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `method`   | `GET`, `HEAD`, `OPTIONS`, `POST`, `PUT`, `PATCH` or `DELETE`, as the route file exports it.                                                                                                                                                                                                                                                                                                                                                              |
-| `path`     | The URL path, with each dynamic segment as `{name}`: `app/api/v1/frameworks/[slug]/route.ts` is `/api/v1/frameworks/{slug}`.                                                                                                                                                                                                                                                                                                                             |
-| `summary`  | One line, in the words a developer reading the docs would use.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `auth`     | `{ who: 'anyone' }`; `{ who: 'platform-admin' }` (`withAdminAuth`: a session or an `admin`-scoped key); `{ who: 'signed-in', apiKeyScope }`; or `{ who: 'workspace-admin', apiKeyScope, platformAdmin }`, where `platformAdmin` is `'anywhere'` or `'entered'` (a platform admin must be acting in this workspace). `apiKeyScope` is the scope an API key needs, or `null` when the route wants a browser session.                                       |
-| `request`  | `params`, `query`, `body`: the Zod schemas the handler parses with, **imported, never restated**. The `params` object has one key per `{name}` in the path. A path that fails `params` answers 400 `VALIDATION_ERROR` unless `invalidParamsStatus` says otherwise: the framework routes set it to 404.                                                                                                                                                   |
-| `response` | The success `status`, or a list of them when one route answers several with the same `data` (`POST assessments`: `[200, 202]`); the Zod schemas of the envelope's `data` and (if sent) `meta`, as they are on the wire, where a `Date` is an ISO string; `conditional: true` for a route that sends an `ETag` and answers a matching `If-None-Match` with 304; and `stream: 'sse'` for a Server-Sent Events route, whose `data` is each event's payload. |
+| Field      | What goes in it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `method`   | `GET`, `HEAD`, `OPTIONS`, `POST`, `PUT`, `PATCH` or `DELETE`, as the route file exports it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `path`     | The URL path, with each dynamic segment as `{name}`: `app/api/v1/frameworks/[slug]/route.ts` is `/api/v1/frameworks/{slug}`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `summary`  | One line, in the words a developer reading the docs would use.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `auth`     | `{ who: 'anyone' }`; `{ who: 'platform-admin' }` (`withAdminAuth`: a session or an `admin`-scoped key); `{ who: 'signed-in', apiKeyScope }`; or `{ who: 'workspace-admin', apiKeyScope, platformAdmin }`, where `platformAdmin` is `'anywhere'` or `'entered'` (a platform admin must be acting in this workspace). `apiKeyScope` is the scope an API key needs, or `null` when the route wants a browser session.                                                                                                                                                            |
+| `request`  | `params`, `query`, `body`: the Zod schemas the handler parses with, **imported, never restated**. The `params` object has one key per `{name}` in the path. A path that fails `params` answers 400 `VALIDATION_ERROR` unless `invalidParamsStatus` says otherwise: the framework routes set it to 404.                                                                                                                                                                                                                                                                        |
+| `response` | The success `status`, or a list of them when one route answers several with the same `data` (`POST assessments`: `[200, 202]`); the Zod schemas of the envelope's `data` and (if sent) `meta`, as they are on the wire, where a `Date` is an ISO string; `conditional: true` for a route that sends an `ETag` and answers a matching `If-None-Match` with 304; `stream: 'sse'` for a Server-Sent Events route, whose `data` is each event's payload; `file` for a download of that media type; and `envelope: false` for a body that is `data` itself (the OpenAPI document). |
 
 Errors are not declared per entry. Every route answers the standard error envelope,
 and its docblock lists its codes.
@@ -55,7 +54,34 @@ it reads any app directory.
   The two bodies a handler builds inline (the invitation's 202 and the decline) have no
   service type, so they are checked by reading the handler.
 
-Not in scope here: generating OpenAPI (`dp2`).
+## The OpenAPI document
+
+`lib/app/api/openapi.ts` builds it from `APP_ROUTES` with zod 4's `z.toJSONSchema`
+(JSON Schema 2020-12, OpenAPI 3.1's dialect): requests as the schema's input, responses
+as its output. `GET /api/v1/openapi.json` serves it to anyone, bare, as a conditional GET
+(t-44). Nothing about a route is written twice, so a new entry appears in the document
+with no further step.
+
+- **Each registry property maps to the document**, one test per mapping in
+  `tests/unit/lib/app/api/openapi.test.ts`: `auth` to `security` (a `session` cookie, an
+  `apiKey` bearer naming its scope) plus a 401/403, `invalidParamsStatus` to a 404 in place
+  of the 400, `conditional` to `If-None-Match`, `ETag` and a 304, `stream` to
+  `text/event-stream`, `file` to its media type.
+- **Errors:** a 429 and the shared `Error` envelope as `default` on every route, plus the
+  statuses the registry implies. A code only a handler raises stays in its docblock.
+- **HEAD and OPTIONS** are not listed: Next.js answers HEAD on every GET, and OpenAPI
+  tools expect only declared methods.
+- **`context` and `result`** are `unknown` in the registry, each framework's own. Each
+  place they appear uses its own exported field (`assessmentContextField`,
+  `assessmentResultField`, `storedResultField`, `sharedResultField`), which the generator
+  swaps for HowDoesThisLand's schemas in `lib/app/frameworks/howdoesthisland/engine/wire.ts`.
+  The registry stays open on purpose: the report parses `result` with its own looser
+  schema, which an older stored result still passes. A shared report's `result` is the
+  report's allowlist (`reportResultSchema`), not the whole result.
+- **Kept honest by:** validation against the official OpenAPI 3.1 schema (vendored at
+  `tests/fixtures/openapi-3.1-schema.json`) with ajv's 2020-12 build, which fails a broken
+  document; every `$ref` resolving; and `wire.test.ts`, which holds `wire.ts` to the
+  engine's types and parses every baseline case's real result through it.
 
 ## API keys
 

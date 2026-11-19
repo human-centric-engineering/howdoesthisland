@@ -84,6 +84,7 @@ const APP_ROUTE_DIRS = [
   'admin/frameworks',
   'assessments',
   'frameworks',
+  'openapi.json',
   'scan',
   'shared-reports',
   'shares',
