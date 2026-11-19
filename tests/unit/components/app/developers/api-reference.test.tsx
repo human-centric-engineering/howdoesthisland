@@ -106,3 +106,34 @@ describe('ApiReference', () => {
     }
   });
 });
+
+describe('a schema with a boolean subschema', () => {
+  it('renders the field as any rather than failing the page', () => {
+    const odd: OpenApiDocument = {
+      ...openApiDocument(),
+      paths: {
+        '/api/v1/odd': {
+          post: {
+            operationId: 'post_odd',
+            summary: 'Odd.',
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: { anything: true, name: { type: 'string' } },
+                  },
+                },
+              },
+            },
+            responses: {},
+          },
+        },
+      },
+    };
+    const { container } = render(<ApiReference document={odd} />);
+    const entry = container.querySelector('[data-operation="POST /api/v1/odd"]');
+    expect(entry?.textContent).toContain('anything');
+    expect(entry?.textContent).toContain('name');
+  });
+});

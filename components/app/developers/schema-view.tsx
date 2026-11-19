@@ -52,7 +52,7 @@ function read(schema: JsonSchemaNode) {
     minItems: num('minItems'),
     maxItems: num('maxItems'),
     properties: props.success
-      ? Object.entries(props.data).map(([k, v]) => [k, node.parse(v)] as const)
+      ? Object.entries(props.data).map(([k, v]) => [k, node.safeParse(v).data ?? {}] as const)
       : null,
     additional: node.safeParse(schema.additionalProperties).data ?? null,
     items: items.success ? items.data : null,

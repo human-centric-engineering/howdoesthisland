@@ -78,7 +78,11 @@ const ERROR_ENVELOPE = `{
 
 /** Codes any route can answer. A route's own are below, and in its reference entry. */
 const COMMON_ERRORS: [status: number, code: string, meaning: string][] = [
-  [400, 'VALIDATION_ERROR', 'The body, query or path does not parse. `details` says where.'],
+  [
+    400,
+    'VALIDATION_ERROR',
+    'The body, query or path does not parse. `details` says where. A frameworks route answers a path that does not parse with `404`.',
+  ],
   [401, 'UNAUTHORIZED', 'No key or session, or a key that is revoked or expired.'],
   [403, 'FORBIDDEN', 'The key lacks the scope the route needs, or the route takes no keys.'],
   [404, 'NOT_FOUND', 'Nothing by that id in your workspace.'],
@@ -101,6 +105,10 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [422, 'FETCH_TIMEOUT', 'The page took too long to answer.'],
   [413, 'FILE_TOO_LARGE', 'The file is over the upload limit.'],
   [415, 'INVALID_FILE_TYPE', 'Not a file type the server can read.'],
+  [422, 'TOO_MANY_PAGES', 'The file has more pages than the server reads.'],
+  [422, 'PDF_HAS_NO_TEXT', 'The PDF has no text to read, as a scan does not.'],
+  [422, 'NO_TEXT', 'The file or page has no words in it.'],
+  [422, 'FILE_UNREADABLE', 'The file could not be read.'],
   [422, 'NOT_SCORABLE', 'With `store: false`: the copy could not be scored.'],
 ];
 
@@ -109,18 +117,30 @@ const LIMITS = SECURITY_CONSTANTS.RATE_LIMIT.LIMITS;
 /** Each per-minute cap, and what it counts. */
 const RATE_LIMITS: [what: string, perMinute: number, keyedOn: string][] = [
   [
-    'Every route under `/api/v1`',
+    'Every route under `/api/v1` not named below',
     LIMITS.API,
     'Per person with a browser session; per IP address with a key',
   ],
-  ['Routes under `/api/v1/admin`', LIMITS.ADMIN, 'As above'],
+  [
+    'Routes under `/api/v1/admin`, in place of the cap above',
+    LIMITS.ADMIN,
+    'Per person with a browser session; per IP address with a key',
+  ],
   [
     'Reviews by the AI reviewers (`POST /api/v1/assessments`, any profile but `quick`)',
     AI_ASSESSMENTS_PER_MINUTE,
-    'Per person, on top of the cap above',
+    'Per person, on top of the first cap',
   ],
-  ['The free quick scan (`POST /api/v1/scan`)', SCANS_PER_MINUTE, 'Per IP address'],
-  ['Opening a shared report', SHARED_REPORT_VIEWS_PER_MINUTE, 'Per IP address'],
+  [
+    'The free quick scan (`POST /api/v1/scan`), in place of the first cap',
+    SCANS_PER_MINUTE,
+    'Per IP address',
+  ],
+  [
+    'Opening a shared report (`GET /api/v1/shared-reports/{token}`), in place of the first cap',
+    SHARED_REPORT_VIEWS_PER_MINUTE,
+    'Per IP address',
+  ],
 ];
 
 function RouteLinks({ ops }: { ops: Operation[] }) {

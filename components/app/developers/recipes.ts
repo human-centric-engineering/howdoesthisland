@@ -49,7 +49,7 @@ export const RECIPES: readonly Recipe[] = [
       wait: true,
     },
     then: [
-      'With `wait: true` the answer is a 200 with the finished review once the AI reviewers are done, or a 202 if they take longer than a minute. A 202 carries the review’s `id`: follow it with `GET /api/v1/assessments/{id}/events`, or read `GET /api/v1/assessments/{id}` until `status` is `completed` or `partial`.',
+      'With `wait: true` the answer is a 200 with the finished review once the AI reviewers are done, or a 202 if they take longer than a minute. A 202 carries the review’s `id`: follow it with `GET /api/v1/assessments/{id}/events`, or read `GET /api/v1/assessments/{id}` until `status` is no longer `queued` or `running`. A review ends `completed`, `partial` (some AI reviewers did not answer), `failed` or `cancelled`.',
       '`overall` is the score out of 100 and `band` its name. `result` holds the notes on the copy, each with the passage it is about.',
       'For the report as a PDF, `GET /api/v1/assessments/{id}/report.pdf` with a key that has the `reports` scope.',
     ],
@@ -89,7 +89,7 @@ export const RECIPES: readonly Recipe[] = [
       store: false,
     },
     then: [
-      'The answer is a 200 with `stored: false`, `overall` and `band`. `overall` can be `null` when the copy cannot be scored at all; treat that as a failure.',
+      'The answer is a 200 with `stored: false`, `overall` and `band`. Copy that cannot be scored at all is refused with a 422 `NOT_SCORABLE`; the script below fails the build on any answer but a 200, and on an `overall` of `null`.',
       'For a stricter gate, leave out `profile` to use every AI reviewer. That is charged, and counts against the per-minute cap.',
     ],
     script: `#!/usr/bin/env bash
@@ -97,14 +97,20 @@ export const RECIPES: readonly Recipe[] = [
 set -euo pipefail
 THRESHOLD="\${THRESHOLD:-60}"
 
-score=$(jq -n --rawfile text "$1" \\
+answer=$(jq -n --rawfile text "$1" \\
     '{source: {text: $text}, profile: "quick", store: false}' |
-  curl -sS --fail-with-body -X POST "$HDTL_URL/api/v1/assessments" \\
+  curl -sS -X POST "$HDTL_URL/api/v1/assessments" \\
     -H "Authorization: Bearer $HDTL_KEY" \\
     -H "Content-Type: application/json" \\
-    --data @- |
-  jq -r '.data.overall // "null"')
+    --data @- -w '\\n%{http_code}')
+status="\${answer##*$'\\n'}"
+body="\${answer%$'\\n'*}"
 
+if [ "$status" != "200" ]; then
+  echo "Review of $1 refused ($status): $(jq -r '.error.code // "unknown"' <<<"$body")" >&2
+  exit 1
+fi
+score=$(jq -r '.data.overall // "null"' <<<"$body")
 if [ "$score" = "null" ]; then
   echo "Could not score $1" >&2; exit 1
 fi
