@@ -1,0 +1,58 @@
+/**
+ * Tests: the developer docs' recipes (t-45).
+ *
+ * A recipe is copied and run by someone deciding whether to build on the API,
+ * so each one has to be a request the route accepts. Its body is parsed with
+ * the route's own request schema from the registry (the schema the handler
+ * parses with), and its `context` with the shipped framework model's own
+ * check, which a body schema cannot do: those ids are the version's.
+ *
+ * @see components/app/developers/recipes.ts
+ */
+import { describe, expect, it } from 'vitest';
+import { APP_ROUTES } from '@/lib/app/api/registry';
+import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
+import { RECIPES, curlFor } from '@/components/app/developers/recipes';
+import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-fixtures';
+
+const engine = createHowDoesThisLandEngine(loadModel(), { culture: true });
+
+describe.each(RECIPES.map((r) => [r.title, r] as const))('%s', (_title, recipe) => {
+  const route = APP_ROUTES.find((r) => r.method === recipe.method && r.path === recipe.path);
+
+  it('calls a route the registry declares, needing the scope the recipe names', () => {
+    expect(route).toBeDefined();
+    expect(route?.auth).toMatchObject({ apiKeyScope: recipe.scope });
+  });
+
+  it("sends a body the route's own request schema accepts", () => {
+    const schema = route?.request.body;
+    if (!schema) throw new Error(`${recipe.method} ${recipe.path} takes no body`);
+    const parsed = schema.safeParse(recipe.body);
+    expect(parsed.error?.issues).toBeUndefined();
+    expect(parsed.success).toBe(true);
+  });
+
+  it('names only ids the shipped framework version has in its context', () => {
+    const parsed = engine.parseContext(recipe.body.context ?? {});
+    expect(parsed.ok ? [] : parsed.issues).toEqual([]);
+  });
+
+  it('prints its body in the curl command as valid JSON, unchanged', () => {
+    const curl = curlFor(recipe);
+    const json = curl.slice(curl.indexOf("<<'JSON'\n") + 8, curl.lastIndexOf('\nJSON'));
+    expect(JSON.parse(json)).toEqual(recipe.body);
+  });
+});
+
+describe('a body the route refuses', () => {
+  it('fails the same check: both a profile and judges', () => {
+    const route = APP_ROUTES.find((r) => r.method === 'POST' && r.path === '/api/v1/assessments');
+    const parsed = route?.request.body?.safeParse({
+      source: { text: 'Copy.' },
+      profile: 'quick',
+      judges: ['ethos'],
+    });
+    expect(parsed?.success).toBe(false);
+  });
+});
