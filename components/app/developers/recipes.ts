@@ -13,6 +13,13 @@
  * routes and fields are quoted as the API names them.
  */
 import type { HttpMethod } from '@/lib/app/api/registry';
+import { WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
+
+/** How long `wait: true` waits before answering 202, in words. */
+const waitBound =
+  WAIT_BOUND_MS % 60_000 === 0
+    ? `${WAIT_BOUND_MS / 60_000} minute${WAIT_BOUND_MS === 60_000 ? '' : 's'}`
+    : `${WAIT_BOUND_MS / 1000} seconds`;
 
 export interface Recipe {
   /** The anchor on the page. */
@@ -49,7 +56,7 @@ export const RECIPES: readonly Recipe[] = [
       wait: true,
     },
     then: [
-      'With `wait: true` the answer is a 200 with the finished review once the AI reviewers are done, or a 202 if they take longer than a minute. A 202 carries the review’s `id`: follow it with `GET /api/v1/assessments/{id}/events`, or read `GET /api/v1/assessments/{id}` until `status` is no longer `queued` or `running`. A review ends `completed`, `partial` (some AI reviewers did not answer), `failed` or `cancelled`.',
+      `With \`wait: true\` the answer is a 200 with the finished review once the AI reviewers are done, or a 202 if they take longer than ${waitBound}. A 202 carries the review’s \`id\`: follow it with \`GET /api/v1/assessments/{id}/events\`, or read \`GET /api/v1/assessments/{id}\` until \`status\` is no longer \`queued\` or \`running\`. A review ends \`completed\`, \`partial\` (some AI reviewers did not answer), \`failed\` or \`cancelled\`.`,
       '`overall` is the score out of 100 and `band` its name. `result` holds the notes on the copy, each with the passage it is about.',
       'For the report as a PDF, `GET /api/v1/assessments/{id}/report.pdf` with a key that has the `reports` scope.',
     ],

@@ -57,9 +57,31 @@ function read(schema: JsonSchemaNode) {
     additional: node.safeParse(schema.additionalProperties).data ?? null,
     items: items.success ? items.data : null,
     variants: variants.success ? variants.data : null,
+    nullableOf: variants.success ? nullableOf(variants.data) : null,
+    pattern: str('pattern'),
+    exclusiveMinimum: num('exclusiveMinimum'),
+    exclusiveMaximum: num('exclusiveMaximum'),
     required: new Set(required.success ? required.data : []),
   };
 }
+
+/**
+ * `X` when the variants are `X` or `null`, as zod writes every `.nullable()`:
+ * shown as `X | null` rather than as two options.
+ */
+function nullableOf(variants: JsonSchemaNode[]): JsonSchemaNode | null {
+  if (variants.length !== 2) return null;
+  const isNull = (v: JsonSchemaNode) => v.type === 'null' && Object.keys(v).length === 1;
+  const others = variants.filter((v) => !isNull(v));
+  return others.length === 1 ? others[0] : null;
+}
+
+/**
+ * zod writes every `.int()` with ±`Number.MAX_SAFE_INTEGER` as its bounds,
+ * which say nothing to a reader: those are left out.
+ */
+const bound = (n: number | null): number | null =>
+  n === null || Math.abs(n) >= Number.MAX_SAFE_INTEGER ? null : n;
 
 const json = (value: unknown): string => JSON.stringify(value);
 
@@ -72,6 +94,7 @@ function typeLabel(schema: JsonSchemaNode): string {
   if (s.ref) return refName(s.ref);
   if (s.hasConst) return json(s.constValue);
   if (s.enumValues) return s.enumValues.map(json).join(' | ');
+  if (s.nullableOf) return `${typeLabel(s.nullableOf)} | null`;
   if (s.variants) return 'one of';
   if (s.type === 'array') return s.items ? `array of ${typeLabel(s.items)}` : 'array';
   if (s.type === 'object' && !s.properties && s.additional) {
@@ -90,9 +113,12 @@ function constraints(schema: JsonSchemaNode): string[] {
     else if (min !== null) out.push(`≥ ${min}${unit}`);
     else if (max !== null) out.push(`≤ ${max}${unit}`);
   };
-  range(s.minimum, s.maximum, '');
+  range(bound(s.minimum), bound(s.maximum), '');
+  if (s.exclusiveMinimum !== null) out.push(`> ${s.exclusiveMinimum}`);
+  if (s.exclusiveMaximum !== null) out.push(`< ${s.exclusiveMaximum}`);
   range(s.minLength, s.maxLength, ' chars');
   range(s.minItems, s.maxItems, ' items');
+  if (s.pattern) out.push(`pattern ${s.pattern}`);
   if (s.hasDefault) out.push(`default ${json(s.defaultValue)}`);
   return out;
 }
@@ -118,6 +144,7 @@ function Children({ schema, depth }: { schema: JsonSchemaNode; depth: number }) 
       </ul>
     );
   }
+  if (s.nullableOf) return <Children schema={s.nullableOf} depth={depth} />;
   if (s.variants) {
     return (
       <ol className="space-y-2 border-l pl-4">
@@ -135,10 +162,16 @@ function Children({ schema, depth }: { schema: JsonSchemaNode; depth: number }) 
   return null;
 }
 
-function TypeText({ schema }: { schema: JsonSchemaNode }) {
+/** The named schema a type links to: its own `$ref`, an array's, or a nullable's. */
+function linkedRef(schema: JsonSchemaNode): string | null {
   const s = read(schema);
-  // A `$ref`, or an array of one, links to the named schema.
-  const target = s.ref ?? (s.type === 'array' && s.items ? read(s.items).ref : null);
+  if (s.ref) return s.ref;
+  if (s.type === 'array' && s.items) return linkedRef(s.items);
+  return s.nullableOf ? linkedRef(s.nullableOf) : null;
+}
+
+function TypeText({ schema }: { schema: JsonSchemaNode }) {
+  const target = linkedRef(schema);
   const label = typeLabel(schema);
   if (!target) return <span className="text-muted-foreground font-mono text-xs">{label}</span>;
   return (

@@ -94,6 +94,7 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [400, 'CONTENT_EMPTY', 'No copy once whitespace is trimmed.'],
   [400, 'CONTEXT_INVALID', '`context` names an id this framework version does not have.'],
   [400, 'PROFILE_UNKNOWN', 'No such `profile` or AI reviewer, or one switched off.'],
+  [404, 'FRAMEWORK_NOT_FOUND', 'No published framework by that `framework` slug.'],
   [404, 'FRAMEWORK_VERSION_NOT_FOUND', 'No published version by that `framework` and `version`.'],
   [
     422,
@@ -143,6 +144,18 @@ const RATE_LIMITS: [what: string, perMinute: number, keyedOn: string][] = [
   ],
 ];
 
+/** A scope's name and what it lets a key do; a scope with no description is shown by name. */
+function describeScope(scope: string): { label: string; detail: string | null } {
+  if (scope === 'admin') {
+    return {
+      label: 'Platform admins',
+      detail:
+        'For the people who run HowDoesThisLand, not for its customers: only a platform admin can make a key with this scope.',
+    };
+  }
+  return SCOPE_DESCRIPTIONS[scope] ?? { label: scope, detail: null };
+}
+
 function RouteLinks({ ops }: { ops: Operation[] }) {
   return (
     <ul className="space-y-0.5">
@@ -190,6 +203,10 @@ function ErrorTable({ rows }: { rows: [number, string, string][] }) {
 export default function DevelopersPage() {
   const document = openApiDocument();
   const operations = readOperations(document);
+  // Every scope a route in the document asks for, in the document's order.
+  const keyScopes = [
+    ...new Set(operations.flatMap((op) => (op.apiKeyScope ? [op.apiKeyScope] : []))),
+  ];
   const byScope = (scope: string) => operations.filter((op) => op.apiKeyScope === scope);
   const sessionOnly = operations.filter((op) => !op.anonymous && op.apiKeyScope === null);
   const anonymous = operations.filter((op) => op.anonymous);
@@ -269,25 +286,18 @@ export default function DevelopersPage() {
             job needs: a key that downloads reports does not need to run reviews.
           </p>
           <div className="space-y-6">
-            {Object.entries(SCOPE_DESCRIPTIONS).map(([scope, { label, detail }]) => (
-              <div key={scope} className="space-y-1">
-                <h3 className="font-semibold">
-                  <code>{scope}</code> · {label}
-                </h3>
-                <p className="text-muted-foreground text-sm">{detail}</p>
-                <RouteLinks ops={byScope(scope)} />
-              </div>
-            ))}
-            <div className="space-y-1">
-              <h3 className="font-semibold">
-                <code>admin</code> · Platform admins
-              </h3>
-              <p className="text-muted-foreground text-sm">
-                For the people who run HowDoesThisLand, not for its customers: only a platform admin
-                can make a key with this scope.
-              </p>
-              <RouteLinks ops={byScope('admin')} />
-            </div>
+            {keyScopes.map((scope) => {
+              const { label, detail } = describeScope(scope);
+              return (
+                <div key={scope} className="space-y-1">
+                  <h3 className="font-semibold">
+                    <code>{scope}</code> · {label}
+                  </h3>
+                  {detail ? <p className="text-muted-foreground text-sm">{detail}</p> : null}
+                  <RouteLinks ops={byScope(scope)} />
+                </div>
+              );
+            })}
             <div className="space-y-1">
               <h3 className="font-semibold">Browser session only</h3>
               <p className="text-muted-foreground text-sm">

@@ -137,3 +137,58 @@ describe('a schema with a boolean subschema', () => {
     expect(entry?.textContent).toContain('name');
   });
 });
+
+describe('what a field shows', () => {
+  const doc = openApiDocument();
+
+  it("leaves out zod's ±MAX_SAFE_INTEGER bounds on integers, and keeps real ones", () => {
+    const { container } = render(<ApiReference document={doc} />);
+    expect(container.textContent).not.toContain(String(Number.MAX_SAFE_INTEGER));
+
+    const list = container.querySelector('[data-operation="GET /api/v1/assessments"]');
+    expect(list?.textContent).toContain('1–100');
+  });
+
+  it('labels a nullable field as its type or null, linked to the named schema', () => {
+    const { container } = render(<ApiReference document={doc} />);
+    const detail = container.querySelector('[data-operation="GET /api/v1/assessments/{id}"]');
+    const link = [...(detail?.querySelectorAll('a') ?? [])].find(
+      (a) => a.textContent === 'AssessmentResult | null'
+    );
+
+    expect(link).toHaveAttribute('href', '#schema-AssessmentResult');
+  });
+
+  it("shows a field's pattern and exclusive bounds", () => {
+    const odd: OpenApiDocument = {
+      ...doc,
+      paths: {
+        '/api/v1/odd': {
+          post: {
+            operationId: 'post_odd',
+            summary: 'Odd.',
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      slug: { type: 'string', pattern: '^[a-z]+$' },
+                      weight: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {},
+          },
+        },
+      },
+    };
+    const { container } = render(<ApiReference document={odd} />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('pattern ^[a-z]+$');
+    expect(text).toContain('> 0');
+    expect(text).toContain('< 1');
+  });
+});
