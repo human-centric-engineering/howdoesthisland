@@ -241,7 +241,7 @@ function operation(route: RouteContract): JsonObject {
   const responses: Record<string, JsonObject> = {};
   for (const status of statuses) {
     responses[String(status)] = {
-      description: status === 202 ? 'Accepted: still running.' : 'Success.',
+      description: status === 202 ? 'Accepted.' : 'Success.',
       ...(response.conditional
         ? {
             headers: { ETag: { schema: { type: 'string' }, description: 'The answer’s version.' } },
@@ -269,7 +269,7 @@ function operation(route: RouteContract): JsonObject {
     responses['404'] = errorRef('`NOT_FOUND`: the path names nothing, or does not parse.');
   }
   responses['429'] = errorRef('`RATE_LIMIT_EXCEEDED`: over the `/api/v1` rate limit.');
-  responses.default = errorRef('The error envelope; the route’s docblock lists its codes.');
+  responses.default = errorRef('Any other error, in the error envelope; `error.code` says which.');
 
   const note = authNote(auth);
   return {
