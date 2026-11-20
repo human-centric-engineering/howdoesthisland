@@ -41,7 +41,12 @@ import {
   startNextQueued,
 } from '@/lib/app/assessments/run';
 import { withPlace } from '@/lib/app/assessments/places';
-import { assertReviewWithinBudget } from '@/lib/app/usage/budget';
+import {
+  assertReviewFits,
+  reserveReviewBudget,
+  type BudgetHold,
+  type ReviewRate,
+} from '@/lib/app/usage/budget';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -160,13 +165,26 @@ export interface PreparedAssessment {
   ctx: unknown;
   profile: JudgeProfile;
   judges: readonly string[];
+  /**
+   * What the request holds of the workspace's budget (t-50), or `null` when
+   * it holds nothing: taken by {@link holdReviewBudget}. {@link createAssessment}
+   * releases it once the review is stored or, kept nowhere, once its run
+   * ends; whoever took it releases it again however the request ends, which
+   * is safe.
+   */
+  hold: BudgetHold | null;
+  /** The cost per judge the budget check read, for the hold's check to reuse. */
+  rate: ReviewRate | null;
 }
 
 /**
  * Everything that can be refused before anything is fetched, read or spent:
  * the version, the context, the profile, pasted text, and a review that would
  * pass the workspace's monthly budget (402 `BUDGET_EXCEEDED`, t-49). The route
- * counts a request against the per-user cap only once this has passed.
+ * counts a request against the per-user cap only once this has passed, then
+ * holds its estimate with {@link holdReviewBudget} (t-50). Holds nothing, so a
+ * request the route then refuses (no place free, the per-user cap) never
+ * held budget another request was refused for.
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
   const resolved = await versionToScore(body);
@@ -179,8 +197,32 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     await refusingAsApi(() => assessableText(text));
   }
   // Last, so a request refused for anything above is refused for that.
-  await assertReviewWithinBudget(requireOrgId(), storedProfileName(profile), judges.length);
-  return { resolved, ctx, profile, judges };
+  const rate = await assertReviewFits(
+    requireOrgId(),
+    storedProfileName(profile),
+    judges.length,
+    body.store !== false
+  );
+  return { resolved, ctx, profile, judges, hold: null, rate };
+}
+
+/**
+ * Check `prepared` against the workspace's budget again and hold its estimate
+ * (t-50) under the lock that orders requests arriving together, as
+ * `prepared.hold`: the last step before {@link createAssessment}. Throws 402
+ * `BUDGET_EXCEEDED` when requests checked before it took what was left.
+ */
+export async function holdReviewBudget(
+  body: CreateAssessmentBody,
+  prepared: PreparedAssessment
+): Promise<void> {
+  prepared.hold = await reserveReviewBudget(
+    requireOrgId(),
+    storedProfileName(prepared.profile),
+    prepared.judges.length,
+    body.store !== false,
+    prepared.rate ?? undefined
+  );
 }
 
 export async function createAssessment(
@@ -189,39 +231,42 @@ export async function createAssessment(
   caller: Caller,
   options: { boundMs?: number; signal?: AbortSignal } = {}
 ): Promise<CreatedAssessment> {
-  const { resolved, ctx, profile, judges } = prepared;
-  const source = await intake(body.source);
-
+  const { resolved, ctx, profile, hold } = prepared;
   if (body.store === false) {
-    const run = () =>
-      refusingAsApi(() =>
-        runEphemeral(resolved, source, ctx, profile, judges, caller, options.signal)
-      );
-    // A run that calls judges takes one of the workspace's places, or is
-    // refused with `WorkspaceBusyError` (t-28). The quick scan calls no model.
-    const orgId = requireOrgId();
-    const assessment =
-      judges.length > 0 ? await withPlace(orgId, run, () => startNextQueued(orgId)) : await run();
-    return { kind: 'ephemeral', assessment };
+    try {
+      return await createEphemeral(body, prepared, caller, options.signal);
+    } finally {
+      // Held while the run spends: it has no row to be held by (t-51).
+      await hold?.release();
+    }
   }
 
-  const { assessmentId } = await refusingAsApi(() =>
-    enqueueAssessment({
-      content: {
-        text: source.text,
-        title: body.title ?? source.title,
-        sourceKind: source.sourceKind,
-        sourceUrl: source.sourceUrl,
-        fileName: source.fileName,
-      },
-      frameworkVersionId: resolved.version.id,
-      profile,
-      context: storedContext(ctx),
-      requestedVia: caller.apiKeyId ? 'API' : 'APP',
-      apiKeyId: caller.apiKeyId,
-      userId: caller.userId,
-    })
-  );
+  let assessmentId: string;
+  try {
+    const source = await intake(body.source);
+    ({ assessmentId } = await refusingAsApi(() =>
+      enqueueAssessment({
+        content: {
+          text: source.text,
+          title: body.title ?? source.title,
+          sourceKind: source.sourceKind,
+          sourceUrl: source.sourceUrl,
+          fileName: source.fileName,
+        },
+        frameworkVersionId: resolved.version.id,
+        profile,
+        context: storedContext(ctx),
+        requestedVia: caller.apiKeyId ? 'API' : 'APP',
+        apiKeyId: caller.apiKeyId,
+        userId: caller.userId,
+      })
+    ));
+  } finally {
+    // Stored, the review's row is held in its place; refused, nothing is.
+    // Before the run is claimed, whose check would hold this request's hold
+    // against the review it became.
+    await hold?.release();
+  }
 
   if (body.wait === true) {
     await waitForRun(assessmentId, options.boundMs ?? WAIT_BOUND_MS, options.signal);
@@ -232,6 +277,25 @@ export async function createAssessment(
   // Deleted under us, by another request, between the write and this read.
   if (!assessment) throw new NotFoundError('Assessment not found');
   return { kind: 'stored', final: isFinal(assessment.status), assessment };
+}
+
+/** A `store: false` review: intake, then the run, holding one of the workspace's places. */
+async function createEphemeral(
+  body: CreateAssessmentBody,
+  prepared: PreparedAssessment,
+  caller: Caller,
+  signal?: AbortSignal
+): Promise<CreatedAssessment> {
+  const { resolved, ctx, profile, judges } = prepared;
+  const source = await intake(body.source);
+  const run = () =>
+    refusingAsApi(() => runEphemeral(resolved, source, ctx, profile, judges, caller, signal));
+  // A run that calls judges takes one of the workspace's places, or is
+  // refused with `WorkspaceBusyError` (t-28). The quick scan calls no model.
+  const orgId = requireOrgId();
+  const assessment =
+    judges.length > 0 ? await withPlace(orgId, run, () => startNextQueued(orgId)) : await run();
+  return { kind: 'ephemeral', assessment };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

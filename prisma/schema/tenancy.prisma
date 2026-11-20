@@ -105,6 +105,7 @@ model Org {
   reportShares         ReportShare[]
   calibrationRuns      CalibrationRun[]
   assessmentPlaces     AssessmentPlace[]
+  budgetHolds          BudgetHold[]
 
   @@map("org")
 }

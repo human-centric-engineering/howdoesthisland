@@ -262,6 +262,30 @@ model AssessmentPlace {
   @@map("app_assessment_place")
 }
 
+/// What a review request holds of its workspace's monthly budget from the
+/// moment its budget check passes (t-50, t-51, `lib/app/usage/budget.ts`),
+/// so requests arriving together cannot each spend the same remainder. A
+/// stored request holds it until its `Assessment` row exists, which then
+/// counts in its place; a `store: false` request, which has no row, until its
+/// run ends. Renewed while held, and deleted when released. One whose lease
+/// has run out (its process died) holds nothing, and the next check deletes
+/// it. Carries no `userId`: it is a lease, not a record of who asked.
+/// Tenant-owned (`orgId`, cascade, `org_isolation`).
+model BudgetHold {
+  id             String   @id @default(cuid())
+  orgId          String?
+  org            Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// The judges the request calls: held at each checker's own rate.
+  judges         Int
+  /// A stored review, which the editor runs on once it calls enough judges.
+  stored         Boolean
+  leaseExpiresAt DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([orgId, leaseExpiresAt])
+  @@map("app_budget_hold")
+}
+
 enum AssessmentStatus {
   QUEUED
   RUNNING

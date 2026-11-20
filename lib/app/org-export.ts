@@ -170,6 +170,11 @@ export function initAppOrgSources(): void {
         reason:
           'A lease held for a few seconds while a review kept nowhere runs, deleted when it ends: bookkeeping that records nothing about the workspace.',
       },
+      {
+        model: 'BudgetHold',
+        reason:
+          'A lease on part of the monthly budget a review request holds until its review is stored or its run ends, deleted then: bookkeeping that records nothing about the workspace.',
+      },
     ],
   });
 }

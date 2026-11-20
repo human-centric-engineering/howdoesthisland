@@ -162,6 +162,11 @@ export function initAppSubjectSources(): void {
         reason:
           'A lease a review kept nowhere holds while it runs, deleted when it ends; it has no user column and records nothing about anyone.',
       },
+      {
+        model: 'BudgetHold',
+        reason:
+          'A lease on part of the monthly budget a review request holds until its review is stored or its run ends, deleted then; it has no user column and records nothing about anyone.',
+      },
     ],
   });
 }

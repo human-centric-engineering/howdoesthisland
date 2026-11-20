@@ -232,6 +232,8 @@ describe('reserved fork tiers', () => {
       'model Assessment {',
       // FORK (HowDoesThisLand): running places for runs kept nowhere (t-28).
       'model AssessmentPlace {',
+      // FORK (HowDoesThisLand): budget holds for review requests (t-50).
+      'model BudgetHold {',
       'enum AssessmentStatus {',
       'enum AssessmentVia {',
       'model JudgeRun {',

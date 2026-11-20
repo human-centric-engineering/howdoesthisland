@@ -2,10 +2,12 @@
  * Tests: refusing a review before it starts when it would pass the
  * workspace's monthly budget (t-49).
  *
- * Mocked: Prisma (an in-memory fake of the cost rows, assessments and judge
- * runs, filtering and ordering as the queries ask), the org's quotas and the
- * logger. Real: the check and Sunrise's spend-caps module, so the cap it
- * compares against is the one the per-judge gate reads.
+ * Mocked: Prisma (an in-memory fake of the cost rows, assessments, judge
+ * runs and budget holds, filtering and ordering as the queries ask; its
+ * advisory lock admits one transaction per key at a time, as Postgres's
+ * does), the org's quotas and the logger. Real: the check and Sunrise's
+ * spend-caps module, so the cap it compares against is the one the per-judge
+ * gate reads.
  *
  * @see lib/app/usage/budget.ts
  */
@@ -19,6 +21,20 @@ interface ReviewRow {
   costUsd: number;
   judges: string[];
   leaseExpiresAt: Date | null;
+  createdAt: Date;
+}
+interface HoldRow {
+  id: string;
+  orgId: string;
+  judges: number;
+  stored: boolean;
+  leaseExpiresAt: Date;
+  createdAt: Date;
+}
+interface CostRow {
+  orgId: string;
+  totalCostUsd: number;
+  metadata: unknown;
   createdAt: Date;
 }
 interface RunRow {
@@ -36,6 +52,11 @@ const state = vi.hoisted(() => ({
   quotasFail: false,
   reviews: [] as ReviewRow[],
   runs: [] as RunRow[],
+  holds: [] as HoldRow[],
+  costRows: [] as CostRow[],
+  /** The keys the advisory lock was taken on, in order. */
+  locked: [] as string[],
+  seq: 0,
 }));
 
 type Where = Record<string, unknown>;
@@ -50,6 +71,7 @@ const matches = (row: Record<string, unknown>, where: Where): boolean =>
     if ('in' in v) return (v as { in: unknown[] }).in.includes(value);
     if ('not' in v) return value !== v.not;
     if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
+    if ('lte' in v) return value instanceof Date && value <= (v as { lte: Date }).lte;
     if ('lt' in v) {
       const lt = (v as { lt: Date | string }).lt;
       if (typeof lt === 'string') return typeof value === 'string' && value < lt;
@@ -61,10 +83,39 @@ function newestFirst<T extends { createdAt: Date }>(rows: T[], take: number): T[
   return [...rows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, take);
 }
 
-vi.mock('@/lib/db/client', () => ({
-  prisma: {
+vi.mock('@/lib/db/client', () => {
+  /** The tail of each key's queue of lock holders. */
+  const lockQueues = new Map<string, Promise<void>>();
+  const db = {
     aiCostLog: {
       aggregate: vi.fn(async () => ({ _sum: { totalCostUsd: state.spent } })),
+      findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
+        newestFirst(
+          state.costRows.filter((r) => matches({ ...r }, where)),
+          take ?? Infinity
+        ).map((r) => ({ totalCostUsd: r.totalCostUsd, metadata: r.metadata }))
+      ),
+    },
+    budgetHold: {
+      findMany: vi.fn(async ({ where }: { where: Where }) =>
+        state.holds.filter((h) => matches({ ...h }, where)).map((h) => ({ ...h }))
+      ),
+      create: vi.fn(async ({ data }: { data: Omit<HoldRow, 'id'> }) => {
+        state.seq += 1;
+        const row = { id: `hold-${state.seq}`, ...data };
+        state.holds.push(row);
+        return { id: row.id };
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Where; data: Partial<HoldRow> }) => {
+        const rows = state.holds.filter((h) => matches({ ...h }, where));
+        for (const row of rows) Object.assign(row, data);
+        return { count: rows.length };
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: Where }) => {
+        const gone = state.holds.filter((h) => matches({ ...h }, where));
+        state.holds = state.holds.filter((h) => !gone.includes(h));
+        return { count: gone.length };
+      }),
     },
     assessment: {
       findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
@@ -96,8 +147,36 @@ vi.mock('@/lib/db/client', () => ({
         }))
       ),
     },
-  },
-}));
+    /**
+     * A transaction whose `$executeRaw` takes the advisory lock its key names,
+     * waiting behind whoever holds it, until the transaction ends.
+     */
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      let unlock = () => {};
+      const tx = {
+        ...db,
+        $executeRaw: vi.fn(async (sql: TemplateStringsArray, ...values: unknown[]) => {
+          const key = String(values[0]);
+          state.locked.push(`${sql.join('?')} ${key}`);
+          const ahead = lockQueues.get(key) ?? Promise.resolve();
+          const mine = new Promise<void>((resolve) => (unlock = resolve));
+          lockQueues.set(
+            key,
+            ahead.then(() => mine)
+          );
+          await ahead;
+          return 1;
+        }),
+      };
+      try {
+        return await fn(tx);
+      } finally {
+        unlock();
+      }
+    }),
+  };
+  return { prisma: db };
+});
 vi.mock('@/lib/tenancy/org-settings', () => ({
   loadOrgQuotas: vi.fn(async () => {
     if (state.quotasFail) throw new Error('settings unreadable');
@@ -108,14 +187,21 @@ vi.mock('@/lib/logging', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
+import { logger } from '@/lib/logging';
 import { forgetSpendCaps, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { APIError } from '@/lib/api/errors';
 import {
-  assertReviewWithinBudget,
+  assertReviewFits,
   budgetRefusal,
   estimateReviewCost,
+  JUDGE_HISTORY,
+  KEPT_NOWHERE_SCAN,
+  KEPT_NOWHERE_TAIL,
+  reserveReviewBudget,
 } from '@/lib/app/usage/budget';
+import { LEASE_MS, LEASE_RENEW_MS } from '@/lib/app/assessments/limits';
 
 const ORG = 'org-a';
 const OTHER = 'org-b';
@@ -153,6 +239,12 @@ function judgeRun(costUsd: number, over: Partial<RunRow> = {}): void {
   });
 }
 
+/** Check a stored request as `reserveReviewBudget` does, releasing what it held: t-49's check. */
+async function check(orgId: string, profile: string, judgeCount: number): Promise<void> {
+  const hold = await reserveReviewBudget(orgId, profile, judgeCount, true);
+  await hold?.release();
+}
+
 /** The refusal `fn` throws, or a failure when it throws none. */
 async function refusal(fn: () => Promise<void>): Promise<APIError> {
   const err = await fn().then(
@@ -172,6 +264,9 @@ beforeEach(() => {
     quotasFail: false,
     reviews: [],
     runs: [],
+    holds: [],
+    costRows: [],
+    locked: [],
   });
 });
 
@@ -258,7 +353,7 @@ describe('estimateReviewCost', () => {
   });
 });
 
-describe('assertReviewWithinBudget', () => {
+describe('reserveReviewBudget: the check (t-49)', () => {
   beforeEach(() => {
     state.budget = 10;
     // An estimate of $1.00 a 7-judge review.
@@ -267,18 +362,18 @@ describe('assertReviewWithinBudget', () => {
 
   it('lets a review start when its estimate is under what is left', async () => {
     state.spent = 8.5;
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 
   it('lets a review start when its estimate is exactly what is left', async () => {
     state.spent = 9;
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 
   it('refuses a review whose estimate is over what is left, with the figures', async () => {
     state.spent = 9.25;
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
+    const err = await refusal(() => check(ORG, 'full', 7));
 
     expect(err.status).toBe(402);
     expect(err.code).toBe('BUDGET_EXCEEDED');
@@ -298,7 +393,7 @@ describe('assertReviewWithinBudget', () => {
   it('refuses at the cap, with nothing left', async () => {
     state.spent = 10;
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
+    const err = await refusal(() => check(ORG, 'full', 7));
 
     expect(err.code).toBe('BUDGET_EXCEEDED');
     expect(err.details).toMatchObject({ remainingUsd: 0, limitUsd: 10, estimateUsd: 1 });
@@ -307,27 +402,27 @@ describe('assertReviewWithinBudget', () => {
   it('with no history, lets any positive remainder through and refuses none left', async () => {
     state.reviews = [];
     state.spent = 9.999;
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
 
     forgetSpendCaps();
     state.spent = 10;
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
+    const err = await refusal(() => check(ORG, 'full', 7));
     expect(err.details).toMatchObject({ estimateUsd: 0, basis: 'none', remainingUsd: 0 });
   });
 
   it('never refuses a review calling no judge (the quick profile), even past the cap', async () => {
     state.spent = 50;
-    await expect(assertReviewWithinBudget(ORG, 'quick', 0)).resolves.toBeUndefined();
+    await expect(check(ORG, 'quick', 0)).resolves.toBeUndefined();
   });
 
   it('refuses nothing with no cap set, or a cap that cannot be read', async () => {
     state.budget = null;
     state.spent = 1_000;
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
 
     forgetSpendCaps();
     state.quotasFail = true;
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
   it('holds back what reviews already queued or running are yet to spend', async () => {
     state.spent = 8;
@@ -338,7 +433,7 @@ describe('assertReviewWithinBudget', () => {
     // Another workspace's, and a finished one: neither is held.
     review(0, { status: 'QUEUED', judges: slots(7), orgId: OTHER });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
+    const err = await refusal(() => check(ORG, 'full', 7));
 
     // $2.00 left, $10/7 held: $4/7 is under the $1.00 estimate.
     expect(err.details).toMatchObject({
@@ -347,21 +442,21 @@ describe('assertReviewWithinBudget', () => {
       inFlightUsd: 1.428571,
     });
     expect(err.message).toContain(
-      'once $1.43 is held for reviews already queued, running or finishing'
+      'once $1.43 is held for reviews already starting, queued, running or finishing'
     );
   });
 
   it('lets a review start when what is left after those in flight covers it', async () => {
     state.spent = 7;
     review(0, { status: 'QUEUED', judges: slots(7) });
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 
   it('is not used up by a remainder too small to round, short of the cap', async () => {
     state.reviews = [];
     state.spent = 9.9999996;
     // No history: an estimate of 0, and the cap not reached.
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 
   it('gives amounts under a cent to four places in the message', async () => {
@@ -370,7 +465,7 @@ describe('assertReviewWithinBudget', () => {
     state.budget = 5;
     state.spent = 4.997;
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 1));
+    const err = await refusal(() => check(ORG, 'full', 1));
 
     expect(err.message).toContain('about $0.0040, more than the $0.0030 left');
   });
@@ -380,7 +475,7 @@ describe('assertReviewWithinBudget', () => {
     for (let i = 0; i < 3; i += 1) review(0.0001, { judges: slots(1) });
     state.spent = 9.99997;
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 1));
+    const err = await refusal(() => check(ORG, 'full', 1));
 
     expect(err.message).toContain('more than the under $0.0001 left');
     expect(err.message).not.toContain('$0.0000');
@@ -392,11 +487,11 @@ describe('assertReviewWithinBudget', () => {
     review(0, { status: 'QUEUED', judges: slots(7) });
     review(0, { status: 'QUEUED', judges: slots(7) });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
+    const err = await refusal(() => check(ORG, 'full', 7));
 
     expect(err.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 2 });
     expect(err.message).toContain(
-      "Reviews already queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
+      "Reviews already starting, queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
     );
     expect(err.message).not.toContain('more than the');
   });
@@ -411,7 +506,7 @@ describe('assertReviewWithinBudget', () => {
     });
     judgeRun(0.1, { assessmentId: id });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+    const err = await refusal(() => check(ORG, 'full', 13));
 
     // A 13-judge review at $1/7 a judge is $1.857143; $2.00 less $0.571429 held leaves $1.428571.
     expect(err.details).toMatchObject({ inFlightUsd: 0.571429, remainingUsd: 1.428571 });
@@ -427,7 +522,7 @@ describe('assertReviewWithinBudget', () => {
     });
     for (let i = 0; i < 5; i += 1) judgeRun(0.1, { assessmentId: id });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+    const err = await refusal(() => check(ORG, 'full', 13));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0.285714 });
   });
@@ -441,7 +536,7 @@ describe('assertReviewWithinBudget', () => {
     });
     review(0, { status: 'CANCELLED', judges: slots(7), leaseExpiresAt: null });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 15));
+    const err = await refusal(() => check(ORG, 'full', 15));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0, remainingUsd: 2 });
   });
@@ -453,7 +548,7 @@ describe('assertReviewWithinBudget', () => {
     const id = review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
     for (let i = 0; i < 5; i += 1) judgeRun(0.1, { assessmentId: id, createdAt: lastMonth });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+    const err = await refusal(() => check(ORG, 'full', 14));
 
     // Its 5 judges settled last month are reused: 2 are still to come this month.
     expect(err.details).toMatchObject({ inFlightUsd: 0.285714, remainingUsd: 1.714286 });
@@ -471,7 +566,7 @@ describe('assertReviewWithinBudget', () => {
     judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
     judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'provider_error' });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+    const err = await refusal(() => check(ORG, 'full', 13));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0.285714 });
   });
@@ -492,7 +587,7 @@ describe('assertReviewWithinBudget', () => {
     for (let i = 0; i < 6; i += 1) judgeRun(0.1, { assessmentId: id });
     judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+    const err = await refusal(() => check(ORG, 'full', 20));
 
     // The larger of one judge ($0.10) and the editor ($0.30).
     expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
@@ -515,7 +610,7 @@ describe('assertReviewWithinBudget', () => {
     // A judge that failed for good is settled.
     judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'invalid_reply' });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+    const err = await refusal(() => check(ORG, 'full', 20));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
   });
@@ -529,7 +624,7 @@ describe('assertReviewWithinBudget', () => {
     judgeRun(0.1, { assessmentId: id });
     judgeRun(0.2, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+    const err = await refusal(() => check(ORG, 'full', 14));
 
     // The failed judge's $0.20 does not pay for its re-run: it is held at the
     // full $1/7 with the four not yet called, $5/7 in all.
@@ -543,7 +638,7 @@ describe('assertReviewWithinBudget', () => {
     judgeRun(0.1, { assessmentId: id });
     judgeRun(0.1, { assessmentId: id, status: 'FAILED', errorCode: 'invalid_reply' });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+    const err = await refusal(() => check(ORG, 'full', 14));
 
     // Three settled, four to come.
     expect(err.details).toMatchObject({ inFlightUsd: 0.571429, remainingUsd: 1.428571 });
@@ -556,7 +651,7 @@ describe('assertReviewWithinBudget', () => {
     const id = review(0.3, { status: 'RUNNING', judges: slots(7) });
     judgeRun(0.3, { assessmentId: id });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+    const err = await refusal(() => check(ORG, 'full', 14));
 
     // Its six other judges are still to come: $6/7, not $1.00 less its $0.30.
     expect(err.details).toMatchObject({ inFlightUsd: 0.857143 });
@@ -574,7 +669,7 @@ describe('assertReviewWithinBudget', () => {
     const id = review(0.9, { status: 'RUNNING', judges: slots(7) });
     for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: id });
 
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+    const err = await refusal(() => check(ORG, 'full', 20));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
   });
@@ -582,7 +677,7 @@ describe('assertReviewWithinBudget', () => {
   it('reads no judge runs by review when none is in flight', async () => {
     state.spent = 8;
 
-    await assertReviewWithinBudget(ORG, 'full', 7);
+    await check(ORG, 'full', 7);
 
     expect(prisma.judgeRun.findMany).not.toHaveBeenCalledWith(
       expect.objectContaining({
@@ -595,7 +690,7 @@ describe('assertReviewWithinBudget', () => {
     state.spent = 9.99;
     vi.mocked(prisma.assessment.findMany).mockRejectedValueOnce(new Error('statement timeout'));
 
-    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 });
 
@@ -709,5 +804,492 @@ describe('budgetRefusal: a queued review checked again as it is claimed (t-53)',
 
     expect(refused?.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 0, limitUsd: 10 });
     expect(refused?.reason).toContain('has used its $10.00 monthly AI budget');
+  });
+});
+
+describe('reserveReviewBudget: requests arriving together (t-50)', () => {
+  beforeEach(() => {
+    state.budget = 10;
+    // An estimate of $1.00 a 7-judge review, and an editor that costs nothing.
+    for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+  });
+
+  /** A hold seeded directly: one taken by a request checked earlier. */
+  function hold(over: Partial<HoldRow> = {}): HoldRow {
+    state.seq += 1;
+    const row: HoldRow = {
+      id: `hold-${state.seq}`,
+      orgId: ORG,
+      judges: 7,
+      stored: true,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: at(),
+      ...over,
+    };
+    state.holds.push(row);
+    return row;
+  }
+
+  for (const [label, stored] of [
+    ['stored', true],
+    ['store: false', false],
+  ] as const) {
+    it(`${label}: of three checked at the same moment with room for one, passes one and refuses the others with its hold in inFlightUsd`, async () => {
+      state.spent = 8.5;
+
+      const outcomes = await Promise.allSettled(
+        [1, 2, 3].map(() => reserveReviewBudget(ORG, 'full', 7, stored))
+      );
+
+      const passed = outcomes.filter((o) => o.status === 'fulfilled');
+      const refused = outcomes.flatMap((o) => (o.status === 'rejected' ? [o.reason] : []));
+      expect(passed).toHaveLength(1);
+      expect(refused).toHaveLength(2);
+      for (const err of refused) {
+        expect(err).toBeInstanceOf(APIError);
+        expect(err).toMatchObject({
+          status: 402,
+          code: 'BUDGET_EXCEEDED',
+          details: { estimateUsd: 1, inFlightUsd: 1, remainingUsd: 0.5 },
+        });
+      }
+      expect(state.holds).toEqual([expect.objectContaining({ orgId: ORG, judges: 7, stored })]);
+      // Each check took the workspace's lock before it read what is held.
+      expect(state.locked).toEqual(
+        Array(3).fill(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0)) app:budget-hold:${ORG}`)
+      );
+    });
+  }
+
+  it("takes each workspace's own lock, so one workspace's checks do not wait on another's", async () => {
+    state.spent = 0;
+    const a = await reserveReviewBudget(ORG, 'full', 7, true);
+    const b = await reserveReviewBudget(OTHER, 'full', 7, true);
+
+    expect(state.locked.map((l) => l.split(' ').at(-1))).toEqual([
+      `app:budget-hold:${ORG}`,
+      `app:budget-hold:${OTHER}`,
+    ]);
+    await a?.release();
+    await b?.release();
+  });
+
+  it('holds a stored request at its judges and the editor allowance, a store: false one at its judges alone', async () => {
+    state.reviews = [];
+    // Judges $0.10 each and an editor of $0.30 on 7-judge reviews.
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 8;
+    hold({ stored: true });
+    hold({ stored: false });
+    // Another workspace's hold, and one whose lease has run out: neither counts.
+    hold({ orgId: OTHER });
+    hold({ leaseExpiresAt: new Date(Date.now() - 1_000) });
+
+    const err = await refusal(() => check(ORG, 'full', 20));
+
+    // $1.00 for the stored request's, $0.70 for the store: false one's.
+    expect(err.details).toMatchObject({ inFlightUsd: 1.7, remainingUsd: 0.3 });
+  });
+
+  it('holds until released, then not; releasing twice is safe', async () => {
+    state.spent = 8.5;
+    const first = await reserveReviewBudget(ORG, 'full', 7, true);
+    expect(first).not.toBeNull();
+    await refusal(() => check(ORG, 'full', 7));
+
+    await first?.release();
+    await first?.release();
+
+    expect(state.holds).toEqual([]);
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+
+  it('renews the lease while held, and stops once released', async () => {
+    vi.useFakeTimers();
+    try {
+      state.spent = 0;
+      const held = await reserveReviewBudget(ORG, 'full', 7, true);
+      const row = state.holds[0];
+      const first = row.leaseExpiresAt.getTime();
+
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS);
+      expect(row.leaseExpiresAt.getTime()).toBe(Date.now() + LEASE_MS);
+      expect(row.leaseExpiresAt.getTime()).toBeGreaterThan(first);
+
+      await held?.release();
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS * 3);
+      expect(prisma.budgetHold.updateMany).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not warn of a lost hold when it was released while a renewal was in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      const held = await reserveReviewBudget(ORG, 'full', 7, true);
+      let renewed: (value: { count: number }) => void = () => undefined;
+      vi.mocked(prisma.budgetHold.updateMany).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            renewed = resolve;
+          }) as ReturnType<typeof prisma.budgetHold.updateMany>
+      );
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS);
+      await held?.release();
+      // The renewal lands after the delete: it matched nothing.
+      renewed({ count: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        'Budget hold lost before its request ended',
+        expect.anything()
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives a burst room to queue for a connection and the lock, past Prisma's 2s and 5s defaults", async () => {
+    const held = await reserveReviewBudget(ORG, 'full', 7, true);
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
+    await held?.release();
+  });
+
+  it('stamps the hold with the time read under the lock, not a database default', async () => {
+    const held = await reserveReviewBudget(ORG, 'full', 7, false);
+    const { data } = vi.mocked(prisma.budgetHold.create).mock.calls[0][0];
+    expect(data.createdAt).toBeInstanceOf(Date);
+    expect(data.leaseExpiresAt).toEqual(new Date((data.createdAt as Date).getTime() + LEASE_MS));
+    await held?.release();
+  });
+
+  it('reuses the rate assertReviewFits read, reading no history again', async () => {
+    state.spent = 0;
+    const rate = await assertReviewFits(ORG, 'full', 7, true);
+    expect(rate).toMatchObject({ perJudgeUsd: expect.any(Number), basis: 'profile' });
+    const historyReads = vi.mocked(prisma.assessment.findMany).mock.calls.length;
+    // History that would now estimate $100 a judge: the reused rate ignores it.
+    for (let i = 0; i < 3; i += 1) review(700, { judges: slots(7) });
+
+    const held = await reserveReviewBudget(ORG, 'full', 7, true, rate ?? undefined);
+    expect(held).not.toBeNull();
+    // Only what is in flight was read again, not the profile's history.
+    expect(
+      vi
+        .mocked(prisma.assessment.findMany)
+        .mock.calls.slice(historyReads)
+        .some(([args]) => (args as { take?: number }).take !== undefined)
+    ).toBe(false);
+    await held?.release();
+  });
+
+  it('assertReviewFits: refuses as the check does, and holds nothing either way', async () => {
+    state.spent = 9.5;
+    const err = await refusal(() => assertReviewFits(ORG, 'full', 7, true).then(() => undefined));
+    expect(err.code).toBe('BUDGET_EXCEEDED');
+    expect(err.status).toBe(402);
+    state.spent = 0;
+    forgetSpendCaps();
+    await expect(assertReviewFits(ORG, 'full', 7, true)).resolves.toMatchObject({
+      basis: 'profile',
+    });
+
+    expect(state.holds).toEqual([]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('deletes holds whose lease has run out (their process died) before it checks', async () => {
+    state.spent = 8.5;
+    hold({ leaseExpiresAt: new Date(Date.now() - 1_000) });
+    hold({ orgId: OTHER, leaseExpiresAt: new Date(Date.now() - 1_000) });
+
+    const held = await reserveReviewBudget(ORG, 'full', 7, true);
+
+    // Not held back, and gone; another workspace's is its own to clear.
+    expect(state.holds.map((h) => h.orgId)).toEqual([OTHER, ORG]);
+    await held?.release();
+  });
+
+  it('holds nothing when it is refused, calls no judge, or has no cap', async () => {
+    state.spent = 10;
+    await refusal(() => reserveReviewBudget(ORG, 'full', 7, true).then(() => undefined));
+    state.spent = 50;
+    await expect(reserveReviewBudget(ORG, 'quick', 0, true)).resolves.toBeNull();
+    forgetSpendCaps();
+    state.budget = null;
+    await expect(reserveReviewBudget(ORG, 'full', 7, true)).resolves.toBeNull();
+
+    expect(state.holds).toEqual([]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('refuses nothing and holds nothing when the hold fails other than by timing out, as a history that cannot be read', async () => {
+    state.spent = 9.5;
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(reserveReviewBudget(ORG, 'full', 7, true)).resolves.toBeNull();
+    expect(state.holds).toEqual([]);
+  });
+
+  it('refuses 429, to try again, a check that times out waiting for the lock or a connection, rather than passing it unheld', async () => {
+    state.spent = 9;
+    for (const code of ['P2028', 'P2024']) {
+      vi.mocked(prisma.$transaction).mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('Transaction timed out', {
+          code,
+          clientVersion: '7',
+        })
+      );
+      const err = await refusal(() =>
+        reserveReviewBudget(ORG, 'full', 7, true).then(() => undefined)
+      );
+      expect(err.status).toBe(429);
+      expect(err.code).toBe('RATE_LIMIT_EXCEEDED');
+    }
+    expect(state.holds).toEqual([]);
+  });
+
+  it('checks and holds all the same when clearing expired holds fails', async () => {
+    state.spent = 8.5;
+    vi.mocked(prisma.budgetHold.deleteMany).mockRejectedValueOnce(new Error('lock conflict'));
+
+    const held = await reserveReviewBudget(ORG, 'full', 7, true);
+    expect(held).not.toBeNull();
+    await refusal(() => check(ORG, 'full', 7));
+    await held?.release();
+  });
+
+  it('estimates a store: false request without the editor allowance, which never runs on it', async () => {
+    state.reviews = [];
+    // Judges $0.10 each and an editor of $0.30 on 7-judge reviews.
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 9.2;
+
+    // $0.70 fits the $0.80 left; stored, with the editor, $1.00 does not.
+    const held = await reserveReviewBudget(ORG, 'full', 7, false);
+    expect(held).not.toBeNull();
+    await held?.release();
+    await expect(assertReviewFits(ORG, 'full', 7, false)).resolves.not.toBeNull();
+    const err = await refusal(() => assertReviewFits(ORG, 'full', 7, true).then(() => undefined));
+    expect(err.details).toMatchObject({ estimateUsd: 1 });
+  });
+
+  it('logs a release that fails rather than throwing; the lease then runs out on its own', async () => {
+    state.spent = 0;
+    const held = await reserveReviewBudget(ORG, 'full', 7, true);
+    vi.mocked(prisma.budgetHold.deleteMany).mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(held?.release()).resolves.toBeUndefined();
+  });
+
+  describe('as a queued review is claimed (t-53)', () => {
+    /** A stored 7-judge review as the claim names it. */
+    function claimed() {
+      const id = review(0, { status: 'RUNNING', judges: slots(7) });
+      const row = state.reviews.find((r) => r.id === id);
+      if (!row) throw new Error('not stored');
+      return { id, createdAt: row.createdAt };
+    }
+
+    it('holds back a store: false run that began before it, not one after it nor a stored request’s', async () => {
+      state.spent = 8;
+      hold({ stored: false, judges: 7 });
+      // A stored request's hold, taken before the review: a later review once
+      // stored, or this review's own until its request releases it.
+      hold({ stored: true, judges: 7 });
+      const self = claimed();
+      hold({ stored: false, judges: 7 });
+
+      const refused = await budgetRefusal(ORG, 'full', 14, self);
+
+      expect(refused?.details).toMatchObject({ inFlightUsd: 1, remainingUsd: 1 });
+    });
+  });
+});
+
+describe('the kept-nowhere tier: history from store: false reviews (t-51)', () => {
+  /** The cost row of one judge of a `store: false` run. */
+  function costRow(run: string, judge: string, costUsd: number, over: Partial<CostRow> = {}) {
+    state.costRows.push({
+      orgId: ORG,
+      totalCostUsd: costUsd,
+      metadata: { ephemeral: true, ephemeralRun: run, judge, attempts: 1 },
+      createdAt: at(),
+      ...over,
+    });
+  }
+
+  it('with no stored judge run, estimates from the judges of the workspace’s store: false reviews', async () => {
+    costRow('r1', 'j0', 0.02);
+    costRow('r1', 'j1', 0.04);
+    costRow('r2', 'j0', 0.06);
+
+    // The median of $0.02, $0.04 and $0.06; no editor allowance, as those reviews have none.
+    expect(await estimateReviewCost(ORG, 'full', 7)).toEqual({
+      estimateUsd: 0.28,
+      basis: 'kept-nowhere',
+    });
+  });
+
+  it('sums a judge’s rows (one per service tier), and leaves out a failed judge, a calibration run’s, other AI use and other workspaces', async () => {
+    costRow('r1', 'j0', 0.03);
+    costRow('r1', 'j0', 0.02);
+    costRow('r2', 'j0', 0.05);
+    // A judge that failed after a billed attempt: one row with an error.
+    state.costRows.push({
+      orgId: ORG,
+      totalCostUsd: 9,
+      metadata: { ephemeral: true, ephemeralRun: 'r3', judge: 'j0', error: 'invalid_reply' },
+      createdAt: at(),
+    });
+    state.costRows.push({
+      orgId: ORG,
+      totalCostUsd: 9,
+      metadata: { ephemeral: true, ephemeralRun: 'c1', judge: 'j0', calibrationRunId: 'cal' },
+      createdAt: at(),
+    });
+    state.costRows.push({
+      orgId: ORG,
+      totalCostUsd: 9,
+      metadata: { agent: 'chat' },
+      createdAt: at(),
+    });
+    state.costRows.push({ orgId: ORG, totalCostUsd: 9, metadata: null, createdAt: at() });
+    costRow('r4', 'j0', 9, { orgId: OTHER });
+
+    // Two judges at $0.05 each.
+    expect(await estimateReviewCost(ORG, 'full', 2)).toEqual({
+      estimateUsd: 0.1,
+      basis: 'kept-nowhere',
+    });
+  });
+
+  it('reads at most the last 500 cost rows, newest first, and at most the last 100 judges in them', async () => {
+    // 101 judges: the oldest at $5 is past the last 100.
+    costRow('old', 'j0', 5);
+    for (let i = 0; i < JUDGE_HISTORY; i += 1) costRow(`r${i}`, 'j0', 0.01);
+
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.01,
+      basis: 'kept-nowhere',
+    });
+    expect(prisma.aiCostLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { orgId: ORG },
+        orderBy: { createdAt: 'desc' },
+        take: KEPT_NOWHERE_SCAN,
+      })
+    );
+  });
+
+  it('leaves out the oldest judge of a full scan, whose rows the scan may have cut short', async () => {
+    // Oldest: a judge whose other row is past the scan.
+    costRow('cut', 'j0', 0.001);
+    for (let i = 0; i < KEPT_NOWHERE_SCAN - 3; i += 1)
+      state.costRows.push({
+        orgId: ORG,
+        totalCostUsd: 1,
+        metadata: { agent: 'chat' },
+        createdAt: at(),
+      });
+    costRow('a', 'j0', 0.05);
+    costRow('b', 'j0', 0.07);
+
+    // The median of $0.05 and $0.07, not of those and the cut judge's $0.001.
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.06,
+      basis: 'kept-nowhere',
+    });
+  });
+
+  it('on a full scan, leaves out every judge of the oldest run, whose rows interleave as they land', async () => {
+    // The oldest run: judge A's two tier rows either side of judge B's one.
+    costRow('cut', 'jA', 0.001);
+    costRow('cut', 'jB', 0.002);
+    costRow('cut', 'jA', 0.001);
+    for (let i = 0; i < KEPT_NOWHERE_SCAN - 5; i += 1)
+      state.costRows.push({
+        orgId: ORG,
+        totalCostUsd: 1,
+        metadata: { agent: 'chat' },
+        createdAt: at(),
+      });
+    costRow('a', 'j0', 0.05);
+    costRow('b', 'j0', 0.07);
+
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.06,
+      basis: 'kept-nowhere',
+    });
+  });
+
+  it('on a full scan, leaves out every run with a row near its end, as runs alongside interleave too', async () => {
+    // Two runs alongside each other at the scan's end.
+    costRow('x', 'j0', 0.001);
+    costRow('y', 'j0', 0.002);
+    costRow('x', 'j1', 0.001);
+    for (let i = 0; i < KEPT_NOWHERE_TAIL; i += 1)
+      state.costRows.push({
+        orgId: ORG,
+        totalCostUsd: 1,
+        metadata: { agent: 'chat' },
+        createdAt: at(),
+      });
+    // Past the tail: a run counted whole.
+    costRow('a', 'j0', 0.05);
+    for (let i = 0; i < KEPT_NOWHERE_SCAN - KEPT_NOWHERE_TAIL - 5; i += 1)
+      state.costRows.push({
+        orgId: ORG,
+        totalCostUsd: 1,
+        metadata: { agent: 'chat' },
+        createdAt: at(),
+      });
+    costRow('b', 'j0', 0.07);
+
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.06,
+      basis: 'kept-nowhere',
+    });
+  });
+
+  it('comes after stored judge runs, which a workspace with both estimates from', async () => {
+    costRow('r1', 'j0', 5);
+    judgeRun(0.02);
+
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.02,
+      basis: 'judges',
+    });
+    expect(prisma.aiCostLog.findMany).not.toHaveBeenCalled();
+  });
+
+  it('is none when the cost rows hold no store: false judge', async () => {
+    state.costRows.push({
+      orgId: ORG,
+      totalCostUsd: 1,
+      metadata: { agent: 'chat' },
+      createdAt: at(),
+    });
+    expect(await estimateReviewCost(ORG, 'full', 7)).toEqual({ estimateUsd: 0, basis: 'none' });
+  });
+
+  it('refuses a request on that history, with its basis', async () => {
+    state.budget = 10;
+    state.spent = 9.9;
+    for (let i = 0; i < 3; i += 1) costRow(`r${i}`, 'j0', 0.05);
+
+    const err = await refusal(() => check(ORG, 'full', 7));
+
+    expect(err.details).toMatchObject({ estimateUsd: 0.35, basis: 'kept-nowhere' });
   });
 });
