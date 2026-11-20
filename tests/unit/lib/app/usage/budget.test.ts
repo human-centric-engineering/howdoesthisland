@@ -630,9 +630,17 @@ describe('budgetRefusal: a queued review checked again as it is claimed (t-53)',
     for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
   });
 
+  /** A stored 7-judge review as the claim names it. */
+  function claimed(over: Partial<ReviewRow> = {}) {
+    const id = review(0, { status: 'RUNNING', judges: slots(7), ...over });
+    const row = state.reviews.find((r) => r.id === id);
+    if (!row) throw new Error('not stored');
+    return { id, createdAt: row.createdAt };
+  }
+
   it('leaves the review’s own hold out of what is held back, so it fits what its request saw', async () => {
     state.spent = 9;
-    const self = review(0, { status: 'RUNNING', judges: slots(7) });
+    const self = claimed();
 
     // Held as one of the others, it would leave nothing.
     await expect(budgetRefusal(ORG, 'full', 7)).resolves.toMatchObject({
@@ -641,11 +649,11 @@ describe('budgetRefusal: a queued review checked again as it is claimed (t-53)',
     await expect(budgetRefusal(ORG, 'full', 7, self)).resolves.toBeNull();
   });
 
-  it('still holds back the other reviews in flight, and answers the refusal’s message and figures', async () => {
+  it('holds back the reviews in flight created before it, and answers the reason, message and figures', async () => {
     state.spent = 8.5;
-    const self = review(0, { status: 'RUNNING', judges: slots(7) });
-    // Queued meanwhile, ahead of it: $1.00 to come.
+    // Queued ahead of it: $1.00 to come.
     review(0, { status: 'QUEUED', judges: slots(7) });
+    const self = claimed();
 
     const refused = await budgetRefusal(ORG, 'full', 7, self);
 
@@ -657,17 +665,32 @@ describe('budgetRefusal: a queued review checked again as it is claimed (t-53)',
       limitUsd: 10,
       usagePage: '/usage',
     });
-    expect(refused?.message).toContain('more than the $0.50 left once $1.00 is held');
-    expect(refused?.message).toContain('No AI reviewer was started.');
+    expect(refused?.reason).toContain('more than the $0.50 left once $1.00 is held');
+    expect(refused?.reason).not.toContain('No AI reviewer');
+    expect(refused?.message).toBe(
+      `${refused?.reason} No AI reviewer was started. See /usage; an admin can raise the budget on /admin.`
+    );
+  });
+
+  it('of two claimed together with room for one, refuses only the later, which the earlier holds back', async () => {
+    state.spent = 8.5;
+    const older = claimed();
+    const newer = claimed();
+
+    // The newer was admitted with the older already held, so it does not hold the older back.
+    await expect(budgetRefusal(ORG, 'full', 7, older)).resolves.toBeNull();
+    await expect(budgetRefusal(ORG, 'full', 7, newer)).resolves.toMatchObject({
+      details: { remainingUsd: 0.5, inFlightUsd: 1 },
+    });
   });
 
   it('refuses once other spend has used the budget up while it waited', async () => {
-    const self = review(0, { status: 'RUNNING', judges: slots(7) });
+    const self = claimed();
     state.spent = 10;
 
     const refused = await budgetRefusal(ORG, 'full', 7, self);
 
     expect(refused?.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 0, limitUsd: 10 });
-    expect(refused?.message).toContain('has used its $10.00 monthly AI budget');
+    expect(refused?.reason).toContain('has used its $10.00 monthly AI budget');
   });
 });

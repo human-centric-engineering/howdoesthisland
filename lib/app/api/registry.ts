@@ -299,8 +299,15 @@ export const assessmentSummarySchema = z.object({
   band: z.string().nullable(),
   costUsd: z.number(),
   error: z.string().nullable(),
-  errorCode: z.string().nullable(),
-  errorDetails: budgetRefusalDetailsSchema.nullable(),
+  errorCode: z
+    .string()
+    .nullable()
+    .describe(
+      'For a failed one that has one: `BUDGET_EXCEEDED` when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started. `null` otherwise.'
+    ),
+  errorDetails: budgetRefusalDetailsSchema
+    .nullable()
+    .describe('For `BUDGET_EXCEEDED`: the figures the 402 carries in `details`. `null` otherwise.'),
   createdAt: isoDateTime,
   startedAt: isoDateTime.nullable(),
   completedAt: isoDateTime.nullable(),

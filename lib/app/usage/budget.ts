@@ -84,15 +84,17 @@
  *
  * **Again when it is claimed** (t-53). A stored review can wait in the queue
  * (the workspace's running limit) while other spend lands, so `run.ts` asks
- * {@link budgetRefusal} again when it claims one that has no judge run yet,
- * with the review's own hold left out of what is held back. A refused one is
- * finished `FAILED` with `errorCode` `BUDGET_EXCEEDED` and these figures in
- * `errorDetails`, before any judge is called. A review with judge runs (a
- * re-drive) is not checked again: what it already spent would be thrown
- * away, and the per-judge gate ends it `PARTIAL` with what it has. Two
- * reviews claimed at the same moment each hold the other back, so near the
- * cap both can be refused where one would have fitted; asking again then
- * finds the budget the refused one released.
+ * {@link budgetRefusal} again when it claims one that has no judge run yet.
+ * It holds back only the reviews in flight created before this one, not
+ * itself and not those after it: each later review was admitted with this
+ * one held back already, so older reviews come first. Holding back both ways
+ * would let two reviews claimed together each refuse on the other's account,
+ * and neither run where one fitted. A later review already running is not
+ * held, which the per-judge gate is left to catch. A refused one is finished
+ * `FAILED` with `errorCode` `BUDGET_EXCEEDED`, the reason in `error` and these
+ * figures in `errorDetails`, before any judge is called. A review with judge
+ * runs (a re-drive) is not checked again: what it already spent would be
+ * thrown away, and the per-judge gate ends it `PARTIAL` with what it has.
  *
  * Not done: history from `store: false` reviews, which leave no assessment or judge-run
  * rows (a workspace with only those estimates `0`), and holding back for
@@ -235,19 +237,20 @@ function settled(run: { status: string; errorCode: string | null }): boolean {
 }
 
 /**
- * What the workspace's stored reviews in flight, other than `self`, are yet
- * to spend at `rate`, as of `now`: see "What is left" in the file header.
+ * What the workspace's stored reviews in flight are yet to spend at `rate`,
+ * as of `now`: see "What is left" in the file header. With `self`, only those
+ * created before it: see "Again when it is claimed".
  */
 async function inFlightCost(
   orgId: string,
   rate: JudgeRate,
   now: Date,
-  self?: string
+  self?: ClaimedReview
 ): Promise<number> {
   const open = await prisma.assessment.findMany({
     where: {
       orgId,
-      ...(self ? { id: { not: self } } : {}),
+      ...(self ? { id: { not: self.id }, createdAt: { lt: self.createdAt } } : {}),
       OR: [
         { status: { in: ['QUEUED', 'RUNNING'] } },
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
@@ -272,8 +275,17 @@ async function inFlightCost(
   }, 0);
 }
 
+/** A stored review checked again as it is claimed (t-53). */
+export interface ClaimedReview {
+  id: string;
+  createdAt: Date;
+}
+
 /** A review the budget refuses: why, in words, and the figures. */
 export interface BudgetRefusal {
+  /** Why, with the figures: what a stored review refused at claim keeps in `error`. */
+  reason: string;
+  /** The reason and what to do about it: the 402's message. */
   message: string;
   details: BudgetRefusalDetails;
 }
@@ -283,14 +295,14 @@ export interface BudgetRefusal {
  * is left of the workspace's monthly budget: when nothing is left, or the
  * estimate is more than what is once the reviews in flight are held back.
  * `null` when it fits, calls no judge, or the cap or history cannot be read.
- * `self` is a stored review being checked as it is claimed (t-53): its own
- * hold is left out of what is held back.
+ * `self` is a stored review being checked as it is claimed (t-53): only the
+ * reviews in flight created before it are held back.
  */
 export async function budgetRefusal(
   orgId: string,
   profile: string,
   judgeCount: number,
-  self?: string
+  self?: ClaimedReview
 ): Promise<BudgetRefusal | null> {
   if (judgeCount === 0) return null;
   const cap = await orgCapStateOrSkip(orgId, { check: 'review-estimate' });
@@ -333,6 +345,7 @@ export async function budgetRefusal(
   else
     message = `This review would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${budget}.`;
   return {
+    reason: message,
     message: `${message} No AI reviewer was started. See ${USAGE_PAGE}; an admin can raise the budget on /admin.`,
     details,
   };

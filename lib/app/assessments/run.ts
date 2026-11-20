@@ -39,11 +39,12 @@
  * under the same guard.
  *
  * **The budget, again** (t-53). A review that has called no judge yet is
- * checked against the workspace's budget once claimed, its own hold left out
- * (`budgetRefusal` in `lib/app/usage/budget.ts`): it may have waited in the
- * queue while other spend landed. One that would now pass it is finished
- * `FAILED`, `errorCode` `BUDGET_EXCEEDED` with the figures in `errorDetails`,
- * and no judge is called. A check that cannot read the cap or the history
+ * checked against the workspace's budget once claimed (`budgetRefusal` in
+ * `lib/app/usage/budget.ts`): it may have waited in the queue while other
+ * spend landed. Only the reviews in flight created before it are held back,
+ * so of two claimed together the older runs. One that would now pass the
+ * budget is finished `FAILED`, `errorCode` `BUDGET_EXCEEDED`, with the reason
+ * in `error` and the figures in `errorDetails`, and no judge is called. A check that cannot read the cap or the history
  * refuses nothing.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
@@ -156,6 +157,7 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         frameworkVersionId: true,
         profile: true,
         judges: true,
+        createdAt: true,
         context: true,
         createdByUserId: true,
         content: { select: { text: true, sourceUrl: true } },
@@ -251,6 +253,7 @@ type AssessmentRow = {
   frameworkVersionId: string;
   profile: string;
   judges: string[];
+  createdAt: Date;
   context: Prisma.JsonValue;
   createdByUserId: string | null;
   content: { text: string; sourceUrl: string | null };
@@ -418,12 +421,15 @@ async function drive(
  * or has judge runs already (a re-drive, which the per-judge gate ends).
  */
 async function refuseOverBudget(
-  row: Pick<AssessmentRow, 'id' | 'profile' | 'judges' | 'judgeRuns'>,
+  row: Pick<AssessmentRow, 'id' | 'profile' | 'judges' | 'createdAt' | 'judgeRuns'>,
   orgId: string,
   token: string
 ): Promise<RunOutcome | null> {
   if (row.judgeRuns.length > 0) return null;
-  const refusal = await budgetRefusal(orgId, row.profile, row.judges.length, row.id);
+  const refusal = await budgetRefusal(orgId, row.profile, row.judges.length, {
+    id: row.id,
+    createdAt: row.createdAt,
+  });
   if (!refusal) return null;
   logger.info('Queued assessment refused by the budget as it was claimed', {
     assessmentId: row.id,
@@ -431,7 +437,7 @@ async function refuseOverBudget(
   });
   const written = await finish(row.id, token, {
     status: 'FAILED',
-    error: refusal.message,
+    error: refusal.reason,
     errorCode: 'BUDGET_EXCEEDED',
     errorDetails: { ...refusal.details },
   });

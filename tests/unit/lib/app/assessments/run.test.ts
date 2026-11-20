@@ -914,7 +914,8 @@ describe('the budget, checked again as the review is claimed (t-53)', () => {
     usagePage: '/usage',
   };
   const refusal = {
-    message: 'This review would cost about $1.00, more than the $0.50 left.',
+    reason: 'This review would cost about $1.00, more than the $0.50 left.',
+    message: 'This review would cost about $1.00, more than the $0.50 left. See /usage.',
     details: figures,
   };
 
@@ -924,14 +925,17 @@ describe('the budget, checked again as the review is claimed (t-53)', () => {
 
     expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
 
-    // Its own hold is left out: it is named as the review being claimed.
-    expect(mocks.budgetRefusal).toHaveBeenCalledWith(ORG, 'full', 2, a.id);
+    // Named as the review being claimed, so only reviews created before it are held back.
+    expect(mocks.budgetRefusal).toHaveBeenCalledWith(ORG, 'full', 2, {
+      id: a.id,
+      createdAt: a.createdAt,
+    });
     expect(mocks.runJudge).not.toHaveBeenCalled();
     expect(mocks.runEditor).not.toHaveBeenCalled();
     expect(engine.quickScan).not.toHaveBeenCalled();
     expect(a).toMatchObject({
       status: 'FAILED',
-      error: refusal.message,
+      error: refusal.reason,
       errorCode: 'BUDGET_EXCEEDED',
       errorDetails: figures,
       costUsd: 0,

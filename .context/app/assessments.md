@@ -85,9 +85,9 @@ from either of the first two.
   stays `QUEUED`. When a run ends, however it ends, it starts the workspace's
   oldest queued assessment itself.
 - **The budget, again (t-53).** Once claimed, an assessment that has no
-  judge run yet is checked against the workspace's monthly budget, with its
-  own hold left out of what is held back: it may have waited in the queue
-  while other spend landed. One that would now pass it is `FAILED` at once,
+  judge run yet is checked against the workspace's monthly budget, holding
+  back only the reviews in flight created before it: it may have waited in
+  the queue while other spend landed. One that would now pass it is `FAILED` at once,
   calling no judge, with `errorCode` `BUDGET_EXCEEDED`, the figures in
   `errorDetails` and the reason in `error`. Its place is freed and the next
   queued one starts. A re-drive with judge runs is not checked again. See

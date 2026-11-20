@@ -84,7 +84,8 @@ export const budgetRefusalDetailsSchema = z.object({
   /** What the workspace's other stored reviews in flight (queued, running, or cancelled and finishing) are estimated yet to spend. */
   inFlightUsd: z.number(),
   limitUsd: z.number(),
-  usagePage: z.literal(USAGE_PAGE),
+  /** `/usage`. A string rather than that literal, so figures stored before a move still read. */
+  usagePage: z.string(),
 });
 
 export type BudgetRefusalDetails = z.infer<typeof budgetRefusalDetailsSchema>;
