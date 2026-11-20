@@ -579,7 +579,10 @@ describe('cancel', () => {
     gate.resolve();
     expect(await running).toBe('cancelled');
     expect(a).toMatchObject({ status: 'CANCELLED', leaseExpiresAt: null });
-    expect(await inOrg(() => runAssessment(String(waiting.id)))).toBe('completed');
+    // The place is free again: the waiting one starts, whoever claims it (the
+    // run's own `startNextQueued`, as here, or the next caller).
+    await settle();
+    expect(waiting).toMatchObject({ status: 'COMPLETED', attempts: 1 });
   });
 
   it('answers cancelled, and frees its place, when an error follows the cancel', async () => {

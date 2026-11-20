@@ -230,6 +230,8 @@ describe('reserved fork tiers', () => {
       'model Content {',
       'enum ContentSourceKind {',
       'model Assessment {',
+      // FORK (HowDoesThisLand): running places for runs kept nowhere (t-28).
+      'model AssessmentPlace {',
       'enum AssessmentStatus {',
       'enum AssessmentVia {',
       'model JudgeRun {',

@@ -418,8 +418,14 @@ describe('POST /api/v1/assessments — store: false', () => {
     expect(fake.db.content.create).not.toHaveBeenCalled();
     expect(fake.db.assessment.create).not.toHaveBeenCalled();
     expect(fake.db.judgeRun.upsert).not.toHaveBeenCalled();
-    expect(fake.db.$transaction).not.toHaveBeenCalled();
-    expect([fake.contents, fake.assessments, fake.judgeRuns]).toEqual([[], [], []]);
+    // The one transaction is the running place it took (t-28), gone again.
+    expect(fake.db.$transaction).toHaveBeenCalledTimes(1);
+    expect([fake.contents, fake.assessments, fake.judgeRuns, fake.places]).toEqual([
+      [],
+      [],
+      [],
+      [],
+    ]);
     // The judges ran as ephemeral, so their cost rows say so and name no assessment.
     for (const [, input] of mocks.runJudge.mock.calls) {
       expect(input).toMatchObject({ ephemeral: true, userId: ALICE });
@@ -857,5 +863,125 @@ describe('DELETE /api/v1/assessments/{id}', () => {
     );
     expect(res.status).toBe(403);
     expect(fake.assessments).toHaveLength(1);
+  });
+});
+
+describe('POST /api/v1/assessments — store: false and the running places (t-28)', () => {
+  const ONE = ['judge_ethos'];
+  const live = () => ({
+    status: 'RUNNING',
+    leaseExpiresAt: new Date(Date.now() + 30_000),
+    attempts: 1,
+  });
+  /** `store: false` with one judge, held until `gate` resolves. */
+  function heldEphemeral(gate: Promise<void>) {
+    mocks.runJudge.mockImplementationOnce(async (slot: string) => {
+      await gate;
+      return reply(slot);
+    });
+    return post({ source: { text: TEXT }, judges: ONE, store: false });
+  }
+  /** Until `fn` holds, or give up after a second. */
+  async function until(fn: () => boolean) {
+    for (let i = 0; i < 100 && !fn(); i += 1) await new Promise((r) => setTimeout(r, 10));
+    expect(fn()).toBe(true);
+  }
+
+  it('lets exactly three of four ephemeral runs fired at once start; the fourth is refused and starts no judge', async () => {
+    // The per-user cap (3 here) would refuse the fourth first; this is about places.
+    const cap = vi
+      .spyOn(aiAssessmentLimiter, 'check')
+      .mockReturnValue({ success: true, limit: 99, remaining: 99, reset: 0 });
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+    const all = [1, 2, 3, 4].map(() => post({ source: { text: TEXT }, judges: ONE, store: false }));
+    await until(() => mocks.runJudge.mock.calls.length === 3 && fake.places.length === 3);
+    gate.resolve();
+    const answered = await Promise.all(all);
+
+    const refused = answered.filter((res) => res.status === 429);
+    expect(answered.map((res) => res.status).sort()).toEqual([200, 200, 200, 429]);
+    expect(refused[0]?.headers.get('Retry-After')).toBe('15');
+    expect((await json(refused[0])).error).toMatchObject({
+      code: 'WORKSPACE_BUSY',
+      details: { running: 3, limit: 3 },
+    });
+    // The refused one started no judge: three runs, one judge each.
+    expect(mocks.runJudge).toHaveBeenCalledTimes(3);
+    expect(fake.places).toEqual([]);
+    cap.mockRestore();
+  });
+
+  it('counts stored runs too: refused with two stored running and one ephemeral', async () => {
+    fake.seed({ ...live(), leaseToken: 'run-1' });
+    fake.seed({ ...live(), leaseToken: 'run-2' });
+    const gate = deferred();
+    const held = heldEphemeral(gate.promise);
+    await until(() => fake.places.length === 1);
+
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(await code(res)).toEqual({ status: 429, code: 'WORKSPACE_BUSY' });
+    expect(mocks.runJudge).toHaveBeenCalledTimes(1);
+
+    gate.resolve();
+    expect((await held).status).toBe(200);
+  });
+
+  it('holds stored runs to the shared limit: a stored claim sees an ephemeral run’s place', async () => {
+    fake.seed({ ...live(), leaseToken: 'run-1' });
+    fake.seed({ ...live(), leaseToken: 'run-2' });
+    const queued = fake.seed({ judges: ONE });
+    const gate = deferred();
+    const held = heldEphemeral(gate.promise);
+    await until(() => fake.places.length === 1);
+
+    expect(await runAsOrg(WS_A, () => runAssessment(String(queued.id)))).toBe('not_claimed');
+    expect(queued).toMatchObject({ status: 'QUEUED', attempts: 0 });
+
+    // Not starved: when the ephemeral run ends, the queued stored one starts.
+    gate.resolve();
+    expect((await held).status).toBe(200);
+    await until(() => queued.status === 'COMPLETED');
+    expect(queued).toMatchObject({ status: 'COMPLETED', attempts: 1 });
+  });
+
+  it('takes no place for the quick scan, which calls no model: answered with the workspace full', async () => {
+    for (const n of [1, 2, 3]) fake.seed({ ...live(), leaseToken: `run-${n}` });
+    const res = await post({ source: { text: TEXT }, profile: 'quick', store: false });
+    expect(res.status).toBe(200);
+    expect(fake.db.assessmentPlace.create).not.toHaveBeenCalled();
+  });
+
+  it('gives the place up when the run throws', async () => {
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('no score');
+    });
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(await code(res)).toEqual({ status: 422, code: 'NOT_SCORABLE' });
+    expect(fake.db.assessmentPlace.create).toHaveBeenCalledTimes(1);
+    expect(fake.places).toEqual([]);
+  });
+
+  it('treats a place whose lease ran out as free, and clears it', async () => {
+    const dead = new Date(Date.now() - 1);
+    for (const n of [1, 2, 3]) {
+      fake.places.push({ id: `dead-${n}`, orgId: WS_A, leaseExpiresAt: dead });
+    }
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(res.status).toBe(200);
+    expect(fake.places).toEqual([]);
+  });
+
+  it('counts only this workspace’s places', async () => {
+    const later = new Date(Date.now() + 30_000);
+    for (const n of [1, 2, 3]) {
+      fake.places.push({ id: `b-${n}`, orgId: WS_B, leaseExpiresAt: later });
+    }
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(res.status).toBe(200);
+    expect(fake.places.map((p) => p.orgId)).toEqual([WS_B, WS_B, WS_B]);
   });
 });

@@ -21,6 +21,12 @@
  * attached to the run as `reply` when an assessment is read, and gone with
  * the run when the run goes. `seed()` takes a run's `output` and `dropped`
  * and stores them as its reply, as the migration copied existing ones.
+ *
+ * For the running places (t-28): `assessmentPlace` rows in `places`, with
+ * `count`, `create`, `updateMany` and `deleteMany` (`lte` honoured).
+ * `$transaction` runs one transaction at a time, which is what Serializable
+ * guarantees the code under test (a count and the write it decides stand or
+ * fall together), so N+1 concurrent claimers cannot all see a free place.
  */
 import { vi } from 'vitest';
 
@@ -31,7 +37,14 @@ type Condition =
   | string
   | number
   | Date
-  | { in?: unknown[]; not?: unknown; gt?: Date | number; lt?: Date | number; gte?: number };
+  | {
+      in?: unknown[];
+      not?: unknown;
+      gt?: Date | number;
+      lt?: Date | number;
+      lte?: Date | number;
+      gte?: number;
+    };
 
 function matchesValue(value: unknown, cond: Condition | undefined): boolean {
   if (cond === undefined) return true;
@@ -44,6 +57,7 @@ function matchesValue(value: unknown, cond: Condition | undefined): boolean {
   const num = (v: Date | number) => (v instanceof Date ? v.getTime() : v);
   if (cond.gt !== undefined && (n === null || !(n > num(cond.gt)))) return false;
   if (cond.lt !== undefined && (n === null || !(n < num(cond.lt)))) return false;
+  if (cond.lte !== undefined && (n === null || !(n <= num(cond.lte)))) return false;
   if (cond.gte !== undefined && (n === null || !(n >= cond.gte))) return false;
   return true;
 }
@@ -71,7 +85,10 @@ export function createFakeDb() {
   const contents: Row[] = [];
   const judgeRuns: Row[] = [];
   const replies: Row[] = [];
+  const places: Row[] = [];
   let seq = 0;
+  /** The tail of the transaction queue: each waits for the one before. */
+  let txQueue: Promise<unknown> = Promise.resolve();
 
   /** Remove an assessment's judge runs, and their replies (the cascade). */
   const dropRunsOf = (assessmentId: unknown) => {
@@ -261,7 +278,32 @@ export function createFakeDb() {
         }
       ),
     },
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
+    assessmentPlace: {
+      count: vi.fn(
+        async ({ where }: { where?: Row }) => places.filter((p) => matches(p, where)).length
+      ),
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        seq += 1;
+        const row: Row = { id: `place-${seq}`, ...data, createdAt: new Date() };
+        places.push(row);
+        return { id: row.id };
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = places.filter((p) => matches(p, where));
+        for (const row of rows) Object.assign(row, data);
+        return { count: rows.length };
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: Row }) => {
+        const gone = places.filter((p) => matches(p, where));
+        for (const row of gone) places.splice(places.indexOf(row), 1);
+        return { count: gone.length };
+      }),
+    },
+    $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => {
+      const run = txQueue.then(() => fn(db));
+      txQueue = run.catch(() => undefined);
+      return run;
+    }),
   };
 
   /** Seed an assessment (and its content) directly. */
@@ -334,7 +376,7 @@ export function createFakeDb() {
     return reply ? { ...run, output: reply.output, dropped: reply.dropped } : { ...run };
   };
 
-  return { db, assessments, contents, judgeRuns, replies, withReply, seed };
+  return { db, assessments, contents, judgeRuns, replies, places, withReply, seed };
 }
 
 export type FakeDb = ReturnType<typeof createFakeDb>;
