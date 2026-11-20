@@ -22,11 +22,13 @@ vi.mock('@/lib/db/client', () => ({
       findMany: vi.fn(async ({ take }: { take: number }) =>
         db.orgs.filter((o) => o.status === 'ACTIVE').slice(0, take)
       ),
-      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
-        const org = db.orgs.find((o) => o.id === where.id);
-        return org ? { status: org.status } : null;
-      }),
     },
+    // The status read in the change's transaction (`… FOR SHARE`): the org id
+    // is the tagged template's one value.
+    $queryRaw: vi.fn(async (_sql: TemplateStringsArray, orgId: string) => {
+      const org = db.orgs.find((o) => o.id === orgId);
+      return org ? [{ status: org.status }] : [];
+    }),
     creditEntry: {
       create: vi.fn(async ({ data }: { data: { orgId: string; amount: number } }) => {
         db.balances.set(data.orgId, (db.balances.get(data.orgId) ?? 0) + data.amount);
@@ -211,9 +213,12 @@ describe('changeWorkspaceCredits', () => {
     expect(result.capWarning).toEqual({ balanceUsd: 7.5, remainingUsd: 6.5, limitUsd: 10 });
   });
 
-  it('writes the entry and reads the balance in one transaction', async () => {
+  it('checks the workspace, writes the entry and reads the balance in one transaction', async () => {
     await changeWorkspaceCredits('a', { kind: 'grant', amount: 1, reason: 'x' }, 'admin-1');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // The status is read holding the row, so a concurrent suspend waits.
+    const [sql] = vi.mocked(prisma.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray];
+    expect(sql.join('?')).toMatch(/FOR SHARE/);
   });
 
   it('reads the cap through the read that cannot fail the request once the entry is written', async () => {

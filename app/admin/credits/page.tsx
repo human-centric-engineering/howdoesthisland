@@ -27,7 +27,11 @@ export default async function CreditsPage({
   const { q } = await searchParams;
   // Cut to what the route accepts: a longer search from a hand-edited URL
   // would otherwise be refused, and the page would fail to load.
-  const query = ((Array.isArray(q) ? q[0] : q)?.trim() ?? '').slice(0, MAX_SEARCH);
+  // By code point, not UTF-16 unit, so the cut never leaves half an emoji for
+  // `encodeURIComponent` to throw on.
+  const query = Array.from((Array.isArray(q) ? q[0] : q)?.trim() ?? '')
+    .slice(0, MAX_SEARCH)
+    .join('');
   const { data } = await requireServerData<unknown>(
     query ? `${ADMIN_CREDITS_ENDPOINT}?q=${encodeURIComponent(query)}` : ADMIN_CREDITS_ENDPOINT
   );

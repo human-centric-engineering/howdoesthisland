@@ -41,6 +41,13 @@ function usd(value: number): number {
  *
  * Three reads whatever the number of workspaces: the orgs, their balances,
  * and their month's spend, each one query.
+ *
+ * **What the cap leaves is read here, not through the gate's cache.** The
+ * gate (`getOrgCapState`) caches each org's cap for 30 seconds and adds spend
+ * this process logged a moment ago; reading that per row would be a query per
+ * workspace. So for those seconds after a cap is raised, or a review spends,
+ * this column and a change's `capWarning` (which reads through the gate) can
+ * differ by that much. It is a guide for an admin, not the gate.
  */
 export async function listWorkspaceCredits(q?: string): Promise<AdminCreditsList> {
   return runAsSystem('app.credits: admin list', async () => {
@@ -114,10 +121,14 @@ export async function changeWorkspaceCredits(
   actorUserId: string
 ): Promise<CreditChangeResult> {
   return runAsSystem('app.credits: admin change', async () => {
-    const org = await prisma.org.findUnique({ where: { id: orgId }, select: { status: true } });
-    if (!org || org.status !== 'ACTIVE') throw new NotFoundError('Workspace not found');
-
     const { entry, balance } = await prisma.$transaction(async (tx) => {
+      // In the transaction, holding the org row, so a workspace suspended or
+      // deleted by someone else at the same moment is not credited after its
+      // check passed.
+      const [org] = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT status::text AS status FROM "org" WHERE id = ${orgId} FOR SHARE`;
+      if (!org || org.status !== 'ACTIVE') throw new NotFoundError('Workspace not found');
+
       const written = await recordCreditEntry(
         {
           orgId,
