@@ -331,6 +331,30 @@ describe('what each registry property becomes', () => {
     });
   });
 
+  it('errors: a response per declared status, joined to one already there', () => {
+    const responses = responsesOf(
+      route({
+        errors: [
+          { status: 402, code: 'BUDGET_EXCEEDED', description: 'Over budget.' },
+          { status: 429, code: 'WORKSPACE_BUSY', description: 'Full.' },
+        ],
+      })
+    );
+    expect(responses['402']).toEqual({
+      description: '`BUDGET_EXCEEDED`: Over budget.',
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+    });
+    expect(responses['429']?.description).toBe(
+      '`RATE_LIMIT_EXCEEDED`: over the `/api/v1` rate limit. `WORKSPACE_BUSY`: Full.'
+    );
+  });
+
+  it("lists POST assessments' budget refusal (t-49)", () => {
+    const op = openApiDocument().paths['/api/v1/assessments']?.post;
+    const responses = z.record(z.string(), z.looseObject({})).parse(op?.responses);
+    expect(responses['402']?.description).toMatch(/^`BUDGET_EXCEEDED`: /);
+  });
+
   it('every route: a 429, and the error envelope by default', () => {
     const responses = responsesOf(route());
     for (const code of ['429', 'default']) {

@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
   runEditor: vi.fn(),
   fetchPage: vi.fn(),
   engineForVersion: vi.fn(),
+  loadOrgQuotas: vi.fn(),
+  monthSpend: vi.fn(),
 }));
 vi.mock('@/lib/auth/config', () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock('next/headers', () => ({ headers: vi.fn(() => Promise.resolve(new Headers())) }));
@@ -51,6 +53,10 @@ vi.mock('@/lib/db/client', () => ({
       aiApiKey: { findFirst: mocks.apiKey, update: vi.fn(async () => ({})) },
       user: { findUnique: vi.fn(async () => null) },
       org: { findUnique: vi.fn(async () => null) },
+      // The month's spend, which the budget check (t-49) reads with the cap.
+      aiCostLog: { aggregate: mocks.monthSpend },
+      // No workspace has a judge run on record, so the per-judge tier is empty.
+      judgeRun: { ...fake.db.judgeRun, findMany: vi.fn(async () => []) },
     };
   },
 }));
@@ -65,6 +71,10 @@ vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
 vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/assessments/editor')>()),
   runEditor: mocks.runEditor,
+}));
+vi.mock('@/lib/tenancy/org-settings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/tenancy/org-settings')>()),
+  loadOrgQuotas: mocks.loadOrgQuotas,
 }));
 vi.mock('@/lib/app/intake/fetch-page', () => ({ fetchPage: mocks.fetchPage }));
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
@@ -110,6 +120,7 @@ import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { assessmentDetailSchema, ephemeralAssessmentSchema } from '@/lib/app/api/registry';
+import { forgetSpendCaps } from '@/lib/orchestration/llm/spend-caps';
 
 const WS_A = 'org-a';
 const WS_B = 'org-b';
@@ -265,6 +276,10 @@ beforeEach(() => {
   );
   mocks.runJudge.mockImplementation(async (slot: string) => reply(slot));
   mocks.runEditor.mockResolvedValue({ status: 'skipped', reason: 'too_few_judges' });
+  // No monthly budget unless a test sets one.
+  mocks.loadOrgQuotas.mockResolvedValue({});
+  mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: 0 } });
+  forgetSpendCaps();
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   aiAssessmentLimiter.reset(`user:${BOB}`);
   resetKicksForTests();
@@ -1058,5 +1073,83 @@ describe('POST /api/v1/assessments — store: false and the running places (t-28
     const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
     expect(res.status).toBe(200);
     expect(fake.places.map((p) => p.orgId)).toEqual([WS_B, WS_B, WS_B]);
+  });
+});
+
+describe('POST /api/v1/assessments — the monthly budget (t-49)', () => {
+  /** A $10 budget with `spent` of it used this month. */
+  function budget(spent: number) {
+    mocks.loadOrgQuotas.mockResolvedValue({ monthlyBudgetUsd: 10 });
+    mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: spent } });
+  }
+  /** Three completed full reviews at $1 each: an estimate of $1.00. */
+  function fullReviewsAtOneDollar() {
+    for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1 });
+  }
+  const writtenBefore = () => fake.assessments.length;
+
+  for (const store of [true, false]) {
+    const label = store ? 'stored' : 'store: false';
+
+    it(`${label}: 402 BUDGET_EXCEEDED at the cap, starting no judge and writing no assessment`, async () => {
+      budget(10);
+      const before = writtenBefore();
+      const check = vi.spyOn(aiAssessmentLimiter, 'check');
+
+      const res = await post({ source: { text: TEXT }, store, ...(store ? {} : { wait: true }) });
+
+      const body = await json(res);
+      expect(res.status).toBe(402);
+      expect(body.error?.code).toBe('BUDGET_EXCEEDED');
+      expect(body.error?.details).toEqual({
+        estimateUsd: 0,
+        basis: 'none',
+        remainingUsd: 0,
+        limitUsd: 10,
+        usagePage: '/usage',
+      });
+      expect(mocks.runJudge).not.toHaveBeenCalled();
+      expect(fake.db.assessment.create).not.toHaveBeenCalled();
+      expect(fake.assessments).toHaveLength(before);
+      // Refused before it was counted against the per-user cap.
+      expect(check).not.toHaveBeenCalled();
+      check.mockRestore();
+    });
+
+    it(`${label}: 402 when the estimate is over what is left`, async () => {
+      fullReviewsAtOneDollar();
+      budget(9.5);
+      const before = writtenBefore();
+
+      const res = await post({ source: { text: TEXT }, store, ...(store ? {} : { wait: true }) });
+
+      expect(res.status).toBe(402);
+      expect((await json(res)).error?.details).toMatchObject({
+        estimateUsd: 1,
+        basis: 'profile',
+        remainingUsd: 0.5,
+      });
+      expect(mocks.runJudge).not.toHaveBeenCalled();
+      expect(fake.assessments).toHaveLength(before);
+    });
+
+    it(`${label}: runs when the estimate is under what is left`, async () => {
+      fullReviewsAtOneDollar();
+      budget(8.5);
+
+      const res = await post({ source: { text: TEXT }, store, ...(store ? {} : { wait: true }) });
+
+      expect(res.status).toBe(store ? 202 : 200);
+      if (store) await settle();
+      expect(mocks.runJudge).toHaveBeenCalled();
+    });
+  }
+
+  it('never refuses the quick profile for budget, stored or not, past the cap', async () => {
+    budget(25);
+    expect((await post({ source: { text: TEXT }, profile: 'quick' })).status).toBe(202);
+    expect((await post({ source: { text: TEXT }, profile: 'quick', store: false })).status).toBe(
+      200
+    );
   });
 });
