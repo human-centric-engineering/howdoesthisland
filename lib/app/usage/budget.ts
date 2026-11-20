@@ -33,18 +33,22 @@
  *
  * **What is left** is the cap less this month's spend, less what the
  * workspace's stored reviews in flight are yet to spend, so a request does
- * not count on budget a review already accepted will use:
+ * not count on budget a review already accepted will use. A judge counts as
+ * settled once it answered or failed for good; one that failed in a way a
+ * re-drive runs again (`RETRIED_ON_REDRIVE`) is not.
  *
- * - one queued or running: its judges at this request's rate, less what it
- *   has spent *this month*. `cap.spent` holds only this month's spend, so a
- *   review running across a month's end is held for its estimate less its
- *   cost since the month began (its cost less its judge runs saved before
- *   then), not less its lifetime cost (t-52);
- * - one cancelled whose lease is still live (`places.ts` counts it the same
- *   way): its judges already in flight finish and are billed, but no further
- *   judge starts. Held for those only: its judges not yet saved, at most
- *   {@link JUDGES_IN_FLIGHT}, at this request's rate. Its editor never runs.
- *   Once its lease has gone, nothing.
+ * - One queued or running: its estimate at this request's rate, less what it
+ *   has spent *this month*, since `cap.spent` holds only this month's (t-52).
+ *   For a review created this month that is its `costUsd`; for one created
+ *   before, the cost-log rows naming it since the month began, which is where
+ *   `cap.spent` is summed from. A running review whose lease has run out is
+ *   held all the same: the recovery job will run it again.
+ * - One cancelled whose lease is still live (`places.ts` counts it the same
+ *   way): no further judge starts, but those already called finish and are
+ *   billed. Held for its unsettled judges, at most {@link JUDGES_IN_FLIGHT},
+ *   at this request's rate; and, once every judge is settled, for its editor,
+ *   which may be mid-call and is billed even after a cancel. Once its lease
+ *   has gone (the run cleared it), nothing.
  *
  * It covers reviews already stored: requests arriving together each see none
  * of the others, which the per-judge gate is left to catch.
@@ -70,7 +74,7 @@
  */
 import { APIError } from '@/lib/api/errors';
 import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
-import { JUDGES_IN_FLIGHT } from '@/lib/app/assessments/limits';
+import { JUDGES_IN_FLIGHT, RETRIED_ON_REDRIVE } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { orgCapStateOrSkip, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
@@ -97,7 +101,7 @@ export interface ReviewEstimate {
 export interface BudgetRefusalDetails extends ReviewEstimate {
   /** What is left of the monthly budget once in-flight reviews are held back; `0` once none is. */
   remainingUsd: number;
-  /** What the workspace's stored reviews in flight (queued, running, or cancelled with judges still running) are estimated yet to spend. */
+  /** What the workspace's stored reviews in flight (queued, running, or cancelled and finishing) are estimated yet to spend. */
   inFlightUsd: number;
   limitUsd: number;
   usagePage: typeof USAGE_PAGE;
@@ -211,6 +215,24 @@ export async function estimateReviewCost(
   return { estimateUsd: usd(reviewCost(rate, judgeCount)), basis: rate.basis };
 }
 
+/** Whether a judge run is settled: answered, or failed in a way no re-drive runs again. */
+function settled(run: { status: string; errorCode: string | null }): boolean {
+  return run.status === 'SUCCEEDED' || !run.errorCode || !RETRIED_ON_REDRIVE.has(run.errorCode);
+}
+
+/** What review `assessmentId` has spent since `monthStart`, from the cost log `cap.spent` sums. */
+async function spentSince(orgId: string, assessmentId: string, monthStart: Date): Promise<number> {
+  const { _sum } = await prisma.aiCostLog.aggregate({
+    where: {
+      orgId,
+      createdAt: { gte: monthStart },
+      metadata: { path: ['assessmentId'], equals: assessmentId },
+    },
+    _sum: { totalCostUsd: true },
+  });
+  return _sum.totalCostUsd ?? 0;
+}
+
 /**
  * What the workspace's stored reviews in flight are yet to spend at `rate`,
  * as of `now`: see "What is left" in the file header.
@@ -226,22 +248,27 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
       ],
     },
     select: {
+      id: true,
       status: true,
       costUsd: true,
       judges: true,
-      judgeRuns: { where: { createdAt: { lt: monthStart } }, select: { costUsd: true } },
-      _count: { select: { judgeRuns: true } },
+      createdAt: true,
+      judgeRuns: { select: { status: true, errorCode: true } },
     },
   });
-  return open.reduce((sum, r) => {
+  let held = 0;
+  for (const r of open) {
     if (r.status === 'CANCELLED') {
-      const running = Math.min(JUDGES_IN_FLIGHT, Math.max(0, r.judges.length - r._count.judgeRuns));
-      return sum + running * rate.perJudgeUsd;
+      const unsettled = Math.max(0, r.judges.length - r.judgeRuns.filter(settled).length);
+      const editor = unsettled === 0 && r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
+      held += Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd + editor;
+      continue;
     }
-    const lastMonth = r.judgeRuns.reduce((s, run) => s + run.costUsd, 0);
-    const thisMonth = Math.max(0, r.costUsd - lastMonth);
-    return sum + Math.max(0, reviewCost(rate, r.judges.length) - thisMonth);
-  }, 0);
+    const thisMonth =
+      r.createdAt >= monthStart ? r.costUsd : await spentSince(orgId, r.id, monthStart);
+    held += Math.max(0, reviewCost(rate, r.judges.length) - thisMonth);
+  }
+  return held;
 }
 
 /**
@@ -287,11 +314,13 @@ export async function assertReviewWithinBudget(
   };
   const budget = `the workspace's ${dollars(cap.limit)} monthly AI budget`;
   const held =
-    inFlight > 0 ? ` once ${dollars(inFlight)} is held for reviews already queued or running` : '';
+    inFlight > 0
+      ? ` once ${dollars(inFlight)} is held for reviews already queued, running or finishing`
+      : '';
   let message: string;
   if (usedUp) message = `The workspace has used its ${dollars(cap.limit)} monthly AI budget.`;
   else if (remaining <= 0)
-    message = `Reviews already queued or running are held the rest of ${budget} (${dollars(inFlight)}).`;
+    message = `Reviews already queued, running or finishing are held the rest of ${budget} (${dollars(inFlight)}).`;
   else
     message = `This review would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${budget}.`;
   throw new APIError(

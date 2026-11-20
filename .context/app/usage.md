@@ -45,13 +45,15 @@ budget.
 It refuses when nothing is left, or when the estimate is more than what is.
 What is left is the budget less this month's spend, less `inFlightUsd`: what
 the workspace's stored reviews in flight are yet to spend, so a request does
-not count on budget a review already accepted will use.
+not count on budget a review already accepted will use. A judge is settled
+once it answered or failed for good; one that failed with `rate_limited` or
+`provider_error`, which a re-drive runs again, is not.
 
-| In flight                          | Held back                                                                                                                                                             |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `QUEUED` or `RUNNING`              | Its judges at this request's rate, less what it has spent **this month** (its cost less its judge runs saved before the month began), as the month's spend counts it. |
-| `CANCELLED`, lease still live      | Its judges not yet saved, at most 4 (the judges a run calls at once), at this request's rate: those in flight finish and are billed, but no further judge starts.     |
-| `CANCELLED`, lease gone; any other | Nothing.                                                                                                                                                              |
+| In flight                          | Held back                                                                                                                                                                                                                                                               |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QUEUED` or `RUNNING`              | Its estimate at this request's rate, less what it has spent **this month**: its `costUsd` if it was created this month, else its cost-log rows since the month began (what the month's spend is summed from). Held even with its lease run out: recovery runs it again. |
+| `CANCELLED`, lease still live      | Its unsettled judges, at most 4 (the judges a run calls at once), at this request's rate; once every judge is settled, its editor allowance instead, since the editor may be mid-call and is billed after a cancel.                                                     |
+| `CANCELLED`, lease gone; any other | Nothing.                                                                                                                                                                                                                                                                |
 
 It covers reviews already stored: requests arriving together each see none of
 the others, and the per-judge gate is left to catch them.

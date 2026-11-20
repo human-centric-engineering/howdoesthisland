@@ -24,6 +24,14 @@ export const RUNNING_PER_WORKSPACE = 3;
  */
 export const PLACE_RETRY_AFTER_SECONDS = 15;
 
+/**
+ * Failures a re-drive runs the judge again for (`run.ts`): each is about the
+ * moment (a rate-limit window, a provider outage), not the judge or the text.
+ * A judge run that failed with one is not settled, so the budget check holds
+ * back for it as for a judge not yet run (`budget.ts`).
+ */
+export const RETRIED_ON_REDRIVE: ReadonlySet<string> = new Set(['rate_limited', 'provider_error']);
+
 /** Runs started on one assessment before the recovery job gives up on it. */
 export const MAX_ATTEMPTS = 3;
 

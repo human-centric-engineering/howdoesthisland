@@ -25,6 +25,7 @@ interface RunRow {
   orgId: string;
   assessmentId: string | null;
   status: string;
+  errorCode: string | null;
   costUsd: number;
   createdAt: Date;
 }
@@ -35,6 +36,8 @@ const state = vi.hoisted(() => ({
   quotasFail: false,
   reviews: [] as ReviewRow[],
   runs: [] as RunRow[],
+  /** Cost-log rows naming a review: what `spentSince` sums. */
+  reviewCosts: [] as { assessmentId: string; costUsd: number; createdAt: Date }[],
 }));
 
 type Where = Record<string, unknown>;
@@ -56,34 +59,37 @@ function newestFirst<T extends { createdAt: Date }>(rows: T[], take: number): T[
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiCostLog: {
-      aggregate: vi.fn(async () => ({ _sum: { totalCostUsd: state.spent } })),
-    },
-    assessment: {
-      findMany: vi.fn(
+      aggregate: vi.fn(
         async ({
           where,
-          take,
-          select,
         }: {
-          where: Where;
-          take?: number;
-          select: { judgeRuns: { where?: Where } };
-        }) =>
-          newestFirst(
-            state.reviews.filter((r) => matches({ ...r }, where)),
-            take ?? Infinity
-          ).map((r) => {
-            const own = state.runs.filter((run) => run.assessmentId === r.id);
-            return {
-              status: r.status,
-              costUsd: r.costUsd,
-              judges: r.judges,
-              judgeRuns: own
-                .filter((run) => matches({ ...run }, select.judgeRuns.where ?? {}))
-                .map((run) => ({ costUsd: run.costUsd })),
-              _count: { judgeRuns: own.length },
-            };
-          })
+          where: { createdAt: { gte: Date }; metadata?: { path: string[]; equals: string } };
+        }) => {
+          // The month's spend, as spend-caps reads it, unless it names a review.
+          if (!where.metadata) return { _sum: { totalCostUsd: state.spent } };
+          const id = where.metadata.equals;
+          const total = state.reviewCosts
+            .filter((c) => c.assessmentId === id && c.createdAt >= where.createdAt.gte)
+            .reduce((sum, c) => sum + c.costUsd, 0);
+          return { _sum: { totalCostUsd: total } };
+        }
+      ),
+    },
+    assessment: {
+      findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
+        newestFirst(
+          state.reviews.filter((r) => matches({ ...r }, where)),
+          take ?? Infinity
+        ).map((r) => ({
+          id: r.id,
+          status: r.status,
+          costUsd: r.costUsd,
+          judges: r.judges,
+          createdAt: r.createdAt,
+          judgeRuns: state.runs
+            .filter((run) => run.assessmentId === r.id)
+            .map((run) => ({ costUsd: run.costUsd, status: run.status, errorCode: run.errorCode })),
+        }))
       ),
     },
     judgeRun: {
@@ -140,6 +146,7 @@ function judgeRun(costUsd: number, over: Partial<RunRow> = {}): void {
     orgId: ORG,
     assessmentId: null,
     status: 'SUCCEEDED',
+    errorCode: null,
     costUsd,
     createdAt: at(),
     ...over,
@@ -159,7 +166,14 @@ async function refusal(fn: () => Promise<void>): Promise<APIError> {
 beforeEach(() => {
   forgetSpendCaps();
   vi.clearAllMocks();
-  Object.assign(state, { spent: 0, budget: null, quotasFail: false, reviews: [], runs: [] });
+  Object.assign(state, {
+    spent: 0,
+    budget: null,
+    quotasFail: false,
+    reviews: [],
+    runs: [],
+    reviewCosts: [],
+  });
 });
 
 describe('estimateReviewCost', () => {
@@ -328,7 +342,9 @@ describe('assertReviewWithinBudget', () => {
 
     // $2.00 left, $1.60 held: $0.40 is under the $1.00 estimate.
     expect(err.details).toMatchObject({ estimateUsd: 1, remainingUsd: 0.4, inFlightUsd: 1.6 });
-    expect(err.message).toContain('once $1.60 is held for reviews already queued or running');
+    expect(err.message).toContain(
+      'once $1.60 is held for reviews already queued, running or finishing'
+    );
   });
 
   it('lets a review start when what is left after those in flight covers it', async () => {
@@ -376,7 +392,7 @@ describe('assertReviewWithinBudget', () => {
 
     expect(err.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 2 });
     expect(err.message).toContain(
-      "Reviews already queued or running are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
+      "Reviews already queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
     );
     expect(err.message).not.toContain('more than the');
   });
@@ -426,18 +442,71 @@ describe('assertReviewWithinBudget', () => {
     expect(err.details).toMatchObject({ inFlightUsd: 0, remainingUsd: 2 });
   });
 
-  it('holds a review running across the month end for its estimate less only its spend this month', async () => {
+  it('holds a review created last month for its estimate less only its spend this month', async () => {
     state.spent = 8;
-    // A running 7-judge review ($1.00) that spent $0.30 last month and $0.20 this month.
-    const id = review(0.5, { status: 'RUNNING', judges: slots(7) });
+    // A running 7-judge review ($1.00) created last month, which spent $0.30 then and $0.20 since.
     const lastMonth = new Date(utcMonthStart().getTime() - 60_000);
-    judgeRun(0.3, { assessmentId: id, createdAt: lastMonth });
-    judgeRun(0.2, { assessmentId: id, createdAt: new Date() });
+    const id = review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
+    state.reviewCosts.push(
+      { assessmentId: id, costUsd: 0.3, createdAt: lastMonth },
+      { assessmentId: id, costUsd: 0.2, createdAt: new Date() }
+    );
 
     const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
 
     // Held $1.00 less this month's $0.20, not less its lifetime $0.50.
     expect(err.details).toMatchObject({ inFlightUsd: 0.8, remainingUsd: 1.2 });
+  });
+
+  it('takes a review created this month at its cost, without reading the cost log', async () => {
+    state.spent = 8;
+    review(0.4, { status: 'RUNNING', judges: slots(7) });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.6 });
+    expect(prisma.aiCostLog.aggregate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ metadata: expect.anything() }) })
+    );
+  });
+
+  it('holds a cancelled review for a judge a re-drive is running again', async () => {
+    state.spent = 8;
+    // 7 judges, all saved, but 2 failed with rate_limited and are being run again ($2/7).
+    const id = review(0.5, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 5; i += 1) judgeRun(0.1, { assessmentId: id });
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'provider_error' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.285714 });
+  });
+
+  it('holds a cancelled review whose judges are all settled for its editor', async () => {
+    state.reviews = [];
+    // History with an editor: 7-judge reviews that spent $0.70 on judges and $0.30 on the editor.
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 8;
+    const id = review(0.7, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 6; i += 1) judgeRun(0.1, { assessmentId: id });
+    // A judge that failed for good is settled.
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'invalid_reply' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
   });
 
   it('refuses nothing when the history cannot be read, as a cap that cannot be', async () => {
