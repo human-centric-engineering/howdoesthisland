@@ -43,6 +43,7 @@ import {
   creditChangeResultSchema,
   creditChangeSchema,
   MAX_CREDIT_REASON,
+  MAX_SEARCH,
   type AdminCreditsList,
   type AdminWorkspaceCredits,
   type CreditChangeResult,
@@ -64,10 +65,11 @@ function capText(workspace: AdminWorkspaceCredits): string {
 interface ChangeFormProps {
   workspace: AdminWorkspaceCredits;
   onDone: (result: CreditChangeResult) => void;
+  onFailed: () => void;
   onCancel: () => void;
 }
 
-function ChangeForm({ workspace, onDone, onCancel }: ChangeFormProps) {
+function ChangeForm({ workspace, onDone, onFailed, onCancel }: ChangeFormProps) {
   const [kind, setKind] = useState<'grant' | 'adjust'>('grant');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
@@ -106,6 +108,9 @@ function ChangeForm({ workspace, onDone, onCancel }: ChangeFormProps) {
       onDone(result);
     } catch (err) {
       save.report(err);
+      // The change may have been saved although the answer failed: show the
+      // real balance before anyone presses again.
+      onFailed();
     } finally {
       setSaving(false);
     }
@@ -231,6 +236,7 @@ export function CreditsPanel({ initial, query }: CreditsPanelProps) {
           <Input
             id="credit-search"
             placeholder="Name or slug"
+            maxLength={MAX_SEARCH}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -294,6 +300,7 @@ export function CreditsPanel({ initial, query }: CreditsPanelProps) {
                       <ChangeForm
                         workspace={workspace}
                         onCancel={() => setOpen(null)}
+                        onFailed={() => router.refresh()}
                         onDone={(result) => {
                           setOpen(null);
                           setDone({ name: workspace.name, result });

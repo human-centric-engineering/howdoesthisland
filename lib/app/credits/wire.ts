@@ -25,44 +25,51 @@ export const ADMIN_CREDITS_LIST_LIMIT = 200;
  * - `adjust` corrects the balance either way: `amount` is any whole number but
  *   `0`, and may take the balance below zero (a correction says what is true).
  */
-export const creditChangeSchema = z
-  .object({
-    kind: z.enum(['grant', 'adjust']),
-    amount: z
-      // An empty field reaches here as NaN: say what is wanted, not the type.
-      .number({ error: 'Enter a number of credits' })
-      .int('Credits are whole numbers')
-      .min(-MAX_CREDIT_CHANGE, `At most ${MAX_CREDIT_CHANGE.toLocaleString('en-GB')} at a time`)
-      .max(MAX_CREDIT_CHANGE, `At most ${MAX_CREDIT_CHANGE.toLocaleString('en-GB')} at a time`),
-    reason: z
-      .string()
-      .trim()
-      .min(1, 'Say why')
-      .max(MAX_CREDIT_REASON, `${MAX_CREDIT_REASON} characters at most`),
-  })
-  .strict()
-  .superRefine((body, ctx) => {
-    if (body.kind === 'grant' && body.amount <= 0) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['amount'],
+const AT_MOST = `At most ${MAX_CREDIT_CHANGE.toLocaleString('en-GB')} at a time`;
+
+/** Whole credits within one change's limit. An empty field reaches here as NaN: say what is wanted, not the type. */
+const credits = () =>
+  z
+    .number({ error: 'Enter a number of credits' })
+    .int('Credits are whole numbers')
+    .min(-MAX_CREDIT_CHANGE, AT_MOST)
+    .max(MAX_CREDIT_CHANGE, AT_MOST);
+
+const reason = z
+  .string()
+  .trim()
+  .min(1, 'Say why')
+  .max(MAX_CREDIT_REASON, `${MAX_CREDIT_REASON} characters at most`);
+
+// One object per kind, each rule on its own field, so every problem shows on
+// the first submit: an object refinement is skipped while another field is wrong.
+export const creditChangeSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('grant'),
+      amount: credits().refine((n) => n > 0, {
         message: 'A grant gives credits; use an adjustment to take them away',
-      });
-    }
-    if (body.kind === 'adjust' && body.amount === 0) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['amount'],
-        message: 'An adjustment changes something',
-      });
-    }
-  });
+      }),
+      reason,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('adjust'),
+      amount: credits().refine((n) => n !== 0, { message: 'An adjustment changes something' }),
+      reason,
+    })
+    .strict(),
+]);
 
 export type CreditChange = z.infer<typeof creditChangeSchema>;
 
 /** `GET /api/v1/admin/credits?q=` query. */
+/** The longest search the admin list accepts. */
+export const MAX_SEARCH = 100;
+
 export const adminCreditsQuerySchema = z.object({
-  q: z.string().trim().max(100).optional(),
+  q: z.string().trim().max(MAX_SEARCH).optional(),
 });
 
 /** A workspace's monthly AI cap, the safety ceiling, and what is left of it this month. */

@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import { CreditsPanel } from '@/components/app/admin/credits/credits-panel';
 import { FieldHelp } from '@/components/ui/field-help';
 import { requireServerData } from '@/lib/api/server-load';
-import { ADMIN_CREDITS_ENDPOINT, adminCreditsListSchema } from '@/lib/app/credits/wire';
+import { ADMIN_CREDITS_ENDPOINT, adminCreditsListSchema, MAX_SEARCH } from '@/lib/app/credits/wire';
+import { WORDS } from '@/lib/app/reports/words';
 
 export const metadata: Metadata = {
   title: 'CopyCredits',
@@ -24,7 +25,9 @@ export default async function CreditsPage({
   searchParams: Promise<{ q?: string | string[] }>;
 }) {
   const { q } = await searchParams;
-  const query = (Array.isArray(q) ? q[0] : q)?.trim() ?? '';
+  // Cut to what the route accepts: a longer search from a hand-edited URL
+  // would otherwise be refused, and the page would fail to load.
+  const query = ((Array.isArray(q) ? q[0] : q)?.trim() ?? '').slice(0, MAX_SEARCH);
   const { data } = await requireServerData<unknown>(
     query ? `${ADMIN_CREDITS_ENDPOINT}?q=${encodeURIComponent(query)}` : ADMIN_CREDITS_ENDPOINT
   );
@@ -37,8 +40,8 @@ export default async function CreditsPage({
           CopyCredits{' '}
           <FieldHelp title="What are CopyCredits?">
             <p>
-              What a workspace pays for reviews by the AI judges with. A new workspace starts with
-              none; it gets them from a free review code, or from a grant here.
+              What a workspace pays for reviews by {WORDS.aiReviewers} with. A new workspace starts
+              with none; it gets them from a free review code, or from a grant here.
             </p>
             <p className="mt-2">
               To begin with, 100 credits is about $1 of AI cost, and a review is charged for what it
@@ -52,7 +55,8 @@ export default async function CreditsPage({
         </p>
       </header>
 
-      <CreditsPanel initial={list} query={query} />
+      {/* Keyed by the search, so a new one starts the panel afresh: its box and its banner. */}
+      <CreditsPanel key={query} initial={list} query={query} />
     </div>
   );
 }

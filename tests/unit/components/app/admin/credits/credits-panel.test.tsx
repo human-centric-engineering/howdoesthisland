@@ -133,6 +133,22 @@ describe('CreditsPanel', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
+  it('names every problem on the first submit, not one at a time', async () => {
+    const { user } = setup();
+    const form = await openFor(user, 'Acme');
+    await user.type(within(form).getByRole('spinbutton'), '-50');
+    await user.click(within(form).getByRole('button', { name: 'Grant credits' }));
+
+    expect(await within(form).findByText(/A grant gives credits/)).toBeInTheDocument();
+    expect(within(form).getByText(/Say why/)).toBeInTheDocument();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('keeps the search within what the route accepts', () => {
+    setup();
+    expect(screen.getByLabelText('Find a workspace')).toHaveAttribute('maxLength', '100');
+  });
+
   it('shows the server’s refusal by Save, and keeps the form open', async () => {
     vi.mocked(apiClient.post).mockRejectedValue(
       new APIClientError('Workspace not found', 'NOT_FOUND', 404)
@@ -144,7 +160,9 @@ describe('CreditsPanel', () => {
     await user.click(within(form).getByRole('button', { name: 'Grant credits' }));
 
     expect(await within(form).findByText(/Workspace not found/)).toBeInTheDocument();
-    expect(nav.refresh).not.toHaveBeenCalled();
+    // The change may have been saved although the answer failed, so the list
+    // is read again before anyone presses Grant a second time.
+    expect(nav.refresh).toHaveBeenCalled();
   });
 
   it('searches by putting the query in the address', async () => {

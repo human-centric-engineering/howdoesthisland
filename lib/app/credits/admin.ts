@@ -17,7 +17,7 @@
  */
 import { NotFoundError } from '@/lib/api/errors';
 import { prisma } from '@/lib/db/client';
-import { getOrgCapState, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
+import { orgCapStateOrSkip, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { runAsSystem } from '@/lib/tenancy/context';
 import { readOrgQuotas } from '@/lib/tenancy/org-settings';
 import { getCreditBalance, getCreditBalances, recordCreditEntry } from '@/lib/app/credits/ledger';
@@ -39,7 +39,7 @@ function usd(value: number): number {
  * this month. `q` narrows by name or slug. At most
  * {@link ADMIN_CREDITS_LIST_LIMIT}; `truncated` says more matched.
  *
- * Four reads whatever the number of workspaces: the orgs, their balances,
+ * Three reads whatever the number of workspaces: the orgs, their balances,
  * and their month's spend, each one query.
  */
 export async function listWorkspaceCredits(q?: string): Promise<AdminCreditsList> {
@@ -100,6 +100,13 @@ export async function listWorkspaceCredits(q?: string): Promise<AdminCreditsList
 /**
  * Grant or adjust a workspace's credits, recording who and why. Throws
  * `NotFoundError` for a workspace that does not exist or is not active.
+ *
+ * **Once the entry is written, the answer cannot fail.** An admin who is told
+ * a saved grant failed presses Grant again, and an admin's change carries no
+ * reference to make it happen once. So the balance is read in the entry's own
+ * transaction, and the cap, which only feeds `capWarning`, is read through
+ * `orgCapStateOrSkip`: a cap that cannot be read gives no warning rather than
+ * a failed request.
  */
 export async function changeWorkspaceCredits(
   orgId: string,
@@ -110,14 +117,20 @@ export async function changeWorkspaceCredits(
     const org = await prisma.org.findUnique({ where: { id: orgId }, select: { status: true } });
     if (!org || org.status !== 'ACTIVE') throw new NotFoundError('Workspace not found');
 
-    const entry = await recordCreditEntry({
-      orgId,
-      amount: change.amount,
-      kind: change.kind === 'grant' ? 'GRANT' : 'ADJUST',
-      reason: change.reason,
-      actorUserId,
+    const { entry, balance } = await prisma.$transaction(async (tx) => {
+      const written = await recordCreditEntry(
+        {
+          orgId,
+          amount: change.amount,
+          kind: change.kind === 'grant' ? 'GRANT' : 'ADJUST',
+          reason: change.reason,
+          actorUserId,
+        },
+        tx
+      );
+      return { entry: written, balance: await getCreditBalance(orgId, tx) };
     });
-    const [balance, cap] = await Promise.all([getCreditBalance(orgId), getOrgCapState(orgId)]);
+    const cap = await orgCapStateOrSkip(orgId, { source: 'app.credits: admin change' });
 
     const balanceUsd = usdForCredits(balance);
     const remainingUsd = cap ? usd(Math.max(0, cap.limit - cap.spent)) : null;

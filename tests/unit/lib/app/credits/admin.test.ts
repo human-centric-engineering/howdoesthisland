@@ -41,6 +41,12 @@ vi.mock('@/lib/db/client', () => ({
           .map((orgId) => ({ orgId, _sum: { amount: db.balances.get(orgId) } }))
       ),
     },
+    // The entry and the balance read share a transaction; the fake hands the
+    // same client in, so the reads see the write.
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const { prisma } = await import('@/lib/db/client');
+      return fn(prisma);
+    }),
     aiCostLog: {
       groupBy: vi.fn(async ({ where }: { where: { orgId: { in: string[] } } }) =>
         where.orgId.in
@@ -51,9 +57,12 @@ vi.mock('@/lib/db/client', () => ({
   },
 }));
 
-const cap = vi.hoisted(() => ({ state: null as null | { limit: number; spent: number } }));
+const cap = vi.hoisted(() => ({
+  state: null as null | { limit: number; spent: number },
+}));
 vi.mock('@/lib/orchestration/llm/spend-caps', () => ({
-  getOrgCapState: vi.fn(async () =>
+  // `orgCapStateOrSkip` never throws: a cap it cannot read is `null`.
+  orgCapStateOrSkip: vi.fn(async () =>
     cap.state ? { ...cap.state, exceeded: cap.state.spent >= cap.state.limit } : null
   ),
   utcMonthStart: () => new Date('2026-11-01T00:00:00Z'),
@@ -200,6 +209,17 @@ describe('changeWorkspaceCredits', () => {
     );
     // 750 credits is $7.50; the cap leaves $6.50 of its $10.
     expect(result.capWarning).toEqual({ balanceUsd: 7.5, remainingUsd: 6.5, limitUsd: 10 });
+  });
+
+  it('writes the entry and reads the balance in one transaction', async () => {
+    await changeWorkspaceCredits('a', { kind: 'grant', amount: 1, reason: 'x' }, 'admin-1');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the cap through the read that cannot fail the request once the entry is written', async () => {
+    const { orgCapStateOrSkip } = await import('@/lib/orchestration/llm/spend-caps');
+    await changeWorkspaceCredits('a', { kind: 'grant', amount: 1, reason: 'x' }, 'admin-1');
+    expect(orgCapStateOrSkip).toHaveBeenCalledWith('a', expect.any(Object));
   });
 
   it('does not warn for a workspace with no cap', async () => {
