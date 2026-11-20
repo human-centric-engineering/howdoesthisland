@@ -31,6 +31,7 @@ export const publicNavItems: PublicNavItem[] | null = [
   // HowDoesThisLand: only routes that exist. The wordmark links home, so Home
   // is not repeated; each later public page (/scan, /model, /developers) adds
   // its own item when it lands. Text only: the Galley Proof nav has no icons.
+  { href: '/developers', label: 'Developers' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
 ];

@@ -282,7 +282,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     // FORK (HowDoesThisLand): header nav pinned to our routes; the footer lists stay default.
     // Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(publicNavItems?.map((i) => i.href)).toEqual(['/about', '/contact']);
+      expect(publicNavItems?.map((i) => i.href)).toEqual(['/developers', '/about', '/contact']);
       expect(footerNavItems).toBeNull();
       expect(footerLegalItems).toBeNull();
     },
