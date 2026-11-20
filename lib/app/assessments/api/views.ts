@@ -12,11 +12,11 @@ import type { AssessmentStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
-import { budgetRefusalDetailsSchema, type BudgetRefusalDetails } from '@/lib/app/usage/wire';
+import { reviewRefusalDetailsSchema, type ReviewRefusalDetails } from '@/lib/app/usage/wire';
 
-/** A budget refusal's figures as stored, or `null` when there are none in that shape. */
-function budgetFigures(stored: Prisma.JsonValue): BudgetRefusalDetails | null {
-  const parsed = budgetRefusalDetailsSchema.safeParse(stored);
+/** A credit or budget refusal's figures as stored, or `null` when there are none in either shape. */
+function budgetFigures(stored: Prisma.JsonValue): ReviewRefusalDetails | null {
+  const parsed = reviewRefusalDetailsSchema.safeParse(stored);
   return parsed.success ? parsed.data : null;
 }
 
@@ -49,13 +49,14 @@ export type AssessmentSummary = {
   costUsd: number;
   error: string | null;
   /**
-   * What kind of failure, for a `failed` one that has one: `BUDGET_EXCEEDED`
-   * when it was refused as it was claimed, having waited while other spend
-   * landed (t-53). No judge was called.
+   * What kind of failure, for a `failed` one that has one:
+   * `INSUFFICIENT_CREDITS` (t-58) or `BUDGET_EXCEEDED` (t-53) when it was
+   * refused as it was claimed, having waited while other spend landed. No
+   * judge was called.
    */
   errorCode: string | null;
-  /** Its figures, for `BUDGET_EXCEEDED`: what the 402 refusal carries in `details`. */
-  errorDetails: BudgetRefusalDetails | null;
+  /** Its figures, for either: what the 402 refusal carries in `details`. */
+  errorDetails: ReviewRefusalDetails | null;
   createdAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;

@@ -82,6 +82,7 @@
     "smoke:erasure-run-actions": "tsx --env-file=.env.local scripts/smoke/erasure-run-actions.ts",
     "smoke:erasure-stale-saves": "tsx --env-file=.env.local scripts/smoke/erasure-stale-saves.ts",
     "smoke:judge": "tsx --env-file=.env.local scripts/app/smoke-judge.ts",
+    "smoke:credit-charge": "tsx --env-file=.env.local scripts/app/smoke-credit-charge.ts",
     "calibrate": "tsx --env-file=.env.local scripts/app/calibrate.ts",
     "smoke:tenancy": "tsx --env-file=.env.local scripts/smoke/tenancy.ts",
     "smoke:tenancy-isolation": "tsx --env-file=.env.local scripts/smoke/tenancy-isolation.ts",

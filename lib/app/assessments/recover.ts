@@ -11,6 +11,13 @@
  * - **re-driven**: claimed under a new lease (`beginAssessment`), which runs
  *   only the judges that have no row yet.
  *
+ * It also **charges** (t-58) what the workspace has not been charged for: a
+ * review given up on, in the write that gives up on it, and a cancelled review
+ * whose run died before its last write, its lease run out (`CANCELLED` with a
+ * lease set and past). Clearing that lease and charging are one transaction,
+ * so the review is charged once and the next pass skips it. Only those
+ * cancelled within {@link CHARGE_SWEEP_MS}: older ones predate the charge.
+ *
  * Claims are taken one at a time, so they never conflict with each other on
  * the workspace's running count. The pass does not wait for the runs it
  * starts: per-org jobs run one workspace after another, and a long run here
@@ -23,7 +30,8 @@
  * the first pass's live lease, and changes nothing.
  */
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
-import { MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
+import { CANCEL_GRACE_MS, MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
+import { chargeEndedReview } from '@/lib/app/credits/charge';
 import { beginAssessment } from '@/lib/app/assessments/run';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
@@ -33,7 +41,16 @@ export interface RecoveryResult {
   redriven: number;
   /** Assessments marked `FAILED` after their last attempt. */
   gaveUp: number;
+  /** Cancelled assessments whose run died, now charged. */
+  chargedCancelled: number;
 }
+
+/**
+ * How far back a cancelled review whose lease ran out is charged: a lease
+ * lasts at most {@link CANCEL_GRACE_MS} after the cancel, and a day more
+ * covers ticks that did not run. Older rows ended before reviews were charged.
+ */
+export const CHARGE_SWEEP_MS = CANCEL_GRACE_MS + 24 * 60 * 60 * 1000;
 
 export async function recoverAssessments(now: Date = new Date()): Promise<RecoveryResult> {
   const orgId = requireOrgId();
@@ -44,17 +61,49 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
   };
 
   // Only a run whose process died each time gets here: one that stopped on
-  // an error fails itself on its last attempt, with its reason.
-  const { count: gaveUp } = await prisma.assessment.updateMany({
+  // an error fails itself on its last attempt, with its reason. One at a
+  // time, so each is charged in the write that ends it.
+  const spent = await prisma.assessment.findMany({
     where: { ...stalled, attempts: { gte: MAX_ATTEMPTS } },
-    data: {
-      status: 'FAILED',
-      error: `It stopped before finishing ${MAX_ATTEMPTS} times.`,
-      completedAt: now,
-      leaseToken: null,
-      leaseExpiresAt: null,
-    },
+    select: { id: true },
   });
+  let gaveUp = 0;
+  for (const { id } of spent) {
+    gaveUp += await prisma.$transaction(async (tx) => {
+      const { count } = await tx.assessment.updateMany({
+        where: { ...stalled, id, attempts: { gte: MAX_ATTEMPTS } },
+        data: {
+          status: 'FAILED',
+          error: `It stopped before finishing ${MAX_ATTEMPTS} times.`,
+          completedAt: now,
+          leaseToken: null,
+          leaseExpiresAt: null,
+        },
+      });
+      if (count === 1) await chargeEndedReview(tx, id);
+      return count;
+    });
+  }
+
+  // Cancelled reviews whose run died before its last write (`freePlace`).
+  const lapsed = {
+    orgId,
+    status: 'CANCELLED' as const,
+    leaseExpiresAt: { not: null, lte: now },
+    completedAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
+  };
+  const cancelled = await prisma.assessment.findMany({ where: lapsed, select: { id: true } });
+  let chargedCancelled = 0;
+  for (const { id } of cancelled) {
+    chargedCancelled += await prisma.$transaction(async (tx) => {
+      const { count } = await tx.assessment.updateMany({
+        where: { ...lapsed, id },
+        data: { leaseExpiresAt: null },
+      });
+      if (count === 1) await chargeEndedReview(tx, id);
+      return count;
+    });
+  }
 
   // Places whose `store: false` run's process died (`places.ts`): never
   // counted, but only a later take in this workspace would clear them.
@@ -74,5 +123,5 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
     keepRunningAfterResponse(run.done, 'app: assessment re-drive', { assessmentId: id });
   }
 
-  return { redriven, gaveUp };
+  return { redriven, gaveUp, chargedCancelled };
 }

@@ -9,7 +9,8 @@
  * (`ADJUST`), so the ledger says what happened as well as where it stands.
  *
  * **A new workspace starts with no rows**, so a balance of 0: nothing here
- * runs at sign-up. What gates a review on credits is t-58.
+ * runs at sign-up. A review is checked against the balance before it starts
+ * (`lib/app/usage/budget.ts`) and charged as it ends (`./charge.ts`), t-58.
  *
  * Every read names the org, so it answers for that workspace whatever scope
  * the caller is in. Writes go through {@link recordCreditEntry}, which takes a

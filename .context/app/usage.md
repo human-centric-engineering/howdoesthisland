@@ -34,6 +34,15 @@ Projects are shown by id until `f-projects` adds the model and its names.
 
 ## Refused before it starts
 
+Since t-58 a review is checked against the workspace's **CopyCredits** first,
+then its monthly budget, the safety ceiling. The credit check is this same
+machinery measured against the balance: 402 `INSUFFICIENT_CREDITS`, figures in
+whole credits, and what is held back also counts what the reviews in flight
+have spent so far, since they are charged only as they end. Its rules, the
+charge and the overdraft bound are in
+[`credits.md`](./credits.md#the-check-before-a-review-starts). The rest of
+this section is the budget's.
+
 A review that would pass the budget is refused before any judge is called,
 stored or `store: false` (t-49, `assertReviewFits()` in
 `lib/app/usage/budget.ts`, called last in `prepareAssessment`, and again by
@@ -145,7 +154,7 @@ A refused review is finished `FAILED` before any judge is called:
 | Field          | Holds                                                        |
 | -------------- | ------------------------------------------------------------ |
 | `error`        | Why, with the figures: the 402's message without its remedy. |
-| `errorCode`    | `BUDGET_EXCEEDED`.                                           |
+| `errorCode`    | `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED`.                 |
 | `errorDetails` | The 402's `details`: the estimate, its basis and figures.    |
 
 The API answers all three on the read and the list, and `errorCode` on the

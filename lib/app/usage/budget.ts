@@ -1,13 +1,34 @@
 /**
- * Refuse a review before it starts when it would pass the workspace's
- * monthly budget (t-49, D6).
+ * Refuse a review before it starts when the workspace's CopyCredits do not
+ * cover it (t-58), or it would pass the workspace's monthly budget (t-49).
+ *
+ * **Two bounds** (`.context/app/credits.md`). Credits are what people buy:
+ * what is left is the balance less what the workspace's reviews in flight
+ * have spent and are yet to spend, since a review is charged only once it
+ * ends (`lib/app/credits/charge.ts`). Refused 402 `INSUFFICIENT_CREDITS`,
+ * figures in whole credits. The monthly cap is the safety ceiling: what is
+ * left is the cap less this month's spend, which already counts what reviews
+ * in flight spent, less what they are yet to spend. Refused 402
+ * `BUDGET_EXCEEDED`. Each is checked when it can be read, credits first, so
+ * a refusal names what the workspace can do something about. Both are
+ * compared in dollars, credits at `CREDITS_PER_USD`.
+ *
+ * **Overdraft.** A review that passed costs what it costs: it is never cut
+ * short for credits, and is charged in full when it ends, so the balance can
+ * go below zero. By at most what the reviews in flight cost beyond their
+ * estimates, since a review starts only with a positive remainder that
+ * covers its estimate; at most `RUNNING_PER_WORKSPACE` run at once, and the
+ * monthly cap bounds what they spend. An estimate of `0` (no history) lets a
+ * review start on any positive balance, so a workspace's first review can
+ * take its balance below zero by up to a review's cost. Below zero, every
+ * review is refused until credits are added.
  *
  * Sunrise's gate refuses a judge once spend has *reached* the cap
  * (`checkBudget` in `run-judge.ts`), so a workspace near its cap paid for half
  * a review and got a `PARTIAL` one. This check runs first, before any judge
  * is called, on stored and `store: false` requests alike: it estimates the
- * review and refuses it with 402 `BUDGET_EXCEEDED` when the estimate is more
- * than what is left. The per-judge gate stays as the backstop for spend that
+ * review and refuses it with 402 when the estimate is more than what is left
+ * of either bound. The per-judge gate stays as the backstop for spend that
  * lands between this check and the judges.
  *
  * **The estimate** is a cost per judge × the judges this request calls, plus
@@ -118,9 +139,10 @@
  * DAG steps, not judge slots.
  *
  * **The cap** is the workspace's own (`quotas.monthlyBudgetUsd`), read as the
- * judge gate reads it. No cap, or one that cannot be read, refuses nothing
- * (`orgCapStateOrSkip`): the per-judge gate still applies. History that cannot
- * be read refuses nothing either. The install-wide cap is left to that gate
+ * judge gate reads it. No cap, or one that cannot be read, is not checked
+ * (`orgCapStateOrSkip`), and a balance that cannot be read is not either:
+ * the other bound and the per-judge gate still apply. With neither, or
+ * history that cannot be read, nothing is refused. The install-wide cap is left to that gate
  * too: no workspace admin can raise it.
  *
  * **Indexes.** Every query here runs on each non-quick request, the first
@@ -140,8 +162,8 @@
  * `store: false` ones taken before this review was created count: a stored
  * request's hold is a later review once stored, and until its request
  * releases it, may be this review's own. A refused one is finished
- * `FAILED` with `errorCode` `BUDGET_EXCEEDED`, the reason in `error` and these
- * figures in `errorDetails`, before any judge is called. A review with judge
+ * `FAILED` with `errorCode` `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED`, the
+ * reason in `error` and these figures in `errorDetails`, before any judge is called. A review with judge
  * runs (a re-drive) is not checked again: what it already spent would be
  * thrown away, and the per-judge gate ends it `PARTIAL` with what it has.
  */
@@ -159,7 +181,13 @@ import { prisma } from '@/lib/db/client';
 import { isTimeoutError } from '@/lib/privacy/erasure-deadline';
 import { logger } from '@/lib/logging';
 import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
-import { USAGE_PAGE, type BudgetRefusalDetails } from '@/lib/app/usage/wire';
+import { getCreditBalance } from '@/lib/app/credits/ledger';
+import { creditsForUsd, usdForCredits, wholeCreditsIn } from '@/lib/app/credits/rate';
+import {
+  USAGE_PAGE,
+  type BudgetRefusalDetails,
+  type CreditRefusalDetails,
+} from '@/lib/app/usage/wire';
 
 /** Completed reviews of the profile the first tier reads. */
 export const PROFILE_HISTORY = 20;
@@ -352,11 +380,26 @@ function heldCost(rate: JudgeRate, judges: number, stored: boolean): number {
   return stored ? reviewCost(rate, judges) : judges * rate.perJudgeUsd;
 }
 
+/** What the reviews in flight hold back, in USD. */
+interface InFlight {
+  /** What they are yet to spend: "What is left" in the file header. */
+  yet: number;
+  /**
+   * What the stored ones have spent so far (`costUsd`), not yet charged in
+   * credits: they are charged as they end. A `store: false` run's is within
+   * its hold, at all its judges until it ends.
+   */
+  spent: number;
+}
+
+const NONE_IN_FLIGHT: InFlight = { yet: 0, spent: 0 };
+
 /**
  * What the workspace's reviews in flight, and the requests holding budget,
- * are yet to spend at `rate`, as of `now`: see "What is left" in the file
- * header. With `self`, only those created before it: see "Again when it is
- * claimed". Reads through `db`, the lock's transaction when there is one.
+ * are yet to spend at `rate`, and what the stored ones have spent, as of
+ * `now`: see "What is left" in the file header. With `self`, only those
+ * created before it: see "Again when it is claimed". Reads through `db`, the
+ * lock's transaction when there is one.
  */
 async function inFlightCost(
   db: Prisma.TransactionClient,
@@ -364,7 +407,7 @@ async function inFlightCost(
   rate: JudgeRate,
   now: Date,
   self?: ClaimedReview
-): Promise<number> {
+): Promise<InFlight> {
   const holds = await db.budgetHold.findMany({
     where: {
       orgId,
@@ -397,7 +440,7 @@ async function inFlightCost(
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
       ],
     },
-    select: { id: true, status: true, judges: true },
+    select: { id: true, status: true, judges: true, costUsd: true },
   });
   const runs =
     open.length > 0
@@ -406,7 +449,7 @@ async function inFlightCost(
           select: { assessmentId: true, status: true, errorCode: true },
         })
       : [];
-  return open.reduce((sum, r) => {
+  const yet = open.reduce((sum, r) => {
     const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
     const unsettled = Math.max(0, r.judges.length - done);
     const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
@@ -414,6 +457,7 @@ async function inFlightCost(
     const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
     return sum + Math.max(judges, editor);
   }, held);
+  return { yet, spent: open.reduce((sum, r) => sum + r.costUsd, 0) };
 }
 
 /** A stored review checked again as it is claimed (t-53). */
@@ -423,18 +467,23 @@ export interface ClaimedReview {
 }
 
 /** A review the budget refuses: why, in words, and the figures. */
-export interface BudgetRefusal {
+export type BudgetRefusal = {
   /** Why, with the figures: what a stored review refused at claim keeps in `error`. */
   reason: string;
   /** The reason and what to do about it: the 402's message. */
   message: string;
-  details: BudgetRefusalDetails;
-}
+} & (
+  | { code: 'INSUFFICIENT_CREDITS'; details: CreditRefusalDetails }
+  | { code: 'BUDGET_EXCEEDED'; details: BudgetRefusalDetails }
+);
 
-/** The workspace's cap, as the judge gate reads it, and this request's rate. */
+/**
+ * What a review is checked against, and this request's rate: the credit
+ * balance and the cap, each `null` when there is none or it cannot be read.
+ */
 interface Budget {
-  limit: number;
-  spent: number;
+  balance: number | null;
+  cap: { limit: number; spent: number } | null;
   rate: JudgeRate;
 }
 
@@ -447,41 +496,123 @@ function unreadable(orgId: string, err: unknown): null {
   return null;
 }
 
+/** The balance, or `null` when it cannot be read: logged, and the cap and the per-judge gate apply. */
+async function readBalance(orgId: string): Promise<number | null> {
+  try {
+    return await getCreditBalance(orgId);
+  } catch (err) {
+    logger.warn('Credit balance unreadable; not refusing on credits', {
+      orgId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 /**
- * The cap and the rate for a review of `profile`, or `rate` when the request
- * already read it; `null` when there is no cap or either cannot be read.
+ * The balance, the cap and the rate for a review of `profile`, or `rate` when
+ * the request already read it; `null` when neither the balance nor the cap
+ * can be had, or the rate cannot be read.
  */
 async function readBudget(
   orgId: string,
   profile: string,
   rate?: ReviewRate
 ): Promise<Budget | null> {
-  const cap = await orgCapStateOrSkip(orgId, { check: 'review-estimate' });
-  if (!cap) return null;
+  const [balance, capState] = await Promise.all([
+    readBalance(orgId),
+    orgCapStateOrSkip(orgId, { check: 'review-estimate' }),
+  ]);
+  const cap = capState ? { limit: capState.limit, spent: capState.spent } : null;
+  if (balance === null && !cap) return null;
   try {
-    return { limit: cap.limit, spent: cap.spent, rate: rate ?? (await judgeRate(orgId, profile)) };
+    return { balance, cap, rate: rate ?? (await judgeRate(orgId, profile)) };
   } catch (err) {
     return unreadable(orgId, err);
   }
 }
 
-const usedUp = (budget: Budget) => budget.spent >= budget.limit;
+/** Nothing is left, whatever is in flight: no balance, or the cap reached. */
+const usedUp = (budget: Budget) =>
+  (budget.balance !== null && budget.balance <= 0) ||
+  (budget.cap !== null && budget.cap.spent >= budget.cap.limit);
+
+const HOW_TO_GET_CREDITS =
+  'Credits come from a review code or from HowDoesThisLand; the balance is on';
+
+const credits = (n: number) => `${n.toLocaleString('en-GB')} CopyCredit${n === 1 ? '' : 's'}`;
+
+/** The credit refusal for a review costing `estimate`, or `null` when the balance covers it. */
+function creditRefusal(
+  balance: number,
+  basis: EstimateBasis,
+  estimate: number,
+  inFlight: InFlight
+): BudgetRefusal | null {
+  const held = inFlight.yet + inFlight.spent;
+  const remaining = usdForCredits(balance) - held;
+  if (balance > 0 && remaining > 0 && estimate <= remaining) return null;
+
+  const details: CreditRefusalDetails = {
+    estimateCredits: creditsForUsd(estimate),
+    basis,
+    balanceCredits: balance,
+    heldCredits: creditsForUsd(held),
+    remainingCredits: balance > 0 ? wholeCreditsIn(remaining) : 0,
+    usagePage: USAGE_PAGE,
+  };
+  let reason: string;
+  if (balance <= 0) {
+    reason =
+      balance < 0
+        ? `The workspace has no CopyCredits left: its balance is ${balance.toLocaleString('en-GB')}.`
+        : 'The workspace has no CopyCredits left.';
+  } else if (remaining <= 0) {
+    reason = `Reviews already starting, queued, running or finishing hold the workspace's ${credits(balance)}.`;
+  } else if (held > 0) {
+    reason = `This review would cost about ${credits(details.estimateCredits)}, more than the ${details.remainingCredits.toLocaleString('en-GB')} left of the workspace's ${credits(balance)} once ${details.heldCredits.toLocaleString('en-GB')} are held for reviews already starting, queued, running or finishing.`;
+  } else {
+    reason = `This review would cost about ${credits(details.estimateCredits)}, more than the workspace's ${credits(balance)}.`;
+  }
+  return {
+    code: 'INSUFFICIENT_CREDITS',
+    reason,
+    message: `${reason} No AI reviewer was started, and nothing was charged. ${HOW_TO_GET_CREDITS} ${USAGE_PAGE}.`,
+    details,
+  };
+}
 
 /** The refusal for a review of `judgeCount` judges with `inFlight` held back, or `null` when it fits. */
 function refusalFor(
   budget: Budget,
   judgeCount: number,
-  inFlight: number,
+  inFlight: InFlight,
   stored: boolean
 ): BudgetRefusal | null {
-  const { limit, spent, rate } = budget;
+  const { rate } = budget;
   const estimate = heldCost(rate, judgeCount, stored);
+  if (budget.balance !== null) {
+    const refusal = creditRefusal(budget.balance, rate.basis, estimate, inFlight);
+    if (refusal) return refusal;
+  }
+  return budget.cap ? capRefusal(budget.cap, rate.basis, estimate, inFlight.yet) : null;
+}
+
+/** The monthly cap's refusal (t-49), or `null` when what is left of it covers `estimate`. */
+function capRefusal(
+  cap: { limit: number; spent: number },
+  basis: EstimateBasis,
+  estimate: number,
+  inFlight: number
+): BudgetRefusal | null {
+  const { limit, spent } = cap;
+  const capUsedUp = spent >= limit;
   const remaining = Math.max(0, limit - spent - inFlight);
-  if (!usedUp(budget) && remaining > 0 && estimate <= remaining) return null;
+  if (!capUsedUp && remaining > 0 && estimate <= remaining) return null;
 
   const details: BudgetRefusalDetails = {
     estimateUsd: usd(estimate),
-    basis: rate.basis,
+    basis,
     remainingUsd: usd(remaining),
     inFlightUsd: usd(inFlight),
     limitUsd: limit,
@@ -493,12 +624,13 @@ function refusalFor(
       ? ` once ${dollars(inFlight)} is held for reviews already starting, queued, running or finishing`
       : '';
   let message: string;
-  if (usedUp(budget)) message = `The workspace has used its ${dollars(limit)} monthly AI budget.`;
+  if (capUsedUp) message = `The workspace has used its ${dollars(limit)} monthly AI budget.`;
   else if (remaining <= 0)
     message = `Reviews already starting, queued, running or finishing are held the rest of ${workspaceBudget} (${dollars(inFlight)}).`;
   else
     message = `This review would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${workspaceBudget}.`;
   return {
+    code: 'BUDGET_EXCEEDED',
     reason: message,
     message: `${message} No AI reviewer was started. See ${USAGE_PAGE}; an admin can raise the budget on /admin.`,
     details,
@@ -507,10 +639,10 @@ function refusalFor(
 
 /**
  * Whether a review of `profile` calling `judgeCount` judges would pass what
- * is left of the workspace's monthly budget: when nothing is left, or the
- * estimate is more than what is once the reviews in flight and the holds are
- * held back. `null` when it fits, calls no judge, or the cap or history
- * cannot be read. `self` is a stored review being checked as it is claimed
+ * is left of the workspace's credits or monthly budget: when nothing is left,
+ * or the estimate is more than what is once the reviews in flight and the
+ * holds are held back. `null` when it fits, calls no judge, or neither bound
+ * nor the history can be read. `self` is a stored review being checked as it is claimed
  * (t-53): only the reviews in flight and holds from before it are held back.
  * Holds nothing itself: a request is checked with {@link reserveReviewBudget}.
  */
@@ -523,7 +655,7 @@ export async function budgetRefusal(
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
   if (!budget) return null;
-  let inFlight = 0;
+  let inFlight = NONE_IN_FLIGHT;
   if (!usedUp(budget)) {
     try {
       inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date(), self);
@@ -536,11 +668,12 @@ export async function budgetRefusal(
 }
 
 /**
- * Throw 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} would refuse a
- * review of `profile` calling `judgeCount` judges. Holds nothing: a request
- * checked before its other refusals, which {@link reserveReviewBudget} checks
- * again. Answers the rate it read, for that check to reuse; `null` when it
- * calls no judge, there is no cap, or either cannot be read.
+ * Throw 402 `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED` when
+ * {@link budgetRefusal} would refuse a review of `profile` calling
+ * `judgeCount` judges. Holds nothing: a request checked before its other
+ * refusals, which {@link reserveReviewBudget} checks again. Answers the rate
+ * it read, for that check to reuse; `null` when it calls no judge, or neither
+ * bound nor the history can be read.
  */
 export async function assertReviewFits(
   orgId: string,
@@ -551,7 +684,7 @@ export async function assertReviewFits(
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
   if (!budget) return null;
-  let inFlight = 0;
+  let inFlight = NONE_IN_FLIGHT;
   if (!usedUp(budget)) {
     try {
       inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date());
@@ -584,7 +717,7 @@ function lockKey(orgId: string): string {
 }
 
 function refuse(refusal: BudgetRefusal): never {
-  throw new APIError(refusal.message, 'BUDGET_EXCEEDED', 402, { ...refusal.details });
+  throw new APIError(refusal.message, refusal.code, 402, { ...refusal.details });
 }
 
 /** Renew the hold `id` until released. */
@@ -636,10 +769,10 @@ function keepHold(orgId: string, id: string): BudgetHold {
  * against the workspace's budget and, when it fits, hold its estimate until
  * the caller releases it: once the review is stored (`stored`), or once a
  * `store: false` run ends, and however the request ends before either.
- * Throws 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} would refuse it,
- * counting the holds of requests checked before it. `null` (nothing held)
- * when it calls no judge, there is no cap, or the cap, the history or the
- * lock cannot be had. `rate` is the one {@link assertReviewFits} read for
+ * Throws 402 `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED` when
+ * {@link budgetRefusal} would refuse it, counting the holds of requests
+ * checked before it. `null` (nothing held) when it calls no judge, or neither
+ * bound, the history or the lock can be had. `rate` is the one {@link assertReviewFits} read for
  * this request, if any: the history is not read again.
  */
 export async function reserveReviewBudget(
@@ -653,7 +786,7 @@ export async function reserveReviewBudget(
   const budget = await readBudget(orgId, profile, rate);
   if (!budget) return null;
   // Nothing left: refused whatever is held, so no lock to wait for.
-  const spentUp = usedUp(budget) ? refusalFor(budget, judgeCount, 0, stored) : null;
+  const spentUp = usedUp(budget) ? refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored) : null;
   if (spentUp) refuse(spentUp);
 
   // Holds whose process died: they count for nothing already, and nothing
