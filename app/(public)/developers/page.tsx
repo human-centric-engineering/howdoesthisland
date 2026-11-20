@@ -92,6 +92,11 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [400, 'CONTENT_EMPTY', 'No copy once whitespace is trimmed.'],
   [400, 'CONTEXT_INVALID', '`context` names an id this framework version does not have.'],
   [400, 'PROFILE_UNKNOWN', 'No such `profile` or AI reviewer, or one switched off.'],
+  [
+    402,
+    'BUDGET_EXCEEDED',
+    'The review would cost more than is left of your workspace’s monthly AI budget, or none is left. No AI reviewer started and nothing was kept, stored or not. `details` gives the estimate (`estimateUsd`), what is left (`remainingUsd`, once what your queued and running reviews are yet to spend, `inFlightUsd`, is held back) and the budget (`limitUsd`); your usage is on `/usage`, and an admin can raise the budget. A `quick` review is never refused this way.',
+  ],
   [404, 'FRAMEWORK_NOT_FOUND', 'No published framework by that `framework` slug.'],
   [404, 'FRAMEWORK_VERSION_NOT_FOUND', 'No published version by that `framework` and `version`.'],
   [
