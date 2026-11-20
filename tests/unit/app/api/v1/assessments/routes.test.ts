@@ -1082,9 +1082,13 @@ describe('POST /api/v1/assessments — the monthly budget (t-49)', () => {
     mocks.loadOrgQuotas.mockResolvedValue({ monthlyBudgetUsd: 10 });
     mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: spent } });
   }
-  /** Three completed full reviews at $1 each: an estimate of $1.00. */
+  /**
+   * Three completed full reviews at $1 each over the 9 judges `full` resolves
+   * to here: an estimate of $1.00 (the check estimates per judge).
+   */
   function fullReviewsAtOneDollar() {
-    for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1 });
+    const judges = Array.from({ length: 9 }, (_, i) => `judge_${i}`);
+    for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1, judges });
   }
   const writtenBefore = () => fake.assessments.length;
 
@@ -1105,6 +1109,7 @@ describe('POST /api/v1/assessments — the monthly budget (t-49)', () => {
         estimateUsd: 0,
         basis: 'none',
         remainingUsd: 0,
+        inFlightUsd: 0,
         limitUsd: 10,
         usagePage: '/usage',
       });

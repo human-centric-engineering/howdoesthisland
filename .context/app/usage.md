@@ -38,25 +38,36 @@ A review that would pass the budget is refused before any judge is called,
 stored or `store: false` (t-49, `assertReviewWithinBudget()` in
 `lib/app/usage/budget.ts`, called last in `prepareAssessment`). It is 402
 `BUDGET_EXCEEDED`: nothing is stored and the per-user cap is not charged.
-`details` carries `estimateUsd`, its `basis`, `remainingUsd`, `limitUsd` and
-`usagePage` (`/usage`); the remedy is an admin raising the budget.
+`details` carries `estimateUsd`, its `basis`, `remainingUsd`, `inFlightUsd`,
+`limitUsd` and `usagePage` (`/usage`); the remedy is an admin raising the
+budget.
 
 It refuses when nothing is left, or when the estimate is more than what is.
-The estimate, from the workspace's own history:
+What is left is the budget less this month's spend, less `inFlightUsd`: what
+the workspace's stored reviews still `QUEUED` or `RUNNING` are yet to spend
+(each one's judges at this request's cost per judge, less what it has spent),
+so a burst of requests does not each see the same remainder.
 
-| Basis     | Estimate                                                                                                                        |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `profile` | The median `costUsd` of the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list. |
-| `judges`  | The judge count × the median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs.                                      |
-| `none`    | No history: `0`, so any positive remainder is enough.                                                                           |
+The estimate is a cost per judge × the judges the request calls, the cost per
+judge from the workspace's own history:
 
-Only reviews that completed feed the first tier: a review cut short spent less
-than a review costs. A review calling no judge (the quick profile) is never
+| Basis     | Cost per judge                                                                                                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile` | The median of `costUsd / judges.length` over the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list.                                                                             |
+| `judges`  | The median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs; a review the editor runs on adds the median of what the last 20 completed reviews spent beyond their judge runs (the editor's call is on no judge run). |
+| `none`    | No history: `0`, so any positive remainder is enough.                                                                                                                                                                            |
+
+Per judge, so a profile whose judge list differs between frameworks or
+versions is scaled to the request. Only reviews that completed feed the first
+tier: a review cut short spent less than a review costs. A review calling no judge (the quick profile) is never
 refused. No budget set, or one that cannot be read, refuses nothing; the
 install-wide cap is left to the per-judge gate (`run-judge.ts`), which stays
 the backstop for spend that lands between the check and the judges.
 
 Not done: a queued stored review is not checked again when it is claimed.
+`store: false` reviews leave no assessment or judge-run rows, so they feed no
+estimate (a workspace that only sends those estimates `0`) and are not held
+back while in flight.
 
 ## Demo usage for development
 

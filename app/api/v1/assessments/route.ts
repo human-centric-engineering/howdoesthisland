@@ -31,7 +31,7 @@
  *   left of the workspace's monthly AI budget, or none is left (t-49,
  *   `lib/app/usage/budget.ts`). Stored or not; no judge started, nothing
  *   stored, and the per-user cap is not charged. `details`: `estimateUsd`,
- *   `basis`, `remainingUsd`, `limitUsd`, `usagePage`. A `quick` profile is
+ *   `basis`, `remainingUsd`, `inFlightUsd`, `limitUsd`, `usagePage`. A `quick` profile is
  *   never refused this way.
  * - 403 `FORBIDDEN` — an API key without the `assess` scope.
  * - 404 `FRAMEWORK_NOT_FOUND` / `FRAMEWORK_VERSION_NOT_FOUND`.
