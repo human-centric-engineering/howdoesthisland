@@ -83,8 +83,10 @@ const unit: SeedUnit = {
       where: { slug: DEMO_SLUG },
       select: { id: true },
     });
-    const orgId = existing?.id ?? (await createOrg({ slug: DEMO_SLUG, name: DEMO_NAME })).id;
-    await writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD });
+    // Every write through the client the runner hands the seed, never the global one.
+    const orgId =
+      existing?.id ?? (await createOrg({ slug: DEMO_SLUG, name: DEMO_NAME }, prisma)).id;
+    await writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD }, prisma);
 
     const admins = await prisma.user.findMany({
       where: { role: PLATFORM_ADMIN_ROLE, accountType: 'HUMAN' },
