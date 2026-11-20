@@ -552,19 +552,25 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
 }
 
 interface Lease {
-  /** False once a renewal found the lease gone (taken over, freed, or the run's assessment final). */
+  /**
+   * False once a renewal matched nothing: the lease taken over, cleared,
+   * lapsed after a cancel, or the assessment final. A cancel alone does not
+   * turn it false; `stillOurs` reads the status for that.
+   */
   readonly held: () => boolean;
   release: () => void;
 }
 
 /**
  * Renew the lease every {@link LEASE_RENEW_MS} until released, while the
- * assessment is under the token and its lease is set: `RUNNING`, or
- * `CANCELLED` for up to {@link CANCEL_GRACE_MS} after the cancel. A cancel
- * therefore does not turn `held` false: `stillOurs` reads the status, and
- * that is what stops the run starting judges. A renewal that lands after
- * `freePlace` cleared the lease matches nothing, so it cannot give a finished
- * run its place back however late it is.
+ * assessment is under the token: `RUNNING` with its lease set, or
+ * `CANCELLED` with its lease still live, until {@link LEASE_MS} short of
+ * {@link CANCEL_GRACE_MS} after the cancel, so the last lease runs out
+ * before the purge may take the row. A cancel therefore does not turn
+ * `held` false: `stillOurs` reads the status, and that is what stops the run
+ * starting judges. A renewal never brings back a cancelled lease that was
+ * cleared (`freePlace`) or lapsed, whose place another run may have taken,
+ * however late it lands.
  */
 function holdLease(assessmentId: string, token: string): Lease {
   let held = true;
@@ -575,10 +581,13 @@ function holdLease(assessmentId: string, token: string): Lease {
         where: {
           id: assessmentId,
           leaseToken: token,
-          leaseExpiresAt: { not: null },
           OR: [
-            { status: 'RUNNING' },
-            { status: 'CANCELLED', completedAt: { gt: new Date(now - CANCEL_GRACE_MS) } },
+            { status: 'RUNNING', leaseExpiresAt: { not: null } },
+            {
+              status: 'CANCELLED',
+              leaseExpiresAt: { gt: new Date(now) },
+              completedAt: { gt: new Date(now - (CANCEL_GRACE_MS - LEASE_MS)) },
+            },
           ],
         },
         data: { leaseExpiresAt: new Date(now + LEASE_MS) },

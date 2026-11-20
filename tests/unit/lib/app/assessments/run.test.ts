@@ -750,7 +750,7 @@ describe('the lease', () => {
     expect(a.leaseExpiresAt).toBeNull();
   });
 
-  it('stops renewing a cancelled lease once the cancel is past CANCEL_GRACE_MS', async () => {
+  it('stops renewing a cancelled lease LEASE_MS short of CANCEL_GRACE_MS, so it runs out before the purge', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const a = fake.seed({ judges: ['judge_a'] });
     const judge = deferred();
@@ -762,14 +762,37 @@ describe('the lease', () => {
     const running = inOrg(() => runAssessment(String(a.id)));
     await flush();
     expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
-    // A judge that never lands: the cancel is now past the grace the purge allows.
-    a.completedAt = new Date(Date.now() - CANCEL_GRACE_MS - 1);
+    // A judge that never lands: one more lease would outlast the grace the purge allows.
+    a.completedAt = new Date(Date.now() - (CANCEL_GRACE_MS - LEASE_MS) - 1);
     const lease = (a.leaseExpiresAt as Date).getTime();
     await new Promise((r) => setTimeout(r, 5));
     vi.advanceTimersByTime(LEASE_RENEW_MS);
     await flush();
 
     expect((a.leaseExpiresAt as Date).getTime()).toBe(lease);
+    judge.resolve();
+    expect(await running).toBe('cancelled');
+  });
+
+  it('does not bring back a cancelled lease that lapsed, whose place another run may have', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const a = fake.seed({ judges: ['judge_a'] });
+    const judge = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await judge.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    // Renewals failed long enough for the lease to run out.
+    const lapsed = new Date(Date.now() - 1000);
+    a.leaseExpiresAt = lapsed;
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    await flush();
+
+    expect(a.leaseExpiresAt).toEqual(lapsed);
     judge.resolve();
     expect(await running).toBe('cancelled');
   });

@@ -71,9 +71,11 @@ from either of the first two.
 
 - **The lease.** A run claims the assessment with a fresh token and a lease
   90 seconds ahead, renewed every 30 while it runs, and after a cancel while
-  its judges in flight and its editor land (for up to an hour,
-  `CANCEL_GRACE_MS`). A renewal extends only a lease that is still set, so
-  one landing late cannot undo a cleared one. Every later write is
+  its judges in flight and its editor land, until 90 seconds short of an
+  hour after the cancel (`CANCEL_GRACE_MS`), so its last lease runs out
+  before the purge may take the row. A cancelled lease is renewed only while
+  it is still live, so a renewal landing late cannot bring back one that was
+  cleared or ran out and whose place another run may hold. Every later write is
   conditional on that token and on `RUNNING`, so a run that lost its lease or
   was cancelled writes nothing more to the assessment.
 - **The claim** succeeds only for this workspace's `QUEUED` or `RUNNING` assessment with no

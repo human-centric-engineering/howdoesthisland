@@ -50,8 +50,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Statuses whose rows a run may still be reading or writing. */
 const LIVE = ['QUEUED', 'RUNNING'] as const;
 
-export { CANCEL_GRACE_MS };
-
 /**
  * An assessment no run can still write to: not live, and either holding no
  * lease (every final state but a cancel with judges out clears it) or ended
