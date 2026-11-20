@@ -64,6 +64,7 @@ import {
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
+import { monthUsageSchema } from '@/lib/app/usage/wire';
 
 /** Every method a Next.js route handler can export. */
 export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
@@ -619,6 +620,17 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: ASSESS,
     request: { params: assessmentParams },
     response: { status: 200, data: assessmentDetailSchema },
+  },
+
+  // Usage (t-48).
+  {
+    method: 'GET',
+    path: '/api/v1/usage',
+    summary:
+      "Get the workspace's reviews, AI reviewer calls and spend this month (UTC), by project and in total, against its monthly budget.",
+    auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
+    request: {},
+    response: { status: 200, data: monthUsageSchema },
   },
 
   // Workspaces (t-8, t-9).

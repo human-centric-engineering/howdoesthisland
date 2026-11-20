@@ -78,4 +78,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/reports/',
   // The calibration set's schema, and later its runner (t-36).
   'lib/app/calibration/',
+  // A workspace's usage this month against its budget (t-48).
+  'lib/app/usage/',
 ];
