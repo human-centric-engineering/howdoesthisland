@@ -37,18 +37,22 @@
  * settled once it answered or failed for good; one that failed in a way a
  * re-drive runs again (`RETRIED_ON_REDRIVE`) is not.
  *
- * - One queued or running: its estimate at this request's rate, less what it
- *   has spent *this month*, since `cap.spent` holds only this month's (t-52).
- *   For a review created this month that is its `costUsd`; for one created
- *   before, the cost-log rows naming it since the month began, which is where
- *   `cap.spent` is summed from. A running review whose lease has run out is
- *   held all the same: the recovery job will run it again.
+ * - One queued or running: its estimate at this request's rate, less all it
+ *   has spent (`costUsd`). What it has yet to spend lands this month whenever
+ *   it started, so its spend in an earlier month is subtracted too: those
+ *   judges are reused, not billed again (t-52 asked for this month's spend
+ *   only; that would hold last month's spend a second time). A running review
+ *   whose lease has run out is held all the same: recovery runs it again.
  * - One cancelled whose lease is still live (`places.ts` counts it the same
- *   way): no further judge starts, but those already called finish and are
- *   billed. Held for its unsettled judges, at most {@link JUDGES_IN_FLIGHT},
- *   at this request's rate; and, once every judge is settled, for its editor,
- *   which may be mid-call and is billed even after a cancel. Once its lease
- *   has gone (the run cleared it), nothing.
+ *   way): no further judge starts, but what was already called finishes and
+ *   is billed. That is either judges still landing or, once the fan-out has
+ *   ended, the editor (a cancel before then stops the run before the editor),
+ *   never both. A failed row a re-drive retries cannot be told apart from one
+ *   that failed in this run, so the hold is the larger of the two: its
+ *   unsettled judges, at most {@link JUDGES_IN_FLIGHT}, at this request's
+ *   rate, or its editor allowance. An upper bound (judges never started are
+ *   among the unsettled), which lasts only while the lease does. Once the
+ *   run clears its lease, nothing.
  *
  * It covers reviews already stored: requests arriving together each see none
  * of the others, which the per-judge gate is left to catch.
@@ -77,7 +81,7 @@ import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
 import { JUDGES_IN_FLIGHT, RETRIED_ON_REDRIVE } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
-import { orgCapStateOrSkip, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
+import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
 
 /** Completed reviews of the profile the first tier reads. */
 export const PROFILE_HISTORY = 20;
@@ -220,25 +224,11 @@ function settled(run: { status: string; errorCode: string | null }): boolean {
   return run.status === 'SUCCEEDED' || !run.errorCode || !RETRIED_ON_REDRIVE.has(run.errorCode);
 }
 
-/** What review `assessmentId` has spent since `monthStart`, from the cost log `cap.spent` sums. */
-async function spentSince(orgId: string, assessmentId: string, monthStart: Date): Promise<number> {
-  const { _sum } = await prisma.aiCostLog.aggregate({
-    where: {
-      orgId,
-      createdAt: { gte: monthStart },
-      metadata: { path: ['assessmentId'], equals: assessmentId },
-    },
-    _sum: { totalCostUsd: true },
-  });
-  return _sum.totalCostUsd ?? 0;
-}
-
 /**
  * What the workspace's stored reviews in flight are yet to spend at `rate`,
  * as of `now`: see "What is left" in the file header.
  */
 async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<number> {
-  const monthStart = utcMonthStart(now);
   const open = await prisma.assessment.findMany({
     where: {
       orgId,
@@ -248,27 +238,21 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
       ],
     },
     select: {
-      id: true,
       status: true,
       costUsd: true,
       judges: true,
-      createdAt: true,
       judgeRuns: { select: { status: true, errorCode: true } },
     },
   });
-  let held = 0;
-  for (const r of open) {
-    if (r.status === 'CANCELLED') {
-      const unsettled = Math.max(0, r.judges.length - r.judgeRuns.filter(settled).length);
-      const editor = unsettled === 0 && r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
-      held += Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd + editor;
-      continue;
+  return open.reduce((sum, r) => {
+    if (r.status !== 'CANCELLED') {
+      return sum + Math.max(0, reviewCost(rate, r.judges.length) - r.costUsd);
     }
-    const thisMonth =
-      r.createdAt >= monthStart ? r.costUsd : await spentSince(orgId, r.id, monthStart);
-    held += Math.max(0, reviewCost(rate, r.judges.length) - thisMonth);
-  }
-  return held;
+    const unsettled = Math.max(0, r.judges.length - r.judgeRuns.filter(settled).length);
+    const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
+    const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
+    return sum + Math.max(judges, editor);
+  }, 0);
 }
 
 /**

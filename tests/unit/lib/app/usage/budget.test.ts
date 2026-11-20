@@ -36,8 +36,6 @@ const state = vi.hoisted(() => ({
   quotasFail: false,
   reviews: [] as ReviewRow[],
   runs: [] as RunRow[],
-  /** Cost-log rows naming a review: what `spentSince` sums. */
-  reviewCosts: [] as { assessmentId: string; costUsd: number; createdAt: Date }[],
 }));
 
 type Where = Record<string, unknown>;
@@ -59,21 +57,7 @@ function newestFirst<T extends { createdAt: Date }>(rows: T[], take: number): T[
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiCostLog: {
-      aggregate: vi.fn(
-        async ({
-          where,
-        }: {
-          where: { createdAt: { gte: Date }; metadata?: { path: string[]; equals: string } };
-        }) => {
-          // The month's spend, as spend-caps reads it, unless it names a review.
-          if (!where.metadata) return { _sum: { totalCostUsd: state.spent } };
-          const id = where.metadata.equals;
-          const total = state.reviewCosts
-            .filter((c) => c.assessmentId === id && c.createdAt >= where.createdAt.gte)
-            .reduce((sum, c) => sum + c.costUsd, 0);
-          return { _sum: { totalCostUsd: total } };
-        }
-      ),
+      aggregate: vi.fn(async () => ({ _sum: { totalCostUsd: state.spent } })),
     },
     assessment: {
       findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
@@ -172,7 +156,6 @@ beforeEach(() => {
     quotasFail: false,
     reviews: [],
     runs: [],
-    reviewCosts: [],
   });
 });
 
@@ -442,32 +425,16 @@ describe('assertReviewWithinBudget', () => {
     expect(err.details).toMatchObject({ inFlightUsd: 0, remainingUsd: 2 });
   });
 
-  it('holds a review created last month for its estimate less only its spend this month', async () => {
+  it('holds a review created last month for its estimate less all it has spent', async () => {
     state.spent = 8;
-    // A running 7-judge review ($1.00) created last month, which spent $0.30 then and $0.20 since.
+    // A running 7-judge review ($1.00) created last month, which has spent $0.50 in all.
     const lastMonth = new Date(utcMonthStart().getTime() - 60_000);
-    const id = review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
-    state.reviewCosts.push(
-      { assessmentId: id, costUsd: 0.3, createdAt: lastMonth },
-      { assessmentId: id, costUsd: 0.2, createdAt: new Date() }
-    );
+    review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
 
     const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
 
-    // Held $1.00 less this month's $0.20, not less its lifetime $0.50.
-    expect(err.details).toMatchObject({ inFlightUsd: 0.8, remainingUsd: 1.2 });
-  });
-
-  it('takes a review created this month at its cost, without reading the cost log', async () => {
-    state.spent = 8;
-    review(0.4, { status: 'RUNNING', judges: slots(7) });
-
-    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
-
-    expect(err.details).toMatchObject({ inFlightUsd: 0.6 });
-    expect(prisma.aiCostLog.aggregate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ metadata: expect.anything() }) })
-    );
+    // $0.50 is all that can still land this month.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.5, remainingUsd: 1.5 });
   });
 
   it('holds a cancelled review for a judge a re-drive is running again', async () => {
@@ -485,6 +452,28 @@ describe('assertReviewWithinBudget', () => {
     const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0.285714 });
+  });
+
+  it('holds a cancelled review for its editor when that is more than its unsettled judges', async () => {
+    state.reviews = [];
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 8;
+    // One judge failed rate_limited: final in this run or being retried, which the rows cannot say.
+    const id = review(0.6, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 6; i += 1) judgeRun(0.1, { assessmentId: id });
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+
+    // The larger of one judge ($0.10) and the editor ($0.30).
+    expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
   });
 
   it('holds a cancelled review whose judges are all settled for its editor', async () => {
