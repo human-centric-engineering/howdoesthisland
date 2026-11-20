@@ -381,7 +381,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22), their replies
-      // (t-26) and the running places (t-28). Ledger row 2.
+      // (t-26), the running places (t-28) and the budget holds (t-50).
+      // Ledger row 2.
       expect(getAppExcludedSubjectSources().map((entry) => entry.model)).toEqual([
         'Framework',
         'FrameworkVersion',
@@ -390,6 +391,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'JudgeRun',
         'JudgeReply',
         'AssessmentPlace',
+        'BudgetHold',
       ]);
     },
   },
@@ -412,8 +414,12 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
       ]);
-      // FORK (HowDoesThisLand): the running places (t-28), a lease. Ledger row 2.
-      expect(getAppExcludedOrgSources().map((entry) => entry.model)).toEqual(['AssessmentPlace']);
+      // FORK (HowDoesThisLand): the running places (t-28) and the budget holds
+      // (t-50), leases. Ledger row 2.
+      expect(getAppExcludedOrgSources().map((entry) => entry.model)).toEqual([
+        'AssessmentPlace',
+        'BudgetHold',
+      ]);
       expect(appOrgDeclarationsFailed()).toBe(false);
     },
   },
