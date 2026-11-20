@@ -12,10 +12,10 @@
  *
  * **The lease.** A run claims the assessment by writing a fresh `leaseToken`
  * and a `leaseExpiresAt` {@link LEASE_MS} ahead, and renews it every
- * {@link LEASE_RENEW_MS} while it is alive, cancelled or not: a cancelled
- * run's judges in flight and its editor still land and are billed, and the
- * budget check and the running count hold it only while its lease is live
- * (t-56). Every write after the claim is
+ * {@link LEASE_RENEW_MS} while it is alive, cancelled or not (a cancelled
+ * one for up to {@link CANCEL_GRACE_MS}): a cancelled run's judges in flight
+ * and its editor still land and are billed, and the budget check and the
+ * running count hold it only while its lease is live (t-56). Every write after the claim is
  * conditional on the token and on `RUNNING`, so a run that lost its lease (or
  * was cancelled) writes nothing more to the assessment. A claim succeeds only
  * when the assessment is `QUEUED` or `RUNNING` with no live lease, has had
@@ -68,6 +68,7 @@ import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { runJudges, type LandedJudge } from '@/lib/app/assessments/fan-out';
 import { editorCostUsd, runEditor, withEditor } from '@/lib/app/assessments/editor';
 import {
+  CANCEL_GRACE_MS,
   LEASE_MS,
   LEASE_RENEW_MS,
   MAX_ATTEMPTS,
@@ -169,7 +170,7 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     logger.error('Assessment run stopped on an error', err, { assessmentId });
     outcome = await stoppedOnError(assessmentId, token).catch(() => 'lease_lost' as const);
   }
-  await lease.release();
+  lease.release();
   if (outcome === 'cancelled') await freePlace(assessmentId, token).catch(() => undefined);
   startNextQueued(orgId, assessmentId);
   return outcome;
@@ -551,28 +552,36 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
 }
 
 interface Lease {
-  /** False once a renewal found the lease gone (taken over, or the run's assessment final). */
+  /** False once a renewal found the lease gone (taken over, freed, or the run's assessment final). */
   readonly held: () => boolean;
-  /** Stop renewing; settles once a renewal already sent has landed. Never rejects. */
-  release: () => Promise<void>;
+  release: () => void;
 }
 
 /**
  * Renew the lease every {@link LEASE_RENEW_MS} until released, while the
- * assessment is `RUNNING` or `CANCELLED` under the token. A cancel therefore
- * does not turn `held` false: `stillOurs` reads the status, and that is what
- * stops the run starting judges. `release` waits for every renewal still in
- * flight (a slow one can outlast the next tick), so none can land after
- * `freePlace` and give a finished run its place back.
+ * assessment is under the token and its lease is set: `RUNNING`, or
+ * `CANCELLED` for up to {@link CANCEL_GRACE_MS} after the cancel. A cancel
+ * therefore does not turn `held` false: `stillOurs` reads the status, and
+ * that is what stops the run starting judges. A renewal that lands after
+ * `freePlace` cleared the lease matches nothing, so it cannot give a finished
+ * run its place back however late it is.
  */
 function holdLease(assessmentId: string, token: string): Lease {
   let held = true;
-  const pending = new Set<Promise<void>>();
   const timer = setInterval(() => {
-    const renewal: Promise<void> = prisma.assessment
+    const now = Date.now();
+    prisma.assessment
       .updateMany({
-        where: { id: assessmentId, leaseToken: token, status: { in: ['RUNNING', 'CANCELLED'] } },
-        data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) },
+        where: {
+          id: assessmentId,
+          leaseToken: token,
+          leaseExpiresAt: { not: null },
+          OR: [
+            { status: 'RUNNING' },
+            { status: 'CANCELLED', completedAt: { gt: new Date(now - CANCEL_GRACE_MS) } },
+          ],
+        },
+        data: { leaseExpiresAt: new Date(now + LEASE_MS) },
       })
       .then(
         ({ count }) => {
@@ -586,18 +595,10 @@ function holdLease(assessmentId: string, token: string): Lease {
             error: err instanceof Error ? err.message : String(err),
           });
         }
-      )
-      .finally(() => pending.delete(renewal));
-    pending.add(renewal);
+      );
   }, LEASE_RENEW_MS);
   timer.unref?.();
-  return {
-    held: () => held,
-    release: async () => {
-      clearInterval(timer);
-      await Promise.all(pending);
-    },
-  };
+  return { held: () => held, release: () => clearInterval(timer) };
 }
 
 /** Whether the run still holds the assessment: `RUNNING` under its token. */

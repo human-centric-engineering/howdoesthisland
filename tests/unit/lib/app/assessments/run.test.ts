@@ -43,7 +43,12 @@ vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
   runEditor: mocks.runEditor,
 }));
 
-import { JUDGES_IN_FLIGHT, LEASE_MS, LEASE_RENEW_MS } from '@/lib/app/assessments/limits';
+import {
+  CANCEL_GRACE_MS,
+  JUDGES_IN_FLIGHT,
+  LEASE_MS,
+  LEASE_RENEW_MS,
+} from '@/lib/app/assessments/limits';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { cancelAssessment, runAssessment } from '@/lib/app/assessments/run';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
@@ -687,7 +692,7 @@ describe('the lease', () => {
     expect(a.leaseExpiresAt).toBeNull();
   });
 
-  it('waits for a renewal in flight before a cancelled run gives its place up', async () => {
+  it('a renewal that lands after a cancelled run gave its place up does not take it back', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const a = fake.seed({ judges: ['judge_a'] });
     const judge = deferred();
@@ -712,11 +717,11 @@ describe('the lease', () => {
     renewal.resolve();
 
     expect(await running).toBe('cancelled');
-    // The renewal landed first, so freeing the place is what stands.
+    // It found the lease already cleared, so freeing the place is what stands.
     expect(a.leaseExpiresAt).toBeNull();
   });
 
-  it('waits for a renewal that outlasted the next one, too', async () => {
+  it('nor does one that outlasted the next renewal', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const a = fake.seed({ judges: ['judge_a'] });
     const judge = deferred();
@@ -743,6 +748,30 @@ describe('the lease', () => {
 
     expect(await running).toBe('cancelled');
     expect(a.leaseExpiresAt).toBeNull();
+  });
+
+  it('stops renewing a cancelled lease once the cancel is past CANCEL_GRACE_MS', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const a = fake.seed({ judges: ['judge_a'] });
+    const judge = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await judge.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    // A judge that never lands: the cancel is now past the grace the purge allows.
+    a.completedAt = new Date(Date.now() - CANCEL_GRACE_MS - 1);
+    const lease = (a.leaseExpiresAt as Date).getTime();
+    await new Promise((r) => setTimeout(r, 5));
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    await flush();
+
+    expect((a.leaseExpiresAt as Date).getTime()).toBe(lease);
+    judge.resolve();
+    expect(await running).toBe('cancelled');
   });
 
   it('once taken over, the old run writes nothing more to the assessment', async () => {
