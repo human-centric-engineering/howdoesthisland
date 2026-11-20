@@ -88,6 +88,7 @@ const APP_ROUTE_DIRS = [
   'scan',
   'shared-reports',
   'shares',
+  'usage',
   'workspaces',
 ] as const;
 

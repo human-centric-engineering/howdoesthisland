@@ -13,10 +13,12 @@ import { API_KEY_SESSION_ID_PREFIX, isApiKeySession } from '@/lib/auth/api-keys'
 export const ASSESS_SCOPE = 'assess';
 
 /**
- * The API-key scope the report's PDF enforces (t-31). Separate from `assess`
- * so a key that only fetches reports, for a script that files them, cannot
- * start runs that spend. Read-only: making or revoking a share link (t-32),
- * which publishes a report, needs `assess`.
+ * The API-key scope the report's PDF enforces (t-31), and the workspace's
+ * usage this month (`GET /api/v1/usage`, t-48): what it has run and spent.
+ * Separate from `assess` so a key that only reads, for a script that files
+ * reports or watches the budget, cannot start runs that spend. Read-only:
+ * making or revoking a share link (t-32), which publishes a report, needs
+ * `assess`.
  */
 export const REPORTS_SCOPE = 'reports';
 
