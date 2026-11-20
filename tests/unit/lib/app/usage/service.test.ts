@@ -180,6 +180,37 @@ describe('getMonthUsage', () => {
     expect(usage.lines.reduce((s, l) => s + l.spendUsd, 0)).toBe(usage.spendUsd);
   });
 
+  it("puts a calibration run's judge rows on the other line, not with reviews kept nowhere", async () => {
+    // Calibration runs its judges with `ephemeral: true`, in the install org.
+    cost(0.6, { judge: 'ethos', ephemeral: true, calibrationRunId: 'cal1', attempts: 1 });
+    cost(0.4, { judge: 'ethos', ephemeral: true, ephemeralRun: 'r1', attempts: 1 });
+
+    const usage = await getMonthUsage(ORG);
+
+    expect(usage.lines).toEqual([
+      { kind: 'kept-nowhere', projectId: null, reviews: 1, calls: 1, spendUsd: 0.4 },
+      { kind: 'other', projectId: null, reviews: 0, calls: 1, spendUsd: 0.6 },
+    ]);
+  });
+
+  it('reads again when the month turns during the read, so lines and total are one month', async () => {
+    // Last month's rows, read just before midnight UTC on the first.
+    vi.setSystemTime(new Date('2026-11-30T23:59:59.900Z'));
+    review('a1', null);
+    cost(2, { judge: 'ethos', assessmentId: 'a1', attempts: 1 });
+    // The month turns while the first read is in flight.
+    const { prisma } = await import('@/lib/db/client');
+    vi.mocked(prisma.aiCostLog.findMany).mockImplementationOnce(async () => {
+      vi.setSystemTime(new Date('2026-12-01T00:00:00.100Z'));
+      return [{ totalCostUsd: 2, metadata: { judge: 'ethos', assessmentId: 'a1', attempts: 1 } }];
+    });
+
+    const usage = await getMonthUsage(ORG);
+
+    expect(usage.month.start).toBe('2026-12-01T00:00:00.000Z');
+    expect(usage).toMatchObject({ reviews: 0, calls: 0, spendUsd: 0, lines: [] });
+  });
+
   it('answers no cap when the workspace has no budget, with the same total', async () => {
     state.budget = null;
     review('a1', null);

@@ -20,7 +20,7 @@ import { readAppSettings, writeAppSettings } from '@/lib/app/workspaces/app-sett
  * (`app-howdoesthisland/002-demo-usage`) and seed again.
  *
  * **What it writes**, in its own workspace (`usage-demo`, "Usage demo") with
- * the default $10 budget, every human platform admin its `OWNER`: stored
+ * the default $10 budget when it is made, every human platform admin its `OWNER`: stored
  * reviews in two projects and in none, each with its judges' and the
  * editor's cost rows; two reviews kept nowhere (`ephemeral` rows only); and
  * one row that is no review. All dated between the first of this month (UTC)
@@ -109,8 +109,9 @@ const unit: SeedUnit = {
         },
         prisma
       );
+      // Only when made: a budget someone set on the demo since is theirs.
+      await writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD }, prisma);
     }
-    await writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD }, prisma);
 
     const admins = await prisma.user.findMany({
       where: { role: PLATFORM_ADMIN_ROLE, accountType: 'HUMAN' },
@@ -119,7 +120,8 @@ const unit: SeedUnit = {
 
     // Spread over the month so far: the first of the month (UTC) to now.
     const monthStart = utcMonthStart().getTime();
-    const span = Math.max(Date.now() - monthStart, 60_000);
+    // Never ahead of now, even in the month's first moments.
+    const span = Math.max(Date.now() - monthStart, 1);
     const total = REVIEWS.length + EPHEMERAL_RUNS + 1;
     const at = (i: number) => new Date(monthStart + Math.floor((span * (i + 0.5)) / total));
 

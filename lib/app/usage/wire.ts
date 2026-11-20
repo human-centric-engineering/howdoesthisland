@@ -16,7 +16,8 @@ export const USAGE_ENDPOINT = '/api/v1/usage';
  * - `kept-nowhere` — reviews run with `store: false`, which keep nothing but
  *   their cost rows (`ephemeral: true`).
  * - `other` — AI spend tied to no review that still exists: a deleted
- *   review's calls, and anything else the workspace's AI spent. Present only
+ *   review's calls, a calibration run's, and anything else the workspace's
+ *   AI spent. Present only
  *   when there is some.
  */
 export const USAGE_LINE_KINDS = ['project', 'no-project', 'kept-nowhere', 'other'] as const;

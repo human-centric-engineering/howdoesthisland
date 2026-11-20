@@ -10,8 +10,10 @@
  *
  * **The breakdown comes from the same rows.** Each cost row is put on a line
  * by its metadata (`run-judge.ts` writes it): an `assessmentId` goes to that
- * review's project, `ephemeral: true` to the reviews kept nowhere. A row of
- * a review since deleted, or of anything that is not a review, goes to
+ * review's project, `ephemeral: true` to the reviews kept nowhere unless a
+ * calibration run wrote it (`calibrationRunId`: the judges run on the
+ * calibration set, in the install org). A row of a review since deleted, a
+ * calibration run's, or any other AI use that is not a review goes to
  * `other`, whose spend is the total less every other line, so the lines add
  * up to the total. (The cap's total is cached for seconds; in that window a
  * row just written can be in the lines and not yet in the total, and `other`
@@ -23,6 +25,10 @@
  * leaves no row, so it is not counted; nor is a stored one since deleted.
  * **Calls** are the provider attempts billed for a judge or the editor (the
  * row's `attempts`), so a retried judge counts twice, as it is billed.
+ *
+ * **One month throughout.** The cap reads its own month start, so a request
+ * that straddles midnight UTC on the first is read again, once, rather than
+ * answered with last month's lines against this month's total.
  *
  * Dollar figures are rounded to the millionth, the cost rows' own precision.
  *
@@ -43,6 +49,7 @@ const costMetadataSchema = z.object({
   assessmentId: z.string().optional(),
   ephemeral: z.literal(true).optional(),
   ephemeralRun: z.string().optional(),
+  calibrationRunId: z.string().optional(),
   judge: z.string().optional(),
   editor: z.string().optional(),
   attempts: z.number().int().nonnegative().optional(),
@@ -113,7 +120,13 @@ class Lines {
  * the route answers 500 rather than a figure that is wrong.
  */
 export async function getMonthUsage(orgId: string): Promise<MonthUsage> {
-  const monthStart = utcMonthStart();
+  const usage = await readMonth(orgId, utcMonthStart());
+  // The month turned during the read: the cap's total is the new month's.
+  const now = utcMonthStart();
+  return now.toISOString() === usage.month.start ? usage : readMonth(orgId, now);
+}
+
+async function readMonth(orgId: string, monthStart: Date): Promise<MonthUsage> {
   const since = { gte: monthStart };
 
   const [capState, costRows, reviewCounts] = await Promise.all([
@@ -163,7 +176,7 @@ export async function getMonthUsage(orgId: string): Promise<MonthUsage> {
     if (id !== undefined && projectOf.has(id)) {
       const projectId = projectOf.get(id) ?? null;
       line = projectId ? lines.get('project', projectId) : lines.get('no-project');
-    } else if (meta?.ephemeral) {
+    } else if (meta?.ephemeral && meta.calibrationRunId === undefined) {
       line = lines.get('kept-nowhere');
       if (meta.ephemeralRun) ephemeralRuns.add(meta.ephemeralRun);
     } else {

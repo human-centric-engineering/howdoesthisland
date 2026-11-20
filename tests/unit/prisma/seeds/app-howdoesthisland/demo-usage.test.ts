@@ -174,6 +174,8 @@ describe('002-demo-usage', () => {
 
     expect(mocks.createOrg).not.toHaveBeenCalled();
     expect(mocks.writeAppSettings).not.toHaveBeenCalled();
+    // A budget set on the demo since it was made is left as it is.
+    expect(mocks.writeOrgQuotas).not.toHaveBeenCalled();
     expect(db.orgMembership.upsert).toHaveBeenCalledTimes(2);
     for (const model of [db.assessment, db.content, db.aiCostLog]) {
       expect(model.deleteMany).toHaveBeenCalledWith({ where: { orgId: ORG } });
@@ -206,5 +208,16 @@ describe('002-demo-usage', () => {
     await unit.run(ctx);
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('no members'));
+  });
+
+  it('never dates a row after now, even seconds into the month', async () => {
+    const early = new Date('2026-11-01T00:00:10Z');
+    vi.setSystemTime(early);
+    const { ctx, costs } = makeDb();
+
+    await unit.run(ctx);
+
+    expect(costs.length).toBeGreaterThan(0);
+    expect(costs.every((r) => r.createdAt <= early)).toBe(true);
   });
 });
