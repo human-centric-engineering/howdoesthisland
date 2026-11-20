@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
   engineForVersion: vi.fn(),
   loadOrgQuotas: vi.fn(),
   monthSpend: vi.fn(),
+  // The cost rows the `kept-nowhere` tier reads (t-51): none unless a test seeds some.
+  costRows: vi.fn(),
 }));
 vi.mock('@/lib/auth/config', () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock('next/headers', () => ({ headers: vi.fn(() => Promise.resolve(new Headers())) }));
@@ -54,7 +56,7 @@ vi.mock('@/lib/db/client', () => ({
       user: { findUnique: vi.fn(async () => null) },
       org: { findUnique: vi.fn(async () => null) },
       // The month's spend, which the budget check (t-49) reads with the cap.
-      aiCostLog: { aggregate: mocks.monthSpend },
+      aiCostLog: { aggregate: mocks.monthSpend, findMany: mocks.costRows },
       // No workspace has a judge run on record, so the per-judge tier is empty.
       judgeRun: { ...fake.db.judgeRun, findMany: vi.fn(async () => []) },
     };
@@ -279,6 +281,7 @@ beforeEach(() => {
   // No monthly budget unless a test sets one.
   mocks.loadOrgQuotas.mockResolvedValue({});
   mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: 0 } });
+  mocks.costRows.mockResolvedValue([]);
   forgetSpendCaps();
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   aiAssessmentLimiter.reset(`user:${BOB}`);
@@ -1156,6 +1159,156 @@ describe('POST /api/v1/assessments — the monthly budget (t-49)', () => {
     expect((await post({ source: { text: TEXT }, profile: 'quick', store: false })).status).toBe(
       200
     );
+  });
+});
+
+describe('POST /api/v1/assessments — budget held while a request is under way (t-50, t-51)', () => {
+  const nine = Array.from({ length: 9 }, (_, i) => `judge_${i}`);
+  /** A $10 budget with `spent` used, and $1.00 a full review (as in t-49's tests). */
+  function budget(spent: number) {
+    mocks.loadOrgQuotas.mockResolvedValue({ monthlyBudgetUsd: 10 });
+    mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: spent } });
+    for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1, judges: nine });
+  }
+  /** A page whose fetch waits for `gate`: the request holds budget with no row yet. */
+  function slowPage(gate: Promise<void>) {
+    mocks.fetchPage.mockImplementation(async () => {
+      await gate;
+      return {
+        text: TEXT,
+        title: null,
+        url: 'https://example.com/p',
+        wordCount: 14,
+        format: 'html',
+        warnings: [],
+      };
+    });
+  }
+  async function until(fn: () => boolean) {
+    for (let i = 0; i < 100 && !fn(); i += 1) await new Promise((r) => setTimeout(r, 10));
+    expect(fn()).toBe(true);
+  }
+  const page = { url: 'https://example.com/p' };
+
+  for (const [first, second] of [
+    [true, true],
+    [false, false],
+    [true, false],
+    [false, true],
+  ]) {
+    const label = (store: boolean) => (store ? 'stored' : 'store: false');
+    it(`of two sent together with room for one (${label(first)}, then ${label(second)}), refuses the second with the first's hold in inFlightUsd`, async () => {
+      budget(8.5);
+      const gate = deferred();
+      slowPage(gate.promise);
+
+      const pending = post({ source: page, store: first, ...(first ? {} : { wait: true }) });
+      await until(() => fake.holds.length === 1);
+      const res = await post({ source: page, store: second, ...(second ? {} : { wait: true }) });
+
+      const body = await json(res);
+      expect(res.status).toBe(402);
+      expect(body.error?.code).toBe('BUDGET_EXCEEDED');
+      expect(body.error?.details).toMatchObject({
+        estimateUsd: 1,
+        inFlightUsd: 1,
+        remainingUsd: 0.5,
+      });
+      expect(body.error?.message).toContain('held for reviews already starting');
+      gate.resolve();
+      expect((await pending).status).toBe(first ? 202 : 200);
+      await settle();
+      expect(fake.holds).toEqual([]);
+      // Only the first's review: the second wrote nothing and called nothing.
+      expect(mocks.runJudge).toHaveBeenCalledTimes(9);
+    });
+  }
+
+  it('stored: holds from the check until the review is stored, whose row then counts in its place', async () => {
+    budget(8.5);
+    const gate = deferred();
+    slowPage(gate.promise);
+    // The run is held back, so the review stays queued after the request.
+    mocks.runJudge.mockImplementation(() => new Promise(() => undefined));
+
+    const pending = post({ source: page });
+    await until(() => fake.holds.length === 1);
+    expect(fake.holds[0]).toMatchObject({ orgId: WS_A, judges: 9, stored: true });
+    const before = fake.assessments.length;
+    gate.resolve();
+    expect((await pending).status).toBe(202);
+
+    expect(fake.holds).toEqual([]);
+    expect(fake.assessments).toHaveLength(before + 1);
+    // Its row holds it now: a second request is still refused.
+    const res = await post({ source: { text: TEXT } });
+    expect((await json(res)).error?.details).toMatchObject({ inFlightUsd: 1, remainingUsd: 0.5 });
+  });
+
+  it('store: false: holds while its judges run, against stored and store: false requests, and releases when the run ends (t-51)', async () => {
+    budget(8.5);
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+
+    const pending = post({ source: { text: TEXT }, store: false });
+    await until(() => mocks.runJudge.mock.calls.length > 0);
+    expect(fake.holds).toEqual([expect.objectContaining({ judges: 9, stored: false })]);
+
+    for (const store of [true, false]) {
+      const res = await post({ source: { text: TEXT }, store });
+      expect(res.status).toBe(402);
+      expect((await json(res)).error?.details).toMatchObject({ inFlightUsd: 1 });
+    }
+    gate.resolve();
+    expect((await pending).status).toBe(200);
+    expect(fake.holds).toEqual([]);
+  });
+
+  it('releases the hold of a request refused after its check: the per-user cap, a full workspace, a page that cannot be fetched', async () => {
+    budget(0);
+    const cap = vi
+      .spyOn(aiAssessmentLimiter, 'check')
+      .mockReturnValueOnce({ success: false, limit: 3, remaining: 0, reset: Date.now() + 60_000 });
+    expect((await post({ source: { text: TEXT } })).status).toBe(429);
+    expect(fake.holds).toEqual([]);
+    cap.mockRestore();
+
+    for (let i = 0; i < 3; i += 1)
+      fake.places.push({ id: `p${i}`, orgId: WS_A, leaseExpiresAt: new Date(Date.now() + 60_000) });
+    expect(await code(await post({ source: { text: TEXT }, store: false }))).toEqual({
+      status: 429,
+      code: 'WORKSPACE_BUSY',
+    });
+    expect(fake.holds).toEqual([]);
+    fake.places.length = 0;
+
+    mocks.fetchPage.mockRejectedValue(
+      new IntakeError(IntakeErrorCodes.FETCH_FAILED, 'The page could not be fetched.')
+    );
+    for (const store of [true, false]) {
+      const res = await post({ source: page, store });
+      expect(await code(res)).toEqual({ status: 422, code: 'FETCH_FAILED' });
+      expect(fake.holds).toEqual([]);
+    }
+  });
+
+  it('store: false: releases the hold of a caller gone away', async () => {
+    budget(0);
+    const gone = new AbortController();
+    gone.abort();
+    const res = await create(
+      new NextRequest(BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: { text: TEXT }, store: false }),
+        signal: gone.signal,
+      })
+    );
+    expect(await code(res)).toEqual({ status: 499, code: 'REQUEST_CLOSED' });
+    expect(fake.holds).toEqual([]);
   });
 });
 

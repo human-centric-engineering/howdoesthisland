@@ -27,6 +27,11 @@
  * `$transaction` runs one transaction at a time, which is what Serializable
  * guarantees the code under test (a count and the write it decides stand or
  * fall together), so N+1 concurrent claimers cannot all see a free place.
+ *
+ * For the budget holds (t-50): `budgetHold` rows in `holds`, with `findMany`,
+ * `create`, `updateMany` and `deleteMany`, and `$executeRaw` (the advisory
+ * lock) answering `0`. One transaction at a time is also what the lock
+ * guarantees the check: a request checked behind another sees its hold.
  */
 import { vi } from 'vitest';
 
@@ -90,6 +95,7 @@ export function createFakeDb() {
   const judgeRuns: Row[] = [];
   const replies: Row[] = [];
   const places: Row[] = [];
+  const holds: Row[] = [];
   let seq = 0;
   /** The tail of the transaction queue: each waits for the one before. */
   let txQueue: Promise<unknown> = Promise.resolve();
@@ -232,6 +238,10 @@ export function createFakeDb() {
       }),
     },
     judgeRun: {
+      // What the budget check reads of the reviews in flight (t-50).
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        judgeRuns.filter((r) => matches(r, where)).map((r) => ({ ...r }))
+      ),
       upsert: vi.fn(
         async ({
           where,
@@ -305,6 +315,28 @@ export function createFakeDb() {
         return { count: gone.length };
       }),
     },
+    budgetHold: {
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        holds.filter((h) => matches(h, where)).map((h) => ({ ...h }))
+      ),
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        seq += 1;
+        const row: Row = { id: `hold-${seq}`, ...data, createdAt: new Date() };
+        holds.push(row);
+        return { id: row.id };
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = holds.filter((h) => matches(h, where));
+        for (const row of rows) Object.assign(row, data);
+        return { count: rows.length };
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: Row }) => {
+        const gone = holds.filter((h) => matches(h, where));
+        for (const row of gone) holds.splice(holds.indexOf(row), 1);
+        return { count: gone.length };
+      }),
+    },
+    $executeRaw: vi.fn(async () => 0),
     $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => {
       const run = txQueue.then(() => fn(db));
       txQueue = run.catch(() => undefined);
@@ -384,7 +416,7 @@ export function createFakeDb() {
     return reply ? { ...run, output: reply.output, dropped: reply.dropped } : { ...run };
   };
 
-  return { db, assessments, contents, judgeRuns, replies, places, withReply, seed };
+  return { db, assessments, contents, judgeRuns, replies, places, holds, withReply, seed };
 }
 
 export type FakeDb = ReturnType<typeof createFakeDb>;

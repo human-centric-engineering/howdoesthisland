@@ -95,6 +95,13 @@ const ALLOWLIST: ReadonlyArray<{ file: string; calls: number; why: string }> = [
     calls: 2,
     why: 'knowledge-graph adjacency aggregation',
   },
+  // FORK (HowDoesThisLand): the budget check's per-workspace lock (t-50).
+  // Ledger: .context/app/platform-divergences.md.
+  {
+    file: 'lib/app/usage/budget.ts',
+    calls: 1,
+    why: "a review request's budget check and the hold it writes run under `pg_advisory_xact_lock(hashtextextended(key, 0))`, keyed on the workspace's id, so requests arriving together cannot each pass on the same remainder (t-50). Prisma has no call for it, and it touches no table, so RLS has nothing to filter",
+  },
   {
     file: 'lib/db/drift-probes.ts',
     calls: 6,

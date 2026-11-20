@@ -35,7 +35,7 @@ Projects are shown by id until `f-projects` adds the model and its names.
 ## Refused before it starts
 
 A review that would pass the budget is refused before any judge is called,
-stored or `store: false` (t-49, `assertReviewWithinBudget()` in
+stored or `store: false` (t-49, `reserveReviewBudget()` in
 `lib/app/usage/budget.ts`, called last in `prepareAssessment`). It is 402
 `BUDGET_EXCEEDED`: nothing is stored and the per-user cap is not charged.
 `details` carries `estimateUsd`, its `basis`, `remainingUsd`, `inFlightUsd`,
@@ -44,8 +44,8 @@ budget.
 
 It refuses when nothing is left, or when the estimate is more than what is.
 What is left is the budget less this month's spend, less `inFlightUsd`: what
-the workspace's stored reviews in flight are yet to spend, so a request does
-not count on budget a review already accepted will use. A judge is settled
+the workspace's reviews in flight, stored or not, are yet to spend, so a
+request does not count on budget a review already accepted will use. A judge is settled
 once it answered or failed for good; one that failed with `rate_limited` or
 `provider_error`, which a re-drive runs again, is not.
 
@@ -53,29 +53,52 @@ once it answered or failed for good; one that failed with `rate_limited` or
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `QUEUED` or `RUNNING`              | What it is yet to call, at this request's rate: a judge for each slot not yet settled, and the editor allowance for a review the editor runs on. Not its estimate less what it has spent: a re-drive calls an unsettled judge again at a full judge's cost, and the editor again, while a re-driven judge's row carries its first attempt's spend on. A retryable failure in this run is held as one being retried, since the rows cannot tell them apart, and the editor until the review is final. Judges it settled last month are reused, not called again. Held even with its lease run out: recovery runs it again. |
 | `CANCELLED`, lease still live      | The larger of its unsettled judges (at most 4, the judges a run calls at once) at this request's rate, and its editor allowance: after a cancel either judges are still landing or the editor is mid-call, never both, and a retried failure cannot be told from a final one. An upper bound, for the lease's life, which the run renews until they have landed.                                                                                                                                                                                                                                                          |
+| A request's hold (below)           | Its judges at this request's rate, and the editor allowance for a stored review the editor will run on. A `store: false` run is held at all its judges until it ends: it records none as they land.                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `CANCELLED`, lease gone; any other | Nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-It covers reviews already stored: requests arriving together each see none of
-the others, and the per-judge gate is left to catch them.
+### Requests arriving together
+
+A request stores its review only once intake has fetched the page or read the
+file (seconds), and a `store: false` one never does, so a check alone would let
+requests sent together each pass on the same remainder (t-50). So the check
+and a **hold** on the request's estimate are made in one transaction, under a
+per-workspace advisory lock (`pg_advisory_xact_lock`): a request checked
+behind another sees its hold in `inFlightUsd`.
+
+| Request        | Holds until                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| Stored         | Its review is stored, whose row is then held in its place. Both count for a moment, never neither.              |
+| `store: false` | Its run ends, since it has no row (t-51).                                                                       |
+| Either         | However it ends before then: refused for the per-user cap or a full workspace, intake failing, the caller gone. |
+
+A hold is an `app_budget_hold` row (`BudgetHold`): the judge count and whether
+the review is stored, under a lease renewed while it is held. One whose
+process died stops counting when its lease runs out, and the next check in the
+workspace deletes it. A check that cannot take the lock or write the hold in
+time refuses nothing, as one that cannot read the history.
 
 Every read the check makes runs on each non-quick request, before the
 per-user limiter, so each has an index serving its filter and order:
 `app_assessment` `(orgId, profile, status, createdAt)` and
-`(orgId, status, createdAt)`, `app_judge_run` `(orgId, status, createdAt)`.
+`(orgId, status, createdAt)`, `app_judge_run` `(orgId, status, createdAt)`,
+`app_budget_hold` `(orgId, leaseExpiresAt)`, and Sunrise's `ai_cost_log`
+`(orgId, createdAt)` for the `kept-nowhere` tier's bounded read.
 
 The estimate is a cost per judge × the judges the request calls, plus an
 editor allowance when the editor will run (2 judges or more). The cost per
 judge, from the workspace's own history:
 
-| Basis     | Cost per judge                                                                                                                                                         |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profile` | The median judge spend (cost less the editor's) per judge over the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list. |
-| `judges`  | The median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs.                                                                                               |
-| `none`    | No history: `0`, so any positive remainder is enough.                                                                                                                  |
+| Basis          | Cost per judge                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile`      | The median judge spend (cost less the editor's) per judge over the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list.                                                                                                                                                                                                                                     |
+| `judges`       | The median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs.                                                                                                                                                                                                                                                                                                                                   |
+| `kept-nowhere` | No stored judge run: the median spend of the judges of the workspace's `store: false` reviews (t-51), from their cost rows summed by `ephemeralRun` and `judge`. A judge whose row carries an `error` is left out, as are calibration runs' rows. Read from the workspace's last 500 cost rows, at most 100 judges: no index reaches into the rows' metadata, so the read is bounded rather than filtered. |
+| `none`         | No history: `0`, so any positive remainder is enough.                                                                                                                                                                                                                                                                                                                                                      |
 
 The editor allowance is the median of what the reviews that tier read (the
 profile's, or else the workspace's last 20 completed) spent beyond their judge
-runs, over those the editor ran on: its call is on no judge run.
+runs, over those the editor ran on: its call is on no judge run. The
+`kept-nowhere` tier has none: the editor never runs on those reviews.
 
 Per judge, so a profile whose judge list differs between frameworks or
 versions is scaled to the request. Only reviews that completed feed the first
@@ -96,7 +119,10 @@ not yet to spend on top of itself, and not those after it: each of those was
 admitted with this one held back already, so older reviews come first.
 Holding back both ways would let two reviews claimed together each refuse on
 the other's account, and neither run where one fitted. A later review that is
-already running is not held, and the per-judge gate is left to catch it.
+already running is not held, and the per-judge gate is left to catch it. Of
+the holds, only `store: false` runs that began before it count: a stored
+request's hold is a later review once stored, and until its request releases
+it, may be this review's own.
 
 A refused review is finished `FAILED` before any judge is called:
 
@@ -115,12 +141,6 @@ Only a review with no judge run yet is checked. A re-drive has already spent
 on its judges, which a refusal would throw away; the per-judge gate ends it
 `PARTIAL` with what it has. A check that cannot read the cap or the history
 refuses nothing, as at the request.
-
-Not done:
-
-- `store: false` reviews leave no assessment or judge-run rows, so they feed
-  no estimate (a workspace that only sends those estimates `0`) and are not
-  held back while in flight.
 
 ## Demo usage for development
 

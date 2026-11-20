@@ -77,11 +77,14 @@ export const USAGE_PAGE = '/usage';
 export const budgetRefusalDetailsSchema = z.object({
   /** USD, to the millionth. */
   estimateUsd: z.number(),
-  /** Where the cost per judge came from: the profile's reviews, recent judge runs, or none. */
-  basis: z.enum(['profile', 'judges', 'none']),
+  /**
+   * Where the cost per judge came from: the profile's reviews, recent judge
+   * runs, the judges of recent `store: false` reviews (`kept-nowhere`), or none.
+   */
+  basis: z.enum(['profile', 'judges', 'kept-nowhere', 'none']),
   /** What is left of the monthly budget once in-flight reviews are held back; `0` once none is. */
   remainingUsd: z.number(),
-  /** What the workspace's other stored reviews in flight (queued, running, or cancelled and finishing) are estimated yet to spend. */
+  /** What the workspace's other reviews in flight (starting, queued, running, or cancelled and finishing; stored or not) are estimated yet to spend. */
   inFlightUsd: z.number(),
   limitUsd: z.number(),
   /** `/usage`. A string rather than that literal, so figures stored before a move still read. */

@@ -558,7 +558,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
         status: 402,
         code: 'BUDGET_EXCEEDED',
         description:
-          "The review's estimated cost is more than what is left of the workspace's monthly AI budget, or none is left. No AI reviewer started and nothing was stored. What is left holds back what the workspace's queued and running reviews are yet to spend. `details` carries `estimateUsd`, its `basis`, `remainingUsd`, `inFlightUsd`, `limitUsd` and `usagePage`. A `quick` review is never refused this way.",
+          "The review's estimated cost is more than what is left of the workspace's monthly AI budget, or none is left. No AI reviewer started and nothing was stored. What is left holds back what the workspace's reviews already starting, queued or running (stored or not) are yet to spend, so requests sent together cannot each spend the same remainder. `details` carries `estimateUsd`, its `basis` (`profile`, `judges`, `kept-nowhere` for an estimate from the workspace's `store: false` reviews, or `none`), `remainingUsd`, `inFlightUsd`, `limitUsd` and `usagePage`. A `quick` review is never refused this way.",
       },
     ],
     response: {

@@ -109,6 +109,10 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       details: { ...err.counts, limit: RUNNING_PER_WORKSPACE },
       headers: { 'Retry-After': String(err.retryAfterSeconds) },
     });
+  } finally {
+    // The budget it held (t-50), however the request ended: refused for a
+    // full workspace or the per-user cap, failed, or done (a no-op then).
+    await prepared.hold?.release();
   }
   const done = created.kind === 'ephemeral' || created.final;
   return successResponse(created.assessment, undefined, { status: done ? 200 : 202 });
