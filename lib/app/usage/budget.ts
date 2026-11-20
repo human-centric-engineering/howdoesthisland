@@ -37,12 +37,18 @@
  * settled once it answered or failed for good; one that failed in a way a
  * re-drive runs again (`RETRIED_ON_REDRIVE`) is not.
  *
- * - One queued or running: its estimate at this request's rate, less all it
- *   has spent (`costUsd`). What it has yet to spend lands this month whenever
- *   it started, so its spend in an earlier month is subtracted too: those
- *   judges are reused, not billed again (t-52 asked for this month's spend
- *   only; that would hold last month's spend a second time). A running review
- *   whose lease has run out is held all the same: recovery runs it again.
+ * - One queued or running: its estimate at this request's rate, less its
+ *   settled spend: what it has spent (`costUsd`) less the spend on its judge
+ *   runs that are not settled. A re-drive calls each of those again, at a full
+ *   judge's cost, so their first attempts' spend does not count against the
+ *   estimate's share for them (t-55). A row that failed retryably in this run
+ *   is held the same way, though a re-drive may never come: the rows cannot
+ *   tell the two apart. What it has yet to spend lands this month whenever
+ *   it started, so its settled spend in an earlier month is subtracted too:
+ *   those judges are reused, not billed again (t-52 asked for this month's
+ *   spend only; that would hold last month's spend a second time). A running
+ *   review whose lease has run out is held all the same: recovery runs it
+ *   again.
  * - One cancelled whose lease is still live (`places.ts` counts it the same
  *   way): no further judge starts, but what was already called finishes and
  *   is billed. That is either judges still landing or, once the fan-out has
@@ -53,8 +59,11 @@
  *   rate, or its editor allowance. An upper bound, which lasts only while
  *   the lease does: judges never started are among the unsettled, and an
  *   editor already billed is held until the run clears its lease. Once it
- *   has, nothing. Its judge runs are read only for these rows, by
- *   `assessmentId` (the `[assessmentId, judge]` unique index).
+ *   has, nothing. The run renews the lease of a cancelled review until its
+ *   judges and editor have landed (t-56).
+ *
+ * The judge runs of these reviews are read by `assessmentId` (the
+ * `[assessmentId, judge]` unique index).
  *
  * It covers reviews already stored: requests arriving together each see none
  * of the others, which the per-judge gate is left to catch.
@@ -241,19 +250,23 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
     },
     select: { id: true, status: true, costUsd: true, judges: true },
   });
-  const cancelled = open.filter((r) => r.status === 'CANCELLED');
   const runs =
-    cancelled.length > 0
+    open.length > 0
       ? await prisma.judgeRun.findMany({
-          where: { orgId, assessmentId: { in: cancelled.map((r) => r.id) } },
-          select: { assessmentId: true, status: true, errorCode: true },
+          where: { orgId, assessmentId: { in: open.map((r) => r.id) } },
+          select: { assessmentId: true, status: true, errorCode: true, costUsd: true },
         })
       : [];
   return open.reduce((sum, r) => {
+    const own = runs.filter((run) => run.assessmentId === r.id);
     if (r.status !== 'CANCELLED') {
-      return sum + Math.max(0, reviewCost(rate, r.judges.length) - r.costUsd);
+      const unsettledSpend = own
+        .filter((run) => !settled(run))
+        .reduce((total, run) => total + run.costUsd, 0);
+      const settledSpend = r.costUsd - unsettledSpend;
+      return sum + Math.max(0, reviewCost(rate, r.judges.length) - settledSpend);
     }
-    const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
+    const done = own.filter(settled).length;
     const unsettled = Math.max(0, r.judges.length - done);
     const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
     const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;

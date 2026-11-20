@@ -430,7 +430,7 @@ describe('assertReviewWithinBudget', () => {
     expect(err.details).toMatchObject({ inFlightUsd: 0, remainingUsd: 2 });
   });
 
-  it('holds a review created last month for its estimate less all it has spent', async () => {
+  it('holds a review created last month for its estimate less all it has settled', async () => {
     state.spent = 8;
     // A running 7-judge review ($1.00) created last month, which has spent $0.50 in all.
     const lastMonth = new Date(utcMonthStart().getTime() - 60_000);
@@ -503,11 +503,38 @@ describe('assertReviewWithinBudget', () => {
     expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
   });
 
-  it('reads judge runs for cancelled reviews only, and none without one', async () => {
+  it("holds a running review for re-running its retryably failed judges at this request's rate (t-55)", async () => {
     state.spent = 8;
-    review(0.4, { status: 'RUNNING', judges: slots(7) });
+    // A running 7-judge review ($1.00) that has spent $0.40: two judges answered
+    // ($0.10 each) and one failed rate_limited after $0.20, which a re-drive runs again.
+    const id = review(0.4, { status: 'RUNNING', judges: slots(7) });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.2, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
 
-    await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    // Its estimate less its settled $0.20: the failed judge's $0.20 does not
+    // pay for its re-run, so it is held at the full $1/7 with the rest.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.8, remainingUsd: 1.2 });
+  });
+
+  it('counts the spend of a judge that failed for good as settled', async () => {
+    state.spent = 8;
+    const id = review(0.4, { status: 'QUEUED', judges: slots(7) });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.2, { assessmentId: id, status: 'FAILED', errorCode: 'invalid_reply' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.6, remainingUsd: 1.4 });
+  });
+
+  it('reads no judge runs by review when none is in flight', async () => {
+    state.spent = 8;
+
+    await assertReviewWithinBudget(ORG, 'full', 7);
 
     expect(prisma.judgeRun.findMany).not.toHaveBeenCalledWith(
       expect.objectContaining({
