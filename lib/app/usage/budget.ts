@@ -37,22 +37,18 @@
  * settled once it answered or failed for good; one that failed in a way a
  * re-drive runs again (`RETRIED_ON_REDRIVE`) is not.
  *
- * - One queued or running: its estimate at this request's rate, less its
- *   settled spend: each settled judge's spend, up to one judge's share at
- *   this rate, and its editor's (what it spent beyond its judge runs), up to
- *   the editor allowance. A judge that is not settled is not subtracted: a
- *   re-drive calls it again at a full judge's cost, so its first attempt's
- *   spend does not count against the estimate's share for it (t-55). A row
- *   that failed retryably in this run is held the same way, though a re-drive
- *   may never come: the rows cannot tell the two apart. The caps keep spend
- *   past a share (a re-driven judge's row carries its first attempt on) from
- *   coming off what the review's other judges are yet to spend. What it has
- *   yet to spend lands this month whenever
- *   it started, so its settled spend in an earlier month is subtracted too:
- *   those judges are reused, not billed again (t-52 asked for this month's
- *   spend only; that would hold last month's spend a second time). A running
- *   review whose lease has run out is held all the same: recovery runs it
- *   again.
+ * - One queued or running: what it is yet to call, at this request's rate:
+ *   a judge for each slot not yet settled, and the editor allowance for a
+ *   review the editor runs on (t-55). Not its estimate less what it has
+ *   spent: a re-drive calls a judge that is not settled again at a full
+ *   judge's cost, and the editor again, while a re-driven judge's row carries
+ *   its first attempt's spend on, so what it spent says little about what is
+ *   to come. A row that failed retryably in this run is held as one a
+ *   re-drive retries, though a re-drive may never come: the rows cannot tell
+ *   the two apart. The editor is held until the review is final for the same
+ *   reason. Judges it settled last month are reused, not called again (t-52).
+ *   A running review whose lease has run out is held all the same: recovery
+ *   runs it again.
  * - One cancelled whose lease is still live (`places.ts` counts it the same
  *   way): no further judge starts, but what was already called finishes and
  *   is billed. That is either judges still landing or, once the fan-out has
@@ -252,31 +248,21 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
       ],
     },
-    select: { id: true, status: true, costUsd: true, judges: true },
+    select: { id: true, status: true, judges: true },
   });
   const runs =
     open.length > 0
       ? await prisma.judgeRun.findMany({
           where: { orgId, assessmentId: { in: open.map((r) => r.id) } },
-          select: { assessmentId: true, status: true, errorCode: true, costUsd: true },
+          select: { assessmentId: true, status: true, errorCode: true },
         })
       : [];
   return open.reduce((sum, r) => {
-    const own = runs.filter((run) => run.assessmentId === r.id);
-    if (r.status !== 'CANCELLED') {
-      const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
-      const editorSpent = Math.max(0, r.costUsd - own.reduce((t, run) => t + run.costUsd, 0));
-      const settledSpend =
-        own
-          .filter(settled)
-          .reduce((total, run) => total + Math.min(run.costUsd, rate.perJudgeUsd), 0) +
-        Math.min(editorSpent, editor);
-      return sum + Math.max(0, reviewCost(rate, r.judges.length) - settledSpend);
-    }
-    const done = own.filter(settled).length;
+    const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
     const unsettled = Math.max(0, r.judges.length - done);
-    const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
     const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
+    if (r.status !== 'CANCELLED') return sum + unsettled * rate.perJudgeUsd + editor;
+    const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
     return sum + Math.max(judges, editor);
   }, 0);
 }
