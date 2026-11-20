@@ -1158,3 +1158,72 @@ describe('POST /api/v1/assessments — the monthly budget (t-49)', () => {
     );
   });
 });
+
+describe('a queued review checked against the budget again as it is claimed (t-53)', () => {
+  const nine = Array.from({ length: 9 }, (_, i) => `judge_${i}`);
+
+  it('is failed with BUDGET_EXCEEDED and its figures, which the read and the events stream show', async () => {
+    // $1.00 a review, as in t-49's tests; it was queued while the budget had room.
+    for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1, judges: nine });
+    const queued = fake.seed({ judges: nine, profile: 'full' });
+    const id = String(queued.id);
+    // Spend landed while it waited: $0.50 left.
+    mocks.loadOrgQuotas.mockResolvedValue({ monthlyBudgetUsd: 10 });
+    mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: 9.5 } });
+
+    expect(await runAsOrg(WS_A, () => runAssessment(id))).toBe('failed');
+
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+    const figures = {
+      estimateUsd: 1,
+      basis: 'profile',
+      remainingUsd: 0.5,
+      inFlightUsd: 0,
+      limitUsd: 10,
+      usagePage: '/usage',
+    };
+    const body = await json(await getOne(id));
+    expect(body.data).toMatchObject({
+      status: 'failed',
+      errorCode: 'BUDGET_EXCEEDED',
+      errorDetails: figures,
+      costUsd: 0,
+      judgeRuns: [],
+    });
+    expect(body.data?.error).toContain('more than the $0.50 left');
+
+    const listed = await json(await getList(''));
+    expect((listed.data as unknown as Row[]).find((r) => r.id === id)).toMatchObject({
+      errorCode: 'BUDGET_EXCEEDED',
+      errorDetails: figures,
+    });
+
+    const done = (await frames(await stream(id))).at(-1);
+    expect(done?.data).toMatchObject({
+      type: 'assessment_done',
+      status: 'failed',
+      errorCode: 'BUDGET_EXCEEDED',
+    });
+  });
+
+  it('answers errorCode and errorDetails null for a review that failed otherwise, and for figures not in the refusal’s shape', async () => {
+    const plain = fake.seed({
+      status: 'FAILED',
+      error: 'Its framework version can no longer be run.',
+    });
+    const odd = fake.seed({
+      status: 'FAILED',
+      errorCode: 'BUDGET_EXCEEDED',
+      errorDetails: { x: 1 },
+    });
+
+    expect((await json(await getOne(String(plain.id)))).data).toMatchObject({
+      errorCode: null,
+      errorDetails: null,
+    });
+    expect((await json(await getOne(String(odd.id)))).data).toMatchObject({
+      errorCode: 'BUDGET_EXCEEDED',
+      errorDetails: null,
+    });
+  });
+});

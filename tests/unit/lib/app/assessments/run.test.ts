@@ -5,7 +5,8 @@
  * Mocked: Prisma (the fake in `fake-db.ts`, so every assertion is on the rows
  * a run leaves), the engine (a stub whose `assemble` reports which judges'
  * outputs it was given), `runJudge` (scripted per slot) and `runEditor`
- * (skipping by default; its own tests are `editor.test.ts`). Real: how the
+ * (skipping by default; its own tests are `editor.test.ts`), and the budget
+ * check at claim (fitting by default; its own tests are `budget.test.ts`). Real: how the
  * editor's outcome is stored and costed. Real: the fan-out,
  * the lease and claim logic, the tenant context and the privacy scope.
  *
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   runJudge: vi.fn(),
   runEditor: vi.fn(),
   engineForVersion: vi.fn(),
+  budgetRefusal: vi.fn(),
 }));
 
 let fake: FakeDb;
@@ -38,6 +40,8 @@ vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
   runJudge: mocks.runJudge,
 }));
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
+// The check itself is `budget.test.ts`'s; here, what the run does with its answer (t-53).
+vi.mock('@/lib/app/usage/budget', () => ({ budgetRefusal: mocks.budgetRefusal }));
 vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/assessments/editor')>()),
   runEditor: mocks.runEditor,
@@ -114,6 +118,7 @@ beforeEach(() => {
   });
   mocks.runJudge.mockImplementation(async (slot: string) => reply(slot));
   mocks.runEditor.mockResolvedValue({ status: 'skipped', reason: 'too_few_judges' });
+  mocks.budgetRefusal.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -896,6 +901,89 @@ describe('the concurrency limits', () => {
     const mine = fake.seed({ judges: ['judge_a'] });
 
     expect(await inOrg(() => runAssessment(String(mine.id)))).toBe('completed');
+  });
+});
+
+describe('the budget, checked again as the review is claimed (t-53)', () => {
+  const figures = {
+    estimateUsd: 1,
+    basis: 'profile',
+    remainingUsd: 0.5,
+    inFlightUsd: 1,
+    limitUsd: 10,
+    usagePage: '/usage',
+  };
+  const refusal = {
+    message: 'This review would cost about $1.00, more than the $0.50 left.',
+    details: figures,
+  };
+
+  it('finishes a review that would now pass the budget FAILED, with the refusal, calling no judge', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'], profile: 'full' });
+    mocks.budgetRefusal.mockResolvedValueOnce(refusal);
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+
+    // Its own hold is left out: it is named as the review being claimed.
+    expect(mocks.budgetRefusal).toHaveBeenCalledWith(ORG, 'full', 2, a.id);
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+    expect(mocks.runEditor).not.toHaveBeenCalled();
+    expect(engine.quickScan).not.toHaveBeenCalled();
+    expect(a).toMatchObject({
+      status: 'FAILED',
+      error: refusal.message,
+      errorCode: 'BUDGET_EXCEEDED',
+      errorDetails: figures,
+      costUsd: 0,
+      result: null,
+      leaseToken: null,
+      leaseExpiresAt: null,
+    });
+    expect(a.completedAt).toBeInstanceOf(Date);
+    expect(runsOf(a.id)).toEqual([]);
+  });
+
+  it('runs a review that still fits as before', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.budgetRefusal).toHaveBeenCalledTimes(1);
+    expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_a', 'judge_b']);
+    expect(a).toMatchObject({
+      status: 'COMPLETED',
+      error: null,
+      errorCode: null,
+      errorDetails: null,
+    });
+  });
+
+  it('does not check a re-drive that already has judge runs, whose spend a refusal would throw away', async () => {
+    const a = fake.seed(
+      { judges: ['judge_a', 'judge_b'], status: 'RUNNING', attempts: 1, costUsd: 0.01 },
+      [{ judge: 'judge_a', status: 'SUCCEEDED', costUsd: 0.01, output: { from: 'judge_a' } }]
+    );
+    mocks.budgetRefusal.mockResolvedValue(refusal);
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.budgetRefusal).not.toHaveBeenCalled();
+    expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_b']);
+  });
+
+  it('frees the place it was claimed into, so the next queued review starts', async () => {
+    const live = { status: 'RUNNING', leaseExpiresAt: new Date(Date.now() + 30_000), attempts: 1 };
+    fake.seed({ ...live, leaseToken: 'run-1' });
+    fake.seed({ ...live, leaseToken: 'run-2' });
+    const refused = fake.seed({ judges: ['judge_a'] });
+    const next = fake.seed({ judges: ['judge_a'] });
+    mocks.budgetRefusal.mockResolvedValueOnce(refusal);
+
+    expect(await inOrg(() => runAssessment(String(refused.id)))).toBe('failed');
+    await settle();
+
+    expect(refused).toMatchObject({ status: 'FAILED', errorCode: 'BUDGET_EXCEEDED' });
+    expect(next).toMatchObject({ status: 'COMPLETED', attempts: 1 });
   });
 });
 

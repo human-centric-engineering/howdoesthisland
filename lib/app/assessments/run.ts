@@ -1,7 +1,7 @@
 /**
  * Run a stored assessment under a lease (t-22, app-plan §8.2).
  *
- *   claim ─▶ quick scan ─▶ missing judges (≤ 4 in flight, each JudgeRun saved
+ *   claim ─▶ budget (no judge run yet) ─▶ quick scan ─▶ missing judges (≤ 4 in flight, each JudgeRun saved
  *   as it lands) ─▶ assemble ─▶ editor's summary ─▶ COMPLETED | PARTIAL | FAILED
  *
  * **The editor** (`editor.ts`, t-25) summarises the assembled result for a run
@@ -37,6 +37,14 @@
  * transaction that saves it, so the total holds however the run ends:
  * completed, cancelled, or given up on. The editor's is added as it lands,
  * under the same guard.
+ *
+ * **The budget, again** (t-53). A review that has called no judge yet is
+ * checked against the workspace's budget once claimed, its own hold left out
+ * (`budgetRefusal` in `lib/app/usage/budget.ts`): it may have waited in the
+ * queue while other spend landed. One that would now pass it is finished
+ * `FAILED`, `errorCode` `BUDGET_EXCEEDED` with the figures in `errorDetails`,
+ * and no judge is called. A check that cannot read the cap or the history
+ * refuses nothing.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
  * assessment back to the queue under the same attempt count, so the recovery
@@ -81,6 +89,7 @@ import { isSerializableConflict } from '@/lib/db/serializable-conflict';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { requireOrgId } from '@/lib/tenancy/context';
+import { budgetRefusal } from '@/lib/app/usage/budget';
 
 /** How a call to {@link runAssessment} ended. */
 export type RunOutcome =
@@ -145,6 +154,7 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
       select: {
         id: true,
         frameworkVersionId: true,
+        profile: true,
         judges: true,
         context: true,
         createdByUserId: true,
@@ -152,8 +162,11 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         judgeRuns: { include: { reply: { select: { output: true } } } },
       },
     });
+    const refused = row ? await refuseOverBudget(row, orgId, token) : null;
     if (!row) {
       outcome = 'lease_lost';
+    } else if (refused) {
+      outcome = refused;
     } else {
       const scope = createPrivacyScope({
         scopeId: `assessment:${row.id}`,
@@ -236,6 +249,7 @@ export function startNextQueued(orgId: string, finished?: string): void {
 type AssessmentRow = {
   id: string;
   frameworkVersionId: string;
+  profile: string;
   judges: string[];
   context: Prisma.JsonValue;
   createdByUserId: string | null;
@@ -395,6 +409,33 @@ async function drive(
   });
   if (!written) return await lostTo(row.id);
   return status === 'PARTIAL' ? 'partial' : 'completed';
+}
+
+/**
+ * Check the budget again as the review is claimed (t-53, `budget.ts`): one
+ * that has called no judge yet and would now pass what is left is finished
+ * `FAILED` with the refusal, before any judge is called. `null` when it fits,
+ * or has judge runs already (a re-drive, which the per-judge gate ends).
+ */
+async function refuseOverBudget(
+  row: Pick<AssessmentRow, 'id' | 'profile' | 'judges' | 'judgeRuns'>,
+  orgId: string,
+  token: string
+): Promise<RunOutcome | null> {
+  if (row.judgeRuns.length > 0) return null;
+  const refusal = await budgetRefusal(orgId, row.profile, row.judges.length, row.id);
+  if (!refusal) return null;
+  logger.info('Queued assessment refused by the budget as it was claimed', {
+    assessmentId: row.id,
+    ...refusal.details,
+  });
+  const written = await finish(row.id, token, {
+    status: 'FAILED',
+    error: refusal.message,
+    errorCode: 'BUDGET_EXCEEDED',
+    errorDetails: { ...refusal.details },
+  });
+  return written ? 'failed' : await lostTo(row.id);
 }
 
 /** Record that the engine could not score the text: final, since it would throw again. */

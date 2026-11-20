@@ -39,13 +39,14 @@ const state = vi.hoisted(() => ({
 }));
 
 type Where = Record<string, unknown>;
-/** Equality, `{ in }`, `{ gt }`, `{ lt }` and a top-level `OR`: what the queries ask. */
+/** Equality, `{ in }`, `{ not }`, `{ gt }`, `{ lt }` and a top-level `OR`: what the queries ask. */
 const matches = (row: Record<string, unknown>, where: Where): boolean =>
   Object.entries(where).every(([k, v]) => {
     if (k === 'OR') return (v as Where[]).some((w) => matches(row, w));
     if (typeof v !== 'object' || v === null || v instanceof Date) return row[k] === v;
     const value = row[k];
     if ('in' in v) return (v as { in: unknown[] }).in.includes(value);
+    if ('not' in v) return value !== v.not;
     if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
     if ('lt' in v) return value instanceof Date && value < (v as { lt: Date }).lt;
     throw new Error(`fake cannot filter ${k} by ${JSON.stringify(v)}`);
@@ -104,7 +105,11 @@ vi.mock('@/lib/logging', () => ({
 import { prisma } from '@/lib/db/client';
 import { forgetSpendCaps, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { APIError } from '@/lib/api/errors';
-import { assertReviewWithinBudget, estimateReviewCost } from '@/lib/app/usage/budget';
+import {
+  assertReviewWithinBudget,
+  budgetRefusal,
+  estimateReviewCost,
+} from '@/lib/app/usage/budget';
 
 const ORG = 'org-a';
 const OTHER = 'org-b';
@@ -615,5 +620,54 @@ describe('the editor in the profile tier', () => {
       estimateUsd: 0.6,
       basis: 'profile',
     });
+  });
+});
+
+describe('budgetRefusal: a queued review checked again as it is claimed (t-53)', () => {
+  beforeEach(() => {
+    state.budget = 10;
+    // An estimate of $1.00 a 7-judge review.
+    for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+  });
+
+  it('leaves the review’s own hold out of what is held back, so it fits what its request saw', async () => {
+    state.spent = 9;
+    const self = review(0, { status: 'RUNNING', judges: slots(7) });
+
+    // Held as one of the others, it would leave nothing.
+    await expect(budgetRefusal(ORG, 'full', 7)).resolves.toMatchObject({
+      details: { remainingUsd: 0, inFlightUsd: 1 },
+    });
+    await expect(budgetRefusal(ORG, 'full', 7, self)).resolves.toBeNull();
+  });
+
+  it('still holds back the other reviews in flight, and answers the refusal’s message and figures', async () => {
+    state.spent = 8.5;
+    const self = review(0, { status: 'RUNNING', judges: slots(7) });
+    // Queued meanwhile, ahead of it: $1.00 to come.
+    review(0, { status: 'QUEUED', judges: slots(7) });
+
+    const refused = await budgetRefusal(ORG, 'full', 7, self);
+
+    expect(refused?.details).toEqual({
+      estimateUsd: 1,
+      basis: 'profile',
+      remainingUsd: 0.5,
+      inFlightUsd: 1,
+      limitUsd: 10,
+      usagePage: '/usage',
+    });
+    expect(refused?.message).toContain('more than the $0.50 left once $1.00 is held');
+    expect(refused?.message).toContain('No AI reviewer was started.');
+  });
+
+  it('refuses once other spend has used the budget up while it waited', async () => {
+    const self = review(0, { status: 'RUNNING', judges: slots(7) });
+    state.spent = 10;
+
+    const refused = await budgetRefusal(ORG, 'full', 7, self);
+
+    expect(refused?.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 0, limitUsd: 10 });
+    expect(refused?.message).toContain('has used its $10.00 monthly AI budget');
   });
 });

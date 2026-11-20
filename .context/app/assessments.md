@@ -84,6 +84,14 @@ from either of the first two.
   count and the claim are one serializable transaction. A fourth assessment
   stays `QUEUED`. When a run ends, however it ends, it starts the workspace's
   oldest queued assessment itself.
+- **The budget, again (t-53).** Once claimed, an assessment that has no
+  judge run yet is checked against the workspace's monthly budget, with its
+  own hold left out of what is held back: it may have waited in the queue
+  while other spend landed. One that would now pass it is `FAILED` at once,
+  calling no judge, with `errorCode` `BUDGET_EXCEEDED`, the figures in
+  `errorDetails` and the reason in `error`. Its place is freed and the next
+  queued one starts. A re-drive with judge runs is not checked again. See
+  [`usage.md`](./usage.md#checked-again-when-it-is-claimed).
 - **Judges** run at most four at once. Each `JudgeRun` row is written as the
   judge lands, in one transaction with an update of the assessment under the
   run's token. A run that lost its lease therefore stores nothing over its
@@ -106,7 +114,9 @@ from either of the first two.
   claim that fails is logged, and the assessment is left as it was.
 - **`FAILED`** is for a version that can no longer be run, a text the engine
   cannot score (its quick scan or `assemble()` threw, which would throw
-  again), and an assessment that ran out of attempts. `error` says which.
+  again), an assessment that ran out of attempts, and one the budget refused
+  as it was claimed. `error` says which; `errorCode` is `BUDGET_EXCEEDED` for
+  the last and `null` for the rest.
 - **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease. The
   run asks before each judge starts, so no further judge is called. Judges
   already in flight finish and their rows are saved, since their cost is
@@ -253,6 +263,10 @@ Each route's docblock lists its error codes. A few rules hold across them:
   `prepareAssessment` estimates the review and refuses it with 402
   `BUDGET_EXCEEDED` when the estimate is more than what is left of the
   workspace's budget, stored or not. See [`usage.md`](./usage.md#refused-before-it-starts).
+  A stored review that passes here and then waits in the queue is checked
+  again when it is claimed; one refused then reads `failed` with `errorCode`
+  `BUDGET_EXCEEDED` and `errorDetails` holding the 402's `details` (t-53).
+  The report page says it was not started for the budget and links `/usage`.
 - **Running places (t-28).** A `store: false` run that calls judges holds one
   of the workspace's three running places while it runs, shared with stored
   runs both ways. It has no `Assessment` row, so it holds an
@@ -308,13 +322,13 @@ request's `after()`, another instance, or the recovery job. A stream opened
 late first replays the judges already landed. Each event is the SSE
 `event:` name and the `data:` payload's `type`:
 
-| Event                | When                                                             |
-| -------------------- | ---------------------------------------------------------------- |
-| `assessment_status`  | First, the state found; then each change, after its judges.      |
-| `assessment_judge`   | A judge landed, or landed again on a re-drive.                   |
-| `assessment_done`    | Final, with `overall`, `band`, `costUsd`, `error`. Then it ends. |
-| `assessment_gone`    | Deleted while followed. Then it ends.                            |
-| `assessment_timeout` | Still going after `EVENTS_MAX_MS` (5 min). Open it again.        |
+| Event                | When                                                                          |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `assessment_status`  | First, the state found; then each change, after its judges.                   |
+| `assessment_judge`   | A judge landed, or landed again on a re-drive.                                |
+| `assessment_done`    | Final, with `overall`, `band`, `costUsd`, `error`, `errorCode`. Then it ends. |
+| `assessment_gone`    | Deleted while followed. Then it ends.                                         |
+| `assessment_timeout` | Still going after `EVENTS_MAX_MS` (5 min). Open it again.                     |
 
 A cancelled run's judges that were in flight land after `cancelled`. The
 stream waits for them, until the run gives up its lease (or the lease runs

@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import type { ReportAssessment } from '@/lib/app/reports/input';
 import { WORDS } from '@/lib/app/reports/words';
+import { USAGE_PAGE } from '@/lib/app/usage/wire';
 
 /**
  * What `/assessments/[id]` shows when there is no report to show yet, or
@@ -42,6 +44,23 @@ export function ReportPending({ assessment }: { assessment: ReportAssessment }) 
 
 export function ReportNoResult({ assessment }: { assessment: ReportAssessment }) {
   const cancelled = assessment.status === 'cancelled';
+  if (!cancelled && assessment.errorCode === 'BUDGET_EXCEEDED') {
+    return (
+      <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="This review was not started">
+        <p>
+          By the time its turn came it would have gone over the workspace&rsquo;s monthly AI budget,
+          so none of its {WORDS.aiReviewers} were started and nothing was charged.
+        </p>
+        {assessment.error ? <p className="mt-3 text-base">{assessment.error}</p> : null}
+        <p className="mt-3 text-base">
+          <Link href={USAGE_PAGE} className="underline">
+            See this month&rsquo;s usage
+          </Link>
+          .
+        </p>
+      </Panel>
+    );
+  }
   return (
     <Panel
       slug={`${WORDS.Review} · ${assessment.status}`}

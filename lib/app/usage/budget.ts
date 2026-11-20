@@ -82,8 +82,19 @@
  * (t-54): `Assessment` `[orgId, profile, status, createdAt]` and
  * `[orgId, status, createdAt]`, `JudgeRun` `[orgId, status, createdAt]`.
  *
- * Not done: re-checking a queued stored review when it is claimed; and
- * history from `store: false` reviews, which leave no assessment or judge-run
+ * **Again when it is claimed** (t-53). A stored review can wait in the queue
+ * (the workspace's running limit) while other spend lands, so `run.ts` asks
+ * {@link budgetRefusal} again when it claims one that has no judge run yet,
+ * with the review's own hold left out of what is held back. A refused one is
+ * finished `FAILED` with `errorCode` `BUDGET_EXCEEDED` and these figures in
+ * `errorDetails`, before any judge is called. A review with judge runs (a
+ * re-drive) is not checked again: what it already spent would be thrown
+ * away, and the per-judge gate ends it `PARTIAL` with what it has. Two
+ * reviews claimed at the same moment each hold the other back, so near the
+ * cap both can be refused where one would have fitted; asking again then
+ * finds the budget the refused one released.
+ *
+ * Not done: history from `store: false` reviews, which leave no assessment or judge-run
  * rows (a workspace with only those estimates `0`), and holding back for
  * those in flight.
  */
@@ -93,6 +104,7 @@ import { JUDGES_IN_FLIGHT, RETRIED_ON_REDRIVE } from '@/lib/app/assessments/limi
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
+import { USAGE_PAGE, type BudgetRefusalDetails } from '@/lib/app/usage/wire';
 
 /** Completed reviews of the profile the first tier reads. */
 export const PROFILE_HISTORY = 20;
@@ -101,25 +113,12 @@ export const MIN_PROFILE_HISTORY = 3;
 /** Succeeded judge runs the second tier reads, most recent first. */
 export const JUDGE_HISTORY = 100;
 
-/** Where the refusal points: the page with the month's spend and the budget. */
-export const USAGE_PAGE = '/usage';
-
-export type EstimateBasis = 'profile' | 'judges' | 'none';
+export type EstimateBasis = BudgetRefusalDetails['basis'];
 
 export interface ReviewEstimate {
   /** USD, to the millionth. */
   estimateUsd: number;
   basis: EstimateBasis;
-}
-
-/** What `BUDGET_EXCEEDED` carries in `details`. */
-export interface BudgetRefusalDetails extends ReviewEstimate {
-  /** What is left of the monthly budget once in-flight reviews are held back; `0` once none is. */
-  remainingUsd: number;
-  /** What the workspace's stored reviews in flight (queued, running, or cancelled and finishing) are estimated yet to spend. */
-  inFlightUsd: number;
-  limitUsd: number;
-  usagePage: typeof USAGE_PAGE;
 }
 
 interface JudgeRate {
@@ -236,13 +235,19 @@ function settled(run: { status: string; errorCode: string | null }): boolean {
 }
 
 /**
- * What the workspace's stored reviews in flight are yet to spend at `rate`,
- * as of `now`: see "What is left" in the file header.
+ * What the workspace's stored reviews in flight, other than `self`, are yet
+ * to spend at `rate`, as of `now`: see "What is left" in the file header.
  */
-async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<number> {
+async function inFlightCost(
+  orgId: string,
+  rate: JudgeRate,
+  now: Date,
+  self?: string
+): Promise<number> {
   const open = await prisma.assessment.findMany({
     where: {
       orgId,
+      ...(self ? { id: { not: self } } : {}),
       OR: [
         { status: { in: ['QUEUED', 'RUNNING'] } },
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
@@ -267,38 +272,46 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
   }, 0);
 }
 
+/** A review the budget refuses: why, in words, and the figures. */
+export interface BudgetRefusal {
+  message: string;
+  details: BudgetRefusalDetails;
+}
+
 /**
- * Throw 402 `BUDGET_EXCEEDED` when a review of `profile` calling `judgeCount`
- * judges would pass what is left of the workspace's monthly budget: when
- * nothing is left, or the estimate is more than what is once the reviews
- * already in flight are held back. A review calling no judge (the
- * quick profile) spends nothing and is never refused.
+ * Whether a review of `profile` calling `judgeCount` judges would pass what
+ * is left of the workspace's monthly budget: when nothing is left, or the
+ * estimate is more than what is once the reviews in flight are held back.
+ * `null` when it fits, calls no judge, or the cap or history cannot be read.
+ * `self` is a stored review being checked as it is claimed (t-53): its own
+ * hold is left out of what is held back.
  */
-export async function assertReviewWithinBudget(
+export async function budgetRefusal(
   orgId: string,
   profile: string,
-  judgeCount: number
-): Promise<void> {
-  if (judgeCount === 0) return;
+  judgeCount: number,
+  self?: string
+): Promise<BudgetRefusal | null> {
+  if (judgeCount === 0) return null;
   const cap = await orgCapStateOrSkip(orgId, { check: 'review-estimate' });
-  if (!cap) return;
+  if (!cap) return null;
   const usedUp = cap.spent >= cap.limit;
   let rate: JudgeRate;
   let inFlight: number;
   try {
     rate = await judgeRate(orgId, profile);
-    inFlight = usedUp ? 0 : await inFlightCost(orgId, rate, new Date());
+    inFlight = usedUp ? 0 : await inFlightCost(orgId, rate, new Date(), self);
   } catch (err) {
     // As a cap that cannot be read: refuse nothing, and the per-judge gate applies.
     logger.warn('Review budget estimate unreadable; not refusing', {
       orgId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return;
+    return null;
   }
   const estimate = reviewCost(rate, judgeCount);
   const remaining = Math.max(0, cap.limit - cap.spent - inFlight);
-  if (!usedUp && remaining > 0 && estimate <= remaining) return;
+  if (!usedUp && remaining > 0 && estimate <= remaining) return null;
 
   const details: BudgetRefusalDetails = {
     estimateUsd: usd(estimate),
@@ -319,10 +332,19 @@ export async function assertReviewWithinBudget(
     message = `Reviews already queued, running or finishing are held the rest of ${budget} (${dollars(inFlight)}).`;
   else
     message = `This review would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${budget}.`;
-  throw new APIError(
-    `${message} No AI reviewer was started. See ${USAGE_PAGE}; an admin can raise the budget on /admin.`,
-    'BUDGET_EXCEEDED',
-    402,
-    { ...details }
-  );
+  return {
+    message: `${message} No AI reviewer was started. See ${USAGE_PAGE}; an admin can raise the budget on /admin.`,
+    details,
+  };
+}
+
+/** Throw 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} refuses the review. */
+export async function assertReviewWithinBudget(
+  orgId: string,
+  profile: string,
+  judgeCount: number
+): Promise<void> {
+  const refusal = await budgetRefusal(orgId, profile, judgeCount);
+  if (!refusal) return;
+  throw new APIError(refusal.message, 'BUDGET_EXCEEDED', 402, { ...refusal.details });
 }

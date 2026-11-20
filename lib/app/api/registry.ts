@@ -66,7 +66,7 @@ import {
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
-import { monthUsageSchema } from '@/lib/app/usage/wire';
+import { budgetRefusalDetailsSchema, monthUsageSchema } from '@/lib/app/usage/wire';
 
 /** Every method a Next.js route handler can export. */
 export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
@@ -299,6 +299,8 @@ export const assessmentSummarySchema = z.object({
   band: z.string().nullable(),
   costUsd: z.number(),
   error: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorDetails: budgetRefusalDetailsSchema.nullable(),
   createdAt: isoDateTime,
   startedAt: isoDateTime.nullable(),
   completedAt: isoDateTime.nullable(),
@@ -421,6 +423,7 @@ export const assessmentEventSchema = z.discriminatedUnion('type', [
     band: z.string().nullable(),
     costUsd: z.number(),
     error: z.string().nullable(),
+    errorCode: z.string().nullable(),
   }),
   z.object({ type: z.literal('assessment_gone'), id: z.string() }),
   z.object({ type: z.literal('assessment_timeout'), id: z.string() }),

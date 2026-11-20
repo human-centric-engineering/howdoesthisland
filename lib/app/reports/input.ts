@@ -183,6 +183,8 @@ export const reportAssessmentSchema = sharedAssessmentSchema.extend({
   costUsd: z.number().optional(),
   /** Why it failed, for a failed run's panel. */
   error: z.string().nullable().optional(),
+  /** `BUDGET_EXCEEDED` for one refused by the budget as it was claimed (t-53). */
+  errorCode: z.string().nullable().optional(),
 });
 export type ReportAssessment = z.infer<typeof reportAssessmentSchema>;
 

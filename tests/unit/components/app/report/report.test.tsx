@@ -189,6 +189,27 @@ describe('report states', () => {
     expect(screen.queryByText('x')).not.toBeInTheDocument();
   });
 
+  it('a review refused by the budget as it was claimed says so, with its message and the usage page', () => {
+    const message = 'This review would cost about $1.00, more than the $0.50 left.';
+    render(
+      <ReportNoResult
+        assessment={apiAssessment({
+          status: 'failed',
+          result: null,
+          error: message,
+          errorCode: 'BUDGET_EXCEEDED',
+        })}
+      />
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'This review was not started'
+    );
+    expect(screen.getByText(/monthly AI budget/)).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /usage/ })).toHaveAttribute('href', '/usage');
+    expect(screen.queryByText(/Run the review again/)).not.toBeInTheDocument();
+  });
+
   it('unreadable says it was logged', () => {
     render(<ReportUnreadable />);
     expect(screen.getByText(/logged/)).toBeInTheDocument();
