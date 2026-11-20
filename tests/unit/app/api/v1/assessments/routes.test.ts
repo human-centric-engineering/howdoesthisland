@@ -103,6 +103,7 @@ import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthislan
 import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-fixtures';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
+import { resetKicksForTests } from '@/lib/app/assessments/kick';
 import { runAssessment } from '@/lib/app/assessments/run';
 import { runAsOrg } from '@/lib/tenancy/context';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
@@ -266,6 +267,7 @@ beforeEach(() => {
   mocks.runEditor.mockResolvedValue({ status: 'skipped', reason: 'too_few_judges' });
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   aiAssessmentLimiter.reset(`user:${BOB}`);
+  resetKicksForTests();
   signedIn(ALICE, WS_A);
 });
 
@@ -978,6 +980,30 @@ describe('POST /api/v1/assessments — store: false and the running places (t-28
     expect(res.status).toBe(429);
     expect((await json(res)).error?.details).toEqual({ running: 0, waiting: 3, limit: 3 });
     await until(() => waiting.every((a) => a.status === 'COMPLETED'));
+  });
+
+  it('starts stalled runs too (RUNNING, lease run out), and kicks once per interval', async () => {
+    const stalled = [1, 2, 3].map(() =>
+      fake.seed({
+        judges: ONE,
+        status: 'RUNNING',
+        leaseExpiresAt: new Date(Date.now() - 1),
+        attempts: 1,
+      })
+    );
+    const first = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(first.status).toBe(429);
+    await until(() => stalled.every((a) => a.status === 'COMPLETED'));
+    expect(stalled.map((a) => a.attempts)).toEqual([2, 2, 2]);
+    // Let each ended run's own `startNextQueued` find nothing first.
+    await settle();
+
+    // Three more stall; a refusal within the interval does not start them.
+    const again = [1, 2, 3].map(() => fake.seed({ judges: ONE }));
+    const second = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(second.status).toBe(429);
+    await settle();
+    expect(again.map((a) => a.status)).toEqual(['QUEUED', 'QUEUED', 'QUEUED']);
   });
 
   it('ignores queued stored reviews that can no longer start (out of attempts)', async () => {

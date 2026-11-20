@@ -65,7 +65,7 @@ import { listAssessments } from '@/lib/app/assessments/api/views';
 import { RUNNING_PER_WORKSPACE } from '@/lib/app/assessments/limits';
 import { assertPlaceFree, WorkspaceBusyError } from '@/lib/app/assessments/places';
 import { requireOrgId } from '@/lib/tenancy/context';
-import { startNextQueued } from '@/lib/app/assessments/run';
+import { startWaitingReviews } from '@/lib/app/assessments/kick';
 
 /** Long enough for a run the response did not wait for to finish under `after()`. */
 export const maxDuration = 300;
@@ -94,9 +94,9 @@ export const POST = withAuth(async (request: NextRequest, session) => {
   } catch (err) {
     // An APIError cannot carry a header, and this one needs `Retry-After`.
     if (!(err instanceof WorkspaceBusyError)) throw err;
-    // Places are free but stored reviews wait for them: start the queue, in
-    // case a review's own start was lost.
-    if (err.queueCanStart) startNextQueued(requireOrgId());
+    // Places are free but stored reviews wait for them: start them, in case
+    // their own start was lost (throttled per workspace, `kick.ts`).
+    if (err.queueCanStart) startWaitingReviews(requireOrgId());
     return errorResponse(err.message, {
       code: 'WORKSPACE_BUSY',
       status: 429,

@@ -24,7 +24,7 @@
  * starts the workspace's oldest queued stored review, which a full workspace
  * may have left waiting. A place whose process died stops being renewed and is
  * free once its lease runs out; the next take deletes it, before its own
- * transaction.
+ * transaction, and so does the recovery pass.
  */
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
@@ -64,7 +64,7 @@ export class WorkspaceBusyError extends Error {
 
   /**
    * Refused only because stored reviews are waiting, with places free: the
-   * caller should start the queue (`startNextQueued`), since a waiting review
+   * caller should start them (`startWaitingReviews` in `kick.ts`), since a waiting review
    * whose own start was lost would otherwise hold the places until the
    * recovery job's next tick.
    */
@@ -195,6 +195,7 @@ export async function takePlace(orgId: string): Promise<Place> {
       break;
     } catch (err) {
       if (!isSerializableConflict(err)) throw err;
+      if (tries === TAKE_TRIES) break;
       // A jittered pause, so claimers that conflicted do not retry in step.
       await new Promise((resolve) => setTimeout(resolve, Math.random() * 50 * tries));
     }

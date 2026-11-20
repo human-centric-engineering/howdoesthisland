@@ -760,6 +760,18 @@ describe('the concurrency limits', () => {
 });
 
 describe('the recovery job', () => {
+  it('clears this workspace’s dead running places (t-28), and no live or other one', async () => {
+    const dead = new Date(Date.now() - 1);
+    const later = new Date(Date.now() + 30_000);
+    fake.places.push(
+      { id: 'dead', orgId: ORG, leaseExpiresAt: dead },
+      { id: 'live', orgId: ORG, leaseExpiresAt: later },
+      { id: 'theirs', orgId: 'org-b', leaseExpiresAt: dead }
+    );
+    await inOrg(() => recoverAssessments());
+    expect(fake.places.map((p) => p.id)).toEqual(['live', 'theirs']);
+  });
+
   /** A population with one of each case the job decides about. */
   function population() {
     const expired = new Date(Date.now() - 5_000);

@@ -258,8 +258,14 @@ Each route's docblock lists its error codes. A few rules hold across them:
   `WORKSPACE_BUSY` with `Retry-After` (`PLACE_RETRY_AFTER_SECONDS`),
   `details.limit` and, when it was counted, `details.running` and
   `details.waiting`, and no judge starts. A refusal made only because reviews
-  are waiting, with places free, also starts the queue, so a review whose own
-  start was lost does not hold the places until the recovery job's next tick.
+  are waiting, with places free, also runs the workspace's recovery pass
+  (`kick.ts`), so reviews whose own start was lost, queued or stalled, do not
+  hold the places until the job's next tick, 15 minutes away. At most once a
+  minute per workspace per instance, so retrying clients do not start a pass
+  each, and a review requeued after an error is not re-driven on every
+  refusal. The recovery pass also clears dead places. A stored review counts
+  as waiting from the moment it is queued, including the instant before its
+  own request claims it: the queue goes first.
   A run whose place was cleared under it (its renewals failed for longer than
   the lease) carries on uncounted, and that is logged. The route checks for a
   free place before it charges the per-user cap, so a caller retrying a busy
