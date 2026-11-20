@@ -99,6 +99,8 @@ export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment 
     band: 'Solid',
     costUsd: 0.1234,
     error: null,
+    errorCode: null,
+    errorDetails: null,
     createdAt: '2026-11-15T09:00:00.000Z',
     startedAt: '2026-11-15T09:00:01.000Z',
     completedAt: '2026-11-15T09:01:00.000Z',
