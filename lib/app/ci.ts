@@ -123,6 +123,15 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'lib/app/frameworks/, which stays gated and has its own tests.',
   },
   {
+    // HowDoesThisLand (t-58), by name like the ones above.
+    pattern: 'scripts/app/smoke-credit-charge.ts',
+    reason:
+      'a tsx smoke run by hand against the real dev database: concurrent ' +
+      'transactions racing one charge, which the in-memory fake cannot race. ' +
+      'Nothing imports it. The charge it drives is lib/app/credits/charge.ts, ' +
+      'which stays gated and has its own tests.',
+  },
+  {
     // HowDoesThisLand (t-19), by name like the ones above.
     pattern: 'scripts/app/smoke-judge.ts',
     reason:

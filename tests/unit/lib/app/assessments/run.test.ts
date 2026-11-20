@@ -1631,3 +1631,44 @@ describe('the charge in CopyCredits (t-58)', () => {
     expect(charges()).toEqual([]);
   });
 });
+
+describe('the recovery job’s charges when a row moved under it (t-58)', () => {
+  it('neither gives up on nor charges a review another writer ended between its read and its write', async () => {
+    const a = fake.seed({
+      status: 'RUNNING',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      attempts: 3,
+    });
+    fake.addCost(ORG, 0.07, { assessmentId: a.id });
+    // Read as stalled, then finished by its run before the give-up's write.
+    fake.db.assessment.findMany.mockImplementationOnce(async () => {
+      Object.assign(a, { status: 'COMPLETED', leaseToken: null, leaseExpiresAt: null });
+      return [{ ...a }];
+    });
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ gaveUp: 0 });
+    expect(a.status).toBe('COMPLETED');
+    expect(fake.credits).toEqual([]);
+  });
+
+  it('does not charge a lapsed cancel whose run cleared its lease first', async () => {
+    const a = fake.seed({
+      status: 'CANCELLED',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      completedAt: new Date(Date.now() - 60_000),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: a.id });
+    fake.db.assessment.findMany
+      .mockImplementationOnce(async () => []) // nothing to give up on
+      .mockImplementationOnce(async () => {
+        // Its run's last write, which charges it, lands first.
+        a.leaseExpiresAt = null;
+        return [{ ...a }];
+      });
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedCancelled: 0 });
+    expect(fake.credits).toEqual([]);
+  });
+});
