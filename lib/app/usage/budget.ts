@@ -50,9 +50,11 @@
  *   never both. A failed row a re-drive retries cannot be told apart from one
  *   that failed in this run, so the hold is the larger of the two: its
  *   unsettled judges, at most {@link JUDGES_IN_FLIGHT}, at this request's
- *   rate, or its editor allowance. An upper bound (judges never started are
- *   among the unsettled), which lasts only while the lease does. Once the
- *   run clears its lease, nothing.
+ *   rate, or its editor allowance. An upper bound, which lasts only while
+ *   the lease does: judges never started are among the unsettled, and an
+ *   editor already billed is held until the run clears its lease. Once it
+ *   has, nothing. Its judge runs are read only for these rows, by
+ *   `assessmentId` (the `[assessmentId, judge]` unique index).
  *
  * It covers reviews already stored: requests arriving together each see none
  * of the others, which the per-judge gate is left to catch.
@@ -237,18 +239,22 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
       ],
     },
-    select: {
-      status: true,
-      costUsd: true,
-      judges: true,
-      judgeRuns: { select: { status: true, errorCode: true } },
-    },
+    select: { id: true, status: true, costUsd: true, judges: true },
   });
+  const cancelled = open.filter((r) => r.status === 'CANCELLED');
+  const runs =
+    cancelled.length > 0
+      ? await prisma.judgeRun.findMany({
+          where: { orgId, assessmentId: { in: cancelled.map((r) => r.id) } },
+          select: { assessmentId: true, status: true, errorCode: true },
+        })
+      : [];
   return open.reduce((sum, r) => {
     if (r.status !== 'CANCELLED') {
       return sum + Math.max(0, reviewCost(rate, r.judges.length) - r.costUsd);
     }
-    const unsettled = Math.max(0, r.judges.length - r.judgeRuns.filter(settled).length);
+    const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
+    const unsettled = Math.max(0, r.judges.length - done);
     const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
     const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
     return sum + Math.max(judges, editor);

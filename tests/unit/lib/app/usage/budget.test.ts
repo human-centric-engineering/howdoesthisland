@@ -72,16 +72,21 @@ vi.mock('@/lib/db/client', () => ({
           createdAt: r.createdAt,
           judgeRuns: state.runs
             .filter((run) => run.assessmentId === r.id)
-            .map((run) => ({ costUsd: run.costUsd, status: run.status, errorCode: run.errorCode })),
+            .map((run) => ({ costUsd: run.costUsd })),
         }))
       ),
     },
     judgeRun: {
-      findMany: vi.fn(async ({ where, take }: { where: Where; take: number }) =>
+      findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
         newestFirst(
           state.runs.filter((r) => matches({ ...r }, where)),
-          take
-        ).map((r) => ({ costUsd: r.costUsd }))
+          take ?? Infinity
+        ).map((r) => ({
+          costUsd: r.costUsd,
+          assessmentId: r.assessmentId,
+          status: r.status,
+          errorCode: r.errorCode,
+        }))
       ),
     },
   },
@@ -496,6 +501,19 @@ describe('assertReviewWithinBudget', () => {
     const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
 
     expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
+  });
+
+  it('reads judge runs for cancelled reviews only, and none without one', async () => {
+    state.spent = 8;
+    review(0.4, { status: 'RUNNING', judges: slots(7) });
+
+    await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    expect(prisma.judgeRun.findMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ assessmentId: expect.anything() }),
+      })
+    );
   });
 
   it('refuses nothing when the history cannot be read, as a cap that cannot be', async () => {
