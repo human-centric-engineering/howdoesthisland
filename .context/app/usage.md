@@ -31,7 +31,7 @@ Projects are shown by id until `f-projects` adds the model and its names.
 ## Demo usage for development
 
 `prisma/seeds/app-howdoesthisland/002-demo-usage.ts` writes a month of usage
-(about $5.80 of $10) into its own workspace, `usage-demo`, and makes every human
+(about $5.80 of $10) into its own workspace, `usage-demo`, marked as the demo's in `settings.app.usageDemo`, and makes every human
 platform admin its owner. It does nothing when `NODE_ENV` is `production`
 unless `SEED_DEMO_USAGE=true`: the rows are made-up spend that would count
 towards a real install's global budget.

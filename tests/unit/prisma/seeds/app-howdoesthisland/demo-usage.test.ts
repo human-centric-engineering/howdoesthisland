@@ -12,9 +12,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createOrg: vi.fn(),
   writeOrgQuotas: vi.fn(),
+  writeAppSettings: vi.fn(),
 }));
 vi.mock('@/lib/tenancy/lifecycle', () => ({ createOrg: mocks.createOrg }));
 vi.mock('@/lib/tenancy/org-settings', () => ({ writeOrgQuotas: mocks.writeOrgQuotas }));
+vi.mock('@/lib/app/workspaces/app-settings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/workspaces/app-settings')>()),
+  writeAppSettings: mocks.writeAppSettings,
+}));
 vi.mock('@/lib/tenancy/context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/tenancy/context')>()),
   runAsOrg: vi.fn((_orgId: string, fn: () => Promise<unknown>) => fn()),
@@ -33,7 +38,9 @@ interface CostRow {
   metadata: Record<string, unknown>;
 }
 
-function makeDb(opts: { version?: boolean; existing?: boolean; admins?: number } = {}) {
+function makeDb(
+  opts: { version?: boolean; existing?: 'demo' | 'someone-else'; admins?: number } = {}
+) {
   const costs: CostRow[] = [];
   let assessments = 0;
   const db = {
@@ -42,7 +49,16 @@ function makeDb(opts: { version?: boolean; existing?: boolean; admins?: number }
         opts.version === false ? null : { id: 'fv1', version: '1.0.0', framework: { slug: 'hdtl' } }
       ),
     },
-    org: { findUnique: vi.fn(async () => (opts.existing ? { id: ORG } : null)) },
+    org: {
+      findUnique: vi.fn(async () =>
+        opts.existing
+          ? {
+              id: ORG,
+              settings: opts.existing === 'demo' ? { app: { usageDemo: true } } : { app: {} },
+            }
+          : null
+      ),
+    },
     user: {
       findMany: vi.fn(async () =>
         Array.from({ length: opts.admins ?? 1 }, (_, i) => ({ id: `admin-${i}` }))
@@ -127,12 +143,37 @@ describe('002-demo-usage', () => {
     expect(mocks.writeOrgQuotas).toHaveBeenCalledWith(ORG, { monthlyBudgetUsd: 10 }, db);
   });
 
-  it('reuses an existing demo workspace, clearing its old usage before writing again', async () => {
-    const { ctx, db } = makeDb({ existing: true, admins: 2 });
+  it('marks the workspace it creates as the demo’s', async () => {
+    const { ctx, db } = makeDb();
+
+    await unit.run(ctx);
+
+    expect(mocks.writeAppSettings).toHaveBeenCalledWith(ORG, expect.any(Function), db);
+    const app: Record<string, unknown> = {};
+    const edit = mocks.writeAppSettings.mock.calls[0]?.[1] as (a: Record<string, unknown>) => void;
+    edit(app);
+    expect(app).toEqual({ usageDemo: true });
+  });
+
+  it('leaves alone a usage-demo workspace it did not make', async () => {
+    const { ctx, db, logger } = makeDb({ existing: 'someone-else' });
 
     await unit.run(ctx);
 
     expect(mocks.createOrg).not.toHaveBeenCalled();
+    expect(mocks.writeOrgQuotas).not.toHaveBeenCalled();
+    expect(db.aiCostLog.deleteMany).not.toHaveBeenCalled();
+    expect(db.assessment.deleteMany).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('not the demo'));
+  });
+
+  it('reuses an existing demo workspace, clearing its old usage before writing again', async () => {
+    const { ctx, db } = makeDb({ existing: 'demo', admins: 2 });
+
+    await unit.run(ctx);
+
+    expect(mocks.createOrg).not.toHaveBeenCalled();
+    expect(mocks.writeAppSettings).not.toHaveBeenCalled();
     expect(db.orgMembership.upsert).toHaveBeenCalledTimes(2);
     for (const model of [db.assessment, db.content, db.aiCostLog]) {
       expect(model.deleteMany).toHaveBeenCalledWith({ where: { orgId: ORG } });

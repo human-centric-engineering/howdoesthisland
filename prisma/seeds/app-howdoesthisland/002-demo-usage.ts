@@ -6,6 +6,7 @@ import { createOrg } from '@/lib/tenancy/lifecycle';
 import { writeOrgQuotas } from '@/lib/tenancy/org-settings';
 import { utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { WORKSPACE_MONTHLY_BUDGET_USD } from '@/lib/app/workspaces/provision';
+import { readAppSettings, writeAppSettings } from '@/lib/app/workspaces/app-settings';
 
 /**
  * A month of usage for a demo workspace (t-48), so `/usage` has figures to
@@ -25,6 +26,10 @@ import { WORKSPACE_MONTHLY_BUDGET_USD } from '@/lib/app/workspaces/provision';
  * one row that is no review. All dated between the first of this month (UTC)
  * and now, about $5.80 in all.
  *
+ * **Only its own workspace.** The one it creates is marked
+ * (`settings.app.usageDemo`); a `usage-demo` workspace without the mark is
+ * someone's real one, and the unit then does nothing.
+ *
  * **Re-runnable.** Each run first deletes the demo workspace's reviews,
  * content and cost rows, then writes them again for the current month: the
  * workspace is the demo's alone. Figures dated last month read as zero once
@@ -32,6 +37,8 @@ import { WORKSPACE_MONTHLY_BUDGET_USD } from '@/lib/app/workspaces/provision';
  */
 const DEMO_SLUG = 'usage-demo';
 const DEMO_NAME = 'Usage demo';
+/** Marks the workspace as the demo's (`settings.app`), so the seed never wipes another. */
+const DEMO_MARKER = 'usageDemo';
 
 /** The judges every demo review ran, and what each call cost. */
 const JUDGES = ['ethos', 'pathos', 'logos', 'audience'] as const;
@@ -81,11 +88,28 @@ const unit: SeedUnit = {
 
     const existing = await prisma.org.findUnique({
       where: { slug: DEMO_SLUG },
-      select: { id: true },
+      select: { id: true, settings: true },
     });
+    // The slug is not reserved: a workspace someone named "Usage demo" gets it.
+    // Only one this seed made is the demo's to wipe.
+    if (existing && readAppSettings(existing.settings)[DEMO_MARKER] !== true) {
+      logger.warn(
+        `Demo usage skipped: a workspace that is not the demo's already has the slug ${DEMO_SLUG}`
+      );
+      return;
+    }
     // Every write through the client the runner hands the seed, never the global one.
-    const orgId =
-      existing?.id ?? (await createOrg({ slug: DEMO_SLUG, name: DEMO_NAME }, prisma)).id;
+    let orgId = existing?.id;
+    if (!orgId) {
+      orgId = (await createOrg({ slug: DEMO_SLUG, name: DEMO_NAME }, prisma)).id;
+      await writeAppSettings(
+        orgId,
+        (app) => {
+          app[DEMO_MARKER] = true;
+        },
+        prisma
+      );
+    }
     await writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD }, prisma);
 
     const admins = await prisma.user.findMany({
