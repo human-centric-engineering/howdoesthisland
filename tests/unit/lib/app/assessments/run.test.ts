@@ -914,6 +914,7 @@ describe('the budget, checked again as the review is claimed (t-53)', () => {
     usagePage: '/usage',
   };
   const refusal = {
+    code: 'BUDGET_EXCEEDED',
     reason: 'This review would cost about $1.00, more than the $0.50 left.',
     message: 'This review would cost about $1.00, more than the $0.50 left. See /usage.',
     details: figures,
@@ -998,7 +999,11 @@ describe('the recovery job', () => {
     for (const n of [1, 2, 3]) fake.seed({ ...live, leaseToken: `run-${n}` });
     // The workspace is full, so the queued one is left for a later pass.
     const queued = fake.seed();
-    expect(await inOrg(() => recoverAssessments(new Date()))).toEqual({ redriven: 0, gaveUp: 0 });
+    expect(await inOrg(() => recoverAssessments(new Date()))).toEqual({
+      redriven: 0,
+      gaveUp: 0,
+      chargedCancelled: 0,
+    });
     expect(queued).toMatchObject({ status: 'QUEUED', attempts: 0 });
   });
 
@@ -1065,7 +1070,11 @@ describe('the recovery job', () => {
   it('re-drives expired runs, rerunning only the missing judges, and gives up after three attempts', async () => {
     const p = population();
 
-    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 2, gaveUp: 1 });
+    expect(await inOrg(() => recoverAssessments())).toEqual({
+      redriven: 2,
+      gaveUp: 1,
+      chargedCancelled: 0,
+    });
     await settle();
 
     // Only judge_c was called for the run that died; judge_a's output was reused.
@@ -1093,7 +1102,11 @@ describe('the recovery job', () => {
     const calls = mocks.runJudge.mock.calls.length;
     const snapshot = structuredClone({ a: fake.assessments, r: fake.judgeRuns });
 
-    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 0, gaveUp: 0 });
+    expect(await inOrg(() => recoverAssessments())).toEqual({
+      redriven: 0,
+      gaveUp: 0,
+      chargedCancelled: 0,
+    });
 
     expect(mocks.runJudge).toHaveBeenCalledTimes(calls);
     expect({ a: fake.assessments, r: fake.judgeRuns }).toEqual(snapshot);
@@ -1126,7 +1139,11 @@ describe('the recovery job', () => {
       return reply(slot);
     });
 
-    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 1, gaveUp: 0 });
+    expect(await inOrg(() => recoverAssessments())).toEqual({
+      redriven: 1,
+      gaveUp: 0,
+      chargedCancelled: 0,
+    });
     expect(a.status).toBe('RUNNING');
 
     gate.resolve();
@@ -1201,7 +1218,11 @@ describe('a succeeded judge whose reply is gone (t-26)', () => {
       [{ judge: 'judge_a', status: 'SUCCEEDED', costUsd: 0.01 }]
     );
 
-    expect(await inOrg(() => recoverAssessments())).toEqual({ redriven: 1, gaveUp: 0 });
+    expect(await inOrg(() => recoverAssessments())).toEqual({
+      redriven: 1,
+      gaveUp: 0,
+      chargedCancelled: 0,
+    });
     await settle();
 
     expect(mocks.runJudge.mock.calls.map((c) => c[0])).toEqual(['judge_b']);
@@ -1220,7 +1241,12 @@ describe('edges of the run', () => {
     const a = fake.seed({ judges: [] });
     fake.db.$transaction.mockRejectedValueOnce(conflict());
     expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
-    expect(fake.db.$transaction).toHaveBeenCalledTimes(2);
+    // The claim, twice: the finish's own transaction is not a claim.
+    const claims = fake.db.$transaction.mock.calls.filter(
+      (call: unknown[]) =>
+        (call[1] as { isolationLevel?: string } | undefined)?.isolationLevel === 'Serializable'
+    );
+    expect(claims).toHaveLength(2);
   });
 
   it('leaves the assessment queued after three conflicts in a row', async () => {
@@ -1364,5 +1390,244 @@ describe('edges of the run', () => {
     fake.db.assessment.findUnique.mockImplementationOnce(real as never).mockResolvedValueOnce(null);
     expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
     expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
+});
+
+describe('the charge in CopyCredits (t-58)', () => {
+  /** Each judge call writes its cost row, as `runJudge` does, naming the review. */
+  function billing(costUsd = 0.0123) {
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      fake.addCost(ORG, costUsd, { assessmentId: input.assessmentId, judge: slot });
+      return reply(slot);
+    });
+  }
+
+  const charges = () => fake.credits.filter((c) => c.kind === 'CHARGE');
+  const chargeOf = (a: Row) => ({
+    orgId: ORG,
+    kind: 'CHARGE',
+    reference: `assessment:${String(a.id)}`,
+  });
+
+  it('charges a completed review once, for its cost rows rounded up to a whole credit', async () => {
+    billing(0.0123);
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    // Another review's row and another workspace's: neither is this review's.
+    fake.addCost(ORG, 5, { assessmentId: 'someone-else' });
+    fake.addCost('org-b', 5, { assessmentId: a.id });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    // $0.0246 is 2.46 credits: 3.
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -3 })]);
+  });
+
+  it('charges a partial review for every billed call, the failed judge’s included', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      fake.addCost(ORG, 0.02, { assessmentId: input.assessmentId, judge: slot });
+      if (slot === 'judge_b') throw new JudgeRunError('refused', 'no');
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('partial');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -4 })]);
+  });
+
+  it('charges a review that failed after its judges were billed', async () => {
+    billing(0.05);
+    const a = fake.seed({ judges: ['judge_a'] });
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('cannot score');
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -5 })]);
+  });
+
+  it('charges a review that stopped on its last attempt for every attempt’s rows', async () => {
+    const a = fake.seed({ judges: ['judge_a'], attempts: 2 });
+    // An earlier attempt's spend.
+    fake.addCost(ORG, 0.03, { assessmentId: a.id, judge: 'judge_a' });
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      fake.addCost(ORG, 0.03, { assessmentId: input.assessmentId, judge: slot });
+      throw new Error('database gone');
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -6 })]);
+  });
+
+  it('charges a re-queued review nothing until it ends, then everything once', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockImplementationOnce(
+      async (slot: string, input: { assessmentId?: string }) => {
+        fake.addCost(ORG, 0.03, { assessmentId: input.assessmentId, judge: slot });
+        throw new Error('database gone');
+      }
+    );
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+    expect(charges()).toEqual([]);
+
+    billing(0.03);
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -6 })]);
+  });
+
+  it('charges a cancelled run once its judges in flight have landed, for all of them', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      if (slot === 'judge_a') {
+        await inOrg(() => cancelAssessment(String(a.id)));
+        // Cancelled, with this judge still to land: not charged yet.
+        expect(charges()).toEqual([]);
+      }
+      fake.addCost(ORG, 0.04, { assessmentId: input.assessmentId, judge: slot });
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('cancelled');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -8 })]);
+    expect(a.leaseExpiresAt).toBeNull();
+  });
+
+  it('charges a cancel with no run to finish it as it cancels, for what earlier runs spent', async () => {
+    const a = fake.seed({ status: 'QUEUED', attempts: 1, judges: ['judge_a'] });
+    fake.addCost(ORG, 0.011, { assessmentId: a.id, judge: 'judge_a' });
+
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+
+    expect(a).toMatchObject({ status: 'CANCELLED', leaseExpiresAt: null });
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -2 })]);
+  });
+
+  it('leaves a cancel with a live run to that run, charging nothing yet', async () => {
+    const a = fake.seed({
+      status: 'RUNNING',
+      leaseToken: 'alive',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: a.id });
+
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    expect(a.leaseToken).toBe('alive');
+    expect(charges()).toEqual([]);
+  });
+
+  it('the recovery job charges a cancelled review whose run died, once', async () => {
+    const a = fake.seed({
+      status: 'CANCELLED',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      completedAt: new Date(Date.now() - 60_000),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: a.id });
+    // Cancelled long before reviews were charged: left alone.
+    const old = fake.seed({
+      status: 'CANCELLED',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: old.id });
+
+    expect(await inOrg(() => recoverAssessments())).toEqual({
+      redriven: 0,
+      gaveUp: 0,
+      chargedCancelled: 1,
+    });
+    expect(await inOrg(() => recoverAssessments())).toEqual({
+      redriven: 0,
+      gaveUp: 0,
+      chargedCancelled: 0,
+    });
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -2 })]);
+    expect(a.leaseExpiresAt).toBeNull();
+  });
+
+  it('the recovery job charges a review it gives up on, in the write that gives up', async () => {
+    const a = fake.seed({
+      status: 'RUNNING',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      attempts: 3,
+    });
+    fake.addCost(ORG, 0.07, { assessmentId: a.id });
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ gaveUp: 1 });
+    expect(a.status).toBe('FAILED');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -7 })]);
+  });
+
+  it('a recovered review is charged once, for its first attempt’s rows and the re-drive’s', async () => {
+    billing(0.01);
+    const a = fake.seed(
+      {
+        status: 'RUNNING',
+        leaseToken: 'dead',
+        leaseExpiresAt: new Date(Date.now() - 5_000),
+        attempts: 1,
+        judges: ['judge_a', 'judge_b'],
+      },
+      [{ judge: 'judge_a', status: 'FAILED', errorCode: 'rate_limited', costUsd: 0.01 }]
+    );
+    fake.addCost(ORG, 0.01, { assessmentId: a.id, judge: 'judge_a' });
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ redriven: 1 });
+    await settle();
+    // A second pass finds it final and charges nothing more.
+    await inOrg(() => recoverAssessments());
+
+    expect(a.status).toBe('COMPLETED');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -3 })]);
+  });
+
+  it('charges a review deleted while its run went on, from its rows', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      fake.addCost(ORG, 0.05, { assessmentId: input.assessmentId, judge: slot });
+      fake.assessments.splice(fake.assessments.indexOf(a), 1);
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -5 })]);
+  });
+
+  it('charges a run that lost its lease nothing: the run that has it charges as it ends', async () => {
+    const a = fake.seed({ judges: ['judge_a'] });
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      fake.addCost(ORG, 0.05, { assessmentId: input.assessmentId, judge: slot });
+      Object.assign(a, { leaseToken: 'successor' });
+      return reply(slot);
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
+    expect(charges()).toEqual([]);
+  });
+
+  it('charges nothing for a review that spent nothing, or was refused before any judge', async () => {
+    const quick = fake.seed({ judges: [] });
+    expect(await inOrg(() => runAssessment(String(quick.id)))).toBe('completed');
+
+    const refused = fake.seed({ judges: ['judge_a'] });
+    mocks.budgetRefusal.mockResolvedValueOnce({
+      code: 'INSUFFICIENT_CREDITS',
+      reason: 'No CopyCredits left.',
+      message: 'No CopyCredits left.',
+      details: {
+        estimateCredits: 1,
+        basis: 'none',
+        balanceCredits: 0,
+        heldCredits: 0,
+        remainingCredits: 0,
+        usagePage: '/usage',
+      },
+    });
+    expect(await inOrg(() => runAssessment(String(refused.id)))).toBe('failed');
+
+    expect(refused).toMatchObject({ errorCode: 'INSUFFICIENT_CREDITS' });
+    expect(charges()).toEqual([]);
   });
 });

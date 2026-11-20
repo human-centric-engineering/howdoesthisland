@@ -349,10 +349,12 @@ describe('what each registry property becomes', () => {
     );
   });
 
-  it("lists POST assessments' budget refusal (t-49)", () => {
+  it("lists POST assessments' 402s: the credit refusal (t-58), then the budget's (t-49)", () => {
     const op = openApiDocument().paths['/api/v1/assessments']?.post;
     const responses = z.record(z.string(), z.looseObject({})).parse(op?.responses);
-    expect(responses['402']?.description).toMatch(/^`BUDGET_EXCEEDED`: /);
+    expect(responses['402']?.description).toMatch(
+      /^`INSUFFICIENT_CREDITS`: .* `BUDGET_EXCEEDED`: /s
+    );
   });
 
   it('every route: a 429, and the error envelope by default', () => {

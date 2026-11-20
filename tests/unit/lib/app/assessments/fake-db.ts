@@ -32,6 +32,13 @@
  * `create`, `updateMany` and `deleteMany`, and `$executeRaw` (the advisory
  * lock) answering `0`. One transaction at a time is also what the lock
  * guarantees the check: a request checked behind another sees its hold.
+ *
+ * For the credits (t-58): `aiCostLog` rows in `costRows`, with `aggregate`
+ * summing `totalCostUsd` (`createdAt: { gte }` and a `metadata: { path,
+ * equals }` filter honoured), and `creditEntry` rows in `credits`, with
+ * `aggregate` summing `amount` and `createMany` honouring the `(kind,
+ * reference)` unique index under `skipDuplicates`, as Postgres's ON CONFLICT
+ * DO NOTHING does. `addCost()` writes a cost row as `run-judge.ts` would.
  */
 import { vi } from 'vitest';
 
@@ -48,7 +55,7 @@ type Condition =
       gt?: Date | number;
       lt?: Date | number | string;
       lte?: Date | number;
-      gte?: number;
+      gte?: Date | number;
     };
 
 function matchesValue(value: unknown, cond: Condition | undefined): boolean {
@@ -66,7 +73,7 @@ function matchesValue(value: unknown, cond: Condition | undefined): boolean {
   if (cond.gt !== undefined && (n === null || !(n > num(cond.gt)))) return false;
   if (cond.lt !== undefined && (n === null || !(n < num(cond.lt)))) return false;
   if (cond.lte !== undefined && (n === null || !(n <= num(cond.lte)))) return false;
-  if (cond.gte !== undefined && (n === null || !(n >= cond.gte))) return false;
+  if (cond.gte !== undefined && (n === null || !(n >= num(cond.gte)))) return false;
   return true;
 }
 
@@ -74,6 +81,13 @@ function matches(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([key, cond]) => {
     if (key === 'OR') return (cond as Row[]).some((w) => matches(row, w));
     if (key === 'AND') return (cond as Row[]).every((w) => matches(row, w));
+    if (cond && typeof cond === 'object' && 'path' in cond) {
+      // A JSON path filter: `{ path: [field], equals }`.
+      const { path, equals } = cond as { path: string[]; equals: unknown };
+      let value: unknown = row[key];
+      for (const part of path) value = (value as Row | null | undefined)?.[part];
+      return value === equals;
+    }
     return matchesValue(row[key], cond as Condition);
   });
 }
@@ -96,6 +110,8 @@ export function createFakeDb() {
   const replies: Row[] = [];
   const places: Row[] = [];
   const holds: Row[] = [];
+  const costRows: Row[] = [];
+  const credits: Row[] = [];
   let seq = 0;
   /** The tail of the transaction queue: each waits for the one before. */
   let txQueue: Promise<unknown> = Promise.resolve();
@@ -336,6 +352,42 @@ export function createFakeDb() {
         return { count: gone.length };
       }),
     },
+    aiCostLog: {
+      aggregate: vi.fn(async ({ where }: { where?: Row }) => {
+        const rows = costRows.filter((r) => matches(r, where));
+        return {
+          _sum: {
+            totalCostUsd: rows.length
+              ? rows.reduce((sum, r) => sum + Number(r.totalCostUsd), 0)
+              : null,
+          },
+        };
+      }),
+    },
+    creditEntry: {
+      aggregate: vi.fn(async ({ where }: { where?: Row }) => {
+        const rows = credits.filter((r) => matches(r, where));
+        return {
+          _sum: { amount: rows.length ? rows.reduce((sum, r) => sum + Number(r.amount), 0) : null },
+        };
+      }),
+      createMany: vi.fn(
+        async ({ data, skipDuplicates }: { data: Row[]; skipDuplicates?: boolean }) => {
+          let count = 0;
+          for (const entry of data) {
+            const taken = credits.some(
+              (c) => c.kind === entry.kind && c.reference != null && c.reference === entry.reference
+            );
+            if (taken && skipDuplicates) continue;
+            if (taken) throw new Error('Unique constraint failed on (kind, reference)');
+            seq += 1;
+            credits.push({ id: `credit-${seq}`, createdAt: new Date(), ...entry });
+            count += 1;
+          }
+          return { count };
+        }
+      ),
+    },
     $executeRaw: vi.fn(async () => 0),
     $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => {
       const run = txQueue.then(() => fn(db));
@@ -416,7 +468,45 @@ export function createFakeDb() {
     return reply ? { ...run, output: reply.output, dropped: reply.dropped } : { ...run };
   };
 
-  return { db, assessments, contents, judgeRuns, replies, places, holds, withReply, seed };
+  /** A cost row as `run-judge.ts` writes it: `metadata` carries `assessmentId` or `ephemeralRun`. */
+  function addCost(
+    orgId: string,
+    totalCostUsd: number,
+    metadata: Row,
+    createdAt = new Date()
+  ): void {
+    seq += 1;
+    costRows.push({ id: `cost-${seq}`, orgId, totalCostUsd, metadata, createdAt });
+  }
+
+  /** Give `orgId` credits, as an admin's grant would. */
+  function grant(orgId: string, amount: number): void {
+    seq += 1;
+    credits.push({
+      id: `credit-${seq}`,
+      orgId,
+      amount,
+      kind: 'GRANT',
+      reference: null,
+      createdAt: new Date(),
+    });
+  }
+
+  return {
+    db,
+    assessments,
+    contents,
+    judgeRuns,
+    replies,
+    places,
+    holds,
+    costRows,
+    credits,
+    withReply,
+    seed,
+    addCost,
+    grant,
+  };
 }
 
 export type FakeDb = ReturnType<typeof createFakeDb>;

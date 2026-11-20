@@ -1,9 +1,13 @@
 /**
  * Tests: refusing a review before it starts when it would pass the
- * workspace's monthly budget (t-49).
+ * workspace's monthly budget (t-49), or its CopyCredits do not cover it
+ * (t-58).
  *
- * Mocked: Prisma (an in-memory fake of the cost rows, assessments, judge
- * runs and budget holds, filtering and ordering as the queries ask; its
+ * The t-49 to t-56 tests run with credits to spare, so the cap is what they
+ * measure; the t-58 tests at the end set the balance.
+ *
+ * Mocked: Prisma (an in-memory fake of the cost rows, the credit balance,
+ * assessments, judge runs and budget holds, filtering and ordering as the queries ask; its
  * advisory lock admits one transaction per key at a time, as Postgres's
  * does), the org's quotas and the logger. Real: the check and Sunrise's
  * spend-caps module, so the cap it compares against is the one the per-judge
@@ -50,6 +54,9 @@ const state = vi.hoisted(() => ({
   spent: 0,
   budget: null as number | null,
   quotasFail: false,
+  /** The workspace's CopyCredits balance. */
+  credits: 1_000_000,
+  creditsFail: false,
   reviews: [] as ReviewRow[],
   runs: [] as RunRow[],
   holds: [] as HoldRow[],
@@ -95,6 +102,12 @@ vi.mock('@/lib/db/client', () => {
           take ?? Infinity
         ).map((r) => ({ totalCostUsd: r.totalCostUsd, metadata: r.metadata }))
       ),
+    },
+    creditEntry: {
+      aggregate: vi.fn(async () => {
+        if (state.creditsFail) throw new Error('ledger unreadable');
+        return { _sum: { amount: state.credits } };
+      }),
     },
     budgetHold: {
       findMany: vi.fn(async ({ where }: { where: Where }) =>
@@ -262,6 +275,8 @@ beforeEach(() => {
     spent: 0,
     budget: null,
     quotasFail: false,
+    credits: 1_000_000,
+    creditsFail: false,
     reviews: [],
     runs: [],
     holds: [],
@@ -1017,13 +1032,15 @@ describe('reserveReviewBudget: requests arriving together (t-50)', () => {
     await held?.release();
   });
 
-  it('holds nothing when it is refused, calls no judge, or has no cap', async () => {
+  it('holds nothing when it is refused, calls no judge, or has neither a cap nor a balance it can read', async () => {
     state.spent = 10;
     await refusal(() => reserveReviewBudget(ORG, 'full', 7, true).then(() => undefined));
     state.spent = 50;
     await expect(reserveReviewBudget(ORG, 'quick', 0, true)).resolves.toBeNull();
     forgetSpendCaps();
     state.budget = null;
+    // No cap is no longer enough: the credits are checked, and held against (t-58).
+    state.creditsFail = true;
     await expect(reserveReviewBudget(ORG, 'full', 7, true)).resolves.toBeNull();
 
     expect(state.holds).toEqual([]);
@@ -1291,5 +1308,203 @@ describe('the kept-nowhere tier: history from store: false reviews (t-51)', () =
     const err = await refusal(() => check(ORG, 'full', 7));
 
     expect(err.details).toMatchObject({ estimateUsd: 0.35, basis: 'kept-nowhere' });
+  });
+});
+
+describe('the credits (t-58)', () => {
+  beforeEach(() => {
+    // An estimate of $1.00 (100 credits) a 7-judge review, as in t-49's fixtures.
+    for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+  });
+
+  for (const [label, stored] of [
+    ['stored', true],
+    ['store: false', false],
+  ] as const) {
+    it(`${label}: refuses 402 INSUFFICIENT_CREDITS with none, before taking the lock`, async () => {
+      state.credits = 0;
+
+      const err = await refusal(async () => {
+        await reserveReviewBudget(ORG, 'full', 7, stored);
+      });
+
+      expect(err).toMatchObject({
+        status: 402,
+        code: 'INSUFFICIENT_CREDITS',
+        details: {
+          estimateCredits: 100,
+          basis: 'profile',
+          balanceCredits: 0,
+          heldCredits: 0,
+          remainingCredits: 0,
+          usagePage: '/usage',
+        },
+      });
+      expect(err.message).toContain('no CopyCredits left');
+      expect(err.message).toContain('review code');
+      expect(state.locked).toEqual([]);
+      expect(state.holds).toEqual([]);
+    });
+  }
+
+  it('lets a review start when its estimate is exactly the balance, and refuses one credit short', async () => {
+    state.credits = 100;
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+
+    state.credits = 99;
+    const err = await refusal(() => check(ORG, 'full', 7));
+    expect(err.code).toBe('INSUFFICIENT_CREDITS');
+    expect(err.details).toMatchObject({
+      estimateCredits: 100,
+      balanceCredits: 99,
+      remainingCredits: 99,
+    });
+    expect(err.message).toContain(
+      "This review would cost about 100 CopyCredits, more than the workspace's 99 CopyCredits."
+    );
+  });
+
+  it('checks the credits with no cap set, which refused nothing before', async () => {
+    state.budget = null;
+    state.credits = 50;
+    const err = await refusal(() => check(ORG, 'full', 7));
+    expect(err.code).toBe('INSUFFICIENT_CREDITS');
+  });
+
+  it('holds back what reviews in flight have spent and are yet to spend, since they are charged only as they end', async () => {
+    state.credits = 250;
+    // Running, 4 of 7 judges answered for $0.60 so far: $3/7 to come.
+    const running = review(0.6, { status: 'RUNNING', judges: slots(7) });
+    for (let j = 0; j < 4; j += 1) judgeRun(0.15, { assessmentId: running });
+    // A store: false request holding its 7 judges ($1.00).
+    state.holds.push({
+      id: 'hold-x',
+      orgId: ORG,
+      judges: 7,
+      stored: false,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+      createdAt: at(),
+    });
+
+    const err = await refusal(() => check(ORG, 'full', 7));
+
+    // Held: $0.60 spent + $3/7 + $1.00 ≈ $2.03, so 250 − 203 = 47 credits left.
+    expect(err.details).toEqual({
+      estimateCredits: 100,
+      basis: 'profile',
+      balanceCredits: 250,
+      heldCredits: 203,
+      remainingCredits: 47,
+      usagePage: '/usage',
+    });
+    expect(err.message).toContain(
+      "more than the 47 left of the workspace's 250 CopyCredits once 203 are held for reviews already starting"
+    );
+  });
+
+  it('counts a cancelled review still finishing for what it spent, and not once its lease has gone', async () => {
+    state.credits = 150;
+    review(0.7, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    // $0.70 spent and up to 4 judges ($4/7) to land: $1.27 held, 23 left.
+    const err = await refusal(() => check(ORG, 'full', 7));
+    expect(err.details).toMatchObject({ heldCredits: 128, remainingCredits: 22 });
+
+    // Its lease gone, it has been charged (`freePlace`): its spend is in the balance.
+    state.reviews.at(-1)!.leaseExpiresAt = null;
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+
+  it('refuses every review while the balance is below zero, naming it', async () => {
+    state.credits = -12;
+    state.reviews = [];
+    // No history: an estimate of 0 passes on any positive balance, but not this one.
+    const err = await refusal(() => check(ORG, 'full', 7));
+    expect(err.code).toBe('INSUFFICIENT_CREDITS');
+    expect(err.details).toMatchObject({
+      estimateCredits: 0,
+      balanceCredits: -12,
+      remainingCredits: 0,
+    });
+    expect(err.message).toContain('its balance is -12');
+  });
+
+  it('with no history, lets a review start on any positive balance: the overdraft bound', async () => {
+    state.reviews = [];
+    state.credits = 1;
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+
+  it('checks the credits before the cap, so a refusal names what the workspace can act on', async () => {
+    state.budget = 10;
+    state.spent = 9.5;
+    state.credits = 10;
+    expect((await refusal(() => check(ORG, 'full', 7))).code).toBe('INSUFFICIENT_CREDITS');
+
+    // Credits to spare: the monthly cap, the safety ceiling, still refuses.
+    forgetSpendCaps();
+    state.credits = 1_000;
+    const err = await refusal(() => check(ORG, 'full', 7));
+    expect(err.code).toBe('BUDGET_EXCEEDED');
+    expect(err.details).toMatchObject({ remainingUsd: 0.5, limitUsd: 10 });
+  });
+
+  it('checks only the cap when the balance cannot be read, and logs it', async () => {
+    state.creditsFail = true;
+    state.budget = 10;
+    state.spent = 9.5;
+    expect((await refusal(() => check(ORG, 'full', 7))).code).toBe('BUDGET_EXCEEDED');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Credit balance unreadable; not refusing on credits',
+      expect.objectContaining({ orgId: ORG })
+    );
+
+    // Neither bound readable: nothing refused, and the per-judge gate applies.
+    forgetSpendCaps();
+    state.budget = null;
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+
+  for (const [label, stored] of [
+    ['stored', true],
+    ['store: false', false],
+  ] as const) {
+    it(`${label}: of three checked at the same moment with credits for one, passes one and refuses the others with its hold`, async () => {
+      state.credits = 150;
+
+      const outcomes = await Promise.allSettled(
+        [1, 2, 3].map(() => reserveReviewBudget(ORG, 'full', 7, stored))
+      );
+
+      const refused = outcomes.flatMap((o) => (o.status === 'rejected' ? [o.reason] : []));
+      expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+      expect(refused).toHaveLength(2);
+      for (const err of refused) {
+        expect(err).toMatchObject({
+          status: 402,
+          code: 'INSUFFICIENT_CREDITS',
+          details: { estimateCredits: 100, heldCredits: 100, remainingCredits: 50 },
+        });
+      }
+      expect(state.holds).toHaveLength(1);
+    });
+  }
+
+  it('as a queued review is claimed, answers the credit refusal for run.ts to store', async () => {
+    state.credits = 150;
+    const earlier = review(0, { status: 'QUEUED', judges: slots(7), createdAt: at() });
+    const self = { id: 'a-self', createdAt: at() };
+    void earlier;
+
+    const refused = await budgetRefusal(ORG, 'full', 7, self);
+
+    expect(refused).toMatchObject({
+      code: 'INSUFFICIENT_CREDITS',
+      details: { heldCredits: 100, remainingCredits: 50 },
+    });
+    expect(refused?.reason).toContain('CopyCredits');
   });
 });
