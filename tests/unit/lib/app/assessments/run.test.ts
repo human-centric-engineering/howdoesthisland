@@ -760,6 +760,15 @@ describe('the concurrency limits', () => {
 });
 
 describe('the recovery job', () => {
+  it('skips a stalled assessment it cannot claim, at the time it is given', async () => {
+    const live = { status: 'RUNNING', leaseExpiresAt: new Date(Date.now() + 30_000), attempts: 1 };
+    for (const n of [1, 2, 3]) fake.seed({ ...live, leaseToken: `run-${n}` });
+    // The workspace is full, so the queued one is left for a later pass.
+    const queued = fake.seed();
+    expect(await inOrg(() => recoverAssessments(new Date()))).toEqual({ redriven: 0, gaveUp: 0 });
+    expect(queued).toMatchObject({ status: 'QUEUED', attempts: 0 });
+  });
+
   it('clears this workspace’s dead running places (t-28), and no live or other one', async () => {
     const dead = new Date(Date.now() - 1);
     const later = new Date(Date.now() + 30_000);
