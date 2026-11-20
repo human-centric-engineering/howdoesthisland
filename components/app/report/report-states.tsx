@@ -48,8 +48,8 @@ export function ReportNoResult({ assessment }: { assessment: ReportAssessment })
     return (
       <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="This review was not started">
         <p>
-          By the time its turn came it would have gone over the workspace&rsquo;s monthly AI budget,
-          so none of its {WORDS.aiReviewers} were started and nothing was charged.
+          By the time its turn came, the workspace&rsquo;s monthly AI budget no longer covered it.
+          Nothing was charged.
         </p>
         {assessment.error ? <p className="mt-3 text-base">{assessment.error}</p> : null}
         <p className="mt-3 text-base">
