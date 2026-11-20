@@ -80,4 +80,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/calibration/',
   // A workspace's usage this month against its budget (t-48).
   'lib/app/usage/',
+  // A workspace's CopyCredits ledger, the rate, and the admin grant (t-57).
+  'lib/app/credits/',
 ];

@@ -30,6 +30,10 @@
  * that straddles midnight UTC on the first is read again, once, rather than
  * answered with last month's lines against this month's total.
  *
+ * **Credits** (t-57) are the workspace's CopyCredits balance, the sum of its
+ * ledger, and what its reviews were charged this month (`CHARGE` entries,
+ * t-58). The cap above is now the safety ceiling, not the allowance.
+ *
  * Dollar figures are rounded to the millionth, the cost rows' own precision.
  *
  * Every read names the org, so it is the workspace's figures whatever scope
@@ -42,6 +46,7 @@ import {
   getOrgCapState,
   utcMonthStart,
 } from '@/lib/orchestration/llm/spend-caps';
+import { getCreditBalance, getCreditsChargedSince } from '@/lib/app/credits/ledger';
 import type { MonthUsage, UsageLine, UsageLineKind } from '@/lib/app/usage/wire';
 
 /** The cost-row metadata a review writes (`run-judge.ts`); every field optional. */
@@ -129,7 +134,7 @@ export async function getMonthUsage(orgId: string): Promise<MonthUsage> {
 async function readMonth(orgId: string, monthStart: Date): Promise<MonthUsage> {
   const since = { gte: monthStart };
 
-  const [capState, costRows, reviewCounts] = await Promise.all([
+  const [capState, costRows, reviewCounts, balance, charged] = await Promise.all([
     getOrgCapState(orgId),
     prisma.aiCostLog.findMany({
       where: { orgId, createdAt: since },
@@ -140,6 +145,8 @@ async function readMonth(orgId: string, monthStart: Date): Promise<MonthUsage> {
       where: { orgId, createdAt: since },
       _count: { _all: true },
     }),
+    getCreditBalance(orgId),
+    getCreditsChargedSince(orgId, monthStart),
   ]);
   // The total the cap is held to; read directly only when there is no cap.
   const spendUsd = capState ? capState.spent : await getMonthToDateOrgSpend(orgId);
@@ -209,6 +216,7 @@ async function readMonth(orgId: string, monthStart: Date): Promise<MonthUsage> {
           exceeded: capState.exceeded,
         }
       : null,
+    credits: { balance, spentThisMonth: charged },
     lines: list,
   };
 }

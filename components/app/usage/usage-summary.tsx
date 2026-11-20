@@ -1,10 +1,14 @@
 /**
- * The workspace's usage this month (t-48): its budget, its totals and the
- * breakdown by project, as `GET /api/v1/usage` answers them. A server
- * component: it only renders figures.
+ * The workspace's usage this month (t-48): its CopyCredits (t-57), its
+ * monthly spending limit, its totals and the breakdown by project, as
+ * `GET /api/v1/usage` answers them. A server component: it only renders
+ * figures.
  *
- * The budget has three states: none set, within it (a meter and what is
- * left), and reached (AI reviewers are refused until the month turns).
+ * Credits are what the workspace pays for reviews with; a workspace starts
+ * with none. The spending limit is the safety ceiling on what its AI can
+ * spend in a month, whatever its credits, and has three states: none set,
+ * within it (a meter and what is left), and reached (AI reviewers are refused
+ * until the month turns).
  */
 import {
   Table,
@@ -69,6 +73,25 @@ function lineNote(line: UsageLine): string | null {
   }
 }
 
+/** The balance, and what reviews were charged this month. */
+function Credits({ usage }: { usage: MonthUsage }) {
+  const { balance, spentThisMonth } = usage.credits;
+  return (
+    <section aria-labelledby="usage-credits" className="rounded-md border p-5">
+      <h2 id="usage-credits" className="font-semibold">
+        CopyCredits
+      </h2>
+      <p className="mt-1 text-2xl font-semibold">{count.format(balance)}</p>
+      <p className="text-muted-foreground mt-1 text-sm">
+        {balance > 0
+          ? `What this workspace has to spend on ${WORDS.review}s by ${WORDS.aiReviewers}.`
+          : `No credits to spend. ${WORDS.Review}s by ${WORDS.aiReviewers} are paid for with CopyCredits, and a free ${WORDS.review} code adds some.`}
+        {spentThisMonth > 0 ? ` ${count.format(spentThisMonth)} spent this month.` : ''}
+      </p>
+    </section>
+  );
+}
+
 function Budget({ usage }: { usage: MonthUsage }) {
   const { cap } = usage;
   const resets = dayName.format(new Date(usage.month.end));
@@ -77,11 +100,11 @@ function Budget({ usage }: { usage: MonthUsage }) {
     return (
       <section aria-labelledby="usage-budget" className="rounded-md border p-5">
         <h2 id="usage-budget" className="font-semibold">
-          No monthly budget
+          No monthly spending limit
         </h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          This workspace has no AI budget set, so {WORDS.aiReviewers} are not held to a limit. Spend
-          so far: {formatUsd(usage.spendUsd)}.
+          This workspace has no monthly limit on its AI spend. Spend so far:{' '}
+          {formatUsd(usage.spendUsd)}.
         </p>
       </section>
     );
@@ -97,7 +120,7 @@ function Budget({ usage }: { usage: MonthUsage }) {
       }
     >
       <h2 id="usage-budget" className="font-semibold">
-        {cap.exceeded ? 'Budget reached' : 'Monthly budget'}
+        {cap.exceeded ? 'Monthly spending limit reached' : 'Monthly spending limit'}
       </h2>
       <p className="mt-1 text-sm">
         {formatUsd(usage.spendUsd)} of {formatUsd(cap.limitUsd)} spent
@@ -107,7 +130,7 @@ function Budget({ usage }: { usage: MonthUsage }) {
       {cap.limitUsd > 0 ? (
         <div
           role="meter"
-          aria-label="Budget used"
+          aria-label="Spending limit used"
           aria-valuemin={0}
           aria-valuemax={cap.limitUsd}
           aria-valuenow={Math.min(usage.spendUsd, cap.limitUsd)}
@@ -122,8 +145,8 @@ function Budget({ usage }: { usage: MonthUsage }) {
       ) : null}
       <p className="text-muted-foreground mt-3 text-sm">
         {cap.exceeded
-          ? `${WORDS.AiReviewers} are refused until ${resets}, when the budget starts again. The quick scan still runs. A platform admin can raise the budget.`
-          : `The budget starts again on ${resets}.`}
+          ? `${WORDS.AiReviewers} are refused until ${resets}, when the limit starts again, whatever credits are left. The quick scan still runs. A platform admin can raise the limit.`
+          : `A safety limit on what this workspace’s AI can spend in a month. It starts again on ${resets}.`}
       </p>
     </section>
   );
@@ -141,6 +164,8 @@ export function UsageSummary({ usage }: { usage: MonthUsage }) {
           This workspace&rsquo;s {WORDS.review}s and AI spend this month, counted in UTC.
         </p>
       </div>
+
+      <Credits usage={usage} />
 
       <Budget usage={usage} />
 

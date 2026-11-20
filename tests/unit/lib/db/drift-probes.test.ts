@@ -436,7 +436,8 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
     // FORK (HowDoesThisLand): pinned to our probes, the hand-written FKs
     // from a workspace invitation to user (t-9), and from content and
     // assessments to user and ai_api_key (t-22), and from a share link to
-    // user (t-32). Ledger:
+    // user (t-32), from a calibration run (t-37) and a credit entry (t-57).
+    // Ledger:
     // .context/app/platform-divergences.md row 11.
     expect(getAppDriftProbes().map((probe) => probe.name)).toEqual([
       'app_workspace_invitation_userId_fkey (hand-written FK → user)',
@@ -446,6 +447,7 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_assessment_apiKeyId_fkey (hand-written FK → ai_api_key)',
       'app_report_share_createdByUserId_fkey (hand-written FK → user)',
       'app_calibration_run_startedByUserId_fkey (hand-written FK → user)',
+      'app_credit_entry_actorUserId_fkey (hand-written FK → user)',
     ]);
   });
 });

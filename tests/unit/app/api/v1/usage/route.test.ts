@@ -62,6 +62,7 @@ const USAGE: MonthUsage = {
   calls: 4,
   spendUsd: 0.4,
   cap: { limitUsd: 10, remainingUsd: 9.6, exceeded: false },
+  credits: { balance: 250, spentThisMonth: 0 },
   lines: [{ kind: 'no-project', projectId: null, reviews: 1, calls: 4, spendUsd: 0.4 }],
 };
 

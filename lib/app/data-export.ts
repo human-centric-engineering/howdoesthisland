@@ -140,6 +140,13 @@ export function initAppSubjectSources(): void {
         description:
           'Calibration runs you started against a framework version, with how often the judges agreed with the expected results.',
       },
+      {
+        model: 'CreditEntry',
+        section: 'creditEntries',
+        disposition: 'export',
+        description:
+          'Changes you made to a workspace’s CopyCredits: credits you granted or adjusted as an admin, and codes you redeemed.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -181,44 +188,55 @@ export function initAppSubjectSources(): void {
  * change the signature just to add one.
  */
 export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promise<AppSubjectData> {
-  const [received, sent, contents, assessments, reportShares, calibrationRuns] = await Promise.all([
-    // The ones to them, without the inviter's id (their name is in the
-    // invitation email, and the id is someone else's data).
-    prisma.workspaceInvitation.findMany({
-      where: { userId },
-      omit: { invitedByUserId: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-    // The ones they sent, without the invitee: that is someone else's data.
-    prisma.workspaceInvitation.findMany({
-      where: { invitedByUserId: userId },
-      omit: { userId: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-    // What they added and asked for (t-22). The workspace keeps these rows
-    // after they leave; this is their copy of what they created.
-    prisma.content.findMany({ where: { createdByUserId: userId }, orderBy: { createdAt: 'asc' } }),
-    prisma.assessment.findMany({
-      where: { createdByUserId: userId },
-      // The lease is the job's bookkeeping, not data about anyone.
-      omit: { leaseToken: true, leaseExpiresAt: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-    // The links they made (t-32), without the token's hash: it is the
-    // credential's verifier, not data about anyone.
-    prisma.reportShare.findMany({
-      where: { createdByUserId: userId },
-      omit: { tokenHash: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-    // The calibration runs they started (t-37). Without the rows: those are
-    // the calibration set's texts scored, the same for whoever runs them.
-    prisma.calibrationRun.findMany({
-      where: { startedByUserId: userId },
-      omit: { rows: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-  ]);
+  const [received, sent, contents, assessments, reportShares, calibrationRuns, creditEntries] =
+    await Promise.all([
+      // The ones to them, without the inviter's id (their name is in the
+      // invitation email, and the id is someone else's data).
+      prisma.workspaceInvitation.findMany({
+        where: { userId },
+        omit: { invitedByUserId: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // The ones they sent, without the invitee: that is someone else's data.
+      prisma.workspaceInvitation.findMany({
+        where: { invitedByUserId: userId },
+        omit: { userId: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // What they added and asked for (t-22). The workspace keeps these rows
+      // after they leave; this is their copy of what they created.
+      prisma.content.findMany({
+        where: { createdByUserId: userId },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.assessment.findMany({
+        where: { createdByUserId: userId },
+        // The lease is the job's bookkeeping, not data about anyone.
+        omit: { leaseToken: true, leaseExpiresAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // The links they made (t-32), without the token's hash: it is the
+      // credential's verifier, not data about anyone.
+      prisma.reportShare.findMany({
+        where: { createdByUserId: userId },
+        omit: { tokenHash: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // The calibration runs they started (t-37). Without the rows: those are
+      // the calibration set's texts scored, the same for whoever runs them.
+      prisma.calibrationRun.findMany({
+        where: { startedByUserId: userId },
+        omit: { rows: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // The changes to a workspace's credits they made (t-57). A charge carries
+      // no actor, so these are an admin's grants and adjustments, and codes the
+      // subject redeemed.
+      prisma.creditEntry.findMany({
+        where: { actorUserId: userId },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
   return {
     workspaceInvitations: [
       ...received.map((row) => ({ ...row, yourPart: 'invitee' as const })),
@@ -228,5 +246,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     assessments,
     reportShares,
     calibrationRuns,
+    creditEntries,
   };
 }

@@ -47,7 +47,17 @@ import {
 
 export { APP_SETTINGS_KEY, WORKSPACE_PROVIDER_SLUGS };
 
-/** The monthly AI budget every new workspace starts with, in USD (D6). */
+/**
+ * The monthly AI spending limit every new workspace starts with, in USD.
+ *
+ * Since t-57 a **safety ceiling, not an allowance**: reviews are paid for in
+ * CopyCredits, and a new workspace starts with none (.context/app/credits.md).
+ * This bounds what any one workspace's AI can spend in a month, whatever the
+ * path. It must stay set: Sunrise reads no cap as unlimited.
+ *
+ * **$10 is a testing value**, to stop overspending while we test. The
+ * production value is the owner's call at launch (f-launch, l1).
+ */
 export const WORKSPACE_MONTHLY_BUDGET_USD = 10;
 
 /** The marker a signup workspace carries until someone has joined it. */

@@ -101,4 +101,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_calibration_run',
     probe: constraintExists('app_calibration_run_startedByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-57: the hand-written FK from a credit entry to `user`. SET NULL: the
+  // ledger is the workspace's and outlives its actor's erasure.
+  registerAppDriftProbe({
+    name: 'app_credit_entry_actorUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_credit_entry',
+    probe: constraintExists('app_credit_entry_actorUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

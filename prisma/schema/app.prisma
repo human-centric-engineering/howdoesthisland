@@ -450,3 +450,44 @@ enum CalibrationRunStatus {
   COMPLETE
   FAILED
 }
+
+// ─── CopyCredits (t-57, f-credits) ───────────────────────────────────────────
+
+/// One change to a workspace's CopyCredits balance: credits an admin granted
+/// or adjusted, a code redeemed (t-60), or a review charged (t-58). Design:
+/// .context/app/credits.md. Append-only: the balance is the sum of `amount`,
+/// and nothing updates or deletes a row except the workspace's own erasure.
+/// Tenant-owned (`orgId`, cascade, `org_isolation`).
+model CreditEntry {
+  id          String          @id @default(cuid())
+  orgId       String?
+  org         Org?            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// Credits, signed: positive adds to the balance, negative takes from it.
+  amount      Int
+  kind        CreditEntryKind
+  /// Why, in words: required for an admin's grant or adjustment.
+  reason      String?
+  /// Who made the change: the admin, or whoever redeemed. Null for a charge,
+  /// or once that user is erased. FK → user, ON DELETE SET NULL (the
+  /// workspace keeps its ledger).
+  actorUserId String?
+  /// What the change is for, as `<kind>:<id>` (a redemption, a review), so one
+  /// thing is credited or charged once. Null for an admin's change.
+  reference   String?
+  createdAt   DateTime        @default(now())
+
+  @@unique([kind, reference])
+  @@index([orgId, createdAt])
+  @@map("app_credit_entry")
+}
+
+enum CreditEntryKind {
+  /// An admin gave credits.
+  GRANT
+  /// An admin corrected the balance, up or down.
+  ADJUST
+  /// A free review code was redeemed (t-60).
+  REDEEM
+  /// A review was charged for what it spent (t-58).
+  CHARGE
+}
