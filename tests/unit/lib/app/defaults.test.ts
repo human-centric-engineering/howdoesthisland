@@ -295,6 +295,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () =>
       expect(protectedNavItems?.map((i) => i.href)).toEqual([
         '/home',
+        '/usage',
         '/profile',
         '/settings',
         '/admin',
@@ -487,9 +488,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/protected-routes.ts',
     risk: 'a stray path would put a public route behind auth on every install',
     // FORK (HowDoesThisLand): pinned to /home, the signed-in landing, and
-    // /assessments, where a review's report lives (t-29).
+    // /assessments, where a review's report lives (t-29), and /usage (t-48).
     // Ledger: .context/app/platform-divergences.md row 2.
-    assert: () => expect(appProtectedRoutes).toEqual(['/home', '/assessments']),
+    assert: () => expect(appProtectedRoutes).toEqual(['/home', '/assessments', '/usage']),
   },
   {
     seam: 'lib/app/config-health.ts',
