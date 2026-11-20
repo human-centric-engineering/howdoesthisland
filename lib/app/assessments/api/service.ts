@@ -41,6 +41,7 @@ import {
   startNextQueued,
 } from '@/lib/app/assessments/run';
 import { withPlace } from '@/lib/app/assessments/places';
+import { assertReviewWithinBudget } from '@/lib/app/usage/budget';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -163,8 +164,9 @@ export interface PreparedAssessment {
 
 /**
  * Everything that can be refused before anything is fetched, read or spent:
- * the version, the context, the profile, and pasted text. The route counts a request
- * against the per-user cap only once this has passed.
+ * the version, the context, the profile, pasted text, and a review that would
+ * pass the workspace's monthly budget (402 `BUDGET_EXCEEDED`, t-49). The route
+ * counts a request against the per-user cap only once this has passed.
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
   const resolved = await versionToScore(body);
@@ -176,6 +178,8 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     const { text } = body.source;
     await refusingAsApi(() => assessableText(text));
   }
+  // Last, so a request refused for anything above is refused for that.
+  await assertReviewWithinBudget(requireOrgId(), storedProfileName(profile), judges.length);
   return { resolved, ctx, profile, judges };
 }
 

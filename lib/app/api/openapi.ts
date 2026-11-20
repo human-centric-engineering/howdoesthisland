@@ -25,10 +25,12 @@
  * - `stream: 'sse'` → `text/event-stream`, its schema the events' payload.
  * - `file` → that media type, with the bytes as its schema.
  * - `envelope: false` → `data` as the body itself.
+ * - `errors` → an error response per status, its description each code's.
  *
  * Every route also answers 429 (the `/api/v1` rate-limit policy, applied in
  * `proxy.ts`) and, as `default`, the error envelope for anything else. A
- * code a route's handler raises beyond those is in its docblock, not here.
+ * code a route's handler raises beyond those is in its docblock, not here,
+ * unless the registry declares it in `errors`.
  *
  * The document lists only the methods the registry declares. Next.js also
  * answers HEAD on every GET and OPTIONS on every route; OpenAPI tools expect
@@ -269,6 +271,12 @@ function operation(route: RouteContract): JsonObject {
     responses['404'] = errorRef('`NOT_FOUND`: the path names nothing, or does not parse.');
   }
   responses['429'] = errorRef('`RATE_LIMIT_EXCEEDED`: over the `/api/v1` rate limit.');
+  for (const declared of route.errors ?? []) {
+    const line = `\`${declared.code}\`: ${declared.description}`;
+    const key = String(declared.status);
+    const existing = responses[key]?.description;
+    responses[key] = errorRef(typeof existing === 'string' ? `${existing} ${line}` : line);
+  }
   responses.default = errorRef('Any other error, in the error envelope; `error.code` says which.');
 
   const note = authNote(auth);

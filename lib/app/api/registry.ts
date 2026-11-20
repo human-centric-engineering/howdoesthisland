@@ -26,7 +26,9 @@
  * registry declares one no file exports.
  *
  * Errors are not declared per route: every route answers the standard error
- * envelope, and its docblock lists the codes.
+ * envelope, and its docblock lists the codes. The exception is `errors`: a
+ * refusal with a status of its own that a caller has to plan for (402
+ * `BUDGET_EXCEEDED`, t-49), which the OpenAPI document then lists.
  */
 import { z } from 'zod';
 import {
@@ -116,6 +118,8 @@ export interface RouteContract {
     query?: z.ZodType;
     body?: z.ZodType;
   };
+  /** Refusals declared beyond the codes every route answers; see the module docblock. */
+  errors?: readonly RouteError[];
   response: {
     /**
      * The success status, or each one the route answers with the same `data`
@@ -153,6 +157,13 @@ export interface RouteContract {
 }
 
 export type SuccessStatus = 200 | 201 | 202;
+
+/** A refusal a route declares: its status, its `error.code`, and when it is answered. */
+export interface RouteError {
+  status: number;
+  code: string;
+  description: string;
+}
 
 // --- Response shapes -------------------------------------------------------
 
@@ -532,6 +543,14 @@ export const APP_ROUTES: readonly RouteContract[] = [
       'Assess a text, a page or a file with a profile or a list of judges: queued, waited for, or kept nowhere.',
     auth: ASSESS,
     request: { body: createAssessmentSchema },
+    errors: [
+      {
+        status: 402,
+        code: 'BUDGET_EXCEEDED',
+        description:
+          "The review's estimated cost is more than what is left of the workspace's monthly AI budget, or none is left. No AI reviewer started and nothing was stored. `details` carries `estimateUsd`, its `basis`, `remainingUsd`, `limitUsd` and `usagePage`. A `quick` review is never refused this way.",
+      },
+    ],
     response: {
       status: [200, 202],
       data: z.union([assessmentDetailSchema, ephemeralAssessmentSchema]),
