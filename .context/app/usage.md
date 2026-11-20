@@ -45,29 +45,42 @@ budget.
 It refuses when nothing is left, or when the estimate is more than what is.
 What is left is the budget less this month's spend, less `inFlightUsd`: what
 the workspace's stored reviews still `QUEUED` or `RUNNING` are yet to spend
-(each one's judges at this request's cost per judge, less what it has spent),
-so a burst of requests does not each see the same remainder.
+(each one's judges at this request's rate, less what it has spent), so a
+request does not count on budget a review already accepted will use. It covers
+reviews already stored: requests arriving together each see none of the
+others, and the per-judge gate is left to catch them.
 
-The estimate is a cost per judge × the judges the request calls, the cost per
-judge from the workspace's own history:
+The estimate is a cost per judge × the judges the request calls, plus an
+editor allowance when the editor will run (2 judges or more). The cost per
+judge, from the workspace's own history:
 
-| Basis     | Cost per judge                                                                                                                                                                                                                   |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profile` | The median of `costUsd / judges.length` over the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list.                                                                             |
-| `judges`  | The median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs; a review the editor runs on adds the median of what the last 20 completed reviews spent beyond their judge runs (the editor's call is on no judge run). |
-| `none`    | No history: `0`, so any positive remainder is enough.                                                                                                                                                                            |
+| Basis     | Cost per judge                                                                                                                                                         |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile` | The median judge spend (cost less the editor's) per judge over the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list. |
+| `judges`  | The median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs.                                                                                               |
+| `none`    | No history: `0`, so any positive remainder is enough.                                                                                                                  |
+
+The editor allowance is the median of what the reviews that tier read (the
+profile's, or else the workspace's last 20 completed) spent beyond their judge
+runs, over those the editor ran on: its call is on no judge run.
 
 Per judge, so a profile whose judge list differs between frameworks or
 versions is scaled to the request. Only reviews that completed feed the first
-tier: a review cut short spent less than a review costs. A review calling no judge (the quick profile) is never
-refused. No budget set, or one that cannot be read, refuses nothing; the
+tier: a review cut short spent less than a review costs. A review calling no
+judge (the quick profile) is never refused. No budget set, a budget that
+cannot be read, or history that cannot be read refuses nothing; the
 install-wide cap is left to the per-judge gate (`run-judge.ts`), which stays
 the backstop for spend that lands between the check and the judges.
 
-Not done: a queued stored review is not checked again when it is claimed.
-`store: false` reviews leave no assessment or judge-run rows, so they feed no
-estimate (a workspace that only sends those estimates `0`) and are not held
-back while in flight.
+Not done:
+
+- A queued stored review is not checked again when it is claimed.
+- `store: false` reviews leave no assessment or judge-run rows, so they feed
+  no estimate (a workspace that only sends those estimates `0`) and are not
+  held back while in flight.
+- A cancelled review's judges still in flight are not held back.
+- A review running across a month's end has its spend last month taken off
+  what it is held for this one.
 
 ## Demo usage for development
 

@@ -333,4 +333,67 @@ describe('assertReviewWithinBudget', () => {
 
     expect(err.message).toContain('about $0.0040, more than the $0.0030 left');
   });
+
+  it('says "under $0.0001" for an amount four places would show as zero', async () => {
+    state.reviews = [];
+    for (let i = 0; i < 3; i += 1) review(0.0001, { judges: slots(1) });
+    state.spent = 9.99997;
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 1));
+
+    expect(err.message).toContain('more than the under $0.0001 left');
+    expect(err.message).not.toContain('$0.0000');
+  });
+
+  it('says the reviews in flight hold the rest when they leave nothing', async () => {
+    state.spent = 8;
+    // Two queued 7-judge reviews hold $2.00: all that is left.
+    review(0, { status: 'QUEUED', judges: slots(7) });
+    review(0, { status: 'QUEUED', judges: slots(7) });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
+
+    expect(err.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 2 });
+    expect(err.message).toContain(
+      "Reviews already queued or running are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
+    );
+    expect(err.message).not.toContain('more than the');
+  });
+
+  it('refuses nothing when the history cannot be read, as a cap that cannot be', async () => {
+    state.spent = 9.99;
+    vi.mocked(prisma.assessment.findMany).mockRejectedValueOnce(new Error('statement timeout'));
+
+    await expect(assertReviewWithinBudget(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+});
+
+describe('the editor in the profile tier', () => {
+  it('takes the editor out of the cost per judge, and adds it back only where the editor runs', async () => {
+    // Three completed 4-judge reviews: judges $0.10 each, an editor of $0.20.
+    for (let i = 0; i < 3; i += 1) {
+      const id = review(0.6, { judges: slots(4) });
+      for (let j = 0; j < 4; j += 1) judgeRun(0.1, { assessmentId: id });
+    }
+
+    // 1 judge: no editor, $0.10 (not $0.15 with an editor share in it).
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.1,
+      basis: 'profile',
+    });
+    // 4 judges: $0.40 + the $0.20 editor.
+    expect(await estimateReviewCost(ORG, 'full', 4)).toEqual({
+      estimateUsd: 0.6,
+      basis: 'profile',
+    });
+  });
+
+  it('counts a review with no judge runs to subtract as all judge spend', async () => {
+    for (let i = 0; i < 3; i += 1) review(0.6, { judges: slots(4) });
+
+    expect(await estimateReviewCost(ORG, 'full', 4)).toEqual({
+      estimateUsd: 0.6,
+      basis: 'profile',
+    });
+  });
 });
