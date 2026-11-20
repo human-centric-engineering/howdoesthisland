@@ -561,14 +561,15 @@ interface Lease {
  * Renew the lease every {@link LEASE_RENEW_MS} until released, while the
  * assessment is `RUNNING` or `CANCELLED` under the token. A cancel therefore
  * does not turn `held` false: `stillOurs` reads the status, and that is what
- * stops the run starting judges. `release` waits for a renewal in flight, so
- * one cannot land after `freePlace` and give a finished run its place back.
+ * stops the run starting judges. `release` waits for every renewal still in
+ * flight (a slow one can outlast the next tick), so none can land after
+ * `freePlace` and give a finished run its place back.
  */
 function holdLease(assessmentId: string, token: string): Lease {
   let held = true;
-  let pending: Promise<void> = Promise.resolve();
+  const pending = new Set<Promise<void>>();
   const timer = setInterval(() => {
-    pending = prisma.assessment
+    const renewal: Promise<void> = prisma.assessment
       .updateMany({
         where: { id: assessmentId, leaseToken: token, status: { in: ['RUNNING', 'CANCELLED'] } },
         data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) },
@@ -585,14 +586,16 @@ function holdLease(assessmentId: string, token: string): Lease {
             error: err instanceof Error ? err.message : String(err),
           });
         }
-      );
+      )
+      .finally(() => pending.delete(renewal));
+    pending.add(renewal);
   }, LEASE_RENEW_MS);
   timer.unref?.();
   return {
     held: () => held,
     release: async () => {
       clearInterval(timer);
-      await pending;
+      await Promise.all(pending);
     },
   };
 }

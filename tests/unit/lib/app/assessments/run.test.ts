@@ -716,6 +716,35 @@ describe('the lease', () => {
     expect(a.leaseExpiresAt).toBeNull();
   });
 
+  it('waits for a renewal that outlasted the next one, too', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const a = fake.seed({ judges: ['judge_a'] });
+    const judge = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await judge.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    // The first renewal hangs in the database past the second, which lands.
+    const slow = deferred();
+    const real = fake.db.assessment.updateMany.getMockImplementation();
+    fake.db.assessment.updateMany.mockImplementationOnce(async (args) => {
+      await slow.promise;
+      return real!(args);
+    });
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    judge.resolve();
+    await flush();
+    slow.resolve();
+
+    expect(await running).toBe('cancelled');
+    expect(a.leaseExpiresAt).toBeNull();
+  });
+
   it('once taken over, the old run writes nothing more to the assessment', async () => {
     const slots = Array.from({ length: JUDGES_IN_FLIGHT + 2 }, (_, i) => `judge_${i}`);
     const a = fake.seed({ judges: slots });
