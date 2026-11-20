@@ -88,7 +88,8 @@ describe('takePlace', () => {
     const err = await takePlace(ORG).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(WorkspaceBusyError);
     expect(err).toMatchObject({
-      running: RUNNING_PER_WORKSPACE,
+      counts: { running: RUNNING_PER_WORKSPACE, waiting: 0 },
+      queueCanStart: false,
       retryAfterSeconds: PLACE_RETRY_AFTER_SECONDS,
     });
     expect(fake.db.assessmentPlace.create).not.toHaveBeenCalled();
@@ -107,7 +108,7 @@ describe('takePlace', () => {
     const err = await takePlace(ORG).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(WorkspaceBusyError);
     expect(err).toMatchObject({
-      running: null,
+      counts: null,
       message: expect.stringMatching(/could not be taken/),
     });
     expect(fake.db.$transaction).toHaveBeenCalledTimes(5);
@@ -118,7 +119,10 @@ describe('takePlace', () => {
     fake.places.push({ id: 'held-1', orgId: ORG, leaseExpiresAt: later });
     fake.seed({ status: 'RUNNING', leaseExpiresAt: later, leaseToken: 't', attempts: 1 });
     fake.seed({ status: 'QUEUED' });
-    await expect(takePlace(ORG)).rejects.toMatchObject({ running: 3 });
+    await expect(takePlace(ORG)).rejects.toMatchObject({
+      counts: { running: 2, waiting: 1 },
+      queueCanStart: true,
+    });
     await expect(assertPlaceFree(ORG)).rejects.toBeInstanceOf(WorkspaceBusyError);
   });
 
@@ -169,6 +173,21 @@ describe('takePlace', () => {
       error: 'timeout',
     });
     expect(fake.places).toHaveLength(1);
+    await place.release();
+  });
+
+  it('logs a place cleared under its run, and stops renewing it', async () => {
+    vi.useFakeTimers();
+    const place = await takePlace(ORG);
+    fake.places.splice(0, fake.places.length);
+    await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS);
+    expect(logger.warn).toHaveBeenCalledWith('Assessment place lost before its run ended', {
+      placeId: place.id,
+      orgId: ORG,
+    });
+    const writes = fake.db.assessmentPlace.updateMany.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS * 2);
+    expect(fake.db.assessmentPlace.updateMany).toHaveBeenCalledTimes(writes);
     await place.release();
   });
 

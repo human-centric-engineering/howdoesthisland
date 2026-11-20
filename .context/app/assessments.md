@@ -251,11 +251,17 @@ Each route's docblock lists its error codes. A few rules hold across them:
   throws. One whose process died is free once its lease runs out, and the
   next take deletes it (outside the take's transaction, so concurrent takers
   do not conflict on it). A `store: false` take also counts the workspace's
-  queued stored reviews as taken, so a freed place goes to the queue first
-  and steady `store: false` traffic cannot starve it; a stored claim does not
-  count them. With no place free the request is 429 `WORKSPACE_BUSY` with
-  `Retry-After` (`PLACE_RETRY_AFTER_SECONDS`), `details.limit` and, when it
-  was counted, `details.running`, and no judge starts. The route checks for a
+  waiting stored reviews as taken (queued, or stalled for the recovery job:
+  `RUNNING` with no live lease, as `recover.ts` reads it), so a freed place
+  goes to them first and steady `store: false` traffic cannot starve them; a
+  stored claim does not count them. With no place free the request is 429
+  `WORKSPACE_BUSY` with `Retry-After` (`PLACE_RETRY_AFTER_SECONDS`),
+  `details.limit` and, when it was counted, `details.running` and
+  `details.waiting`, and no judge starts. A refusal made only because reviews
+  are waiting, with places free, also starts the queue, so a review whose own
+  start was lost does not hold the places until the recovery job's next tick.
+  A run whose place was cleared under it (its renewals failed for longer than
+  the lease) carries on uncounted, and that is logged. The route checks for a
   free place before it charges the per-user cap, so a caller retrying a busy
   workspace keeps its allowance. It does not wait (owner ruling, 2026-11-20):
   a caller who wants to queue sends a stored review. When a place frees, the

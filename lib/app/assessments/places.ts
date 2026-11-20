@@ -38,23 +38,40 @@ import {
   RUNNING_PER_WORKSPACE,
 } from '@/lib/app/assessments/limits';
 
+/** What a workspace's places were held by when a run was refused. */
+export interface PlaceCounts {
+  /** Runs holding a place: stored runs under a live lease, and live places. */
+  running: number;
+  /** Stored reviews waiting for one: queued, or stalled for the recovery job. */
+  waiting: number;
+}
+
 /** The workspace has no free place for another run, or one could not be taken. */
 export class WorkspaceBusyError extends Error {
-  /**
-   * Runs holding or waiting for a place when it was refused; `null` when the
-   * take gave up on conflicts and never counted.
-   */
-  readonly running: number | null;
+  /** `null` when the take gave up on conflicts and never counted. */
+  readonly counts: PlaceCounts | null;
   readonly retryAfterSeconds = PLACE_RETRY_AFTER_SECONDS;
 
-  constructor(running: number | null) {
+  constructor(counts: PlaceCounts | null) {
     super(
-      running === null
+      counts === null
         ? 'A place to run this review could not be taken. Try again shortly, or send a stored review, which queues.'
-        : `The workspace already has ${running} reviews running or queued, its limit. Try again shortly, or send a stored review, which queues.`
+        : `The workspace has ${counts.running} reviews running and ${counts.waiting} waiting; it runs at most ${RUNNING_PER_WORKSPACE} at once. Try again shortly, or send a stored review, which queues.`
     );
     this.name = 'WorkspaceBusyError';
-    this.running = running;
+    this.counts = counts;
+  }
+
+  /**
+   * Refused only because stored reviews are waiting, with places free: the
+   * caller should start the queue (`startNextQueued`), since a waiting review
+   * whose own start was lost would otherwise hold the places until the
+   * recovery job's next tick.
+   */
+  get queueCanStart(): boolean {
+    return (
+      this.counts !== null && this.counts.waiting > 0 && this.counts.running < RUNNING_PER_WORKSPACE
+    );
   }
 }
 
@@ -85,30 +102,37 @@ export async function liveRunsIn(
 }
 
 /**
- * Stored reviews waiting for a place: `QUEUED`, with attempts left and no
- * live lease. A run kept nowhere counts them as taken, so a freed place goes
- * to the queue (`startNextQueued`) rather than to the next `store: false`
+ * Stored reviews waiting for a place, with attempts left: `QUEUED`, or
+ * `RUNNING` with no live lease (its process died; the recovery job re-drives
+ * it), the recovery job's own "stalled". A run kept nowhere counts them as
+ * taken, so a freed place goes to them rather than to the next `store: false`
  * request, which would otherwise win it every time under steady traffic.
  */
-function queuedIn(tx: Prisma.TransactionClient, orgId: string, now: Date): Promise<number> {
+function waitingIn(tx: Prisma.TransactionClient, orgId: string, now: Date): Promise<number> {
   return tx.assessment.count({
     where: {
       orgId,
-      status: 'QUEUED',
+      status: { in: ['QUEUED', 'RUNNING'] },
       attempts: { lt: MAX_ATTEMPTS },
       OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
     },
   });
 }
 
-/** Places and queued stored reviews, against which a `store: false` run is refused. */
-async function takenFor(tx: Prisma.TransactionClient, orgId: string, now: Date): Promise<number> {
-  const [running, queued] = await Promise.all([
+/** What holds or waits for the workspace's places, against which a `store: false` run is refused. */
+async function countsFor(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  now: Date
+): Promise<PlaceCounts> {
+  const [running, waiting] = await Promise.all([
     liveRunsIn(tx, orgId, now),
-    queuedIn(tx, orgId, now),
+    waitingIn(tx, orgId, now),
   ]);
-  return running + queued;
+  return { running, waiting };
 }
+
+const isFull = ({ running, waiting }: PlaceCounts) => running + waiting >= RUNNING_PER_WORKSPACE;
 
 /**
  * Refuse with {@link WorkspaceBusyError} when the workspace has no place for
@@ -118,21 +142,21 @@ async function takenFor(tx: Prisma.TransactionClient, orgId: string, now: Date):
  * {@link takePlace} is settled there.
  */
 export async function assertPlaceFree(orgId: string): Promise<void> {
-  const taken = await takenFor(prisma, orgId, new Date());
-  if (taken >= RUNNING_PER_WORKSPACE) throw new WorkspaceBusyError(taken);
+  const counts = await countsFor(prisma, orgId, new Date());
+  if (isFull(counts)) throw new WorkspaceBusyError(counts);
 }
 
 /** Serializable conflicts a take retries before it gives up. */
 const TAKE_TRIES = 5;
 
-type Taken = { id: string } | { full: number };
+type Taken = { id: string } | { full: PlaceCounts };
 
 async function takeOnce(orgId: string): Promise<Taken> {
   const now = new Date();
   return await prisma.$transaction(
     async (tx) => {
-      const taken = await takenFor(tx, orgId, now);
-      if (taken >= RUNNING_PER_WORKSPACE) return { full: taken };
+      const counts = await countsFor(tx, orgId, now);
+      if (isFull(counts)) return { full: counts };
       const place = await tx.assessmentPlace.create({
         data: { orgId, leaseExpiresAt: new Date(now.getTime() + LEASE_MS) },
         select: { id: true },
@@ -182,6 +206,15 @@ export async function takePlace(orgId: string): Promise<Place> {
   const timer = setInterval(() => {
     prisma.assessmentPlace
       .updateMany({ where: { id }, data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) } })
+      .then(({ count }) => {
+        // Gone: its lease ran out (renewals failed for longer than it) and a
+        // later take cleared it. The run carries on uncounted until it ends,
+        // one over the cap; say so, and stop renewing nothing.
+        if (count === 0) {
+          clearInterval(timer);
+          logger.warn('Assessment place lost before its run ended', { placeId: id, orgId });
+        }
+      })
       .catch((err: unknown) => {
         // Not fatal by itself: the lease has a minute left, and the next
         // renewal may succeed. If none does, the place is freed early, which

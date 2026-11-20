@@ -907,7 +907,7 @@ describe('POST /api/v1/assessments — store: false and the running places (t-28
     expect(refused[0]?.headers.get('Retry-After')).toBe('15');
     expect((await json(refused[0])).error).toMatchObject({
       code: 'WORKSPACE_BUSY',
-      details: { running: 3, limit: 3 },
+      details: { running: 3, waiting: 0, limit: 3 },
     });
     // The refused one started no judge: three runs, one judge each.
     expect(mocks.runJudge).toHaveBeenCalledTimes(3);
@@ -958,9 +958,26 @@ describe('POST /api/v1/assessments — store: false and the running places (t-28
     expect(res.status).toBe(429);
     expect((await json(res)).error).toMatchObject({
       code: 'WORKSPACE_BUSY',
-      details: { running: 3, limit: 3 },
+      details: { running: 2, waiting: 1, limit: 3 },
     });
     expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
+
+  it('counts a stalled stored run (RUNNING, lease run out) as waiting for a place', async () => {
+    fake.seed({ ...live(), leaseToken: 'run-1' });
+    fake.seed({ ...live(), leaseToken: 'run-2' });
+    fake.seed({ status: 'RUNNING', leaseExpiresAt: new Date(Date.now() - 1), attempts: 1 });
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(await code(res)).toEqual({ status: 429, code: 'WORKSPACE_BUSY' });
+  });
+
+  it('starts the queue when it refuses only because reviews wait, with places free', async () => {
+    // Nothing running; three queued reviews whose own start was lost.
+    const waiting = [1, 2, 3].map(() => fake.seed({ judges: ONE }));
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(res.status).toBe(429);
+    expect((await json(res)).error?.details).toEqual({ running: 0, waiting: 3, limit: 3 });
+    await until(() => waiting.every((a) => a.status === 'COMPLETED'));
   });
 
   it('ignores queued stored reviews that can no longer start (out of attempts)', async () => {
