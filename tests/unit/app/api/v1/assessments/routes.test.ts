@@ -933,10 +933,11 @@ describe('POST /api/v1/assessments — store: false and the running places (t-28
   it('holds stored runs to the shared limit: a stored claim sees an ephemeral run’s place', async () => {
     fake.seed({ ...live(), leaseToken: 'run-1' });
     fake.seed({ ...live(), leaseToken: 'run-2' });
-    const queued = fake.seed({ judges: ONE });
     const gate = deferred();
     const held = heldEphemeral(gate.promise);
     await until(() => fake.places.length === 1);
+    // Queued after the ephemeral run took the last place.
+    const queued = fake.seed({ judges: ONE });
 
     expect(await runAsOrg(WS_A, () => runAssessment(String(queued.id)))).toBe('not_claimed');
     expect(queued).toMatchObject({ status: 'QUEUED', attempts: 0 });
@@ -946,6 +947,37 @@ describe('POST /api/v1/assessments — store: false and the running places (t-28
     expect((await held).status).toBe(200);
     await until(() => queued.status === 'COMPLETED');
     expect(queued).toMatchObject({ status: 'COMPLETED', attempts: 1 });
+  });
+
+  it('gives a freed place to a queued stored review first: refused while one waits', async () => {
+    fake.seed({ ...live(), leaseToken: 'run-1' });
+    fake.seed({ ...live(), leaseToken: 'run-2' });
+    // One place is free, but a stored review is waiting for it.
+    fake.seed({ judges: ONE });
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(res.status).toBe(429);
+    expect((await json(res)).error).toMatchObject({
+      code: 'WORKSPACE_BUSY',
+      details: { running: 3, limit: 3 },
+    });
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
+
+  it('ignores queued stored reviews that can no longer start (out of attempts)', async () => {
+    fake.seed({ ...live(), leaseToken: 'run-1' });
+    fake.seed({ ...live(), leaseToken: 'run-2' });
+    fake.seed({ judges: ONE, attempts: 3 });
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(res.status).toBe(200);
+  });
+
+  it('does not charge the per-user cap for a request refused because the workspace is full', async () => {
+    for (const n of [1, 2, 3]) fake.seed({ ...live(), leaseToken: `run-${n}` });
+    const check = vi.spyOn(aiAssessmentLimiter, 'check');
+    const res = await post({ source: { text: TEXT }, judges: ONE, store: false });
+    expect(await code(res)).toEqual({ status: 429, code: 'WORKSPACE_BUSY' });
+    expect(check).not.toHaveBeenCalled();
+    check.mockRestore();
   });
 
   it('takes no place for the quick scan, which calls no model: answered with the workspace full', async () => {

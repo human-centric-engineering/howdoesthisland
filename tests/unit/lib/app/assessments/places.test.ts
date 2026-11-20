@@ -30,7 +30,12 @@ import {
   PLACE_RETRY_AFTER_SECONDS,
   RUNNING_PER_WORKSPACE,
 } from '@/lib/app/assessments/limits';
-import { takePlace, withPlace, WorkspaceBusyError } from '@/lib/app/assessments/places';
+import {
+  assertPlaceFree,
+  takePlace,
+  withPlace,
+  WorkspaceBusyError,
+} from '@/lib/app/assessments/places';
 import { logger } from '@/lib/logging';
 
 const ORG = 'org-a';
@@ -97,10 +102,56 @@ describe('takePlace', () => {
     await place.release();
   });
 
-  it('refuses as busy after conflicting on every try', async () => {
+  it('refuses as busy after conflicting on every try, without claiming a count it never made', async () => {
     fake.db.$transaction.mockRejectedValue(conflict());
-    await expect(takePlace(ORG)).rejects.toBeInstanceOf(WorkspaceBusyError);
+    const err = await takePlace(ORG).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WorkspaceBusyError);
+    expect(err).toMatchObject({
+      running: null,
+      message: expect.stringMatching(/could not be taken/),
+    });
     expect(fake.db.$transaction).toHaveBeenCalledTimes(5);
+  });
+
+  it('counts queued stored reviews with attempts left as taken, so the queue goes first', async () => {
+    const later = new Date(Date.now() + 30_000);
+    fake.places.push({ id: 'held-1', orgId: ORG, leaseExpiresAt: later });
+    fake.seed({ status: 'RUNNING', leaseExpiresAt: later, leaseToken: 't', attempts: 1 });
+    fake.seed({ status: 'QUEUED' });
+    await expect(takePlace(ORG)).rejects.toMatchObject({ running: 3 });
+    await expect(assertPlaceFree(ORG)).rejects.toBeInstanceOf(WorkspaceBusyError);
+  });
+
+  it('assertPlaceFree passes with a place free and writes nothing', async () => {
+    await expect(assertPlaceFree(ORG)).resolves.toBeUndefined();
+    expect(fake.db.assessmentPlace.create).not.toHaveBeenCalled();
+    expect(fake.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('clears dead places outside the take’s transaction', async () => {
+    fake.places.push({ id: 'dead', orgId: ORG, leaseExpiresAt: new Date(Date.now() - 1) });
+    fake.places.push({ id: 'theirs', orgId: 'org-b', leaseExpiresAt: new Date(Date.now() - 1) });
+    let inTx = false;
+    const deletes: boolean[] = [];
+    const tx = fake.db.$transaction.getMockImplementation();
+    fake.db.$transaction.mockImplementation(async (fn) => {
+      inTx = true;
+      try {
+        return await tx?.(fn);
+      } finally {
+        inTx = false;
+      }
+    });
+    fake.db.assessmentPlace.deleteMany.mockImplementationOnce(async (args) => {
+      deletes.push(inTx);
+      const gone = fake.places.filter((p) => p.orgId === args.where.orgId && p.id === 'dead');
+      for (const p of gone) fake.places.splice(fake.places.indexOf(p), 1);
+      return { count: gone.length };
+    });
+    const place = await takePlace(ORG);
+    expect(deletes).toEqual([false]);
+    expect(fake.places.map((p) => p.id)).toEqual(['theirs', place.id]);
+    await place.release();
   });
 
   it('throws any other database error as it is', async () => {

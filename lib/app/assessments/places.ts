@@ -11,6 +11,10 @@
  * and their write in one serializable transaction, so two claimers of either
  * kind cannot both take the last place.
  *
+ * **Queued stored reviews come first.** A `store: false` take also counts the
+ * workspace's queued stored reviews as taken, so it never wins a freed place
+ * from the queue. A stored claim does not count them: it is the queue.
+ *
  * **Full:** {@link takePlace} throws {@link WorkspaceBusyError}, and the API
  * answers 429 `WORKSPACE_BUSY` with `Retry-After`. The request is not held
  * open to wait (owner ruling at planning, 2026-11-20). A caller who wants to
@@ -19,7 +23,8 @@
  * **Release:** {@link withPlace} deletes the place however the run ends, then
  * starts the workspace's oldest queued stored review, which a full workspace
  * may have left waiting. A place whose process died stops being renewed and is
- * free once its lease runs out; the next take deletes it.
+ * free once its lease runs out; the next take deletes it, before its own
+ * transaction.
  */
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
@@ -28,19 +33,25 @@ import { logger } from '@/lib/logging';
 import {
   LEASE_MS,
   LEASE_RENEW_MS,
+  MAX_ATTEMPTS,
   PLACE_RETRY_AFTER_SECONDS,
   RUNNING_PER_WORKSPACE,
 } from '@/lib/app/assessments/limits';
 
-/** The workspace has no free place for another run. */
+/** The workspace has no free place for another run, or one could not be taken. */
 export class WorkspaceBusyError extends Error {
-  /** Runs holding a place when it was refused. */
-  readonly running: number;
+  /**
+   * Runs holding or waiting for a place when it was refused; `null` when the
+   * take gave up on conflicts and never counted.
+   */
+  readonly running: number | null;
   readonly retryAfterSeconds = PLACE_RETRY_AFTER_SECONDS;
 
-  constructor(running: number) {
+  constructor(running: number | null) {
     super(
-      `The workspace already has ${running} reviews running, its limit. Try again shortly, or send a stored review, which queues.`
+      running === null
+        ? 'A place to run this review could not be taken. Try again shortly, or send a stored review, which queues.'
+        : `The workspace already has ${running} reviews running or queued, its limit. Try again shortly, or send a stored review, which queues.`
     );
     this.name = 'WorkspaceBusyError';
     this.running = running;
@@ -73,6 +84,44 @@ export async function liveRunsIn(
   return stored + ephemeral;
 }
 
+/**
+ * Stored reviews waiting for a place: `QUEUED`, with attempts left and no
+ * live lease. A run kept nowhere counts them as taken, so a freed place goes
+ * to the queue (`startNextQueued`) rather than to the next `store: false`
+ * request, which would otherwise win it every time under steady traffic.
+ */
+function queuedIn(tx: Prisma.TransactionClient, orgId: string, now: Date): Promise<number> {
+  return tx.assessment.count({
+    where: {
+      orgId,
+      status: 'QUEUED',
+      attempts: { lt: MAX_ATTEMPTS },
+      OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
+    },
+  });
+}
+
+/** Places and queued stored reviews, against which a `store: false` run is refused. */
+async function takenFor(tx: Prisma.TransactionClient, orgId: string, now: Date): Promise<number> {
+  const [running, queued] = await Promise.all([
+    liveRunsIn(tx, orgId, now),
+    queuedIn(tx, orgId, now),
+  ]);
+  return running + queued;
+}
+
+/**
+ * Refuse with {@link WorkspaceBusyError} when the workspace has no place for
+ * a `store: false` run, outside any transaction. The route asks before it
+ * charges the per-user cap, so a request refused for a full workspace does
+ * not spend the caller's allowance. A place freed or taken between this and
+ * {@link takePlace} is settled there.
+ */
+export async function assertPlaceFree(orgId: string): Promise<void> {
+  const taken = await takenFor(prisma, orgId, new Date());
+  if (taken >= RUNNING_PER_WORKSPACE) throw new WorkspaceBusyError(taken);
+}
+
 /** Serializable conflicts a take retries before it gives up. */
 const TAKE_TRIES = 5;
 
@@ -82,10 +131,8 @@ async function takeOnce(orgId: string): Promise<Taken> {
   const now = new Date();
   return await prisma.$transaction(
     async (tx) => {
-      const running = await liveRunsIn(tx, orgId, now);
-      if (running >= RUNNING_PER_WORKSPACE) return { full: running };
-      // Places whose process died: free already, and nothing else removes them.
-      await tx.assessmentPlace.deleteMany({ where: { orgId, leaseExpiresAt: { lte: now } } });
+      const taken = await takenFor(tx, orgId, now);
+      if (taken >= RUNNING_PER_WORKSPACE) return { full: taken };
       const place = await tx.assessmentPlace.create({
         data: { orgId, leaseExpiresAt: new Date(now.getTime() + LEASE_MS) },
         select: { id: true },
@@ -106,12 +153,18 @@ export interface Place {
 /**
  * Take one of the workspace's places, renewed every {@link LEASE_RENEW_MS}
  * until released. Throws {@link WorkspaceBusyError} when there is none. A
- * claimer that keeps losing serializable conflicts is refused the same way:
- * every conflict is another claimer taking or giving up a place, so the
- * workspace is at its limit or close to it.
+ * claimer that keeps losing serializable conflicts is refused the same way,
+ * with no count, since it never got one: every conflict is another claimer
+ * taking or giving up a place, so the workspace is at its limit or close.
  */
 export async function takePlace(orgId: string): Promise<Place> {
-  let taken: Taken = { full: RUNNING_PER_WORKSPACE };
+  // Places whose process died: free already, since every count skips them,
+  // and nothing else removes them. Outside the take's transaction, so
+  // concurrent takers do not conflict on it.
+  await prisma.assessmentPlace.deleteMany({
+    where: { orgId, leaseExpiresAt: { lte: new Date() } },
+  });
+  let taken: Taken | null = null;
   for (let tries = 1; tries <= TAKE_TRIES; tries += 1) {
     try {
       taken = await takeOnce(orgId);
@@ -122,6 +175,7 @@ export async function takePlace(orgId: string): Promise<Place> {
       await new Promise((resolve) => setTimeout(resolve, Math.random() * 50 * tries));
     }
   }
+  if (!taken) throw new WorkspaceBusyError(null);
   if ('full' in taken) throw new WorkspaceBusyError(taken.full);
   const { id } = taken;
 

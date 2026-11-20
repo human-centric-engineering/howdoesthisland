@@ -112,7 +112,7 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [
     429,
     'WORKSPACE_BUSY',
-    `With \`store: false\`: your workspace already has ${RUNNING_PER_WORKSPACE} reviews by the AI reviewers running, the most it runs at once. No reviewer started. Wait for \`Retry-After\` seconds, or send the review stored, which queues. A \`quick\` review is never refused this way.`,
+    `With \`store: false\`: your workspace already has ${RUNNING_PER_WORKSPACE} reviews by the AI reviewers running or queued, the most it runs at once. No reviewer started, and the request does not count against your per-minute cap. Wait for \`Retry-After\` seconds, or send the review stored, which queues. A \`quick\` review is never refused this way.`,
   ],
 ];
 
