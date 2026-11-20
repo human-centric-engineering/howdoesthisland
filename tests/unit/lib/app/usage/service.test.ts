@@ -28,6 +28,8 @@ const state = vi.hoisted(() => ({
   costs: [] as CostRow[],
   assessments: [] as AssessmentRow[],
   budget: null as number | null,
+  /** Run as the cost rows are read: lets a test move the clock mid-read. */
+  onCostRead: null as null | (() => void),
 }));
 
 type Since = { orgId: string; createdAt: { gte: Date } };
@@ -43,11 +45,14 @@ vi.mock('@/lib/db/client', () => ({
           _sum: { totalCostUsd: rows.length ? rows.reduce((s, r) => s + r.totalCostUsd, 0) : null },
         };
       }),
-      findMany: vi.fn(async ({ where }: { where: Since }) =>
-        state.costs
+      findMany: vi.fn(async ({ where }: { where: Since }) => {
+        const rows = state.costs
           .filter((r) => within(r, where))
-          .map((r) => ({ totalCostUsd: r.totalCostUsd, metadata: r.metadata }))
-      ),
+          .map((r) => ({ totalCostUsd: r.totalCostUsd, metadata: r.metadata }));
+        state.onCostRead?.();
+        state.onCostRead = null;
+        return rows;
+      }),
     },
     assessment: {
       groupBy: vi.fn(async ({ where }: { where: Since }) => {
@@ -96,6 +101,7 @@ beforeEach(() => {
   state.costs = [];
   state.assessments = [];
   state.budget = 10;
+  state.onCostRead = null;
   forgetSpendCaps();
 });
 
@@ -199,11 +205,7 @@ describe('getMonthUsage', () => {
     review('a1', null);
     cost(2, { judge: 'ethos', assessmentId: 'a1', attempts: 1 });
     // The month turns while the first read is in flight.
-    const { prisma } = await import('@/lib/db/client');
-    vi.mocked(prisma.aiCostLog.findMany).mockImplementationOnce(async () => {
-      vi.setSystemTime(new Date('2026-12-01T00:00:00.100Z'));
-      return [{ totalCostUsd: 2, metadata: { judge: 'ethos', assessmentId: 'a1', attempts: 1 } }];
-    });
+    state.onCostRead = () => vi.setSystemTime(new Date('2026-12-01T00:00:00.100Z'));
 
     const usage = await getMonthUsage(ORG);
 
