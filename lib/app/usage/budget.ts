@@ -38,12 +38,16 @@
  * re-drive runs again (`RETRIED_ON_REDRIVE`) is not.
  *
  * - One queued or running: its estimate at this request's rate, less its
- *   settled spend: what it has spent (`costUsd`) less the spend on its judge
- *   runs that are not settled. A re-drive calls each of those again, at a full
- *   judge's cost, so their first attempts' spend does not count against the
- *   estimate's share for them (t-55). A row that failed retryably in this run
- *   is held the same way, though a re-drive may never come: the rows cannot
- *   tell the two apart. What it has yet to spend lands this month whenever
+ *   settled spend: each settled judge's spend, up to one judge's share at
+ *   this rate, and its editor's (what it spent beyond its judge runs), up to
+ *   the editor allowance. A judge that is not settled is not subtracted: a
+ *   re-drive calls it again at a full judge's cost, so its first attempt's
+ *   spend does not count against the estimate's share for it (t-55). A row
+ *   that failed retryably in this run is held the same way, though a re-drive
+ *   may never come: the rows cannot tell the two apart. The caps keep spend
+ *   past a share (a re-driven judge's row carries its first attempt on) from
+ *   coming off what the review's other judges are yet to spend. What it has
+ *   yet to spend lands this month whenever
  *   it started, so its settled spend in an earlier month is subtracted too:
  *   those judges are reused, not billed again (t-52 asked for this month's
  *   spend only; that would hold last month's spend a second time). A running
@@ -260,10 +264,13 @@ async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<
   return open.reduce((sum, r) => {
     const own = runs.filter((run) => run.assessmentId === r.id);
     if (r.status !== 'CANCELLED') {
-      const unsettledSpend = own
-        .filter((run) => !settled(run))
-        .reduce((total, run) => total + run.costUsd, 0);
-      const settledSpend = r.costUsd - unsettledSpend;
+      const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
+      const editorSpent = Math.max(0, r.costUsd - own.reduce((t, run) => t + run.costUsd, 0));
+      const settledSpend =
+        own
+          .filter(settled)
+          .reduce((total, run) => total + Math.min(run.costUsd, rate.perJudgeUsd), 0) +
+        Math.min(editorSpent, editor);
       return sum + Math.max(0, reviewCost(rate, r.judges.length) - settledSpend);
     }
     const done = own.filter(settled).length;
