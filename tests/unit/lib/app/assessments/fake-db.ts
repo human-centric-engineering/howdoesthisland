@@ -4,8 +4,8 @@
  * (B9: a small stateful fake proves a chain no call-assertion can).
  *
  * Implements only what `lib/app/assessments/` asks of Prisma, with the same
- * semantics: `where` with equality, `null`, `in`, `not`, `gt`, `lt`, `gte` and
- * `OR`; `attempts: { increment }`; `updateMany` answering a count; the
+ * semantics: `where` with equality, `null`, `in`, `not`, `gt`, `lt` (on a
+ * string too), `gte`, `OR` and `AND`; `attempts: { increment }`; `updateMany` answering a count; the
  * `assessmentId_judge` upsert; `$transaction(fn)` running `fn` on the same
  * store. A `findUnique` returns the whole row with its `content`,
  * `judgeRuns` and `frameworkVersion` (always `howdoesthisland@0.5.1`),
@@ -41,7 +41,7 @@ type Condition =
       in?: unknown[];
       not?: unknown;
       gt?: Date | number;
-      lt?: Date | number;
+      lt?: Date | number | string;
       lte?: Date | number;
       gte?: number;
     };
@@ -53,8 +53,11 @@ function matchesValue(value: unknown, cond: Condition | undefined): boolean {
   if (typeof cond !== 'object') return value === cond;
   if (cond.in && !cond.in.includes(value)) return false;
   if ('not' in cond && value === cond.not) return false;
+  // A string bound compares as text, as an id tie-break does.
+  if (typeof cond.lt === 'string') return typeof value === 'string' && value < cond.lt;
   const n = value instanceof Date ? value.getTime() : typeof value === 'number' ? value : null;
-  const num = (v: Date | number) => (v instanceof Date ? v.getTime() : v);
+  const num = (v: Date | number | string) =>
+    v instanceof Date ? v.getTime() : typeof v === 'number' ? v : NaN;
   if (cond.gt !== undefined && (n === null || !(n > num(cond.gt)))) return false;
   if (cond.lt !== undefined && (n === null || !(n < num(cond.lt)))) return false;
   if (cond.lte !== undefined && (n === null || !(n <= num(cond.lte)))) return false;
@@ -65,6 +68,7 @@ function matchesValue(value: unknown, cond: Condition | undefined): boolean {
 function matches(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([key, cond]) => {
     if (key === 'OR') return (cond as Row[]).some((w) => matches(row, w));
+    if (key === 'AND') return (cond as Row[]).every((w) => matches(row, w));
     return matchesValue(row[key], cond as Condition);
   });
 }

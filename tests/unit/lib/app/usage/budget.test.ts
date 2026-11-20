@@ -43,12 +43,18 @@ type Where = Record<string, unknown>;
 const matches = (row: Record<string, unknown>, where: Where): boolean =>
   Object.entries(where).every(([k, v]) => {
     if (k === 'OR') return (v as Where[]).some((w) => matches(row, w));
-    if (typeof v !== 'object' || v === null || v instanceof Date) return row[k] === v;
+    if (k === 'AND') return (v as Where[]).every((w) => matches(row, w));
     const value = row[k];
+    if (v instanceof Date) return value instanceof Date && value.getTime() === v.getTime();
+    if (typeof v !== 'object' || v === null) return value === v;
     if ('in' in v) return (v as { in: unknown[] }).in.includes(value);
     if ('not' in v) return value !== v.not;
     if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
-    if ('lt' in v) return value instanceof Date && value < (v as { lt: Date }).lt;
+    if ('lt' in v) {
+      const lt = (v as { lt: Date | string }).lt;
+      if (typeof lt === 'string') return typeof value === 'string' && value < lt;
+      return value instanceof Date && value < lt;
+    }
     throw new Error(`fake cannot filter ${k} by ${JSON.stringify(v)}`);
   });
 function newestFirst<T extends { createdAt: Date }>(rows: T[], take: number): T[] {
@@ -681,6 +687,17 @@ describe('budgetRefusal: a queued review checked again as it is claimed (t-53)',
     await expect(budgetRefusal(ORG, 'full', 7, older)).resolves.toBeNull();
     await expect(budgetRefusal(ORG, 'full', 7, newer)).resolves.toMatchObject({
       details: { remainingUsd: 0.5, inFlightUsd: 1 },
+    });
+  });
+
+  it('of two created in the same instant, holds back the one with the lower id for the other', async () => {
+    state.spent = 8.5;
+    const older = claimed();
+    const newer = claimed({ createdAt: older.createdAt });
+
+    await expect(budgetRefusal(ORG, 'full', 7, older)).resolves.toBeNull();
+    await expect(budgetRefusal(ORG, 'full', 7, newer)).resolves.toMatchObject({
+      details: { inFlightUsd: 1 },
     });
   });
 

@@ -940,6 +940,7 @@ describe('the budget, checked again as the review is claimed (t-53)', () => {
       errorDetails: figures,
       costUsd: 0,
       result: null,
+      startedAt: null,
       leaseToken: null,
       leaseExpiresAt: null,
     });

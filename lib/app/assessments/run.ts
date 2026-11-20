@@ -44,8 +44,9 @@
  * spend landed. Only the reviews in flight created before it are held back,
  * so of two claimed together the older runs. One that would now pass the
  * budget is finished `FAILED`, `errorCode` `BUDGET_EXCEEDED`, with the reason
- * in `error` and the figures in `errorDetails`, and no judge is called. A check that cannot read the cap or the history
- * refuses nothing.
+ * in `error` and the figures in `errorDetails`, and no judge is called. Its
+ * `startedAt` is cleared, since it never started. A check that cannot read
+ * the cap or the history refuses nothing.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
  * assessment back to the queue under the same attempt count, so the recovery
@@ -438,6 +439,8 @@ async function refuseOverBudget(
   const written = await finish(row.id, token, {
     status: 'FAILED',
     error: refusal.reason,
+    // The claim set it; nothing ran.
+    startedAt: null,
     errorCode: 'BUDGET_EXCEEDED',
     errorDetails: { ...refusal.details },
   });

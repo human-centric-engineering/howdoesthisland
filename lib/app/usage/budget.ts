@@ -250,7 +250,19 @@ async function inFlightCost(
   const open = await prisma.assessment.findMany({
     where: {
       orgId,
-      ...(self ? { id: { not: self.id }, createdAt: { lt: self.createdAt } } : {}),
+      // Created before it, ties broken on the id, so two created together still hold one way.
+      ...(self
+        ? {
+            AND: [
+              {
+                OR: [
+                  { createdAt: { lt: self.createdAt } },
+                  { createdAt: self.createdAt, id: { lt: self.id } },
+                ],
+              },
+            ],
+          }
+        : {}),
       OR: [
         { status: { in: ['QUEUED', 'RUNNING'] } },
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
