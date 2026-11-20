@@ -32,6 +32,32 @@ after it shows its spend in the new month and its review in the old.
 
 Projects are shown by id until `f-projects` adds the model and its names.
 
+## Refused before it starts
+
+A review that would pass the budget is refused before any judge is called,
+stored or `store: false` (t-49, `assertReviewWithinBudget()` in
+`lib/app/usage/budget.ts`, called last in `prepareAssessment`). It is 402
+`BUDGET_EXCEEDED`: nothing is stored and the per-user cap is not charged.
+`details` carries `estimateUsd`, its `basis`, `remainingUsd`, `limitUsd` and
+`usagePage` (`/usage`); the remedy is an admin raising the budget.
+
+It refuses when nothing is left, or when the estimate is more than what is.
+The estimate, from the workspace's own history:
+
+| Basis     | Estimate                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `profile` | The median `costUsd` of the last 20 `COMPLETED` reviews of the same profile, given at least 3. Never for a `custom` judge list. |
+| `judges`  | The judge count × the median `costUsd` of the workspace's last 100 `SUCCEEDED` judge runs.                                      |
+| `none`    | No history: `0`, so any positive remainder is enough.                                                                           |
+
+Only reviews that completed feed the first tier: a review cut short spent less
+than a review costs. A review calling no judge (the quick profile) is never
+refused. No budget set, or one that cannot be read, refuses nothing; the
+install-wide cap is left to the per-judge gate (`run-judge.ts`), which stays
+the backstop for spend that lands between the check and the judges.
+
+Not done: a queued stored review is not checked again when it is claimed.
+
 ## Demo usage for development
 
 `prisma/seeds/app-howdoesthisland/002-demo-usage.ts` writes a month of usage

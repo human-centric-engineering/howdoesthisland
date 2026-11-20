@@ -242,6 +242,10 @@ Each route's docblock lists its error codes. A few rules hold across them:
   framework cannot score (its quick scan or `assemble()` throwing) is 422
   `NOT_SCORABLE`, with what the judges had spent in `details.costUsd`: the
   stored run's `failed`, with no row to record it on.
+- **The monthly budget (t-49).** Before anything is fetched or counted,
+  `prepareAssessment` estimates the review and refuses it with 402
+  `BUDGET_EXCEEDED` when the estimate is more than what is left of the
+  workspace's budget, stored or not. See [`usage.md`](./usage.md#refused-before-it-starts).
 - **Running places (t-28).** A `store: false` run that calls judges holds one
   of the workspace's three running places while it runs, shared with stored
   runs both ways. It has no `Assessment` row, so it holds an
