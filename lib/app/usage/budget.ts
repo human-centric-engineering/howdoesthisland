@@ -32,11 +32,22 @@
  * judge runs, over those the editor ran on: its call is on no judge run.
  *
  * **What is left** is the cap less this month's spend, less what the
- * workspace's stored reviews still queued or running are yet to spend (each
- * one's judges at this request's rate, less what it has spent), so a request
- * does not count on budget a review already accepted will use. It covers
- * reviews already stored: requests arriving together each see none of the
- * others, which the per-judge gate is left to catch.
+ * workspace's stored reviews in flight are yet to spend, so a request does
+ * not count on budget a review already accepted will use:
+ *
+ * - one queued or running: its judges at this request's rate, less what it
+ *   has spent *this month*. `cap.spent` holds only this month's spend, so a
+ *   review running across a month's end is held for its estimate less its
+ *   cost since the month began (its cost less its judge runs saved before
+ *   then), not less its lifetime cost (t-52);
+ * - one cancelled whose lease is still live (`places.ts` counts it the same
+ *   way): its judges already in flight finish and are billed, but no further
+ *   judge starts. Held for those only: its judges not yet saved, at most
+ *   {@link JUDGES_IN_FLIGHT}, at this request's rate. Its editor never runs.
+ *   Once its lease has gone, nothing.
+ *
+ * It covers reviews already stored: requests arriving together each see none
+ * of the others, which the per-judge gate is left to catch.
  *
  * Sunrise's workflow cost estimator does not transfer: it models a workflow's
  * DAG steps, not judge slots.
@@ -47,18 +58,22 @@
  * be read refuses nothing either. The install-wide cap is left to that gate
  * too: no workspace admin can raise it.
  *
- * Not done: re-checking a queued stored review when it is claimed; history
- * from `store: false` reviews, which leave no assessment or judge-run rows (a
- * workspace with only those estimates `0`), and holding back for those in
- * flight; holding back for a cancelled review's judges still in flight; and,
- * for a review running across a month's end, its spend last month is taken
- * off what it is held for this one.
+ * **Indexes.** Every query here runs on each non-quick request, before the
+ * per-user limiter, so each reads an index that serves its filter and order
+ * (t-54): `Assessment` `[orgId, profile, status, createdAt]` and
+ * `[orgId, status, createdAt]`, `JudgeRun` `[orgId, status, createdAt]`.
+ *
+ * Not done: re-checking a queued stored review when it is claimed; and
+ * history from `store: false` reviews, which leave no assessment or judge-run
+ * rows (a workspace with only those estimates `0`), and holding back for
+ * those in flight.
  */
 import { APIError } from '@/lib/api/errors';
 import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
+import { JUDGES_IN_FLIGHT } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
-import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
+import { orgCapStateOrSkip, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 
 /** Completed reviews of the profile the first tier reads. */
 export const PROFILE_HISTORY = 20;
@@ -82,7 +97,7 @@ export interface ReviewEstimate {
 export interface BudgetRefusalDetails extends ReviewEstimate {
   /** What is left of the monthly budget once in-flight reviews are held back; `0` once none is. */
   remainingUsd: number;
-  /** What the workspace's stored reviews still queued or running are estimated yet to spend. */
+  /** What the workspace's stored reviews in flight (queued, running, or cancelled with judges still running) are estimated yet to spend. */
   inFlightUsd: number;
   limitUsd: number;
   usagePage: typeof USAGE_PAGE;
@@ -196,23 +211,44 @@ export async function estimateReviewCost(
   return { estimateUsd: usd(reviewCost(rate, judgeCount)), basis: rate.basis };
 }
 
-/** What the workspace's stored reviews still queued or running are yet to spend, at `rate`. */
-async function inFlightCost(orgId: string, rate: JudgeRate): Promise<number> {
+/**
+ * What the workspace's stored reviews in flight are yet to spend at `rate`,
+ * as of `now`: see "What is left" in the file header.
+ */
+async function inFlightCost(orgId: string, rate: JudgeRate, now: Date): Promise<number> {
+  const monthStart = utcMonthStart(now);
   const open = await prisma.assessment.findMany({
-    where: { orgId, status: { in: ['QUEUED', 'RUNNING'] } },
-    select: { costUsd: true, judges: true },
+    where: {
+      orgId,
+      OR: [
+        { status: { in: ['QUEUED', 'RUNNING'] } },
+        { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
+      ],
+    },
+    select: {
+      status: true,
+      costUsd: true,
+      judges: true,
+      judgeRuns: { where: { createdAt: { lt: monthStart } }, select: { costUsd: true } },
+      _count: { select: { judgeRuns: true } },
+    },
   });
-  return open.reduce(
-    (sum, r) => sum + Math.max(0, reviewCost(rate, r.judges.length) - r.costUsd),
-    0
-  );
+  return open.reduce((sum, r) => {
+    if (r.status === 'CANCELLED') {
+      const running = Math.min(JUDGES_IN_FLIGHT, Math.max(0, r.judges.length - r._count.judgeRuns));
+      return sum + running * rate.perJudgeUsd;
+    }
+    const lastMonth = r.judgeRuns.reduce((s, run) => s + run.costUsd, 0);
+    const thisMonth = Math.max(0, r.costUsd - lastMonth);
+    return sum + Math.max(0, reviewCost(rate, r.judges.length) - thisMonth);
+  }, 0);
 }
 
 /**
  * Throw 402 `BUDGET_EXCEEDED` when a review of `profile` calling `judgeCount`
  * judges would pass what is left of the workspace's monthly budget: when
  * nothing is left, or the estimate is more than what is once the reviews
- * already queued or running are held back. A review calling no judge (the
+ * already in flight are held back. A review calling no judge (the
  * quick profile) spends nothing and is never refused.
  */
 export async function assertReviewWithinBudget(
@@ -228,7 +264,7 @@ export async function assertReviewWithinBudget(
   let inFlight: number;
   try {
     rate = await judgeRate(orgId, profile);
-    inFlight = usedUp ? 0 : await inFlightCost(orgId, rate);
+    inFlight = usedUp ? 0 : await inFlightCost(orgId, rate, new Date());
   } catch (err) {
     // As a cap that cannot be read: refuse nothing, and the per-judge gate applies.
     logger.warn('Review budget estimate unreadable; not refusing', {

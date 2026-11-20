@@ -44,11 +44,22 @@ budget.
 
 It refuses when nothing is left, or when the estimate is more than what is.
 What is left is the budget less this month's spend, less `inFlightUsd`: what
-the workspace's stored reviews still `QUEUED` or `RUNNING` are yet to spend
-(each one's judges at this request's rate, less what it has spent), so a
-request does not count on budget a review already accepted will use. It covers
-reviews already stored: requests arriving together each see none of the
-others, and the per-judge gate is left to catch them.
+the workspace's stored reviews in flight are yet to spend, so a request does
+not count on budget a review already accepted will use.
+
+| In flight                          | Held back                                                                                                                                                             |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QUEUED` or `RUNNING`              | Its judges at this request's rate, less what it has spent **this month** (its cost less its judge runs saved before the month began), as the month's spend counts it. |
+| `CANCELLED`, lease still live      | Its judges not yet saved, at most 4 (the judges a run calls at once), at this request's rate: those in flight finish and are billed, but no further judge starts.     |
+| `CANCELLED`, lease gone; any other | Nothing.                                                                                                                                                              |
+
+It covers reviews already stored: requests arriving together each see none of
+the others, and the per-judge gate is left to catch them.
+
+Every read the check makes runs on each non-quick request, before the
+per-user limiter, so each has an index serving its filter and order:
+`app_assessment` `(orgId, profile, status, createdAt)` and
+`(orgId, status, createdAt)`, `app_judge_run` `(orgId, status, createdAt)`.
 
 The estimate is a cost per judge × the judges the request calls, plus an
 editor allowance when the editor will run (2 judges or more). The cost per
@@ -78,9 +89,6 @@ Not done:
 - `store: false` reviews leave no assessment or judge-run rows, so they feed
   no estimate (a workspace that only sends those estimates `0`) and are not
   held back while in flight.
-- A cancelled review's judges still in flight are not held back.
-- A review running across a month's end has its spend last month taken off
-  what it is held for this one.
 
 ## Demo usage for development
 
