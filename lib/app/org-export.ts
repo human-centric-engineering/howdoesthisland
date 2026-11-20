@@ -163,6 +163,15 @@ export function initAppOrgSources(): void {
         fetch: ({ orgId }) =>
           prisma.calibrationRun.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
+      {
+        model: 'CreditEntry',
+        section: 'creditEntries',
+        disposition: 'export',
+        description:
+          'Every change to the workspace’s CopyCredits: grants, adjustments, codes redeemed and reviews charged.',
+        fetch: ({ orgId }) =>
+          prisma.creditEntry.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
     ],
     excluded: [
       {

@@ -93,6 +93,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A run of the calibration set against a framework version; `startedByUserId` is who started it.',
       },
+      // t-57: the workspace's ledger, read by every member on /usage.
+      CreditEntry: {
+        kind: 'not-personal',
+        because:
+          'A change to the workspace’s CopyCredits; `actorUserId` is the admin who made it or the member who redeemed a code.',
+      },
     },
   });
 }

@@ -1,7 +1,7 @@
 # Usage
 
 A workspace's reviews, AI reviewer calls and spend this calendar month, by
-project and in total, against its monthly AI budget (t-48, `f-usage`).
+project and in total, against its monthly AI budget (t-48, `f-usage`). Its CopyCredits balance, and what reviews were charged this month, are in `credits` (t-57, [credits.md](./credits.md)).
 
 - **API:** `GET /api/v1/usage` — a browser session, or an API key with the
   `reports` scope. Declared in the route registry, so it is in the OpenAPI
@@ -17,7 +17,7 @@ project and in total, against its monthly AI budget (t-48, `f-usage`).
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Month             | Midnight UTC on the first (Sunrise's `utcMonthStart`), the month every budget is counted in.                                                                                                                                                                                                                             |
 | Spend (total)     | Sunrise's org cap read, `getOrgCapState(orgId).spent` (`getMonthToDateOrgSpend` when no budget is set): every `AiCostLog` row of the org this month. The page and the budget gate read the same number: the total is cached for 10 seconds, the budget for 30, in both.                                                  |
-| Budget            | `Org.settings.quotas.monthlyBudgetUsd` through the same read; `null` when none is set. New workspaces start at $10 (D6).                                                                                                                                                                                                 |
+| Budget            | `Org.settings.quotas.monthlyBudgetUsd` through the same read; `null` when none is set. New workspaces start at $10. Since t-57 this is a safety ceiling, not the allowance: reviews are paid for in CopyCredits ([credits.md](./credits.md)), and $10 is a testing value.                                                |
 | Spend by line     | The same cost rows, put on a line by their metadata: `assessmentId` → that review's project; `ephemeral: true` → kept nowhere, unless a calibration run wrote it (`calibrationRunId`); anything else (a deleted review's calls, a calibration run's, non-review AI use) → other, whose spend is the total less the rest. |
 | Reviews           | Stored assessments created this month, by `projectId`, whatever became of them (a cancelled or refused one counts); for kept-nowhere runs, the distinct `ephemeralRun` tags on their cost rows (written from t-48).                                                                                                      |
 | AI reviewer calls | The `attempts` on each judge or editor cost row, so a retried judge counts twice, as it is billed.                                                                                                                                                                                                                       |

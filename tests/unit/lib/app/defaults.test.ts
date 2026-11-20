@@ -266,13 +266,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/admin-nav.ts',
     risk: 'a stray section would appear in every install’s admin sidebar',
-    // FORK (HowDoesThisLand): pinned to our one section, the Frameworks page (t-38).
+    // FORK (HowDoesThisLand): pinned to our one section: the Frameworks page
+    // (t-38) and the CopyCredits page (t-57).
     assert: () => {
       __resetNavRegistryForTests();
       initAppNav();
       expect(
         getRegisteredNavSections().map((s) => [s.title, (s.items ?? []).map((i) => i.href)])
-      ).toEqual([['HowDoesThisLand', ['/admin/frameworks']]]);
+      ).toEqual([['HowDoesThisLand', ['/admin/frameworks', '/admin/credits']]]);
       __resetNavRegistryForTests();
     },
   },
@@ -314,7 +315,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/admin-breadcrumbs.ts',
     risk: 'a stray label would rename a breadcrumb segment, and the page title, on every install’s admin',
-    assert: () => expect(appSegmentLabels).toEqual({}),
+    // FORK (HowDoesThisLand): pinned to our one label, the CopyCredits page (t-57).
+    // Ledger: .context/app/platform-divergences.md row 2.
+    assert: () => expect(appSegmentLabels).toEqual({ credits: 'CopyCredits' }),
   },
   {
     seam: 'lib/app/footer.ts',
@@ -350,8 +353,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     risk: 'a stray collector would leak app rows into every install’s subject-access export, and a stray declaration would pre-account for a table nobody decided about',
     assert: async () => {
       // FORK (HowDoesThisLand): pinned to our sections and sources, the
-      // workspace invitations (t-9), content and assessments (t-22), and share
-      // links (t-32). The reads are stubbed: this pins the shape, not the query. Ledger:
+      // workspace invitations (t-9), content and assessments (t-22), share
+      // links (t-32), calibration runs (t-37) and credit entries (t-57). The reads are stubbed: this pins the shape, not the query. Ledger:
       // .context/app/platform-divergences.md row 2.
       const reads = [
         vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
@@ -359,6 +362,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.assessment, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reportShare, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.calibrationRun, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.creditEntry, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
@@ -366,6 +370,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         assessments: [],
         reportShares: [],
         calibrationRuns: [],
+        creditEntries: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -378,6 +383,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['Assessment', 'assessments'],
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
+        ['CreditEntry', 'creditEntries'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22), their replies
@@ -413,6 +419,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['JudgeReply', 'judgeReplies'],
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
+        ['CreditEntry', 'creditEntries'],
       ]);
       // FORK (HowDoesThisLand): the running places (t-28) and the budget holds
       // (t-50), leases. Ledger row 2.
@@ -441,6 +448,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['Assessment', 'not-personal'],
         ['ReportShare', 'not-personal'],
         ['CalibrationRun', 'not-personal'],
+        ['CreditEntry', 'not-personal'],
       ]);
     },
   },

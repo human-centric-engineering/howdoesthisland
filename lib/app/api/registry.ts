@@ -67,6 +67,12 @@ import {
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
 import { budgetRefusalDetailsSchema, monthUsageSchema } from '@/lib/app/usage/wire';
+import {
+  adminCreditsListSchema,
+  adminCreditsQuerySchema,
+  creditChangeResultSchema,
+  creditChangeSchema,
+} from '@/lib/app/credits/wire';
 
 /** Every method a Next.js route handler can export. */
 export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
@@ -757,5 +763,25 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: { who: 'platform-admin' },
     request: { params: calibrationRunParamsSchema, body: startCalibrationRunSchema },
     response: { status: [201, 202], data: startedRunSchema },
+  },
+
+  // CopyCredits, for platform admins (t-57).
+  {
+    method: 'GET',
+    path: '/api/v1/admin/credits',
+    summary:
+      'List active workspaces with their CopyCredits balance and what their monthly AI cap leaves this month. `q` narrows by name or slug.',
+    auth: { who: 'platform-admin' },
+    request: { query: adminCreditsQuerySchema },
+    response: { status: 200, data: adminCreditsListSchema },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/credits/{id}/entries',
+    summary:
+      "Grant or adjust a workspace's CopyCredits, with a reason. Answers with the new balance, and a warning when it is worth more than the workspace's cap leaves this month.",
+    auth: { who: 'platform-admin' },
+    request: { params: orgIdParamSchema, body: creditChangeSchema },
+    response: { status: 201, data: creditChangeResultSchema },
   },
 ];

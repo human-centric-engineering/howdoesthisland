@@ -95,6 +95,13 @@ const ALLOWLIST: ReadonlyArray<{ file: string; calls: number; why: string }> = [
     calls: 2,
     why: 'knowledge-graph adjacency aggregation',
   },
+  // FORK (HowDoesThisLand): an admin credit change holds its workspace's row (t-57).
+  // Ledger: .context/app/platform-divergences.md row 19.
+  {
+    file: 'lib/app/credits/admin.ts',
+    calls: 1,
+    why: "an admin's credit change reads the workspace's status with `SELECT … FOR SHARE` in the transaction that writes the entry, so a workspace suspended at the same moment is not credited after its check passed (t-57). Prisma has no row lock; it reads `org`, a system table with no RLS policy, by id",
+  },
   // FORK (HowDoesThisLand): the budget check's per-workspace lock (t-50).
   // Ledger: .context/app/platform-divergences.md.
   {

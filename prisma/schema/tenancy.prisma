@@ -106,6 +106,7 @@ model Org {
   calibrationRuns      CalibrationRun[]
   assessmentPlaces     AssessmentPlace[]
   budgetHolds          BudgetHold[]
+  creditEntries        CreditEntry[]
 
   @@map("org")
 }

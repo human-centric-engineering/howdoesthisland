@@ -247,6 +247,9 @@ describe('reserved fork tiers', () => {
       'enum CalibrationMode {',
       // FORK (HowDoesThisLand): a run's status, for runs started from the admin page (t-38).
       'enum CalibrationRunStatus {',
+      // FORK (HowDoesThisLand): the CopyCredits ledger (t-57).
+      'model CreditEntry {',
+      'enum CreditEntryKind {',
     ]);
   });
 

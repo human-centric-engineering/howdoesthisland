@@ -13,7 +13,8 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · lib/admin-nav/registry.ts
  */
-import { Scale } from 'lucide-react';
+import { Coins, Scale } from 'lucide-react';
+import { ADMIN_CREDITS_PATH } from '@/lib/app/credits/wire';
 import { registerNavSection } from '@/lib/admin-nav/registry';
 
 export function initAppNav(): void {
@@ -26,6 +27,13 @@ export function initAppNav(): void {
         label: 'Frameworks',
         icon: Scale,
         description: 'Framework versions and their calibration runs',
+      },
+      {
+        // t-57: platform admins only (no `tier`), as the page and its routes are.
+        href: ADMIN_CREDITS_PATH,
+        label: 'CopyCredits',
+        icon: Coins,
+        description: 'Each workspace’s credits, and granting or adjusting them',
       },
     ],
   });

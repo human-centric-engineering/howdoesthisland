@@ -4,6 +4,7 @@
  * `/usage` page reads it. No server imports, so the page can parse with it.
  */
 import { z } from 'zod';
+import { usageCreditsSchema } from '@/lib/app/credits/wire';
 
 /** The route the `/usage` page reads. */
 export const USAGE_ENDPOINT = '/api/v1/usage';
@@ -58,8 +59,13 @@ export const monthUsageSchema = z.object({
   calls: z.number().int(),
   /** Everything the workspace's AI spent this month: the total its budget is held to. */
   spendUsd: z.number(),
-  /** `null` when the workspace has no monthly budget set. */
+  /**
+   * The workspace's monthly AI cap: since t-57 a safety ceiling on what it can
+   * spend in a month, whatever its credits. `null` when none is set.
+   */
   cap: usageCapSchema.nullable(),
+  /** The workspace's CopyCredits (t-57): what it pays for reviews with. */
+  credits: usageCreditsSchema,
   /** Projects first, by spend, then the lines that are not projects. */
   lines: z.array(usageLineSchema),
 });

@@ -17,6 +17,12 @@ interface CostRow {
   metadata: unknown;
   createdAt: Date;
 }
+interface CreditRow {
+  orgId: string;
+  amount: number;
+  kind: 'GRANT' | 'ADJUST' | 'REDEEM' | 'CHARGE';
+  createdAt: Date;
+}
 interface AssessmentRow {
   id: string;
   orgId: string;
@@ -27,6 +33,7 @@ interface AssessmentRow {
 const state = vi.hoisted(() => ({
   costs: [] as CostRow[],
   assessments: [] as AssessmentRow[],
+  credits: [] as CreditRow[],
   budget: null as number | null,
   /** Run as the cost rows are read: lets a test move the clock mid-read. */
   onCostRead: null as null | (() => void),
@@ -53,6 +60,23 @@ vi.mock('@/lib/db/client', () => ({
         state.onCostRead = null;
         return rows;
       }),
+    },
+    creditEntry: {
+      aggregate: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { orgId: string; kind?: string; createdAt?: { gte: Date } };
+        }) => {
+          const rows = state.credits.filter(
+            (r) =>
+              r.orgId === where.orgId &&
+              (where.kind === undefined || r.kind === where.kind) &&
+              (where.createdAt === undefined || r.createdAt >= where.createdAt.gte)
+          );
+          return { _sum: { amount: rows.length ? rows.reduce((s, r) => s + r.amount, 0) : null } };
+        }
+      ),
     },
     assessment: {
       groupBy: vi.fn(async ({ where }: { where: Since }) => {
@@ -100,6 +124,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   state.costs = [];
   state.assessments = [];
+  state.credits = [];
   state.budget = 10;
   state.onCostRead = null;
   forgetSpendCaps();
@@ -110,6 +135,22 @@ afterEach(() => {
 });
 
 describe('getMonthUsage', () => {
+  it('carries the credit balance, and only this month’s charges as spent', async () => {
+    const credit = (amount: number, kind: CreditRow['kind'], createdAt = THIS_MONTH) =>
+      state.credits.push({ orgId: ORG, amount, kind, createdAt });
+    credit(1000, 'GRANT', LAST_MONTH);
+    credit(-120, 'CHARGE', LAST_MONTH);
+    credit(500, 'REDEEM');
+    credit(-35, 'CHARGE');
+    credit(-5, 'ADJUST');
+    // Another workspace's credits are not this one's.
+    state.credits.push({ orgId: 'org-b', amount: 9999, kind: 'GRANT', createdAt: THIS_MONTH });
+
+    const usage = await getMonthUsage(ORG);
+
+    expect(usage.credits).toEqual({ balance: 1340, spentThisMonth: 35 });
+  });
+
   it('answers an empty month with zeros, no lines, and the whole budget left', async () => {
     const usage = await getMonthUsage(ORG);
 
@@ -119,6 +160,7 @@ describe('getMonthUsage', () => {
       calls: 0,
       spendUsd: 0,
       cap: { limitUsd: 10, remainingUsd: 10, exceeded: false },
+      credits: { balance: 0, spentThisMonth: 0 },
       lines: [],
     });
     expect(monthUsageSchema.parse(usage)).toEqual(usage);

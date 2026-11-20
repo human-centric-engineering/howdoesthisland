@@ -27,4 +27,7 @@
  *
  * Full guide: CUSTOMIZATION.md §4
  */
-export const appSegmentLabels: Readonly<Record<string, string>> = {};
+export const appSegmentLabels: Readonly<Record<string, string>> = {
+  // t-57: the admin CopyCredits page (`/admin/credits`), named as the product names them.
+  credits: 'CopyCredits',
+};

@@ -32,6 +32,7 @@ const USAGE = {
   calls: 4,
   spendUsd: 0.4,
   cap: { limitUsd: 10, remainingUsd: 9.6, exceeded: false },
+  credits: { balance: 250, spentThisMonth: 0 },
   lines: [{ kind: 'no-project', projectId: null, reviews: 1, calls: 4, spendUsd: 0.4 }],
 };
 
@@ -51,9 +52,10 @@ describe('/usage', () => {
 
     expect(requireServerData).toHaveBeenCalledWith('/api/v1/usage');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('November 2026');
-    expect(screen.getByRole('region', { name: 'Monthly budget' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Monthly spending limit' })).toHaveTextContent(
       '$0.40 of $10.00 spent'
     );
+    expect(screen.getByRole('region', { name: 'CopyCredits' })).toHaveTextContent('250');
   });
 
   it('refuses an answer that is not the usage shape, rather than rendering it', async () => {

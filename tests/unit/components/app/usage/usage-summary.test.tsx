@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 /**
- * Tests: the `/usage` page's figures (t-48) — the budget's three states, the
- * totals, the breakdown and the empty month.
+ * Tests: the `/usage` page's figures (t-48) — the credits (t-57), the
+ * spending limit's three states, the totals, the breakdown and the empty month.
  *
  * @see components/app/usage/usage-summary.tsx
  */
@@ -17,6 +17,7 @@ const usage = (over: Partial<MonthUsage> = {}): MonthUsage => ({
   calls: 21,
   spendUsd: 3.25,
   cap: { limitUsd: 10, remainingUsd: 6.75, exceeded: false },
+  credits: { balance: 450, spentThisMonth: 0 },
   lines: [
     { kind: 'project', projectId: 'launch', reviews: 3, calls: 13, spendUsd: 2 },
     { kind: 'no-project', projectId: null, reviews: 1, calls: 4, spendUsd: 0.5 },
@@ -31,10 +32,10 @@ describe('UsageSummary', () => {
     render(<UsageSummary usage={usage()} />);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('November 2026');
-    const budget = screen.getByRole('region', { name: 'Monthly budget' });
+    const budget = screen.getByRole('region', { name: 'Monthly spending limit' });
     expect(budget).toHaveTextContent('$3.25 of $10.00 spent · $6.75 left.');
-    expect(budget).toHaveTextContent('The budget starts again on 1 December.');
-    const meter = within(budget).getByRole('meter', { name: 'Budget used' });
+    expect(budget).toHaveTextContent('It starts again on 1 December.');
+    const meter = within(budget).getByRole('meter', { name: 'Spending limit used' });
     expect(meter).toHaveAttribute('aria-valuenow', '3.25');
     expect(meter).toHaveAttribute('aria-valuemax', '10');
   });
@@ -46,7 +47,7 @@ describe('UsageSummary', () => {
       />
     );
 
-    const budget = screen.getByRole('region', { name: 'Budget reached' });
+    const budget = screen.getByRole('region', { name: 'Monthly spending limit reached' });
     expect(budget).toHaveTextContent('$12.00 of $10.00 spent.');
     expect(budget).toHaveTextContent('AI reviewers are refused until 1 December');
     // The meter stops at the budget rather than running past it.
@@ -60,18 +61,44 @@ describe('UsageSummary', () => {
       />
     );
 
-    expect(screen.getByRole('region', { name: 'Budget reached' })).toHaveTextContent(
-      '$0.00 of $0.00 spent.'
-    );
+    expect(
+      screen.getByRole('region', { name: 'Monthly spending limit reached' })
+    ).toHaveTextContent('$0.00 of $0.00 spent.');
     expect(screen.queryByRole('meter')).toBeNull();
   });
 
   it('says there is no limit when the workspace has no budget', () => {
     render(<UsageSummary usage={usage({ cap: null })} />);
 
-    const budget = screen.getByRole('region', { name: 'No monthly budget' });
-    expect(budget).toHaveTextContent('not held to a limit');
+    const budget = screen.getByRole('region', { name: 'No monthly spending limit' });
+    expect(budget).toHaveTextContent('no monthly limit on its AI spend');
     expect(screen.queryByRole('meter')).toBeNull();
+  });
+
+  it('shows the credit balance, and what reviews were charged this month', () => {
+    render(<UsageSummary usage={usage({ credits: { balance: 1250, spentThisMonth: 75 } })} />);
+
+    const credits = screen.getByRole('region', { name: 'CopyCredits' });
+    expect(credits).toHaveTextContent('1,250');
+    expect(credits).toHaveTextContent('What this workspace has to spend');
+    expect(credits).toHaveTextContent('75 spent this month.');
+  });
+
+  it('says what a workspace owes when an adjustment took it below zero', () => {
+    render(<UsageSummary usage={usage({ credits: { balance: -30, spentThisMonth: 0 } })} />);
+
+    const credits = screen.getByRole('region', { name: 'CopyCredits' });
+    expect(credits).toHaveTextContent('This workspace owes 30 credits');
+    expect(credits).not.toHaveTextContent('No credits to spend');
+  });
+
+  it('says how to get credits when the workspace has none', () => {
+    render(<UsageSummary usage={usage({ credits: { balance: 0, spentThisMonth: 0 } })} />);
+
+    const credits = screen.getByRole('region', { name: 'CopyCredits' });
+    expect(credits).toHaveTextContent('No credits to spend.');
+    expect(credits).toHaveTextContent('a free review code adds some');
+    expect(credits).not.toHaveTextContent('spent this month');
   });
 
   it('lists each line with its figures, then the total', () => {
