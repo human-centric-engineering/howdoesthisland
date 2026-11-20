@@ -320,18 +320,23 @@ describe('assertReviewWithinBudget', () => {
   });
   it('holds back what reviews already queued or running are yet to spend', async () => {
     state.spent = 8;
-    // A queued 7-judge review ($1.00 to come) and a running one that has spent $0.40 of its $1.00.
+    // A queued 7-judge review ($1.00 to come) and a running one with 4 judges answered ($3/7 to come).
     review(0, { status: 'QUEUED', judges: slots(7) });
-    review(0.4, { status: 'RUNNING', judges: slots(7) });
+    const running = review(0.4, { status: 'RUNNING', judges: slots(7) });
+    for (let i = 0; i < 4; i += 1) judgeRun(0.1, { assessmentId: running });
     // Another workspace's, and a finished one: neither is held.
     review(0, { status: 'QUEUED', judges: slots(7), orgId: OTHER });
 
     const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 7));
 
-    // $2.00 left, $1.60 held: $0.40 is under the $1.00 estimate.
-    expect(err.details).toMatchObject({ estimateUsd: 1, remainingUsd: 0.4, inFlightUsd: 1.6 });
+    // $2.00 left, $10/7 held: $4/7 is under the $1.00 estimate.
+    expect(err.details).toMatchObject({
+      estimateUsd: 1,
+      remainingUsd: 0.571429,
+      inFlightUsd: 1.428571,
+    });
     expect(err.message).toContain(
-      'once $1.60 is held for reviews already queued, running or finishing'
+      'once $1.43 is held for reviews already queued, running or finishing'
     );
   });
 
@@ -430,16 +435,17 @@ describe('assertReviewWithinBudget', () => {
     expect(err.details).toMatchObject({ inFlightUsd: 0, remainingUsd: 2 });
   });
 
-  it('holds a review created last month for its estimate less all it has spent', async () => {
+  it('holds a review created last month only for the judges it has not settled', async () => {
     state.spent = 8;
     // A running 7-judge review ($1.00) created last month, which has spent $0.50 in all.
     const lastMonth = new Date(utcMonthStart().getTime() - 60_000);
-    review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
+    const id = review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
+    for (let i = 0; i < 5; i += 1) judgeRun(0.1, { assessmentId: id, createdAt: lastMonth });
 
     const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
 
-    // $0.50 is all that can still land this month.
-    expect(err.details).toMatchObject({ inFlightUsd: 0.5, remainingUsd: 1.5 });
+    // Its 5 judges settled last month are reused: 2 are still to come this month.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.285714, remainingUsd: 1.714286 });
   });
 
   it('holds a cancelled review for a judge a re-drive is running again', async () => {
@@ -503,11 +509,69 @@ describe('assertReviewWithinBudget', () => {
     expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
   });
 
-  it('reads judge runs for cancelled reviews only, and none without one', async () => {
+  it("holds a running review for re-running its retryably failed judges at this request's rate (t-55)", async () => {
     state.spent = 8;
-    review(0.4, { status: 'RUNNING', judges: slots(7) });
+    // A running 7-judge review ($1.00) that has spent $0.40: two judges answered
+    // ($0.10 each) and one failed rate_limited after $0.20, which a re-drive runs again.
+    const id = review(0.4, { status: 'RUNNING', judges: slots(7) });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.2, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
 
-    await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    // The failed judge's $0.20 does not pay for its re-run: it is held at the
+    // full $1/7 with the four not yet called, $5/7 in all.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.714286, remainingUsd: 1.285714 });
+  });
+
+  it('counts the spend of a judge that failed for good as settled', async () => {
+    state.spent = 8;
+    const id = review(0.4, { status: 'QUEUED', judges: slots(7) });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.1, { assessmentId: id });
+    judgeRun(0.1, { assessmentId: id, status: 'FAILED', errorCode: 'invalid_reply' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    // Three settled, four to come.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.571429, remainingUsd: 1.428571 });
+  });
+
+  it("holds a re-driven judge's first attempt against none of the judges still to come", async () => {
+    state.spent = 8;
+    // A running 7-judge review ($1/7 a judge): one judge answered on its re-drive,
+    // its row carrying its first attempt's $0.20 on top of the $0.10 that answered.
+    const id = review(0.3, { status: 'RUNNING', judges: slots(7) });
+    judgeRun(0.3, { assessmentId: id });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    // Its six other judges are still to come: $6/7, not $1.00 less its $0.30.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.857143 });
+  });
+
+  it("holds a running review's editor until it is final, since a re-drive calls it again", async () => {
+    state.reviews = [];
+    // History with an editor: 7-judge reviews that spent $0.70 on judges and $0.30 on the editor.
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 8;
+    // All 7 judges answered and the editor has been billed $0.20; a re-drive would call it again.
+    const id = review(0.9, { status: 'RUNNING', judges: slots(7) });
+    for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: id });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
+  });
+
+  it('reads no judge runs by review when none is in flight', async () => {
+    state.spent = 8;
+
+    await assertReviewWithinBudget(ORG, 'full', 7);
 
     expect(prisma.judgeRun.findMany).not.toHaveBeenCalledWith(
       expect.objectContaining({

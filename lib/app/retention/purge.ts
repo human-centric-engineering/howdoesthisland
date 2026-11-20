@@ -17,9 +17,9 @@
  * Assessments still `QUEUED` or `RUNNING` are left alone, and so are their
  * judges' replies: a run re-driven by the recovery job reads its finished
  * judges' replies back. So is a `CANCELLED` one that may still have judges
- * in flight: they can land on it after the cancel (`saveJudgeRun`). Its lease
- * is no guide, because a cancelled run stops renewing it, so it lapses while
- * judges are still out. One is taken once its judges have all landed
+ * in flight: they can land on it after the cancel (`saveJudgeRun`). A lease
+ * that ran out is no guide, because a renewal can fail while the run lives
+ * (the run renews a cancelled one until its judges land, `run.ts`). One is taken once its judges have all landed
  * (`freePlace` clears the lease) or {@link CANCEL_GRACE_MS} after the cancel,
  * past any judge's timeout and retries. The recovery job finishes or fails
  * the live ones, and a later pass takes them.
@@ -37,6 +37,7 @@
  * Idempotent: a second pass finds nothing older than either window, and
  * changes nothing.
  */
+import { CANCEL_GRACE_MS } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { logger } from '@/lib/logging';
@@ -48,12 +49,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Statuses whose rows a run may still be reading or writing. */
 const LIVE = ['QUEUED', 'RUNNING'] as const;
-
-/**
- * How long after a cancel its judges in flight may still land. The longest
- * judge timeout is five minutes; an hour covers that with its retries.
- */
-export const CANCEL_GRACE_MS = 60 * 60 * 1000;
 
 /**
  * An assessment no run can still write to: not live, and either holding no

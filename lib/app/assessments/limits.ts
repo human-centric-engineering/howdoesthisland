@@ -46,6 +46,13 @@ export const LEASE_MS = 90_000;
 /** How often a live run renews its lease. */
 export const LEASE_RENEW_MS = 30_000;
 
+/**
+ * How long after a cancel its judges in flight may still land. The longest
+ * judge timeout is five minutes; an hour covers that with its retries. A run
+ * stops renewing a cancelled lease after it, and the purge may take the row.
+ */
+export const CANCEL_GRACE_MS = 60 * 60 * 1000;
+
 /** The longest text accepted (§8.2). Longer is refused, never truncated. */
 export const MAX_CONTENT_CHARS = 40_000;
 

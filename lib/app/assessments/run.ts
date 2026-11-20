@@ -12,7 +12,10 @@
  *
  * **The lease.** A run claims the assessment by writing a fresh `leaseToken`
  * and a `leaseExpiresAt` {@link LEASE_MS} ahead, and renews it every
- * {@link LEASE_RENEW_MS} while it is alive. Every write after the claim is
+ * {@link LEASE_RENEW_MS} while it is alive, cancelled or not (a cancelled
+ * one for up to {@link CANCEL_GRACE_MS}): a cancelled run's judges in flight
+ * and its editor still land and are billed, and the budget check and the
+ * running count hold it only while its lease is live (t-56). Every write after the claim is
  * conditional on the token and on `RUNNING`, so a run that lost its lease (or
  * was cancelled) writes nothing more to the assessment. A claim succeeds only
  * when the assessment is `QUEUED` or `RUNNING` with no live lease, has had
@@ -65,6 +68,7 @@ import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { runJudges, type LandedJudge } from '@/lib/app/assessments/fan-out';
 import { editorCostUsd, runEditor, withEditor } from '@/lib/app/assessments/editor';
 import {
+  CANCEL_GRACE_MS,
   LEASE_MS,
   LEASE_RENEW_MS,
   MAX_ATTEMPTS,
@@ -548,19 +552,45 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
 }
 
 interface Lease {
-  /** False once a renewal found the lease gone (taken over, or cancelled). */
+  /**
+   * False once a renewal matched nothing: the lease taken over, cleared,
+   * lapsed after a cancel, or the assessment final. A cancel alone does not
+   * turn it false; `stillOurs` reads the status for that.
+   */
   readonly held: () => boolean;
   release: () => void;
 }
 
-/** Renew the lease every {@link LEASE_RENEW_MS} until released. */
+/**
+ * Renew the lease every {@link LEASE_RENEW_MS} until released, while the
+ * assessment is under the token: `RUNNING` with its lease set, or
+ * `CANCELLED` with its lease still live, until {@link LEASE_MS} short of
+ * {@link CANCEL_GRACE_MS} after the cancel, so the last lease runs out
+ * before the purge may take the row. A cancel therefore does not turn
+ * `held` false: `stillOurs` reads the status, and that is what stops the run
+ * starting judges. A renewal never brings back a cancelled lease that was
+ * cleared (`freePlace`) or lapsed, whose place another run may have taken,
+ * however late it lands.
+ */
 function holdLease(assessmentId: string, token: string): Lease {
   let held = true;
   const timer = setInterval(() => {
+    const now = Date.now();
     prisma.assessment
       .updateMany({
-        where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
-        data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) },
+        where: {
+          id: assessmentId,
+          leaseToken: token,
+          OR: [
+            { status: 'RUNNING', leaseExpiresAt: { not: null } },
+            {
+              status: 'CANCELLED',
+              leaseExpiresAt: { gt: new Date(now) },
+              completedAt: { gt: new Date(now - (CANCEL_GRACE_MS - LEASE_MS)) },
+            },
+          ],
+        },
+        data: { leaseExpiresAt: new Date(now + LEASE_MS) },
       })
       .then(
         ({ count }) => {

@@ -70,7 +70,12 @@ silently. With the culture switch off, `culture` is refused.
 from either of the first two.
 
 - **The lease.** A run claims the assessment with a fresh token and a lease
-  90 seconds ahead, renewed every 30 while it runs. Every later write is
+  90 seconds ahead, renewed every 30 while it runs, and after a cancel while
+  its judges in flight and its editor land, until 90 seconds short of an
+  hour after the cancel (`CANCEL_GRACE_MS`), so its last lease runs out
+  before the purge may take the row. A cancelled lease is renewed only while
+  it is still live, so a renewal landing late cannot bring back one that was
+  cleared or ran out and whose place another run may hold. Every later write is
   conditional on that token and on `RUNNING`, so a run that lost its lease or
   was cancelled writes nothing more to the assessment.
 - **The claim** succeeds only for this workspace's `QUEUED` or `RUNNING` assessment with no
@@ -106,7 +111,9 @@ from either of the first two.
   run asks before each judge starts, so no further judge is called. Judges
   already in flight finish and their rows are saved, since their cost is
   already spent. Only the run that held the token saves them. The cancelled
-  run keeps its place in the workspace's limit until they have landed.
+  run keeps its place in the workspace's limit, and its lease renewed, until
+  they have landed, so the running count and the budget check hold it until
+  then.
 - **Privacy.** The run is one privacy scope (`assessment:<id>`), and each
   judge's call sits in its agent's scope inside it (`runJudge`), so each
   agent's privacy mode applies to its call.
@@ -189,8 +196,8 @@ sooner, which is harmless. Each pass:
 `QUEUED` and `RUNNING` assessments are skipped, and so are their judges'
 replies, because a re-driven run reads its finished judges' replies back. So is
 a `CANCELLED` one that may still have judges in flight, since they can land on
-it after the cancel. Its lease is no guide (a cancelled run stops renewing it),
-so one is taken once its judges have all landed (the lease cleared) or an hour
+it after the cancel. A lease that ran out is no guide (a renewal can fail while
+the run lives), so one is taken once its judges have all landed (the lease cleared) or an hour
 after the cancel (`CANCEL_GRACE_MS`, past any judge's timeout and retries). A succeeded run found with no reply on a re-drive is counted
 as a failed judge rather than called again, so the workspace is not billed
 twice. A window that does not parse is never purged on: for content that is no
