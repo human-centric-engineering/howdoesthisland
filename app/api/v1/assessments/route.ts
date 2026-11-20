@@ -62,7 +62,11 @@ import { validateQueryParams, validateRequestBody } from '@/lib/api/validation';
 import { createRateLimitResponse } from '@/lib/security/rate-limit';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import { apiKeyIdOf, assessRoute } from '@/lib/app/assessments/api/route-auth';
-import { createAssessment, prepareAssessment } from '@/lib/app/assessments/api/service';
+import {
+  createAssessment,
+  holdReviewBudget,
+  prepareAssessment,
+} from '@/lib/app/assessments/api/service';
 import {
   createAssessmentSchema,
   listAssessmentsQuerySchema,
@@ -90,6 +94,8 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       if (body.store === false) await assertPlaceFree(requireOrgId());
       const limit = aiAssessmentLimiter.check(`user:${session.user.id}`);
       if (!limit.success) return createRateLimitResponse(limit);
+      // Held only now, so a request refused above holds nothing meanwhile.
+      await holdReviewBudget(body, prepared);
     }
     created = await createAssessment(
       body,
@@ -110,8 +116,8 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       headers: { 'Retry-After': String(err.retryAfterSeconds) },
     });
   } finally {
-    // The budget it held (t-50), however the request ended: refused for a
-    // full workspace or the per-user cap, failed, or done (a no-op then).
+    // The budget it held (t-50), however the request ended: failed, or done
+    // (a no-op then).
     await prepared.hold?.release();
   }
   const done = created.kind === 'ephemeral' || created.final;

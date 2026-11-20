@@ -188,9 +188,11 @@ vi.mock('@/lib/logging', () => ({
 }));
 
 import { prisma } from '@/lib/db/client';
+import { logger } from '@/lib/logging';
 import { forgetSpendCaps, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { APIError } from '@/lib/api/errors';
 import {
+  assertReviewFits,
   budgetRefusal,
   estimateReviewCost,
   JUDGE_HISTORY,
@@ -923,6 +925,54 @@ describe('reserveReviewBudget: requests arriving together (t-50)', () => {
     }
   });
 
+  it('does not warn of a lost hold when it was released while a renewal was in flight', async () => {
+    vi.useFakeTimers();
+    try {
+      const held = await reserveReviewBudget(ORG, 'full', 7, true);
+      let renewed: (value: { count: number }) => void = () => undefined;
+      vi.mocked(prisma.budgetHold.updateMany).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            renewed = resolve;
+          }) as ReturnType<typeof prisma.budgetHold.updateMany>
+      );
+      await vi.advanceTimersByTimeAsync(LEASE_RENEW_MS);
+      await held?.release();
+      // The renewal lands after the delete: it matched nothing.
+      renewed({ count: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        'Budget hold lost before its request ended',
+        expect.anything()
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives a burst room to queue for a connection and the lock, past Prisma's 2s and 5s defaults", async () => {
+    const held = await reserveReviewBudget(ORG, 'full', 7, true);
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
+    await held?.release();
+  });
+
+  it('assertReviewFits: refuses as the check does, and holds nothing either way', async () => {
+    state.spent = 9.5;
+    const err = await refusal(() => assertReviewFits(ORG, 'full', 7));
+    expect(err.code).toBe('BUDGET_EXCEEDED');
+    expect(err.status).toBe(402);
+    state.spent = 0;
+    forgetSpendCaps();
+    await expect(assertReviewFits(ORG, 'full', 7)).resolves.toBeUndefined();
+
+    expect(state.holds).toEqual([]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('deletes holds whose lease has run out (their process died) before it checks', async () => {
     state.spent = 8.5;
     hold({ leaseExpiresAt: new Date(Date.now() - 1_000) });
@@ -1062,6 +1112,26 @@ describe('the kept-nowhere tier: history from store: false reviews (t-51)', () =
         take: KEPT_NOWHERE_SCAN,
       })
     );
+  });
+
+  it('leaves out the oldest judge of a full scan, whose rows the scan may have cut short', async () => {
+    // Oldest: a judge whose other row is past the scan.
+    costRow('cut', 'j0', 0.001);
+    for (let i = 0; i < KEPT_NOWHERE_SCAN - 3; i += 1)
+      state.costRows.push({
+        orgId: ORG,
+        totalCostUsd: 1,
+        metadata: { agent: 'chat' },
+        createdAt: at(),
+      });
+    costRow('a', 'j0', 0.05);
+    costRow('b', 'j0', 0.07);
+
+    // The median of $0.05 and $0.07, not of those and the cut judge's $0.001.
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.06,
+      basis: 'kept-nowhere',
+    });
   });
 
   it('comes after stored judge runs, which a workspace with both estimates from', async () => {

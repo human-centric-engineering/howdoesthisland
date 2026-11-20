@@ -88,15 +88,18 @@
  * pass on the same remainder. {@link reserveReviewBudget} therefore checks
  * and holds in one transaction under a per-workspace advisory lock
  * (`pg_advisory_xact_lock`): a request checked behind another sees its hold.
+ * The route takes it last, after the place check and the per-user cap, and
+ * checks first with {@link assertReviewFits}, which holds nothing: a request
+ * refused 429 never holds budget another is refused 402 for.
  * The hold lasts until the review is stored, whose row is then held in its
  * place, or for `store: false` until the run ends; it is released too
- * however the request ends before then (refused later, failed, the caller
- * gone). It is renewed every `LEASE_RENEW_MS` while held, so one whose
+ * however the request ends before then (failed, the caller gone). It is renewed every `LEASE_RENEW_MS` while held, so one whose
  * process died stops counting when its lease runs out, and the next check
  * deletes it. Released just after the review is stored, so for a moment both
  * are held: a request checked then is refused on the side of caution, never
- * passed on budget nobody holds. A check that cannot take the lock or write
- * the hold in time refuses nothing, as one that cannot read the history: the
+ * passed on budget nobody holds. The transaction has room for a burst to
+ * queue for the lock (`HOLD_TRANSACTION`); a check that still cannot take the
+ * lock or write the hold in time refuses nothing, as one that cannot read the history: the
  * per-judge gate applies.
  *
  * Sunrise's workflow cost estimator does not transfer: it models a workflow's
@@ -108,8 +111,8 @@
  * be read refuses nothing either. The install-wide cap is left to that gate
  * too: no workspace admin can raise it.
  *
- * **Indexes.** Every query here runs on each non-quick request, before the
- * per-user limiter, so each reads an index that serves its filter and order
+ * **Indexes.** Every query here runs on each non-quick request, the first
+ * time before the per-user limiter, so each reads an index that serves its filter and order
  * (t-54): `Assessment` `[orgId, profile, status, createdAt]` and
  * `[orgId, status, createdAt]`, `JudgeRun` `[orgId, status, createdAt]`.
  *
@@ -244,6 +247,9 @@ async function keptNowhereRate(orgId: string): Promise<JudgeRate | null> {
     judge.failed ||= parsed.data.error !== undefined;
     judges.set(key, judge);
   }
+  // A full scan may have cut the oldest judge's rows short: leave it out
+  // rather than count it at part of its cost.
+  if (rows.length === KEPT_NOWHERE_SCAN) judges.delete([...judges.keys()].at(-1) ?? '');
   const costs = [...judges.values()]
     .filter((j) => !j.failed)
     .slice(0, JUDGE_HISTORY)
@@ -489,12 +495,33 @@ export async function budgetRefusal(
   return refusalFor(budget, judgeCount, inFlight);
 }
 
+/**
+ * Throw 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} refuses a review of
+ * `profile` calling `judgeCount` judges. Holds nothing: a request checked
+ * before its other refusals, which {@link reserveReviewBudget} checks again.
+ */
+export async function assertReviewFits(
+  orgId: string,
+  profile: string,
+  judgeCount: number
+): Promise<void> {
+  const refusal = await budgetRefusal(orgId, profile, judgeCount);
+  if (refusal) refuse(refusal);
+}
+
 /** What a request holds of the budget: see "Requests arriving together" in the file header. */
 export interface BudgetHold {
   readonly id: string;
   /** Stop renewing and delete it. Safe to call more than once; never throws. */
   release: () => Promise<void>;
 }
+
+/**
+ * Room for a burst of requests to queue for a connection and the lock, each
+ * holding it for a few queries: Prisma's defaults (2s, 5s) would time the
+ * back of a burst out, and a check that times out refuses nothing.
+ */
+const HOLD_TRANSACTION = { maxWait: 10_000, timeout: 15_000 };
 
 /** The advisory lock a workspace's checks take in turn. */
 function lockKey(orgId: string): string {
@@ -507,13 +534,15 @@ function refuse(refusal: BudgetRefusal): never {
 
 /** Renew the hold `id` until released. */
 function keepHold(orgId: string, id: string): BudgetHold {
+  let released = false;
   const timer = setInterval(() => {
     prisma.budgetHold
       .updateMany({ where: { id }, data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) } })
       .then(({ count }) => {
         // Gone: its lease ran out (renewals failed for longer than it) and a
         // later check cleared it. The request carries on unheld.
-        if (count === 0) {
+        // Released while this renewal was in flight: deleted, not lost.
+        if (count === 0 && !released) {
           clearInterval(timer);
           logger.warn('Budget hold lost before its request ended', { holdId: id, orgId });
         }
@@ -528,7 +557,6 @@ function keepHold(orgId: string, id: string): BudgetHold {
   }, LEASE_RENEW_MS);
   timer.unref?.();
 
-  let released = false;
   return {
     id,
     release: async () => {
@@ -594,7 +622,7 @@ export async function reserveReviewBudget(
         },
         select: { id: true },
       });
-    });
+    }, HOLD_TRANSACTION);
   } catch (err) {
     return unreadable(orgId, err);
   }

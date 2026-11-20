@@ -41,7 +41,7 @@ import {
   startNextQueued,
 } from '@/lib/app/assessments/run';
 import { withPlace } from '@/lib/app/assessments/places';
-import { reserveReviewBudget, type BudgetHold } from '@/lib/app/usage/budget';
+import { assertReviewFits, reserveReviewBudget, type BudgetHold } from '@/lib/app/usage/budget';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -162,9 +162,10 @@ export interface PreparedAssessment {
   judges: readonly string[];
   /**
    * What the request holds of the workspace's budget (t-50), or `null` when
-   * it holds nothing. {@link createAssessment} releases it once the review is
-   * stored or, kept nowhere, once its run ends; whoever prepared the request
-   * releases it again however it ends, which is safe.
+   * it holds nothing: taken by {@link holdReviewBudget}. {@link createAssessment}
+   * releases it once the review is stored or, kept nowhere, once its run
+   * ends; whoever took it releases it again however the request ends, which
+   * is safe.
    */
   hold: BudgetHold | null;
 }
@@ -172,10 +173,11 @@ export interface PreparedAssessment {
 /**
  * Everything that can be refused before anything is fetched, read or spent:
  * the version, the context, the profile, pasted text, and a review that would
- * pass the workspace's monthly budget (402 `BUDGET_EXCEEDED`, t-49), whose
- * estimate is then held (t-50). The route counts a request against the
- * per-user cap only once this has passed, and releases the hold when the
- * request ends.
+ * pass the workspace's monthly budget (402 `BUDGET_EXCEEDED`, t-49). The route
+ * counts a request against the per-user cap only once this has passed, then
+ * holds its estimate with {@link holdReviewBudget} (t-50). Holds nothing, so a
+ * request the route then refuses (no place free, the per-user cap) never
+ * held budget another request was refused for.
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
   const resolved = await versionToScore(body);
@@ -188,13 +190,26 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     await refusingAsApi(() => assessableText(text));
   }
   // Last, so a request refused for anything above is refused for that.
-  const hold = await reserveReviewBudget(
+  await assertReviewFits(requireOrgId(), storedProfileName(profile), judges.length);
+  return { resolved, ctx, profile, judges, hold: null };
+}
+
+/**
+ * Check `prepared` against the workspace's budget again and hold its estimate
+ * (t-50) under the lock that orders requests arriving together, as
+ * `prepared.hold`: the last step before {@link createAssessment}. Throws 402
+ * `BUDGET_EXCEEDED` when requests checked before it took what was left.
+ */
+export async function holdReviewBudget(
+  body: CreateAssessmentBody,
+  prepared: PreparedAssessment
+): Promise<void> {
+  prepared.hold = await reserveReviewBudget(
     requireOrgId(),
-    storedProfileName(profile),
-    judges.length,
+    storedProfileName(prepared.profile),
+    prepared.judges.length,
     body.store !== false
   );
-  return { resolved, ctx, profile, judges, hold };
 }
 
 export async function createAssessment(

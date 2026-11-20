@@ -35,9 +35,11 @@ Projects are shown by id until `f-projects` adds the model and its names.
 ## Refused before it starts
 
 A review that would pass the budget is refused before any judge is called,
-stored or `store: false` (t-49, `reserveReviewBudget()` in
-`lib/app/usage/budget.ts`, called last in `prepareAssessment`). It is 402
-`BUDGET_EXCEEDED`: nothing is stored and the per-user cap is not charged.
+stored or `store: false` (t-49, `assertReviewFits()` in
+`lib/app/usage/budget.ts`, called last in `prepareAssessment`, and again by
+`reserveReviewBudget()` as the request takes its hold, below). It is 402
+`BUDGET_EXCEEDED`: nothing is stored, and a request refused by the first check
+is not charged to the per-user cap.
 `details` carries `estimateUsd`, its `basis`, `remainingUsd`, `inFlightUsd`,
 `limitUsd` and `usagePage` (`/usage`); the remedy is an admin raising the
 budget.
@@ -63,13 +65,17 @@ file (seconds), and a `store: false` one never does, so a check alone would let
 requests sent together each pass on the same remainder (t-50). So the check
 and a **hold** on the request's estimate are made in one transaction, under a
 per-workspace advisory lock (`pg_advisory_xact_lock`): a request checked
-behind another sees its hold in `inFlightUsd`.
+behind another sees its hold in `inFlightUsd`. The route takes the hold
+(`holdReviewBudget`) only after the place check and the per-user cap, so a
+request refused 429 for either never holds budget another request is refused
+402 for. The transaction waits up to 10s for a connection and runs for up to
+15s, so the back of a burst queues for the lock rather than timing out.
 
-| Request        | Holds until                                                                                                     |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| Stored         | Its review is stored, whose row is then held in its place. Both count for a moment, never neither.              |
-| `store: false` | Its run ends, since it has no row (t-51).                                                                       |
-| Either         | However it ends before then: refused for the per-user cap or a full workspace, intake failing, the caller gone. |
+| Request        | Holds until                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| Stored         | Its review is stored, whose row is then held in its place. Both count for a moment, never neither. |
+| `store: false` | Its run ends, since it has no row (t-51).                                                          |
+| Either         | However it ends before then: intake failing, the caller gone.                                      |
 
 A hold is an `app_budget_hold` row (`BudgetHold`): the judge count and whether
 the review is stored, under a lease renewed while it is held. One whose
@@ -77,8 +83,8 @@ process died stops counting when its lease runs out, and the next check in the
 workspace deletes it. A check that cannot take the lock or write the hold in
 time refuses nothing, as one that cannot read the history.
 
-Every read the check makes runs on each non-quick request, before the
-per-user limiter, so each has an index serving its filter and order:
+Every read the check makes runs on each non-quick request, the first time
+before the per-user limiter, so each has an index serving its filter and order:
 `app_assessment` `(orgId, profile, status, createdAt)` and
 `(orgId, status, createdAt)`, `app_judge_run` `(orgId, status, createdAt)`,
 `app_budget_hold` `(orgId, leaseExpiresAt)`, and Sunrise's `ai_cost_log`

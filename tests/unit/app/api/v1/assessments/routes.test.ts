@@ -1267,13 +1267,12 @@ describe('POST /api/v1/assessments — budget held while a request is under way 
     expect(fake.holds).toEqual([]);
   });
 
-  it('releases the hold of a request refused after its check: the per-user cap, a full workspace, a page that cannot be fetched', async () => {
+  it('holds nothing for a request refused 429 (the per-user cap, a full workspace), and releases the hold of a page that cannot be fetched', async () => {
     budget(0);
     const cap = vi
       .spyOn(aiAssessmentLimiter, 'check')
       .mockReturnValueOnce({ success: false, limit: 3, remaining: 0, reset: Date.now() + 60_000 });
     expect((await post({ source: { text: TEXT } })).status).toBe(429);
-    expect(fake.holds).toEqual([]);
     cap.mockRestore();
 
     for (let i = 0; i < 3; i += 1)
@@ -1282,8 +1281,9 @@ describe('POST /api/v1/assessments — budget held while a request is under way 
       status: 429,
       code: 'WORKSPACE_BUSY',
     });
-    expect(fake.holds).toEqual([]);
     fake.places.length = 0;
+    // Refused before the hold is taken: none held budget meanwhile.
+    expect(fake.db.budgetHold.create).not.toHaveBeenCalled();
 
     mocks.fetchPage.mockRejectedValue(
       new IntakeError(IntakeErrorCodes.FETCH_FAILED, 'The page could not be fetched.')
