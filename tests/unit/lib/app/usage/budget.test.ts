@@ -39,15 +39,22 @@ const state = vi.hoisted(() => ({
 }));
 
 type Where = Record<string, unknown>;
-/** Equality, `{ in }`, `{ gt }`, `{ lt }` and a top-level `OR`: what the queries ask. */
+/** Equality, `{ in }`, `{ not }`, `{ gt }`, `{ lt }` and a top-level `OR`: what the queries ask. */
 const matches = (row: Record<string, unknown>, where: Where): boolean =>
   Object.entries(where).every(([k, v]) => {
     if (k === 'OR') return (v as Where[]).some((w) => matches(row, w));
-    if (typeof v !== 'object' || v === null || v instanceof Date) return row[k] === v;
+    if (k === 'AND') return (v as Where[]).every((w) => matches(row, w));
     const value = row[k];
+    if (v instanceof Date) return value instanceof Date && value.getTime() === v.getTime();
+    if (typeof v !== 'object' || v === null) return value === v;
     if ('in' in v) return (v as { in: unknown[] }).in.includes(value);
+    if ('not' in v) return value !== v.not;
     if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
-    if ('lt' in v) return value instanceof Date && value < (v as { lt: Date }).lt;
+    if ('lt' in v) {
+      const lt = (v as { lt: Date | string }).lt;
+      if (typeof lt === 'string') return typeof value === 'string' && value < lt;
+      return value instanceof Date && value < lt;
+    }
     throw new Error(`fake cannot filter ${k} by ${JSON.stringify(v)}`);
   });
 function newestFirst<T extends { createdAt: Date }>(rows: T[], take: number): T[] {
@@ -104,7 +111,11 @@ vi.mock('@/lib/logging', () => ({
 import { prisma } from '@/lib/db/client';
 import { forgetSpendCaps, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { APIError } from '@/lib/api/errors';
-import { assertReviewWithinBudget, estimateReviewCost } from '@/lib/app/usage/budget';
+import {
+  assertReviewWithinBudget,
+  budgetRefusal,
+  estimateReviewCost,
+} from '@/lib/app/usage/budget';
 
 const ORG = 'org-a';
 const OTHER = 'org-b';
@@ -615,5 +626,88 @@ describe('the editor in the profile tier', () => {
       estimateUsd: 0.6,
       basis: 'profile',
     });
+  });
+});
+
+describe('budgetRefusal: a queued review checked again as it is claimed (t-53)', () => {
+  beforeEach(() => {
+    state.budget = 10;
+    // An estimate of $1.00 a 7-judge review.
+    for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+  });
+
+  /** A stored 7-judge review as the claim names it. */
+  function claimed(over: Partial<ReviewRow> = {}) {
+    const id = review(0, { status: 'RUNNING', judges: slots(7), ...over });
+    const row = state.reviews.find((r) => r.id === id);
+    if (!row) throw new Error('not stored');
+    return { id, createdAt: row.createdAt };
+  }
+
+  it('leaves the review’s own hold out of what is held back, so it fits what its request saw', async () => {
+    state.spent = 9;
+    const self = claimed();
+
+    // Held as one of the others, it would leave nothing.
+    await expect(budgetRefusal(ORG, 'full', 7)).resolves.toMatchObject({
+      details: { remainingUsd: 0, inFlightUsd: 1 },
+    });
+    await expect(budgetRefusal(ORG, 'full', 7, self)).resolves.toBeNull();
+  });
+
+  it('holds back the reviews in flight created before it, and answers the reason, message and figures', async () => {
+    state.spent = 8.5;
+    // Queued ahead of it: $1.00 to come.
+    review(0, { status: 'QUEUED', judges: slots(7) });
+    const self = claimed();
+
+    const refused = await budgetRefusal(ORG, 'full', 7, self);
+
+    expect(refused?.details).toEqual({
+      estimateUsd: 1,
+      basis: 'profile',
+      remainingUsd: 0.5,
+      inFlightUsd: 1,
+      limitUsd: 10,
+      usagePage: '/usage',
+    });
+    expect(refused?.reason).toContain('more than the $0.50 left once $1.00 is held');
+    expect(refused?.reason).not.toContain('No AI reviewer');
+    expect(refused?.message).toBe(
+      `${refused?.reason} No AI reviewer was started. See /usage; an admin can raise the budget on /admin.`
+    );
+  });
+
+  it('of two claimed together with room for one, refuses only the later, which the earlier holds back', async () => {
+    state.spent = 8.5;
+    const older = claimed();
+    const newer = claimed();
+
+    // The newer was admitted with the older already held, so it does not hold the older back.
+    await expect(budgetRefusal(ORG, 'full', 7, older)).resolves.toBeNull();
+    await expect(budgetRefusal(ORG, 'full', 7, newer)).resolves.toMatchObject({
+      details: { remainingUsd: 0.5, inFlightUsd: 1 },
+    });
+  });
+
+  it('of two created in the same instant, holds back the one with the lower id for the other', async () => {
+    state.spent = 8.5;
+    const older = claimed();
+    const newer = claimed({ createdAt: older.createdAt });
+
+    await expect(budgetRefusal(ORG, 'full', 7, older)).resolves.toBeNull();
+    await expect(budgetRefusal(ORG, 'full', 7, newer)).resolves.toMatchObject({
+      details: { inFlightUsd: 1 },
+    });
+  });
+
+  it('refuses once other spend has used the budget up while it waited', async () => {
+    const self = claimed();
+    state.spent = 10;
+
+    const refused = await budgetRefusal(ORG, 'full', 7, self);
+
+    expect(refused?.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 0, limitUsd: 10 });
+    expect(refused?.reason).toContain('has used its $10.00 monthly AI budget');
   });
 });

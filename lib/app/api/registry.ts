@@ -66,7 +66,7 @@ import {
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
-import { monthUsageSchema } from '@/lib/app/usage/wire';
+import { budgetRefusalDetailsSchema, monthUsageSchema } from '@/lib/app/usage/wire';
 
 /** Every method a Next.js route handler can export. */
 export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
@@ -299,6 +299,15 @@ export const assessmentSummarySchema = z.object({
   band: z.string().nullable(),
   costUsd: z.number(),
   error: z.string().nullable(),
+  errorCode: z
+    .string()
+    .nullable()
+    .describe(
+      'For a failed one that has one: `BUDGET_EXCEEDED` when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started. `null` otherwise.'
+    ),
+  errorDetails: budgetRefusalDetailsSchema
+    .nullable()
+    .describe('For `BUDGET_EXCEEDED`: the figures the 402 carries in `details`. `null` otherwise.'),
   createdAt: isoDateTime,
   startedAt: isoDateTime.nullable(),
   completedAt: isoDateTime.nullable(),
@@ -421,6 +430,7 @@ export const assessmentEventSchema = z.discriminatedUnion('type', [
     band: z.string().nullable(),
     costUsd: z.number(),
     error: z.string().nullable(),
+    errorCode: z.string().nullable(),
   }),
   z.object({ type: z.literal('assessment_gone'), id: z.string() }),
   z.object({ type: z.literal('assessment_timeout'), id: z.string() }),

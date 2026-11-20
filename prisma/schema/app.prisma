@@ -213,6 +213,11 @@ model Assessment {
   costUsd            Float            @default(0)
   /// Why the run failed, for `FAILED`. A partial run's reasons are on its judge runs.
   error              String?
+  /// What kind of failure, when it has one: `BUDGET_EXCEEDED` for a review
+  /// refused as it was claimed (t-53, lib/app/usage/budget.ts). `null` otherwise.
+  errorCode          String?
+  /// Its figures, for `BUDGET_EXCEEDED`: the refusal's `details`.
+  errorDetails       Json?
   /// Runs started on it. The recovery job gives up after three.
   attempts           Int              @default(0)
   leaseToken         String?

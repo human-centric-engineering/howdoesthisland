@@ -65,3 +65,27 @@ export const monthUsageSchema = z.object({
 });
 
 export type MonthUsage = z.infer<typeof monthUsageSchema>;
+
+/** The page the budget refusal points at: the month's spend and the budget. */
+export const USAGE_PAGE = '/usage';
+
+/**
+ * What a budget refusal carries (t-49, `lib/app/usage/budget.ts`): in
+ * `details` of a 402 `BUDGET_EXCEEDED`, and in `errorDetails` of a stored
+ * review refused as it was claimed (t-53).
+ */
+export const budgetRefusalDetailsSchema = z.object({
+  /** USD, to the millionth. */
+  estimateUsd: z.number(),
+  /** Where the cost per judge came from: the profile's reviews, recent judge runs, or none. */
+  basis: z.enum(['profile', 'judges', 'none']),
+  /** What is left of the monthly budget once in-flight reviews are held back; `0` once none is. */
+  remainingUsd: z.number(),
+  /** What the workspace's other stored reviews in flight (queued, running, or cancelled and finishing) are estimated yet to spend. */
+  inFlightUsd: z.number(),
+  limitUsd: z.number(),
+  /** `/usage`. A string rather than that literal, so figures stored before a move still read. */
+  usagePage: z.string(),
+});
+
+export type BudgetRefusalDetails = z.infer<typeof budgetRefusalDetailsSchema>;

@@ -85,9 +85,39 @@ cannot be read, or history that cannot be read refuses nothing; the
 install-wide cap is left to the per-judge gate (`run-judge.ts`), which stays
 the backstop for spend that lands between the check and the judges.
 
+## Checked again when it is claimed
+
+A stored review can wait in the queue (the workspace's running limit) while
+other spend lands, so the run checks it again when it claims it (t-53,
+`budgetRefusal()` with the review's id and creation time, from `run.ts`). The
+estimate and what is left are worked out as above, except that `inFlightUsd`
+holds back only the reviews in flight created before it. Not itself, which is
+not yet to spend on top of itself, and not those after it: each of those was
+admitted with this one held back already, so older reviews come first.
+Holding back both ways would let two reviews claimed together each refuse on
+the other's account, and neither run where one fitted. A later review that is
+already running is not held, and the per-judge gate is left to catch it.
+
+A refused review is finished `FAILED` before any judge is called:
+
+| Field          | Holds                                                        |
+| -------------- | ------------------------------------------------------------ |
+| `error`        | Why, with the figures: the 402's message without its remedy. |
+| `errorCode`    | `BUDGET_EXCEEDED`.                                           |
+| `errorDetails` | The 402's `details`: the estimate, its basis and figures.    |
+
+The API answers all three on the read and the list, and `errorCode` on the
+events stream's `assessment_done`. The report page says the review was not
+started for the budget and links `/usage`. Its place is freed and the next
+queued review starts, and is checked in turn.
+
+Only a review with no judge run yet is checked. A re-drive has already spent
+on its judges, which a refusal would throw away; the per-judge gate ends it
+`PARTIAL` with what it has. A check that cannot read the cap or the history
+refuses nothing, as at the request.
+
 Not done:
 
-- A queued stored review is not checked again when it is claimed.
 - `store: false` reviews leave no assessment or judge-run rows, so they feed
   no estimate (a workspace that only sends those estimates `0`) and are not
   held back while in flight.

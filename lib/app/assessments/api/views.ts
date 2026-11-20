@@ -12,6 +12,13 @@ import type { AssessmentStatus, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
+import { budgetRefusalDetailsSchema, type BudgetRefusalDetails } from '@/lib/app/usage/wire';
+
+/** A budget refusal's figures as stored, or `null` when there are none in that shape. */
+function budgetFigures(stored: Prisma.JsonValue): BudgetRefusalDetails | null {
+  const parsed = budgetRefusalDetailsSchema.safeParse(stored);
+  return parsed.success ? parsed.data : null;
+}
 
 export type FrameworkRef = { slug: string; version: string };
 
@@ -41,6 +48,14 @@ export type AssessmentSummary = {
   band: string | null;
   costUsd: number;
   error: string | null;
+  /**
+   * What kind of failure, for a `failed` one that has one: `BUDGET_EXCEEDED`
+   * when it was refused as it was claimed, having waited while other spend
+   * landed (t-53). No judge was called.
+   */
+  errorCode: string | null;
+  /** Its figures, for `BUDGET_EXCEEDED`: what the 402 refusal carries in `details`. */
+  errorDetails: BudgetRefusalDetails | null;
   createdAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -123,6 +138,8 @@ const summarySelect = {
   band: true,
   costUsd: true,
   error: true,
+  errorCode: true,
+  errorDetails: true,
   createdAt: true,
   startedAt: true,
   completedAt: true,
@@ -189,6 +206,8 @@ function summaryView(row: SummaryRow): AssessmentSummary {
     band: row.band,
     costUsd: row.costUsd,
     error: row.error,
+    errorCode: row.errorCode,
+    errorDetails: budgetFigures(row.errorDetails),
     createdAt: row.createdAt,
     startedAt: row.startedAt,
     completedAt: row.completedAt,

@@ -42,6 +42,7 @@ export type AssessmentEvent =
       band: string | null;
       costUsd: number;
       error: string | null;
+      errorCode: string | null;
     }
   | { type: 'assessment_gone'; id: string }
   | { type: 'assessment_timeout'; id: string };
@@ -125,6 +126,7 @@ async function* pollEvents(
         band: true,
         costUsd: true,
         error: true,
+        errorCode: true,
         judges: true,
         leaseExpiresAt: true,
         judgeRuns: {
@@ -171,6 +173,7 @@ async function* pollEvents(
         band: row.band,
         costUsd: row.costUsd,
         error: row.error,
+        errorCode: row.errorCode,
       };
       return;
     }
