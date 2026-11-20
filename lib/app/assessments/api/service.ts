@@ -197,7 +197,12 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     await refusingAsApi(() => assessableText(text));
   }
   // Last, so a request refused for anything above is refused for that.
-  const rate = await assertReviewFits(requireOrgId(), storedProfileName(profile), judges.length);
+  const rate = await assertReviewFits(
+    requireOrgId(),
+    storedProfileName(profile),
+    judges.length,
+    body.store !== false
+  );
   return { resolved, ctx, profile, judges, hold: null, rate };
 }
 

@@ -93,19 +93,26 @@
  * refused 429 never holds budget another is refused 402 for.
  * The hold lasts until the review is stored, whose row is then held in its
  * place, or for `store: false` until the run ends; it is released too
- * however the request ends before then (failed, the caller gone). It is renewed every `LEASE_RENEW_MS` while held, so one whose
- * process died stops counting when its lease runs out, and the next check
- * deletes it. Released just after the review is stored, so for a moment both
+ * however the request ends before then (failed, the caller gone). It is
+ * renewed every `LEASE_RENEW_MS` while held, so one whose process died stops
+ * counting when its lease runs out, and the next check deletes it (a delete
+ * that fails is logged, and the check goes on). Released just after the review is stored, so for a moment both
  * are held: a request checked then is refused on the side of caution, never
  * passed on budget nobody holds. The transaction has room for a burst to
  * queue for the lock (`HOLD_TRANSACTION`). Waiting, it holds a pooled
- * connection: on a deploy with `DATABASE_POOL_MAX=1` the instance's other
- * queries wait behind it, for the few queries the holder runs. A request
+ * connection, so a burst for one workspace can take every connection the
+ * instance has (10 by default, 1 with `DATABASE_POOL_MAX=1`) and its other
+ * queries wait behind it, each for the few queries a holder runs. A request
  * refused here, after the route counted it against the per-user cap, keeps
  * that count: it passed {@link assertReviewFits} and lost the lock's race,
  * which only requests sent together do. A check that still cannot take the
- * lock or write the hold in time refuses nothing, as one that cannot read the history: the
- * per-judge gate applies.
+ * lock or a connection in time is refused 429 `RATE_LIMIT_EXCEEDED`, to try
+ * again: passed, it would spend on a remainder checked before the burst. One
+ * that fails otherwise refuses nothing, as one that cannot read the history:
+ * the per-judge gate applies.
+ *
+ * A `store: false` request is estimated, and held, without the editor
+ * allowance: the editor never runs on it.
  *
  * Sunrise's workflow cost estimator does not transfer: it models a workflow's
  * DAG steps, not judge slots.
@@ -140,7 +147,7 @@
  */
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { APIError } from '@/lib/api/errors';
+import { APIError, ErrorCodes } from '@/lib/api/errors';
 import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
 import {
   JUDGES_IN_FLIGHT,
@@ -149,6 +156,7 @@ import {
   RETRIED_ON_REDRIVE,
 } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
+import { isTimeoutError } from '@/lib/privacy/erasure-deadline';
 import { logger } from '@/lib/logging';
 import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
 import { USAGE_PAGE, type BudgetRefusalDetails } from '@/lib/app/usage/wire';
@@ -161,6 +169,8 @@ export const MIN_PROFILE_HISTORY = 3;
 export const JUDGE_HISTORY = 100;
 /** The workspace's cost rows, most recent first, the `kept-nowhere` tier reads. */
 export const KEPT_NOWHERE_SCAN = 500;
+/** The rows at a full scan's end whose runs are left out: see `keptNowhereRate`. */
+export const KEPT_NOWHERE_TAIL = 50;
 
 export type EstimateBasis = BudgetRefusalDetails['basis'];
 
@@ -248,8 +258,9 @@ async function keptNowhereRate(orgId: string): Promise<JudgeRate | null> {
   });
   // Newest first, as the rows are: one entry per judge of a run.
   const judges = new Map<string, { run: string; costUsd: number; failed: boolean }>();
-  let oldestRun: string | undefined;
-  for (const row of rows) {
+  /** Runs with a row near the scan's end, where their other rows may be cut off. */
+  const nearEnd = new Set<string>();
+  for (const [index, row] of rows.entries()) {
     const parsed = keptNowhereJudgeRow.safeParse(row.metadata);
     // A calibration run's judges are tagged ephemeral too; they are not this workspace's reviews.
     if (!parsed.success || parsed.data.calibrationRunId !== undefined) continue;
@@ -258,13 +269,13 @@ async function keptNowhereRate(orgId: string): Promise<JudgeRate | null> {
     judge.costUsd += row.totalCostUsd;
     judge.failed ||= parsed.data.error !== undefined;
     judges.set(key, judge);
-    oldestRun = parsed.data.ephemeralRun;
+    if (index >= rows.length - KEPT_NOWHERE_TAIL) nearEnd.add(parsed.data.ephemeralRun);
   }
-  // A full scan may have cut the oldest run's rows short, and its judges'
-  // rows interleave as they land in parallel: leave all of that run's judges
-  // out rather than count any at part of its cost.
+  // A full scan may have cut short the runs at its end, whose judges' rows
+  // (and those of runs alongside) interleave as they land: leave every judge
+  // of a run near the end out, rather than count any at part of its cost.
   if (rows.length === KEPT_NOWHERE_SCAN) {
-    for (const [key, judge] of judges) if (judge.run === oldestRun) judges.delete(key);
+    for (const [key, judge] of judges) if (nearEnd.has(judge.run)) judges.delete(key);
   }
   const costs = [...judges.values()]
     .filter((j) => !j.failed)
@@ -457,9 +468,14 @@ async function readBudget(
 const usedUp = (budget: Budget) => budget.spent >= budget.limit;
 
 /** The refusal for a review of `judgeCount` judges with `inFlight` held back, or `null` when it fits. */
-function refusalFor(budget: Budget, judgeCount: number, inFlight: number): BudgetRefusal | null {
+function refusalFor(
+  budget: Budget,
+  judgeCount: number,
+  inFlight: number,
+  stored: boolean
+): BudgetRefusal | null {
   const { limit, spent, rate } = budget;
-  const estimate = reviewCost(rate, judgeCount);
+  const estimate = heldCost(rate, judgeCount, stored);
   const remaining = Math.max(0, limit - spent - inFlight);
   if (!usedUp(budget) && remaining > 0 && estimate <= remaining) return null;
 
@@ -515,7 +531,8 @@ export async function budgetRefusal(
       return unreadable(orgId, err);
     }
   }
-  return refusalFor(budget, judgeCount, inFlight);
+  // A review claimed is a stored one.
+  return refusalFor(budget, judgeCount, inFlight, true);
 }
 
 /**
@@ -528,7 +545,8 @@ export async function budgetRefusal(
 export async function assertReviewFits(
   orgId: string,
   profile: string,
-  judgeCount: number
+  judgeCount: number,
+  stored: boolean
 ): Promise<ReviewRate | null> {
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
@@ -541,7 +559,7 @@ export async function assertReviewFits(
       return unreadable(orgId, err);
     }
   }
-  const refusal = refusalFor(budget, judgeCount, inFlight);
+  const refusal = refusalFor(budget, judgeCount, inFlight, stored);
   if (refusal) refuse(refusal);
   return budget.rate;
 }
@@ -635,21 +653,31 @@ export async function reserveReviewBudget(
   const budget = await readBudget(orgId, profile, rate);
   if (!budget) return null;
   // Nothing left: refused whatever is held, so no lock to wait for.
-  const spentUp = usedUp(budget) ? refusalFor(budget, judgeCount, 0) : null;
+  const spentUp = usedUp(budget) ? refusalFor(budget, judgeCount, 0, stored) : null;
   if (spentUp) refuse(spentUp);
+
+  // Holds whose process died: they count for nothing already, and nothing
+  // else removes them. Outside the lock, so checks do not queue behind it.
+  // Housekeeping: a delete that fails leaves them for the next check.
+  try {
+    await prisma.budgetHold.deleteMany({ where: { orgId, leaseExpiresAt: { lte: new Date() } } });
+  } catch (err) {
+    logger.warn('Expired budget holds not cleared', {
+      orgId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   let taken: { id: string } | { refusal: BudgetRefusal };
   try {
-    // Holds whose process died: they count for nothing already, and nothing
-    // else removes them. Outside the lock, so checks do not queue behind it.
-    await prisma.budgetHold.deleteMany({ where: { orgId, leaseExpiresAt: { lte: new Date() } } });
     taken = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey(orgId)}, 0))`;
       const now = new Date();
       const refusal = refusalFor(
         budget,
         judgeCount,
-        await inFlightCost(tx, orgId, budget.rate, now)
+        await inFlightCost(tx, orgId, budget.rate, now),
+        stored
       );
       if (refusal) return { refusal };
       return tx.budgetHold.create({
@@ -666,6 +694,18 @@ export async function reserveReviewBudget(
       });
     }, HOLD_TRANSACTION);
   } catch (err) {
+    // Swamped by a burst: passed, it would spend on a remainder checked
+    // before the burst, which is what the lock is for.
+    if (isTimeoutError(err)) {
+      logger.warn('Budget hold timed out waiting for the lock or a connection; refusing', {
+        orgId,
+      });
+      throw new APIError(
+        'Too many reviews were requested at once for this workspace to check them against its budget. Try again in a moment.',
+        ErrorCodes.RATE_LIMIT_EXCEEDED,
+        429
+      );
+    }
     return unreadable(orgId, err);
   }
   if ('refusal' in taken) refuse(taken.refusal);

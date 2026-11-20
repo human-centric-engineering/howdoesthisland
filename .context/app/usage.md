@@ -69,9 +69,13 @@ behind another sees its hold in `inFlightUsd`. The route takes the hold
 (`holdReviewBudget`) only after the place check and the per-user cap, so a
 request refused 429 for either never holds budget another request is refused
 402 for. The transaction waits up to 10s for a connection and runs for up to
-15s, so the back of a burst queues for the lock rather than timing out. It
-holds a pooled connection while it waits: with `DATABASE_POOL_MAX=1` the
-instance's other queries wait behind it. The hold's check reuses the cost per
+15s, so the back of a burst queues for the lock rather than timing out; one
+that still times out is refused 429 `RATE_LIMIT_EXCEEDED`, to try again, rather
+than passed unheld. It holds a pooled connection while it waits, so a burst for
+one workspace can take every connection the instance has (10 by default, 1 with
+`DATABASE_POOL_MAX=1`) and its other queries wait behind it. A `store: false`
+request is estimated and held without the editor allowance: the editor never
+runs on it. The hold's check reuses the cost per
 judge the first check read; only the cap and what is in flight are read again.
 A request that passes the first check and is refused 402 here, having lost the
 lock's race to a request sent with it, has been counted against the per-user
