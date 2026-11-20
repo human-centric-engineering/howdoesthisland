@@ -284,8 +284,9 @@ async function runEphemeral(
   const quick = notScorable(() => engine.quickScan(text, ctx), 0);
   // Who the calls are for, as the stored run says it (`run.ts`), so the
   // privacy layer applies the same policy and the user's own known values.
+  const runId = crypto.randomUUID();
   const scope = createPrivacyScope({
-    scopeId: `assessment:ephemeral:${crypto.randomUUID()}`,
+    scopeId: `assessment:ephemeral:${runId}`,
     orgId: requireOrgId(),
     userId: caller.userId,
   });
@@ -298,6 +299,9 @@ async function runEphemeral(
       slots: judges,
       userId: caller.userId,
       ephemeral: true,
+      // Tells this run's cost rows apart, so usage can count the reviews
+      // kept nowhere, which have no other record (t-48).
+      costTags: { ephemeralRun: runId },
       // A caller gone away starts no further judge: nobody is left to answer.
       shouldContinue: () => Promise.resolve(!signal?.aborted),
     })
