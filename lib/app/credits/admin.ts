@@ -49,16 +49,26 @@ function usd(value: number): number {
  * this column and a change's `capWarning` (which reads through the gate) can
  * differ by that much. It is a guide for an admin, not the gate.
  */
+/**
+ * `q` as a literal for Prisma's `contains`, which becomes `ILIKE '%q%'` and
+ * does not escape LIKE's own wildcards: without this, `a_b` matches `axb` and
+ * `%` matches every workspace.
+ */
+export function likeLiteral(q: string): string {
+  return q.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 export async function listWorkspaceCredits(q?: string): Promise<AdminCreditsList> {
+  const term = q ? likeLiteral(q) : undefined;
   return runAsSystem('app.credits: admin list', async () => {
     const orgs = await prisma.org.findMany({
       where: {
         status: 'ACTIVE',
-        ...(q
+        ...(term
           ? {
               OR: [
-                { name: { contains: q, mode: 'insensitive' } },
-                { slug: { contains: q, mode: 'insensitive' } },
+                { name: { contains: term, mode: 'insensitive' } },
+                { slug: { contains: term, mode: 'insensitive' } },
               ],
             }
           : {}),

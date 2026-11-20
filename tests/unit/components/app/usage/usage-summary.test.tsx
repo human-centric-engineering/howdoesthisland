@@ -84,6 +84,14 @@ describe('UsageSummary', () => {
     expect(credits).toHaveTextContent('75 spent this month.');
   });
 
+  it('says what a workspace owes when an adjustment took it below zero', () => {
+    render(<UsageSummary usage={usage({ credits: { balance: -30, spentThisMonth: 0 } })} />);
+
+    const credits = screen.getByRole('region', { name: 'CopyCredits' });
+    expect(credits).toHaveTextContent('This workspace owes 30 credits');
+    expect(credits).not.toHaveTextContent('No credits to spend');
+  });
+
   it('says how to get credits when the workspace has none', () => {
     render(<UsageSummary usage={usage({ credits: { balance: 0, spentThisMonth: 0 } })} />);
 

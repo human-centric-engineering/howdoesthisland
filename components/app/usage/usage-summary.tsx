@@ -85,7 +85,9 @@ function Credits({ usage }: { usage: MonthUsage }) {
       <p className="text-muted-foreground mt-1 text-sm">
         {balance > 0
           ? `What this workspace has to spend on ${WORDS.review}s by ${WORDS.aiReviewers}.`
-          : `No credits to spend. ${WORDS.Review}s by ${WORDS.aiReviewers} are paid for with CopyCredits, and a free ${WORDS.review} code adds some.`}
+          : balance < 0
+            ? `This workspace owes ${count.format(-balance)} credits, so ${WORDS.review}s by ${WORDS.aiReviewers} wait until it has some again. A free ${WORDS.review} code adds some.`
+            : `No credits to spend. ${WORDS.Review}s by ${WORDS.aiReviewers} are paid for with CopyCredits, and a free ${WORDS.review} code adds some.`}
         {spentThisMonth > 0 ? ` ${count.format(spentThisMonth)} spent this month.` : ''}
       </p>
     </section>

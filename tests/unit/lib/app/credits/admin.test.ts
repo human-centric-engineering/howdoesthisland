@@ -78,7 +78,7 @@ vi.mock('@/lib/logging', () => ({
 
 import { prisma } from '@/lib/db/client';
 import { runAsSystem } from '@/lib/tenancy/context';
-import { changeWorkspaceCredits, listWorkspaceCredits } from '@/lib/app/credits/admin';
+import { changeWorkspaceCredits, likeLiteral, listWorkspaceCredits } from '@/lib/app/credits/admin';
 import { ADMIN_CREDITS_LIST_LIMIT, adminCreditsListSchema } from '@/lib/app/credits/wire';
 
 const quotas = (monthlyBudgetUsd: number) => ({ quotas: { monthlyBudgetUsd } });
@@ -143,6 +143,25 @@ describe('listWorkspaceCredits', () => {
             { slug: { contains: 'acm', mode: 'insensitive' } },
           ],
         },
+      })
+    );
+  });
+
+  it('searches for LIKE’s wildcards as themselves, not as wildcards', async () => {
+    expect(likeLiteral('a_b')).toBe('a\\_b');
+    expect(likeLiteral('100%')).toBe('100\\%');
+    expect(likeLiteral('back\\slash')).toBe('back\\\\slash');
+    expect(likeLiteral('plain words')).toBe('plain words');
+
+    await listWorkspaceCredits('a_b');
+    expect(prisma.org.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { name: { contains: 'a\\_b', mode: 'insensitive' } },
+            { slug: { contains: 'a\\_b', mode: 'insensitive' } },
+          ],
+        }),
       })
     );
   });

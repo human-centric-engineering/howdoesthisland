@@ -68,8 +68,16 @@ export type CreditChange = z.infer<typeof creditChangeSchema>;
 /** The longest search the admin list accepts. */
 export const MAX_SEARCH = 100;
 
+// Counted by code point, as the page cuts it, so an emoji counts once in both
+// and a search the page lets through is never refused here.
 export const adminCreditsQuerySchema = z.object({
-  q: z.string().trim().max(MAX_SEARCH).optional(),
+  q: z
+    .string()
+    .trim()
+    .refine((s) => Array.from(s).length <= MAX_SEARCH, {
+      message: `${MAX_SEARCH} characters at most`,
+    })
+    .optional(),
 });
 
 /** A workspace's monthly AI cap, the safety ceiling, and what is left of it this month. */

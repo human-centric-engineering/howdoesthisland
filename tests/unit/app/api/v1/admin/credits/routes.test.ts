@@ -128,6 +128,13 @@ describe('GET /api/v1/admin/credits', () => {
     expect(service.listWorkspaceCredits).toHaveBeenCalledWith(undefined);
   });
 
+  it('counts an emoji once, as the page does when it cuts a search', async () => {
+    mockGetSession.mockResolvedValue(session('ADMIN'));
+    // 60 emoji: 60 characters, though 120 UTF-16 units.
+    const q = encodeURIComponent('😀'.repeat(60));
+    expect((await get(`?q=${q}`)).status).toBe(200);
+  });
+
   it('refuses a search over 100 characters', async () => {
     mockGetSession.mockResolvedValue(session('ADMIN'));
     expect((await get(`?q=${'a'.repeat(101)}`)).status).toBe(400);
