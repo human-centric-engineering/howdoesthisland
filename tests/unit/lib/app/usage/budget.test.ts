@@ -100,9 +100,9 @@ vi.mock('@/lib/db/client', () => {
       findMany: vi.fn(async ({ where }: { where: Where }) =>
         state.holds.filter((h) => matches({ ...h }, where)).map((h) => ({ ...h }))
       ),
-      create: vi.fn(async ({ data }: { data: Omit<HoldRow, 'id' | 'createdAt'> }) => {
+      create: vi.fn(async ({ data }: { data: Omit<HoldRow, 'id'> }) => {
         state.seq += 1;
-        const row = { id: `hold-${state.seq}`, ...data, createdAt: new Date() };
+        const row = { id: `hold-${state.seq}`, ...data };
         state.holds.push(row);
         return { id: row.id };
       }),
@@ -960,14 +960,42 @@ describe('reserveReviewBudget: requests arriving together (t-50)', () => {
     await held?.release();
   });
 
+  it('stamps the hold with the time read under the lock, not a database default', async () => {
+    const held = await reserveReviewBudget(ORG, 'full', 7, false);
+    const { data } = vi.mocked(prisma.budgetHold.create).mock.calls[0][0];
+    expect(data.createdAt).toBeInstanceOf(Date);
+    expect(data.leaseExpiresAt).toEqual(new Date((data.createdAt as Date).getTime() + LEASE_MS));
+    await held?.release();
+  });
+
+  it('reuses the rate assertReviewFits read, reading no history again', async () => {
+    state.spent = 0;
+    const rate = await assertReviewFits(ORG, 'full', 7);
+    expect(rate).toMatchObject({ perJudgeUsd: expect.any(Number), basis: 'profile' });
+    const historyReads = vi.mocked(prisma.assessment.findMany).mock.calls.length;
+    // History that would now estimate $100 a judge: the reused rate ignores it.
+    for (let i = 0; i < 3; i += 1) review(700, { judges: slots(7) });
+
+    const held = await reserveReviewBudget(ORG, 'full', 7, true, rate ?? undefined);
+    expect(held).not.toBeNull();
+    // Only what is in flight was read again, not the profile's history.
+    expect(
+      vi
+        .mocked(prisma.assessment.findMany)
+        .mock.calls.slice(historyReads)
+        .some(([args]) => (args as { take?: number }).take !== undefined)
+    ).toBe(false);
+    await held?.release();
+  });
+
   it('assertReviewFits: refuses as the check does, and holds nothing either way', async () => {
     state.spent = 9.5;
-    const err = await refusal(() => assertReviewFits(ORG, 'full', 7));
+    const err = await refusal(() => assertReviewFits(ORG, 'full', 7).then(() => undefined));
     expect(err.code).toBe('BUDGET_EXCEEDED');
     expect(err.status).toBe(402);
     state.spent = 0;
     forgetSpendCaps();
-    await expect(assertReviewFits(ORG, 'full', 7)).resolves.toBeUndefined();
+    await expect(assertReviewFits(ORG, 'full', 7)).resolves.toMatchObject({ basis: 'profile' });
 
     expect(state.holds).toEqual([]);
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -1128,6 +1156,27 @@ describe('the kept-nowhere tier: history from store: false reviews (t-51)', () =
     costRow('b', 'j0', 0.07);
 
     // The median of $0.05 and $0.07, not of those and the cut judge's $0.001.
+    expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
+      estimateUsd: 0.06,
+      basis: 'kept-nowhere',
+    });
+  });
+
+  it('on a full scan, leaves out every judge of the oldest run, whose rows interleave as they land', async () => {
+    // The oldest run: judge A's two tier rows either side of judge B's one.
+    costRow('cut', 'jA', 0.001);
+    costRow('cut', 'jB', 0.002);
+    costRow('cut', 'jA', 0.001);
+    for (let i = 0; i < KEPT_NOWHERE_SCAN - 5; i += 1)
+      state.costRows.push({
+        orgId: ORG,
+        totalCostUsd: 1,
+        metadata: { agent: 'chat' },
+        createdAt: at(),
+      });
+    costRow('a', 'j0', 0.05);
+    costRow('b', 'j0', 0.07);
+
     expect(await estimateReviewCost(ORG, 'full', 1)).toEqual({
       estimateUsd: 0.06,
       basis: 'kept-nowhere',

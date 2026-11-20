@@ -98,7 +98,12 @@
  * deletes it. Released just after the review is stored, so for a moment both
  * are held: a request checked then is refused on the side of caution, never
  * passed on budget nobody holds. The transaction has room for a burst to
- * queue for the lock (`HOLD_TRANSACTION`); a check that still cannot take the
+ * queue for the lock (`HOLD_TRANSACTION`). Waiting, it holds a pooled
+ * connection: on a deploy with `DATABASE_POOL_MAX=1` the instance's other
+ * queries wait behind it, for the few queries the holder runs. A request
+ * refused here, after the route counted it against the per-user cap, keeps
+ * that count: it passed {@link assertReviewFits} and lost the lock's race,
+ * which only requests sent together do. A check that still cannot take the
  * lock or write the hold in time refuses nothing, as one that cannot read the history: the
  * per-judge gate applies.
  *
@@ -164,6 +169,12 @@ export interface ReviewEstimate {
   estimateUsd: number;
   basis: EstimateBasis;
 }
+
+/**
+ * A request's cost per judge, as {@link assertReviewFits} read it, for
+ * {@link reserveReviewBudget} to reuse rather than read the history again.
+ */
+export type ReviewRate = Readonly<JudgeRate>;
 
 interface JudgeRate {
   /** What one judge costs. */
@@ -236,20 +247,25 @@ async function keptNowhereRate(orgId: string): Promise<JudgeRate | null> {
     select: { totalCostUsd: true, metadata: true },
   });
   // Newest first, as the rows are: one entry per judge of a run.
-  const judges = new Map<string, { costUsd: number; failed: boolean }>();
+  const judges = new Map<string, { run: string; costUsd: number; failed: boolean }>();
+  let oldestRun: string | undefined;
   for (const row of rows) {
     const parsed = keptNowhereJudgeRow.safeParse(row.metadata);
     // A calibration run's judges are tagged ephemeral too; they are not this workspace's reviews.
     if (!parsed.success || parsed.data.calibrationRunId !== undefined) continue;
     const key = JSON.stringify([parsed.data.ephemeralRun, parsed.data.judge]);
-    const judge = judges.get(key) ?? { costUsd: 0, failed: false };
+    const judge = judges.get(key) ?? { run: parsed.data.ephemeralRun, costUsd: 0, failed: false };
     judge.costUsd += row.totalCostUsd;
     judge.failed ||= parsed.data.error !== undefined;
     judges.set(key, judge);
+    oldestRun = parsed.data.ephemeralRun;
   }
-  // A full scan may have cut the oldest judge's rows short: leave it out
-  // rather than count it at part of its cost.
-  if (rows.length === KEPT_NOWHERE_SCAN) judges.delete([...judges.keys()].at(-1) ?? '');
+  // A full scan may have cut the oldest run's rows short, and its judges'
+  // rows interleave as they land in parallel: leave all of that run's judges
+  // out rather than count any at part of its cost.
+  if (rows.length === KEPT_NOWHERE_SCAN) {
+    for (const [key, judge] of judges) if (judge.run === oldestRun) judges.delete(key);
+  }
   const costs = [...judges.values()]
     .filter((j) => !j.failed)
     .slice(0, JUDGE_HISTORY)
@@ -420,12 +436,19 @@ function unreadable(orgId: string, err: unknown): null {
   return null;
 }
 
-/** The cap and the rate for a review of `profile`; `null` when there is no cap or either cannot be read. */
-async function readBudget(orgId: string, profile: string): Promise<Budget | null> {
+/**
+ * The cap and the rate for a review of `profile`, or `rate` when the request
+ * already read it; `null` when there is no cap or either cannot be read.
+ */
+async function readBudget(
+  orgId: string,
+  profile: string,
+  rate?: ReviewRate
+): Promise<Budget | null> {
   const cap = await orgCapStateOrSkip(orgId, { check: 'review-estimate' });
   if (!cap) return null;
   try {
-    return { limit: cap.limit, spent: cap.spent, rate: await judgeRate(orgId, profile) };
+    return { limit: cap.limit, spent: cap.spent, rate: rate ?? (await judgeRate(orgId, profile)) };
   } catch (err) {
     return unreadable(orgId, err);
   }
@@ -496,17 +519,31 @@ export async function budgetRefusal(
 }
 
 /**
- * Throw 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} refuses a review of
- * `profile` calling `judgeCount` judges. Holds nothing: a request checked
- * before its other refusals, which {@link reserveReviewBudget} checks again.
+ * Throw 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} would refuse a
+ * review of `profile` calling `judgeCount` judges. Holds nothing: a request
+ * checked before its other refusals, which {@link reserveReviewBudget} checks
+ * again. Answers the rate it read, for that check to reuse; `null` when it
+ * calls no judge, there is no cap, or either cannot be read.
  */
 export async function assertReviewFits(
   orgId: string,
   profile: string,
   judgeCount: number
-): Promise<void> {
-  const refusal = await budgetRefusal(orgId, profile, judgeCount);
+): Promise<ReviewRate | null> {
+  if (judgeCount === 0) return null;
+  const budget = await readBudget(orgId, profile);
+  if (!budget) return null;
+  let inFlight = 0;
+  if (!usedUp(budget)) {
+    try {
+      inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date());
+    } catch (err) {
+      return unreadable(orgId, err);
+    }
+  }
+  const refusal = refusalFor(budget, judgeCount, inFlight);
   if (refusal) refuse(refusal);
+  return budget.rate;
 }
 
 /** What a request holds of the budget: see "Requests arriving together" in the file header. */
@@ -584,16 +621,18 @@ function keepHold(orgId: string, id: string): BudgetHold {
  * Throws 402 `BUDGET_EXCEEDED` when {@link budgetRefusal} would refuse it,
  * counting the holds of requests checked before it. `null` (nothing held)
  * when it calls no judge, there is no cap, or the cap, the history or the
- * lock cannot be had.
+ * lock cannot be had. `rate` is the one {@link assertReviewFits} read for
+ * this request, if any: the history is not read again.
  */
 export async function reserveReviewBudget(
   orgId: string,
   profile: string,
   judgeCount: number,
-  stored: boolean
+  stored: boolean,
+  rate?: ReviewRate
 ): Promise<BudgetHold | null> {
   if (judgeCount === 0) return null;
-  const budget = await readBudget(orgId, profile);
+  const budget = await readBudget(orgId, profile, rate);
   if (!budget) return null;
   // Nothing left: refused whatever is held, so no lock to wait for.
   const spentUp = usedUp(budget) ? refusalFor(budget, judgeCount, 0) : null;
@@ -618,6 +657,9 @@ export async function reserveReviewBudget(
           orgId,
           judges: judgeCount,
           stored,
+          // Read under the lock, so a claim check orders it after every
+          // review it counted (see "Again when it is claimed").
+          createdAt: now,
           leaseExpiresAt: new Date(now.getTime() + LEASE_MS),
         },
         select: { id: true },

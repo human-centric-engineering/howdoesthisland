@@ -321,7 +321,7 @@ export function createFakeDb() {
       ),
       create: vi.fn(async ({ data }: { data: Row }) => {
         seq += 1;
-        const row: Row = { id: `hold-${seq}`, ...data, createdAt: new Date() };
+        const row: Row = { id: `hold-${seq}`, createdAt: new Date(), ...data };
         holds.push(row);
         return { id: row.id };
       }),

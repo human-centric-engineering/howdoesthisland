@@ -41,7 +41,12 @@ import {
   startNextQueued,
 } from '@/lib/app/assessments/run';
 import { withPlace } from '@/lib/app/assessments/places';
-import { assertReviewFits, reserveReviewBudget, type BudgetHold } from '@/lib/app/usage/budget';
+import {
+  assertReviewFits,
+  reserveReviewBudget,
+  type BudgetHold,
+  type ReviewRate,
+} from '@/lib/app/usage/budget';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -168,6 +173,8 @@ export interface PreparedAssessment {
    * is safe.
    */
   hold: BudgetHold | null;
+  /** The cost per judge the budget check read, for the hold's check to reuse. */
+  rate: ReviewRate | null;
 }
 
 /**
@@ -190,8 +197,8 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     await refusingAsApi(() => assessableText(text));
   }
   // Last, so a request refused for anything above is refused for that.
-  await assertReviewFits(requireOrgId(), storedProfileName(profile), judges.length);
-  return { resolved, ctx, profile, judges, hold: null };
+  const rate = await assertReviewFits(requireOrgId(), storedProfileName(profile), judges.length);
+  return { resolved, ctx, profile, judges, hold: null, rate };
 }
 
 /**
@@ -208,7 +215,8 @@ export async function holdReviewBudget(
     requireOrgId(),
     storedProfileName(prepared.profile),
     prepared.judges.length,
-    body.store !== false
+    body.store !== false,
+    prepared.rate ?? undefined
   );
 }
 
