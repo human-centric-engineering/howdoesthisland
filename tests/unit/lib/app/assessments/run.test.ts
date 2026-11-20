@@ -657,6 +657,65 @@ describe('the lease', () => {
     expect(a.status).toBe('COMPLETED');
   });
 
+  it('is renewed after a cancel while the judges in flight land, until the run clears it (t-56)', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const slots = Array.from({ length: JUDGES_IN_FLIGHT + 2 }, (_, i) => `judge_${i}`);
+    const a = fake.seed({ judges: slots });
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    const first = (a.leaseExpiresAt as Date).getTime();
+    await new Promise((r) => setTimeout(r, 5));
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    await flush();
+
+    // Cancelled, and its lease still renewed while the first wave is out.
+    expect(a.status).toBe('CANCELLED');
+    expect((a.leaseExpiresAt as Date).getTime()).toBeGreaterThan(first);
+
+    gate.resolve();
+    expect(await running).toBe('cancelled');
+    // No judge started after the cancel, and the run gave its place up once they landed.
+    expect(mocks.runJudge).toHaveBeenCalledTimes(JUDGES_IN_FLIGHT);
+    expect(runsOf(a.id)).toHaveLength(JUDGES_IN_FLIGHT);
+    expect(a.leaseExpiresAt).toBeNull();
+  });
+
+  it('waits for a renewal in flight before a cancelled run gives its place up', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const a = fake.seed({ judges: ['judge_a'] });
+    const judge = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await judge.promise;
+      return reply(slot);
+    });
+
+    const running = inOrg(() => runAssessment(String(a.id)));
+    await flush();
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    // The next renewal is held up in the database until the run has ended.
+    const renewal = deferred();
+    const real = fake.db.assessment.updateMany.getMockImplementation();
+    fake.db.assessment.updateMany.mockImplementationOnce(async (args) => {
+      await renewal.promise;
+      return real!(args);
+    });
+    vi.advanceTimersByTime(LEASE_RENEW_MS);
+    judge.resolve();
+    await flush();
+    renewal.resolve();
+
+    expect(await running).toBe('cancelled');
+    // The renewal landed first, so freeing the place is what stands.
+    expect(a.leaseExpiresAt).toBeNull();
+  });
+
   it('once taken over, the old run writes nothing more to the assessment', async () => {
     const slots = Array.from({ length: JUDGES_IN_FLIGHT + 2 }, (_, i) => `judge_${i}`);
     const a = fake.seed({ judges: slots });
