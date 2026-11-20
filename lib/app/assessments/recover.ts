@@ -56,6 +56,10 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
     },
   });
 
+  // Places whose `store: false` run's process died (`places.ts`): never
+  // counted, but only a later take in this workspace would clear them.
+  await prisma.assessmentPlace.deleteMany({ where: { orgId, leaseExpiresAt: { lte: now } } });
+
   const candidates = await prisma.assessment.findMany({
     where: { ...stalled, attempts: { lt: MAX_ATTEMPTS } },
     orderBy: { createdAt: 'asc' },

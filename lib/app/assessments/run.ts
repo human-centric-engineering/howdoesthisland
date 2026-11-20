@@ -17,7 +17,8 @@
  * was cancelled) writes nothing more to the assessment. A claim succeeds only
  * when the assessment is `QUEUED` or `RUNNING` with no live lease, has had
  * fewer than {@link MAX_ATTEMPTS} runs, and the workspace has fewer than
- * {@link RUNNING_PER_WORKSPACE} other live runs. The count and the claim are
+ * {@link RUNNING_PER_WORKSPACE} other live runs, stored or kept nowhere
+ * (`places.ts`, t-28). The count and the claim are
  * one serializable transaction, so two claimers cannot both take the last
  * place; the loser of a conflict leaves the assessment `QUEUED` for the
  * recovery job.
@@ -70,6 +71,7 @@ import {
   RUNNING_PER_WORKSPACE,
 } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
+import { liveRunsIn } from '@/lib/app/assessments/places';
 import { isSerializableConflict } from '@/lib/db/serializable-conflict';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
@@ -197,13 +199,14 @@ async function stoppedOnError(assessmentId: string, token: string): Promise<RunO
 }
 
 /**
- * Start the workspace's oldest queued assessment, now that this run's place
- * is free, without waiting for it. This is what picks up an assessment that
+ * Start the workspace's oldest queued assessment, now that a place is free
+ * (this run's, or a `store: false` run's: `finished` is absent then), without
+ * waiting for it. This is what picks up an assessment that
  * was queued while the workspace was at its limit; the recovery job is the
  * backstop. Tries the next few in turn, since another claimer may take the
  * oldest first. Never throws.
  */
-function startNextQueued(orgId: string, finished: string): void {
+export function startNextQueued(orgId: string, finished?: string): void {
   keepRunningAfterResponse(
     async () => {
       const queued = await prisma.assessment.findMany({
@@ -211,7 +214,7 @@ function startNextQueued(orgId: string, finished: string): void {
           orgId,
           status: 'QUEUED',
           attempts: { lt: MAX_ATTEMPTS },
-          id: { not: finished },
+          ...(finished ? { id: { not: finished } } : {}),
           OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
         },
         orderBy: { createdAt: 'asc' },
@@ -527,16 +530,8 @@ async function claimOnce(assessmentId: string, orgId: string): Promise<string | 
       if (!row || (row.status !== 'QUEUED' && row.status !== 'RUNNING')) return null;
       if (row.leaseExpiresAt && row.leaseExpiresAt > now) return null;
       if (row.attempts >= MAX_ATTEMPTS) return null;
-      const running = await tx.assessment.count({
-        where: {
-          orgId,
-          // A cancelled run holds its place until its judges in flight land.
-          status: { in: ['RUNNING', 'CANCELLED'] },
-          leaseExpiresAt: { gt: now },
-          id: { not: assessmentId },
-        },
-      });
-      if (running >= RUNNING_PER_WORKSPACE) return null;
+      // Stored runs and runs kept nowhere share the places (t-28).
+      if ((await liveRunsIn(tx, orgId, now, assessmentId)) >= RUNNING_PER_WORKSPACE) return null;
 
       const token = crypto.randomUUID();
       await tx.assessment.update({

@@ -19,6 +19,7 @@ import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { openApiDocument } from '@/lib/app/api/openapi';
 import {
   AI_ASSESSMENTS_PER_MINUTE,
+  RUNNING_PER_WORKSPACE,
   MAX_CONTENT_CHARS,
   SCANS_PER_MINUTE,
 } from '@/lib/app/assessments/limits';
@@ -108,6 +109,11 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [422, 'NO_TEXT', 'The file or page has no words in it.'],
   [422, 'FILE_UNREADABLE', 'The file could not be read.'],
   [422, 'NOT_SCORABLE', 'With `store: false`: the copy could not be scored.'],
+  [
+    429,
+    'WORKSPACE_BUSY',
+    `With \`store: false\`: your workspace already has ${RUNNING_PER_WORKSPACE} reviews by the AI reviewers running, or running and waiting their turn, the most it runs at once. No reviewer started. Refused on arrival, it does not count against your per-minute cap; refused because another request took the last place while yours was being read, it does. Wait for \`Retry-After\` seconds, or send the review stored, which queues. A \`quick\` review is never refused this way.`,
+  ],
 ];
 
 const LIMITS = SECURITY_CONSTANTS.RATE_LIMIT.LIMITS;

@@ -164,6 +164,12 @@ export function initAppOrgSources(): void {
           prisma.calibrationRun.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
     ],
-    excluded: [],
+    excluded: [
+      {
+        model: 'AssessmentPlace',
+        reason:
+          'A lease held for a few seconds while a review kept nowhere runs, deleted when it ends: bookkeeping that records nothing about the workspace.',
+      },
+    ],
   });
 }

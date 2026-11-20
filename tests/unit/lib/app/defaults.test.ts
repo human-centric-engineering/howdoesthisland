@@ -379,8 +379,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['CalibrationRun', 'calibrationRuns'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
-      // holding no personal data (t-10), judge runs (t-22) and their replies
-      // (t-26). Ledger row 2.
+      // holding no personal data (t-10), judge runs (t-22), their replies
+      // (t-26) and the running places (t-28). Ledger row 2.
       expect(getAppExcludedSubjectSources().map((entry) => entry.model)).toEqual([
         'Framework',
         'FrameworkVersion',
@@ -388,6 +388,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'FrameworkLink',
         'JudgeRun',
         'JudgeReply',
+        'AssessmentPlace',
       ]);
     },
   },
@@ -410,7 +411,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
       ]);
-      expect(getAppExcludedOrgSources()).toEqual([]);
+      // FORK (HowDoesThisLand): the running places (t-28), a lease. Ledger row 2.
+      expect(getAppExcludedOrgSources().map((entry) => entry.model)).toEqual(['AssessmentPlace']);
       expect(appOrgDeclarationsFailed()).toBe(false);
     },
   },

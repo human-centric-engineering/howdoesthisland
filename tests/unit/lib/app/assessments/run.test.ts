@@ -579,7 +579,10 @@ describe('cancel', () => {
     gate.resolve();
     expect(await running).toBe('cancelled');
     expect(a).toMatchObject({ status: 'CANCELLED', leaseExpiresAt: null });
-    expect(await inOrg(() => runAssessment(String(waiting.id)))).toBe('completed');
+    // The place is free again: the waiting one starts, whoever claims it (the
+    // run's own `startNextQueued`, as here, or the next caller).
+    await settle();
+    expect(waiting).toMatchObject({ status: 'COMPLETED', attempts: 1 });
   });
 
   it('answers cancelled, and frees its place, when an error follows the cancel', async () => {
@@ -757,6 +760,27 @@ describe('the concurrency limits', () => {
 });
 
 describe('the recovery job', () => {
+  it('skips a stalled assessment it cannot claim, at the time it is given', async () => {
+    const live = { status: 'RUNNING', leaseExpiresAt: new Date(Date.now() + 30_000), attempts: 1 };
+    for (const n of [1, 2, 3]) fake.seed({ ...live, leaseToken: `run-${n}` });
+    // The workspace is full, so the queued one is left for a later pass.
+    const queued = fake.seed();
+    expect(await inOrg(() => recoverAssessments(new Date()))).toEqual({ redriven: 0, gaveUp: 0 });
+    expect(queued).toMatchObject({ status: 'QUEUED', attempts: 0 });
+  });
+
+  it('clears this workspace’s dead running places (t-28), and no live or other one', async () => {
+    const dead = new Date(Date.now() - 1);
+    const later = new Date(Date.now() + 30_000);
+    fake.places.push(
+      { id: 'dead', orgId: ORG, leaseExpiresAt: dead },
+      { id: 'live', orgId: ORG, leaseExpiresAt: later },
+      { id: 'theirs', orgId: 'org-b', leaseExpiresAt: dead }
+    );
+    await inOrg(() => recoverAssessments());
+    expect(fake.places.map((p) => p.id)).toEqual(['live', 'theirs']);
+  });
+
   /** A population with one of each case the job decides about. */
   function population() {
     const expired = new Date(Date.now() - 5_000);

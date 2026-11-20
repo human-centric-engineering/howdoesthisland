@@ -10,7 +10,10 @@
  * - **Kept nowhere** (`store: false`): synchronous only. The quick scan and
  *   the judges' fan-out run with no rows (`runJudges`), so no `Content`,
  *   `Assessment` or `JudgeRun` is written. The cost rows still are, marked
- *   `ephemeral: true` and with no `assessmentId` (§8.2).
+ *   `ephemeral: true` and with no `assessmentId` (§8.2). A run that calls
+ *   judges holds one of the workspace's running places while it runs, shared
+ *   with stored runs (`places.ts`, t-28); with none free it is refused with
+ *   `WorkspaceBusyError`, which the route answers 429 `WORKSPACE_BUSY`.
  *
  * Runs in the caller's tenant context (the route's guard). Every refusal is
  * an `APIError`, so the guard answers it with its status and code.
@@ -35,7 +38,9 @@ import {
   cancelAssessment,
   NOT_SCORABLE,
   scoresOf,
+  startNextQueued,
 } from '@/lib/app/assessments/run';
+import { withPlace } from '@/lib/app/assessments/places';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -184,12 +189,16 @@ export async function createAssessment(
   const source = await intake(body.source);
 
   if (body.store === false) {
-    return {
-      kind: 'ephemeral',
-      assessment: await refusingAsApi(() =>
+    const run = () =>
+      refusingAsApi(() =>
         runEphemeral(resolved, source, ctx, profile, judges, caller, options.signal)
-      ),
-    };
+      );
+    // A run that calls judges takes one of the workspace's places, or is
+    // refused with `WorkspaceBusyError` (t-28). The quick scan calls no model.
+    const orgId = requireOrgId();
+    const assessment =
+      judges.length > 0 ? await withPlace(orgId, run, () => startNextQueued(orgId)) : await run();
+    return { kind: 'ephemeral', assessment };
   }
 
   const { assessmentId } = await refusingAsApi(() =>

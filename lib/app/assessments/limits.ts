@@ -9,11 +9,20 @@
 export const JUDGES_IN_FLIGHT = 4;
 
 /**
- * Assessments `RUNNING` at once in one workspace, counted from rows. A run
- * that would be the next one stays `QUEUED`, and the next run to end starts
- * it (the recovery job is the backstop).
+ * Assessments running at once in one workspace: stored runs, counted from
+ * their rows, and runs kept nowhere (`store: false`), counted from their
+ * places (`places.ts`, t-28). A stored run that would be one more stays
+ * `QUEUED`, and the next run to end starts it (the recovery job is the
+ * backstop). A `store: false` run that would be one more is refused.
  */
 export const RUNNING_PER_WORKSPACE = 3;
+
+/**
+ * The `Retry-After` a `store: false` request refused for a full workspace
+ * carries (t-28). Nothing says when a place will free, so this is a guess at
+ * a judged review's length, short enough that a retry is likely to land.
+ */
+export const PLACE_RETRY_AFTER_SECONDS = 15;
 
 /** Runs started on one assessment before the recovery job gives up on it. */
 export const MAX_ATTEMPTS = 3;

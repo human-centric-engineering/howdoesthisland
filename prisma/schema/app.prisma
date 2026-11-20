@@ -237,6 +237,24 @@ model Assessment {
   @@map("app_assessment")
 }
 
+/// A place under the workspace's running limit held by a review kept nowhere
+/// (`store: false`, t-28), which has no `Assessment` row for the claim to
+/// count. Taken in the same serializable count as a stored run's claim
+/// (`lib/app/assessments/places.ts`), renewed while the run is alive, and
+/// deleted when it ends. One whose lease has run out (its process died) is
+/// free, and the next take deletes it. Carries no `userId`: it is a lease, not
+/// a record of who asked. Tenant-owned (`orgId`, cascade, `org_isolation`).
+model AssessmentPlace {
+  id             String   @id @default(cuid())
+  orgId          String?
+  org            Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  leaseExpiresAt DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([orgId, leaseExpiresAt])
+  @@map("app_assessment_place")
+}
+
 enum AssessmentStatus {
   QUEUED
   RUNNING
