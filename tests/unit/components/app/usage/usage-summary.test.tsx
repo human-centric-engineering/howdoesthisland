@@ -53,6 +53,19 @@ describe('UsageSummary', () => {
     expect(within(budget).getByRole('meter')).toHaveAttribute('aria-valuenow', '10');
   });
 
+  it('draws no meter for a $0 budget, which has no range to show', () => {
+    render(
+      <UsageSummary
+        usage={usage({ spendUsd: 0, cap: { limitUsd: 0, remainingUsd: 0, exceeded: true } })}
+      />
+    );
+
+    expect(screen.getByRole('region', { name: 'Budget reached' })).toHaveTextContent(
+      '$0.00 of $0.00 spent.'
+    );
+    expect(screen.queryByRole('meter')).toBeNull();
+  });
+
   it('says there is no limit when the workspace has no budget', () => {
     render(<UsageSummary usage={usage({ cap: null })} />);
 

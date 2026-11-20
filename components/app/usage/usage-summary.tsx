@@ -87,8 +87,6 @@ function Budget({ usage }: { usage: MonthUsage }) {
     );
   }
 
-  const used = cap.limitUsd > 0 ? Math.min(1, usage.spendUsd / cap.limitUsd) : 1;
-
   return (
     <section
       aria-labelledby="usage-budget"
@@ -105,20 +103,23 @@ function Budget({ usage }: { usage: MonthUsage }) {
         {formatUsd(usage.spendUsd)} of {formatUsd(cap.limitUsd)} spent
         {cap.exceeded ? '.' : ` · ${formatUsd(cap.remainingUsd)} left.`}
       </p>
-      <div
-        role="meter"
-        aria-label="Budget used"
-        aria-valuemin={0}
-        aria-valuemax={cap.limitUsd}
-        aria-valuenow={Math.min(usage.spendUsd, cap.limitUsd)}
-        aria-valuetext={`${formatUsd(usage.spendUsd)} of ${formatUsd(cap.limitUsd)}`}
-        className="bg-muted mt-3 h-2 w-full overflow-hidden rounded-full"
-      >
+      {/* A $0 budget has no range to show: no AI reviewer may run at all. */}
+      {cap.limitUsd > 0 ? (
         <div
-          className={cap.exceeded ? 'bg-destructive h-full' : 'bg-primary h-full'}
-          style={{ width: `${used * 100}%` }}
-        />
-      </div>
+          role="meter"
+          aria-label="Budget used"
+          aria-valuemin={0}
+          aria-valuemax={cap.limitUsd}
+          aria-valuenow={Math.min(usage.spendUsd, cap.limitUsd)}
+          aria-valuetext={`${formatUsd(usage.spendUsd)} of ${formatUsd(cap.limitUsd)}`}
+          className="bg-muted mt-3 h-2 w-full overflow-hidden rounded-full"
+        >
+          <div
+            className={cap.exceeded ? 'bg-destructive h-full' : 'bg-primary h-full'}
+            style={{ width: `${Math.min(1, usage.spendUsd / cap.limitUsd) * 100}%` }}
+          />
+        </div>
+      ) : null}
       <p className="text-muted-foreground mt-3 text-sm">
         {cap.exceeded
           ? `${WORDS.AiReviewers} are refused until ${resets}, when the budget starts again. The quick scan still runs. A platform admin can raise the budget.`
