@@ -18,12 +18,14 @@ interface ReviewRow {
   status: string;
   costUsd: number;
   judges: string[];
+  leaseExpiresAt: Date | null;
   createdAt: Date;
 }
 interface RunRow {
   orgId: string;
   assessmentId: string | null;
   status: string;
+  errorCode: string | null;
   costUsd: number;
   createdAt: Date;
 }
@@ -37,12 +39,17 @@ const state = vi.hoisted(() => ({
 }));
 
 type Where = Record<string, unknown>;
-const matches = (row: Record<string, unknown>, where: Where) =>
-  Object.entries(where).every(([k, v]) =>
-    typeof v === 'object' && v !== null && 'in' in v
-      ? (v as { in: unknown[] }).in.includes(row[k])
-      : row[k] === v
-  );
+/** Equality, `{ in }`, `{ gt }`, `{ lt }` and a top-level `OR`: what the queries ask. */
+const matches = (row: Record<string, unknown>, where: Where): boolean =>
+  Object.entries(where).every(([k, v]) => {
+    if (k === 'OR') return (v as Where[]).some((w) => matches(row, w));
+    if (typeof v !== 'object' || v === null || v instanceof Date) return row[k] === v;
+    const value = row[k];
+    if ('in' in v) return (v as { in: unknown[] }).in.includes(value);
+    if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
+    if ('lt' in v) return value instanceof Date && value < (v as { lt: Date }).lt;
+    throw new Error(`fake cannot filter ${k} by ${JSON.stringify(v)}`);
+  });
 function newestFirst<T extends { createdAt: Date }>(rows: T[], take: number): T[] {
   return [...rows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, take);
 }
@@ -58,8 +65,11 @@ vi.mock('@/lib/db/client', () => ({
           state.reviews.filter((r) => matches({ ...r }, where)),
           take ?? Infinity
         ).map((r) => ({
+          id: r.id,
+          status: r.status,
           costUsd: r.costUsd,
           judges: r.judges,
+          createdAt: r.createdAt,
           judgeRuns: state.runs
             .filter((run) => run.assessmentId === r.id)
             .map((run) => ({ costUsd: run.costUsd })),
@@ -67,11 +77,16 @@ vi.mock('@/lib/db/client', () => ({
       ),
     },
     judgeRun: {
-      findMany: vi.fn(async ({ where, take }: { where: Where; take: number }) =>
+      findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
         newestFirst(
           state.runs.filter((r) => matches({ ...r }, where)),
-          take
-        ).map((r) => ({ costUsd: r.costUsd }))
+          take ?? Infinity
+        ).map((r) => ({
+          costUsd: r.costUsd,
+          assessmentId: r.assessmentId,
+          status: r.status,
+          errorCode: r.errorCode,
+        }))
       ),
     },
   },
@@ -87,7 +102,7 @@ vi.mock('@/lib/logging', () => ({
 }));
 
 import { prisma } from '@/lib/db/client';
-import { forgetSpendCaps } from '@/lib/orchestration/llm/spend-caps';
+import { forgetSpendCaps, utcMonthStart } from '@/lib/orchestration/llm/spend-caps';
 import { APIError } from '@/lib/api/errors';
 import { assertReviewWithinBudget, estimateReviewCost } from '@/lib/app/usage/budget';
 
@@ -109,6 +124,7 @@ function review(costUsd: number, over: Partial<ReviewRow> = {}): string {
     status: 'COMPLETED',
     costUsd,
     judges: slots(1),
+    leaseExpiresAt: null,
     createdAt: at(),
     ...over,
   });
@@ -119,6 +135,7 @@ function judgeRun(costUsd: number, over: Partial<RunRow> = {}): void {
     orgId: ORG,
     assessmentId: null,
     status: 'SUCCEEDED',
+    errorCode: null,
     costUsd,
     createdAt: at(),
     ...over,
@@ -138,7 +155,13 @@ async function refusal(fn: () => Promise<void>): Promise<APIError> {
 beforeEach(() => {
   forgetSpendCaps();
   vi.clearAllMocks();
-  Object.assign(state, { spent: 0, budget: null, quotasFail: false, reviews: [], runs: [] });
+  Object.assign(state, {
+    spent: 0,
+    budget: null,
+    quotasFail: false,
+    reviews: [],
+    runs: [],
+  });
 });
 
 describe('estimateReviewCost', () => {
@@ -307,7 +330,9 @@ describe('assertReviewWithinBudget', () => {
 
     // $2.00 left, $1.60 held: $0.40 is under the $1.00 estimate.
     expect(err.details).toMatchObject({ estimateUsd: 1, remainingUsd: 0.4, inFlightUsd: 1.6 });
-    expect(err.message).toContain('once $1.60 is held for reviews already queued or running');
+    expect(err.message).toContain(
+      'once $1.60 is held for reviews already queued, running or finishing'
+    );
   });
 
   it('lets a review start when what is left after those in flight covers it', async () => {
@@ -355,9 +380,140 @@ describe('assertReviewWithinBudget', () => {
 
     expect(err.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 2 });
     expect(err.message).toContain(
-      "Reviews already queued or running are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
+      "Reviews already queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
     );
     expect(err.message).not.toContain('more than the');
+  });
+
+  it('holds back a cancelled review for its judges still in flight, not its whole estimate', async () => {
+    state.spent = 8;
+    // Cancelled with its lease live: 7 judges, 1 saved, so at most 4 still running ($4/7).
+    const id = review(0.1, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    judgeRun(0.1, { assessmentId: id });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+
+    // A 13-judge review at $1/7 a judge is $1.857143; $2.00 less $0.571429 held leaves $1.428571.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.571429, remainingUsd: 1.428571 });
+  });
+
+  it('holds back a cancelled review only for the judges it has not saved', async () => {
+    state.spent = 8;
+    // 7 judges, 5 saved: 2 can still be running ($2/7).
+    const id = review(0.5, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 5; i += 1) judgeRun(0.1, { assessmentId: id });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.285714 });
+  });
+
+  it('holds nothing back for a cancelled review whose lease has gone', async () => {
+    state.spent = 8;
+    review(0, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() - 1_000),
+    });
+    review(0, { status: 'CANCELLED', judges: slots(7), leaseExpiresAt: null });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 15));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0, remainingUsd: 2 });
+  });
+
+  it('holds a review created last month for its estimate less all it has spent', async () => {
+    state.spent = 8;
+    // A running 7-judge review ($1.00) created last month, which has spent $0.50 in all.
+    const lastMonth = new Date(utcMonthStart().getTime() - 60_000);
+    review(0.5, { status: 'RUNNING', judges: slots(7), createdAt: lastMonth });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    // $0.50 is all that can still land this month.
+    expect(err.details).toMatchObject({ inFlightUsd: 0.5, remainingUsd: 1.5 });
+  });
+
+  it('holds a cancelled review for a judge a re-drive is running again', async () => {
+    state.spent = 8;
+    // 7 judges, all saved, but 2 failed with rate_limited and are being run again ($2/7).
+    const id = review(0.5, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 5; i += 1) judgeRun(0.1, { assessmentId: id });
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'provider_error' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 13));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.285714 });
+  });
+
+  it('holds a cancelled review for its editor when that is more than its unsettled judges', async () => {
+    state.reviews = [];
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 8;
+    // One judge failed rate_limited: final in this run or being retried, which the rows cannot say.
+    const id = review(0.6, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 6; i += 1) judgeRun(0.1, { assessmentId: id });
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'rate_limited' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+
+    // The larger of one judge ($0.10) and the editor ($0.30).
+    expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
+  });
+
+  it('holds a cancelled review whose judges are all settled for its editor', async () => {
+    state.reviews = [];
+    // History with an editor: 7-judge reviews that spent $0.70 on judges and $0.30 on the editor.
+    for (let i = 0; i < 3; i += 1) {
+      const past = review(1, { judges: slots(7) });
+      for (let j = 0; j < 7; j += 1) judgeRun(0.1, { assessmentId: past });
+    }
+    state.spent = 8;
+    const id = review(0.7, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    for (let i = 0; i < 6; i += 1) judgeRun(0.1, { assessmentId: id });
+    // A judge that failed for good is settled.
+    judgeRun(0, { assessmentId: id, status: 'FAILED', errorCode: 'invalid_reply' });
+
+    const err = await refusal(() => assertReviewWithinBudget(ORG, 'full', 20));
+
+    expect(err.details).toMatchObject({ inFlightUsd: 0.3 });
+  });
+
+  it('reads judge runs for cancelled reviews only, and none without one', async () => {
+    state.spent = 8;
+    review(0.4, { status: 'RUNNING', judges: slots(7) });
+
+    await refusal(() => assertReviewWithinBudget(ORG, 'full', 14));
+
+    expect(prisma.judgeRun.findMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ assessmentId: expect.anything() }),
+      })
+    );
   });
 
   it('refuses nothing when the history cannot be read, as a cap that cannot be', async () => {

@@ -68,6 +68,7 @@ import {
   LEASE_MS,
   LEASE_RENEW_MS,
   MAX_ATTEMPTS,
+  RETRIED_ON_REDRIVE,
   RUNNING_PER_WORKSPACE,
 } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
@@ -101,12 +102,6 @@ export function scoresOf(result: unknown): { overall: number | null; band: strin
     ? { overall: parsed.data.scores.overall, band: parsed.data.scores.band }
     : { overall: null, band: null };
 }
-
-/**
- * Failures a re-drive runs the judge again for: each is about the moment
- * (a rate-limit window, a provider outage), not the judge or the text.
- */
-const RETRIED_ON_REDRIVE: ReadonlySet<string> = new Set(['rate_limited', 'provider_error']);
 
 export async function runAssessment(assessmentId: string): Promise<RunOutcome> {
   const run = await beginAssessment(assessmentId);

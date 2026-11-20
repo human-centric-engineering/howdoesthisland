@@ -229,7 +229,9 @@ model Assessment {
   judgeRuns          JudgeRun[]
   shares             ReportShare[]
 
-  @@index([orgId, status])
+  /// The budget check's history and in-flight reads (t-54, lib/app/usage/budget.ts).
+  @@index([orgId, status, createdAt])
+  @@index([orgId, profile, status, createdAt])
   /// The retention purge's content-window delete (t-26).
   @@index([orgId, createdAt])
   @@index([status, leaseExpiresAt])
@@ -296,7 +298,9 @@ model JudgeRun {
   updatedAt    DateTime       @updatedAt
 
   @@unique([assessmentId, judge])
-  @@index([orgId])
+  /// Leads with `orgId`, so it serves every org-scoped read; and the budget
+  /// check's recent succeeded runs (t-54, lib/app/usage/budget.ts).
+  @@index([orgId, status, createdAt])
   @@map("app_judge_run")
 }
 

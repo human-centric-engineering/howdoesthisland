@@ -44,11 +44,24 @@ budget.
 
 It refuses when nothing is left, or when the estimate is more than what is.
 What is left is the budget less this month's spend, less `inFlightUsd`: what
-the workspace's stored reviews still `QUEUED` or `RUNNING` are yet to spend
-(each one's judges at this request's rate, less what it has spent), so a
-request does not count on budget a review already accepted will use. It covers
-reviews already stored: requests arriving together each see none of the
-others, and the per-judge gate is left to catch them.
+the workspace's stored reviews in flight are yet to spend, so a request does
+not count on budget a review already accepted will use. A judge is settled
+once it answered or failed for good; one that failed with `rate_limited` or
+`provider_error`, which a re-drive runs again, is not.
+
+| In flight                          | Held back                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QUEUED` or `RUNNING`              | Its estimate at this request's rate, less all it has spent (`costUsd`). What it has yet to spend lands this month, and judges it ran last month are reused, so its earlier spend is subtracted too. Held even with its lease run out: recovery runs it again.                                                       |
+| `CANCELLED`, lease still live      | The larger of its unsettled judges (at most 4, the judges a run calls at once) at this request's rate, and its editor allowance: after a cancel either judges are still landing or the editor is mid-call, never both, and a retried failure cannot be told from a final one. An upper bound, for the lease's life. |
+| `CANCELLED`, lease gone; any other | Nothing.                                                                                                                                                                                                                                                                                                            |
+
+It covers reviews already stored: requests arriving together each see none of
+the others, and the per-judge gate is left to catch them.
+
+Every read the check makes runs on each non-quick request, before the
+per-user limiter, so each has an index serving its filter and order:
+`app_assessment` `(orgId, profile, status, createdAt)` and
+`(orgId, status, createdAt)`, `app_judge_run` `(orgId, status, createdAt)`.
 
 The estimate is a cost per judge × the judges the request calls, plus an
 editor allowance when the editor will run (2 judges or more). The cost per
@@ -78,9 +91,6 @@ Not done:
 - `store: false` reviews leave no assessment or judge-run rows, so they feed
   no estimate (a workspace that only sends those estimates `0`) and are not
   held back while in flight.
-- A cancelled review's judges still in flight are not held back.
-- A review running across a month's end has its spend last month taken off
-  what it is held for this one.
 
 ## Demo usage for development
 
