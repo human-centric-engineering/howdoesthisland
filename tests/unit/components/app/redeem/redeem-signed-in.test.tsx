@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
 
-/** The redeem press (t-60): posts the code, then shows what it gave or why not. */
+/**
+ * The signed-in redeem panel (t-60): what the code gives and the press that
+ * redeems it, which posts the code, then shows what it gave in place of the
+ * offer, or why not.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,7 +14,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
   apiClient: { post: vi.fn(), get: vi.fn(), delete: vi.fn() },
 }));
 
-import { RedeemButton } from '@/components/app/redeem/redeem-button';
+import { RedeemSignedIn } from '@/components/app/redeem/redeem-signed-in';
 import { apiClient, APIClientError } from '@/lib/api/client';
 import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 
@@ -22,11 +26,31 @@ const REDEMPTION = {
   workspace: { id: 'w1', name: 'Acme Copy' },
 };
 
+const CHECK = {
+  status: 'active',
+  code: 'ABCD-EFGH-JKMN',
+  credits: 500,
+  expiresAt: '2027-02-19T23:59:59.999Z',
+} as const;
+
 beforeEach(() => vi.clearAllMocks());
 
-describe('RedeemButton', () => {
+describe('RedeemSignedIn', () => {
+  it('replaces the offer with what was added once redeemed', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(REDEMPTION);
+    render(<RedeemSignedIn check={CHECK} />);
+    expect(screen.getByRole('heading', { name: 'Redeem your code' })).toBeInTheDocument();
+    expect(screen.getByText(/Redeem it by 19 February 2027/)).toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole('button'));
+
+    expect(await screen.findByRole('heading', { name: 'Credits added' })).toBeInTheDocument();
+    expect(screen.queryByText(/Redeem it by/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add/ })).not.toBeInTheDocument();
+  });
+
   it('offers to add the credits the code gives', () => {
-    render(<RedeemButton code="ABCD-EFGH-JKMN" credits={500} />);
+    render(<RedeemSignedIn check={CHECK} />);
     expect(
       screen.getByRole('button', { name: 'Add 500 CopyCredits to my workspace' })
     ).toBeEnabled();
@@ -35,7 +59,7 @@ describe('RedeemButton', () => {
 
   it('posts the code to the redeem endpoint on press', async () => {
     vi.mocked(apiClient.post).mockResolvedValue(REDEMPTION);
-    render(<RedeemButton code="ABCD-EFGH-JKMN" credits={500} />);
+    render(<RedeemSignedIn check={CHECK} />);
 
     await userEvent.setup().click(screen.getByRole('button'));
 
@@ -47,7 +71,7 @@ describe('RedeemButton', () => {
 
   it('shows the credits added, the workspace and the new balance, with next steps', async () => {
     vi.mocked(apiClient.post).mockResolvedValue(REDEMPTION);
-    render(<RedeemButton code="ABCD-EFGH-JKMN" credits={500} />);
+    render(<RedeemSignedIn check={CHECK} />);
 
     await userEvent.setup().click(screen.getByRole('button'));
 
@@ -66,7 +90,7 @@ describe('RedeemButton', () => {
     vi.mocked(apiClient.post).mockRejectedValue(
       new APIClientError('This code has been used as many times as it allows.', 'CODE_USED_UP', 410)
     );
-    render(<RedeemButton code="ABCD-EFGH-JKMN" credits={500} />);
+    render(<RedeemSignedIn check={CHECK} />);
 
     await userEvent.setup().click(screen.getByRole('button'));
 
@@ -84,7 +108,7 @@ describe('RedeemButton', () => {
       .mockRejectedValueOnce(new APIClientError('Try later.', 'INTERNAL_ERROR', 500))
       .mockResolvedValueOnce(REDEMPTION);
     const user = userEvent.setup();
-    render(<RedeemButton code="ABCD-EFGH-JKMN" credits={500} />);
+    render(<RedeemSignedIn check={CHECK} />);
 
     await user.click(screen.getByRole('button'));
     expect(await screen.findByText('Try later.')).toBeInTheDocument();
@@ -97,7 +121,7 @@ describe('RedeemButton', () => {
   it('is disabled and says it is adding while the request is pending', async () => {
     let resolve: (v: unknown) => void = () => {};
     vi.mocked(apiClient.post).mockImplementation(() => new Promise((r) => (resolve = r)));
-    render(<RedeemButton code="ABCD-EFGH-JKMN" credits={500} />);
+    render(<RedeemSignedIn check={CHECK} />);
 
     await userEvent.setup().click(screen.getByRole('button'));
 

@@ -2,12 +2,10 @@ import type { Metadata } from 'next';
 import { getServerSession } from '@/lib/auth/utils';
 import { checkCode } from '@/lib/app/credits/codes/redeem';
 import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
-import { RedeemButton } from '@/components/app/redeem/redeem-button';
+import { RedeemSignedIn } from '@/components/app/redeem/redeem-signed-in';
 import {
-  CodeGives,
   RedeemAlreadyRedeemed,
   RedeemEnterCode,
-  RedeemPanel,
   RedeemRefused,
   RedeemSignedOut,
 } from '@/components/app/redeem/redeem-states';
@@ -59,12 +57,7 @@ export default async function RedeemPage({
     } else if (check.alreadyRedeemed) {
       body = <RedeemAlreadyRedeemed code={check.code} />;
     } else {
-      body = (
-        <RedeemPanel slug="Free review code" title="Redeem your code">
-          <CodeGives check={check} />
-          <RedeemButton code={check.code} credits={check.credits} />
-        </RedeemPanel>
-      );
+      body = <RedeemSignedIn check={check} />;
     }
   }
 

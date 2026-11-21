@@ -10,7 +10,7 @@ import { USAGE_PAGE } from '@/lib/app/usage/wire';
 /**
  * What `/redeem` shows (t-60): a box to type a code into, why a code cannot
  * be redeemed, and what it gives someone signed out or already holding it.
- * Signed in, the page adds `<RedeemButton>`.
+ * Signed in, the page shows `<RedeemSignedIn>`, built from these.
  */
 
 const DATE = new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' });
@@ -62,7 +62,6 @@ export function CodeEntryForm({ defaultValue = '' }: { defaultValue?: string }) 
           id="redeem-code"
           name="code"
           defaultValue={defaultValue}
-          placeholder="ABCD-EFGH-JKMN"
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
