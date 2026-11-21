@@ -62,7 +62,7 @@ import { POST as check } from '@/app/api/v1/codes/check/route';
 import { POST as redeem } from '@/app/api/v1/codes/redeem/route';
 import { CodeRefusedError } from '@/lib/app/credits/codes/redeem';
 import { codeCheckSchema, redemptionSchema, type Redemption } from '@/lib/app/credits/codes/wire';
-import { REDEEM_PATH, REDEEM_TIER } from '@/lib/app/rate-limit';
+import { REDEEM_LIMIT_PATHS, REDEEM_TIER } from '@/lib/app/rate-limit';
 import { getTenantContext } from '@/lib/tenancy/context';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 
@@ -286,7 +286,7 @@ describe('the redeem proxy rule', () => {
   it('covers the page and both code routes, and nothing else', () => {
     expect(REDEEM_TIER).toBe('redeem');
     for (const path of ['/redeem', '/redeem/', '/api/v1/codes/check', '/api/v1/codes/redeem']) {
-      expect(REDEEM_PATH.test(path), path).toBe(true);
+      expect(REDEEM_LIMIT_PATHS.test(path), path).toBe(true);
     }
     for (const path of [
       '/redeemed',
@@ -296,7 +296,7 @@ describe('the redeem proxy rule', () => {
       '/api/v1/admin/codes',
       '/admin/codes',
     ]) {
-      expect(REDEEM_PATH.test(path), path).toBe(false);
+      expect(REDEEM_LIMIT_PATHS.test(path), path).toBe(false);
     }
   });
 });

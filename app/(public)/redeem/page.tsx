@@ -32,7 +32,13 @@ export const metadata: Metadata = {
  *   with the code (their `callbackUrl`);
  * - signed in: what it gives, and a press that redeems it into the active
  *   workspace through `POST /api/v1/codes/redeem`; or, if this person already
- *   has, says so.
+ *   has, says so, ahead of the code's own state: someone who used a personal
+ *   code's one redemption is told they have it, not that it is used up, as
+ *   `redeemCode` tells them.
+ *
+ * A failed email verification comes back here (the sign-up form passes this
+ * page as better-auth's `callbackURL`), with better-auth's `?error=`; the
+ * signed-out panel then says the link did not work and how to get a new one.
  *
  * Page loads count against the per-IP code tier (`lib/app/rate-limit.ts`).
  */
@@ -41,7 +47,9 @@ export default async function RedeemPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const raw = (await searchParams).code;
+  const params = await searchParams;
+  const raw = params.code;
+  const verificationFailed = params.error !== undefined;
   const typed = (Array.isArray(raw) ? raw[0] : raw)?.trim().slice(0, MAX_TYPED_CODE) ?? '';
 
   let body;
@@ -50,12 +58,12 @@ export default async function RedeemPage({
   } else {
     const session = await getServerSession();
     const check = await checkCode(typed, session?.user.id);
-    if (check.status !== 'active') {
+    if (session && check.status !== 'unknown' && check.alreadyRedeemed) {
+      body = <RedeemAlreadyRedeemed code={check.code} />;
+    } else if (check.status !== 'active') {
       body = <RedeemRefused check={check} typed={typed} />;
     } else if (!session) {
-      body = <RedeemSignedOut check={check} />;
-    } else if (check.alreadyRedeemed) {
-      body = <RedeemAlreadyRedeemed code={check.code} />;
+      body = <RedeemSignedOut check={check} verificationFailed={verificationFailed} />;
     } else {
       body = <RedeemSignedIn check={check} />;
     }

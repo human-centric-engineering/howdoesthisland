@@ -6,11 +6,14 @@
  * A code is about 59 bits, so no rate here makes guessing one feasible; the
  * caps stop a script hammering the lookup, not a person at a door. Per IP is
  * the looser of the two because a QR card is handed out at events, where a
- * room of people scanning together share one address.
+ * room of people scanning together share one address, and one person's way
+ * through takes several requests (the page, a check, the page again after
+ * sign-up, the redemption). At 120 a minute, twenty or more people behind one
+ * address get through in a minute.
  */
 
 /** Checks and redemptions per IP a minute: the `/redeem` page and both code routes, together. */
-export const CODE_ATTEMPTS_PER_MINUTE_PER_IP = 30;
+export const CODE_ATTEMPTS_PER_MINUTE_PER_IP = 120;
 
 /** Redemptions per person a minute, across their sessions and keys. */
 export const REDEEM_ATTEMPTS_PER_MINUTE_PER_USER = 10;

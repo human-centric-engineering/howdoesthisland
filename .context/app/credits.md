@@ -253,9 +253,10 @@ learns nothing about why it missed.
 lookup, not a guesser:
 
 - the `redeem` proxy rule (`lib/app/rate-limit.ts`), keyed on IP,
-  `CODE_ATTEMPTS_PER_MINUTE_PER_IP` (30) across the page and both routes. It is
+  `CODE_ATTEMPTS_PER_MINUTE_PER_IP` (120) across the page and both routes. It is
   the looser of the two because a QR card is handed out at events, where a room
-  scanning together shares one address;
+  scanning together shares one address, and one person's way through takes
+  several requests (raised from 30 in t-60's review);
 - per person in the redeem handler, `REDEEM_ATTEMPTS_PER_MINUTE_PER_USER` (10),
   every attempt counted, a malformed one too.
 
@@ -268,11 +269,19 @@ QR land here.
   `callbackUrl=/redeem?code=…`, so the person comes back here. The sign-up form
   carries the callback through email verification and OAuth (a carried edit,
   ledger row 22; sunrise#1315).
+  - A verification link that fails (expired, used) comes back here with
+    better-auth's `?error=`, not to the platform's verification page; the
+    panel then says so, and that signing in sends a new link.
+  - **Known limit:** a verification email sent again from the platform's pages
+    (`/verify-email`, the login form) carries no callback, so it lands on the
+    landing route. The code's own link still works once the person is
+    verified. Part of sunrise#1315.
 - Signed in: what it gives, and one press that redeems into the active
   workspace, then the balance and where to go next. A press, not a
   redemption on load, so the person sees what they add, and a link opened by
   anything else redeems nothing (decided in t-60). Or, if they already have,
-  says so.
+  says so, ahead of the code's own state: someone who used a personal code's
+  one redemption is told they have it, not that it is used up.
 
 **Privacy.** The rows are in the person's subject export (`codeRedemptions`)
 and the workspace's org export.

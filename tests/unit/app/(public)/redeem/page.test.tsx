@@ -30,8 +30,12 @@ const ACTIVE = {
   alreadyRedeemed: false,
 };
 
-const renderPage = async (code?: string | string[]) =>
-  render(await RedeemPage({ searchParams: Promise.resolve(code === undefined ? {} : { code }) }));
+const renderPage = async (code?: string | string[], extra: Record<string, string> = {}) =>
+  render(
+    await RedeemPage({
+      searchParams: Promise.resolve(code === undefined ? extra : { code, ...extra }),
+    })
+  );
 
 const signIn = () => vi.mocked(getServerSession).mockResolvedValue(createMockSession());
 
@@ -118,6 +122,43 @@ describe('RedeemPage', () => {
 
     expect(screen.getByRole('heading', { name: 'You’ve redeemed this code' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /to my workspace/ })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['used up', { status: 'used-up' as const, code: 'ABCD-EFGH-JKMN' }],
+    [
+      'expired',
+      { status: 'expired' as const, code: 'ABCD-EFGH-JKMN', expiresAt: '2026-01-01T00:00:00.000Z' },
+    ],
+    ['revoked', { status: 'revoked' as const, code: 'ABCD-EFGH-JKMN' }],
+  ])(
+    'tells someone who redeemed a code now %s that they have it, not why others cannot',
+    async (_name, check) => {
+      signIn();
+      vi.mocked(checkCode).mockResolvedValue({ ...check, alreadyRedeemed: true });
+      await renderPage('abcd');
+
+      expect(
+        screen.getByRole('heading', { name: 'You’ve redeemed this code' })
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    }
+  );
+
+  it('says a verification link failed when better-auth sends someone back with an error', async () => {
+    vi.mocked(checkCode).mockResolvedValue(ACTIVE);
+    await renderPage('abcd', { error: 'TOKEN_EXPIRED' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The link in your verification email didn’t work'
+    );
+    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('says nothing about verification without an error', async () => {
+    vi.mocked(checkCode).mockResolvedValue(ACTIVE);
+    await renderPage('abcd');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('uses the first value when code is repeated', async () => {

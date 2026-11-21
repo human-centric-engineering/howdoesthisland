@@ -145,11 +145,28 @@ export function redeemReturnPath(code: string): string {
   return `${REDEEM_PATH}?${new URLSearchParams({ code }).toString()}`;
 }
 
-/** An active code, signed out: create an account or sign in, and come back here. */
-export function RedeemSignedOut({ check }: { check: Extract<CodeCheck, { status: 'active' }> }) {
+/**
+ * An active code, signed out: create an account or sign in, and come back
+ * here. `verificationFailed` when a verification email's link sent the person
+ * back with better-auth's `?error=`: signing in offers a new link, and the
+ * code's own link works again once they are verified.
+ */
+export function RedeemSignedOut({
+  check,
+  verificationFailed = false,
+}: {
+  check: Extract<CodeCheck, { status: 'active' }>;
+  verificationFailed?: boolean;
+}) {
   const callback = new URLSearchParams({ callbackUrl: redeemReturnPath(check.code) }).toString();
   return (
     <RedeemPanel slug="Free review code" title="Your code is good">
+      {verificationFailed && (
+        <p role="alert" className="text-(--hd-ink)">
+          The link in your verification email didn’t work: it may have expired or been used already.
+          Sign in to get a new one, then open your code’s link again.
+        </p>
+      )}
       <CodeGives check={check} />
       <p>Create an account to redeem it, or sign in if you have one. You’ll come back here.</p>
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -164,13 +181,13 @@ export function RedeemSignedOut({ check }: { check: Extract<CodeCheck, { status:
   );
 }
 
-/** Signed in, and this person has redeemed the code already. */
+/** Signed in, and this person has redeemed the code already, whatever the code's state now. */
 export function RedeemAlreadyRedeemed({ code }: { code: string }) {
   return (
     <RedeemPanel slug="Free review code" title="You’ve redeemed this code">
       <p>
-        <span className="font-mono">{code}</span> is already on your account. Each person can redeem
-        a code once.
+        You redeemed <span className="font-mono">{code}</span> into a workspace already. Each person
+        can redeem a code once.
       </p>
       <RedeemNextSteps />
     </RedeemPanel>

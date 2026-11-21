@@ -75,7 +75,7 @@ const sharedReportRule: RateLimitRule = {
 
 /** The code tier and the paths it covers: the page, the check and redeeming. */
 export const REDEEM_TIER = 'redeem';
-export const REDEEM_PATH = /^\/(redeem|api\/v1\/codes\/(check|redeem))\/?$/;
+export const REDEEM_LIMIT_PATHS = /^\/(redeem|api\/v1\/codes\/(check|redeem))\/?$/;
 
 const redeemLimiter = createRateLimiter({
   interval: 60_000,
@@ -83,7 +83,7 @@ const redeemLimiter = createRateLimiter({
   uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
 });
 
-const redeemRule: RateLimitRule = { match: REDEEM_PATH, tier: REDEEM_TIER, key: 'ip' };
+const redeemRule: RateLimitRule = { match: REDEEM_LIMIT_PATHS, tier: REDEEM_TIER, key: 'ip' };
 
 export function registerAppRateLimits(): void {
   registerRateLimitTier(SCAN_TIER, scanLimiter);
