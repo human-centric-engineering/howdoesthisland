@@ -99,6 +99,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A change to the workspace’s CopyCredits; `actorUserId` is the admin who made it or the member who redeemed a code.',
       },
+      // t-59: install-level config, made and read by platform admins.
+      ReviewCode: {
+        kind: 'not-personal',
+        because:
+          'A free review code the platform made for a campaign; `createdByUserId` is the admin who made it.',
+      },
     },
   });
 }

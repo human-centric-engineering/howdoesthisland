@@ -80,7 +80,8 @@ import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibrat
 
 /** The route directories this fork added under `app/api/v1/`. */
 const APP_ROUTE_DIRS = [
-  // The app's own directories inside core's `admin` (t-38, t-57).
+  // The app's own directories inside core's `admin` (t-38, t-57, t-59).
+  'admin/codes',
   'admin/credits',
   'admin/frameworks',
   'assessments',

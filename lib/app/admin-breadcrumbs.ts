@@ -30,4 +30,6 @@
 export const appSegmentLabels: Readonly<Record<string, string>> = {
   // t-57: the admin CopyCredits page (`/admin/credits`), named as the product names them.
   credits: 'CopyCredits',
+  // t-59: the free review codes page (`/admin/codes`).
+  codes: 'Review codes',
 };

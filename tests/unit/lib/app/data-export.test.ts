@@ -23,6 +23,7 @@ vi.mock('@/lib/db/client', () => ({
     reportShare: { findMany: vi.fn() },
     calibrationRun: { findMany: vi.fn() },
     creditEntry: { findMany: vi.fn() },
+    reviewCode: { findMany: vi.fn() },
   },
 }));
 
@@ -39,6 +40,7 @@ describe('collectAppSubjectData', () => {
     vi.mocked(prisma.reportShare.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.calibrationRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.creditEntry.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.reviewCode.findMany).mockResolvedValue([] as never);
   });
 
   it('reads invitations to the person by invitee, and the ones they sent without the invitee', async () => {
@@ -78,6 +80,7 @@ describe('collectAppSubjectData', () => {
       reportShares: [],
       calibrationRuns: [],
       creditEntries: [],
+      reviewCodes: [],
     });
   });
 
@@ -111,6 +114,7 @@ describe('collectAppSubjectData', () => {
       reportShares: [],
       calibrationRuns: [],
       creditEntries: [],
+      reviewCodes: [],
     });
   });
 
@@ -153,5 +157,19 @@ describe('collectAppSubjectData', () => {
       orderBy: { createdAt: 'asc' },
     });
     expect(data.creditEntries).toEqual([{ id: 'entry-1' }]);
+  });
+
+  it('reads the review codes they made, without the codes or their idempotency keys', async () => {
+    vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.reviewCode.findMany).mockResolvedValue([{ id: 'code-1' }] as never);
+
+    const data = await collectAppSubjectData(SUBJECT);
+
+    expect(vi.mocked(prisma.reviewCode.findMany)).toHaveBeenCalledWith({
+      where: { createdByUserId: 'user-1' },
+      omit: { code: true, idempotencyKey: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(data.reviewCodes).toEqual([{ id: 'code-1' }]);
   });
 });

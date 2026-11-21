@@ -13,7 +13,8 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · lib/admin-nav/registry.ts
  */
-import { Coins, Scale } from 'lucide-react';
+import { Coins, QrCode, Scale } from 'lucide-react';
+import { ADMIN_CODES_PATH } from '@/lib/app/credits/codes/wire';
 import { ADMIN_CREDITS_PATH } from '@/lib/app/credits/wire';
 import { registerNavSection } from '@/lib/admin-nav/registry';
 
@@ -34,6 +35,13 @@ export function initAppNav(): void {
         label: 'CopyCredits',
         icon: Coins,
         description: 'Each workspace’s credits, and granting or adjusting them',
+      },
+      {
+        // t-59: platform admins only (no `tier`), as the page and its routes are.
+        href: ADMIN_CODES_PATH,
+        label: 'Review codes',
+        icon: QrCode,
+        description: 'Free review codes and their QR cards: make, list and revoke them',
       },
     ],
   });
