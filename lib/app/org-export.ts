@@ -172,6 +172,18 @@ export function initAppOrgSources(): void {
         fetch: ({ orgId }) =>
           prisma.creditEntry.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
+      {
+        model: 'ReviewCodeRedemption',
+        section: 'codeRedemptions',
+        disposition: 'export',
+        description:
+          'Free review codes redeemed into the workspace: when, by whom, and the credits each gave.',
+        fetch: ({ orgId }) =>
+          prisma.reviewCodeRedemption.findMany({
+            where: ownedBy(orgId),
+            orderBy: { createdAt: 'asc' },
+          }),
+      },
     ],
     excluded: [
       {

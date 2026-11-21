@@ -496,19 +496,18 @@ enum CreditEntryKind {
 
 /// A free review code: someone who redeems it gets `creditsPerRedemption`
 /// CopyCredits for their workspace (t-60), up to `maxRedemptions` times (1 for
-/// a personal code, N for a QR card). Design: .context/app/credits.md.
+/// a personal code, N for a QR card). Its redemptions are counted from
+/// `ReviewCodeRedemption`, never stored on the code. Design: .context/app/credits.md.
 /// Install-level shared config (`globalConfig`): no `orgId`, made by platform
 /// admins, redeemed into whichever workspace redeems it.
 model ReviewCode {
-  id                   String    @id @default(cuid())
+  id                   String                 @id @default(cuid())
   /// The code itself, canonical: upper case, no separators, from the
   /// unambiguous alphabet in `lib/app/credits/codes/generate.ts`. Stored, not
   /// hashed, so the admin page can show its link and QR again (t-59 decision).
-  code                 String    @unique
+  code                 String                 @unique
   creditsPerRedemption Int
   maxRedemptions       Int
-  /// How many times it has been redeemed (t-60 increments it).
-  redemptionCount      Int       @default(0)
   expiresAt            DateTime
   /// Which campaign, card run or representative it was made for.
   campaign             String
@@ -518,10 +517,51 @@ model ReviewCode {
   /// The issuing call's idempotency key, and the code's place in its batch,
   /// so a retried call mints its codes once. Null for a call without a key.
   idempotencyKey       String?
-  batchIndex           Int       @default(0)
-  createdAt            DateTime  @default(now())
+  batchIndex           Int                    @default(0)
+  createdAt            DateTime               @default(now())
+  /// How many times it has been redeemed is how many of these there are
+  /// (t-60): the code row itself is config, and redeeming never writes it.
+  redemptions          ReviewCodeRedemption[]
 
   @@unique([idempotencyKey, batchIndex])
   @@index([createdAt])
   @@map("app_review_code")
+}
+
+/// One redemption of a free review code (t-60): who redeemed it, into which
+/// workspace, for how many credits. The workspace's `REDEEM` credit entry
+/// references it as `redemption:<id>`. Design: .context/app/credits.md.
+///
+/// **The count of a code's redemptions is the count of these rows**, so the
+/// shared code row is never written by a customer. Each takes a `slot`, its
+/// place among the code's uses from 0, which is unique per code and below the
+/// code's `maxRedemptions` when written: distinct slots each below the
+/// maximum cannot number more than the maximum, however many redeem at once.
+///
+/// **Rows are never deleted**, so slots stay dense and a code's uses never
+/// come back: the workspace and the person are SET NULL on erasure, leaving
+/// the code, the slot, the credits and the time. A workspace erased after
+/// redeeming a personal code does not make that code redeemable again.
+model ReviewCodeRedemption {
+  id        String     @id @default(cuid())
+  codeId    String
+  /// RESTRICT: a code with redemptions is history, and nothing deletes codes.
+  code      ReviewCode @relation(fields: [codeId], references: [id], onDelete: Restrict)
+  /// Its place among the code's uses, from 0.
+  slot      Int
+  /// SET NULL, not CASCADE: the use outlives the workspace's erasure.
+  orgId     String?
+  org       Org?       @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  /// Who redeemed it. FK → user, ON DELETE SET NULL (hand-written, B11).
+  userId    String?
+  /// What it gave, as the code granted then.
+  credits   Int
+  createdAt DateTime   @default(now())
+
+  @@unique([codeId, slot])
+  /// One per person per code. Postgres treats NULLs as distinct, so an
+  /// erased person's row does not count against anyone.
+  @@unique([codeId, userId])
+  @@index([orgId, createdAt])
+  @@map("app_review_code_redemption")
 }

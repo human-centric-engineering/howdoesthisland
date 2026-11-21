@@ -105,6 +105,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A free review code the platform made for a campaign; `createdByUserId` is the admin who made it.',
       },
+      // t-60: a use of a code, credited to the workspace and on its ledger.
+      ReviewCodeRedemption: {
+        kind: 'not-personal',
+        because:
+          'A code redeemed into the workspace, as its `REDEEM` credit entry is; `userId` is the member who redeemed it.',
+      },
     },
   });
 }
