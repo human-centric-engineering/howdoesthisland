@@ -8,13 +8,13 @@ import { HOME_COPY } from '@/components/app/marketing/home-copy';
  * image of its own. Generated once at build: paper, the headline with its
  * turn in proof red, and the mark beside the wordmark.
  *
- * The card is set in Fraunces from static Bold and Bold
- * Italic files in `components/app/brand/fonts/` (OFL, licence beside them).
- * The site's Fraunces comes from `next/font`, which has no file this route
- * can read, and Satori renders neither a variable font nor a weight or
- * style it was not given, so the default face would show them regular and
- * upright. Giving `fonts` replaces the default face, so the slug line is in
- * Fraunces Bold too.
+ * The card is set in Fraunces Bold, with the turn in Spectral Bold Italic
+ * (the site's reading face, calmer than Fraunces' italic), right-aligned
+ * under the lead. Both are static files in `components/app/brand/fonts/`
+ * (OFL, licences beside them): the site's fonts come from `next/font`,
+ * which has no file this route can read, and Satori renders neither a
+ * variable font nor a weight or style it was not given. Giving `fonts`
+ * replaces the default face, so the slug line is in Fraunces Bold too.
  */
 
 export const alt = `HowDoesThisLand: ${HOME_COPY.h1Lead} ${HOME_COPY.h1Turn}`;
@@ -30,10 +30,10 @@ const RULE = '#d6d4cc';
 const FONTS = join(process.cwd(), 'components/app/brand/fonts');
 
 export default async function Image() {
-  const [mark, bold, boldItalic] = await Promise.all([
+  const [mark, bold, turn] = await Promise.all([
     readFile(join(process.cwd(), 'public/brand/mark-512.png')),
     readFile(join(FONTS, 'Fraunces-Bold.ttf')),
-    readFile(join(FONTS, 'Fraunces-BoldItalic.ttf')),
+    readFile(join(FONTS, 'Spectral-BoldItalic.ttf')),
   ]);
   const markSrc = `data:image/png;base64,${mark.toString('base64')}`;
 
@@ -66,7 +66,17 @@ export default async function Image() {
         }}
       >
         <span>{HOME_COPY.h1Lead}</span>
-        <span style={{ color: RED, fontStyle: 'italic' }}>{HOME_COPY.h1Turn}</span>
+        <span
+          style={{
+            color: RED,
+            fontFamily: 'Spectral',
+            fontStyle: 'italic',
+            alignSelf: 'flex-end',
+            marginTop: 18,
+          }}
+        >
+          {HOME_COPY.h1Turn}
+        </span>
       </div>
       <div
         style={{
@@ -87,7 +97,7 @@ export default async function Image() {
       ...size,
       fonts: [
         { name: 'Fraunces', data: bold, weight: 700, style: 'normal' },
-        { name: 'Fraunces', data: boldItalic, weight: 700, style: 'italic' },
+        { name: 'Spectral', data: turn, weight: 700, style: 'italic' },
       ],
     }
   );

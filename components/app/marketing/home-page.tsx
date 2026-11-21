@@ -85,7 +85,8 @@ export default async function HomePage() {
           <div>
             <p className="hd-slug">{C.slug}</p>
             <h1 className="mt-4 max-w-[13ch] text-5xl leading-[0.95] font-extrabold sm:text-6xl xl:text-7xl">
-              {C.h1Lead} <em className="font-normal text-(--hd-red) italic">{C.h1Turn}</em>
+              {C.h1Lead}{' '}
+              <em className="font-sans font-normal text-(--hd-red) italic">{C.h1Turn}</em>
             </h1>
             <p className="mt-6 max-w-[54ch] text-lg leading-relaxed text-(--hd-muted)">{C.sub}</p>
             <div className="mt-8">
@@ -100,7 +101,7 @@ export default async function HomePage() {
 
         {/* The problem */}
         <Band className="grid items-start gap-8 lg:grid-cols-2">
-          <p className="max-w-[22ch] font-serif text-3xl leading-[1.12] italic sm:text-4xl">
+          <p className="max-w-[22ch] font-sans text-3xl leading-[1.12] italic sm:text-4xl">
             {C.story}
           </p>
           <div className="max-w-[56ch] leading-relaxed text-(--hd-muted) lg:pt-3">
