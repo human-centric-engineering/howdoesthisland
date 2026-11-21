@@ -55,10 +55,16 @@ export const issueCodesSchema = z
     maxRedemptions: positive('how many times it can be used', MAX_REDEMPTIONS),
     expiresAt: z.iso
       .datetime({ offset: true, error: 'Choose when it expires' })
-      .refine((iso) => Date.parse(iso) > Date.now(), { message: 'Choose a time in the future' })
-      .refine((iso) => Date.parse(iso) <= Date.now() + MAX_EXPIRY_DAYS * DAY_MS, {
-        message: 'At most three years ahead',
-      }),
+      // Zod runs these even when the format check failed: a value that is not
+      // a time is left to that check's one message.
+      .refine((iso) => Number.isNaN(Date.parse(iso)) || Date.parse(iso) > Date.now(), {
+        message: 'Choose a time in the future',
+      })
+      .refine(
+        (iso) =>
+          Number.isNaN(Date.parse(iso)) || Date.parse(iso) <= Date.now() + MAX_EXPIRY_DAYS * DAY_MS,
+        { message: 'At most three years ahead' }
+      ),
     campaign: z
       .string()
       .trim()

@@ -193,8 +193,13 @@ to mint a code for a qualified lead later; that wiring is not built.
   passed is refused 400: give a code more life than the caller retries for.
   `(idempotencyKey, batchIndex)` is unique, so two calls racing with one key
   mint once: the loser reads back the winner's codes.
-- The admin form sends a key of its own, drawn again only after a mint
-  succeeds, so pressing again after a failed answer cannot mint twice.
+- **Keys are install-wide**, not per caller: a key another caller already
+  used answers with its codes, or 409. Send keys unique to the caller: the
+  form sends 128 random bits; an integration should prefix its own ids
+  (`conquest:lead-123`).
+- The admin form keeps a request's key until it is answered, so saving the
+  same form again after a failed answer cannot mint twice; a changed form is a
+  new request with a new key.
 - `GET /api/v1/admin/codes?q=` lists the newest 200, by campaign or code;
   `DELETE /api/v1/admin/codes/{id}` revokes.
 

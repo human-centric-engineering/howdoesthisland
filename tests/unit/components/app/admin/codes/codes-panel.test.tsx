@@ -23,7 +23,12 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
   apiClient: { post: vi.fn(), get: vi.fn(), delete: vi.fn() },
 }));
 
-import { CodesPanel, codeEndpoint, endOfDay } from '@/components/app/admin/codes/codes-panel';
+import {
+  CodesPanel,
+  codeEndpoint,
+  endOfDay,
+  newIdempotencyKey,
+} from '@/components/app/admin/codes/codes-panel';
 import { apiClient, APIClientError } from '@/lib/api/client';
 import {
   ADMIN_CODES_ENDPOINT,
@@ -196,6 +201,34 @@ describe('making codes', () => {
     expect(second?.idempotencyKey).not.toBe(first?.idempotencyKey);
   });
 
+  it('keeps the key when the form is put back as it was, so a retry cannot mint twice', async () => {
+    vi.mocked(apiClient.post)
+      .mockRejectedValueOnce(new APIClientError('Network error', 'NETWORK_ERROR', 0))
+      .mockResolvedValueOnce({ codes: [CARD], replayed: true });
+    const { user } = setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: 'Make codes' }));
+    await waitFor(() => expect(nav.refresh).toHaveBeenCalledTimes(1));
+
+    await user.clear(field('code-campaign'));
+    await user.type(field('code-campaign'), 'Spring stand card');
+    await user.click(screen.getByRole('button', { name: 'Make codes' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(2));
+
+    const [first, second] = postedBodies();
+    expect(second?.idempotencyKey).toBe(first?.idempotencyKey);
+  });
+
+  it('shows one message for a missing expiry, not every rule it breaks', async () => {
+    const { user } = setup();
+    await fillForm(user);
+    await user.clear(field('code-expiresAt'));
+    await user.click(screen.getByRole('button', { name: 'Make codes' }));
+    expect(await screen.findByText(/Choose when it expires/)).toBeInTheDocument();
+    expect(screen.queryByText(/Choose a time in the future/)).toBeNull();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
   it('offers expiry days from today to three years ahead', () => {
     setup();
     expect(field('code-expiresAt').getAttribute('min')).toBe('2026-11-21');
@@ -249,6 +282,14 @@ describe('revoking a code', () => {
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Keep it' })
     );
     expect(apiClient.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('newIdempotencyKey', () => {
+  it('is 128 random bits as hex, different each time', () => {
+    const a = newIdempotencyKey();
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(newIdempotencyKey()).not.toBe(a);
   });
 });
 

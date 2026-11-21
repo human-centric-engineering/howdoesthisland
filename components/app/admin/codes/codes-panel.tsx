@@ -7,10 +7,11 @@
  * Reads nothing itself: the page passes what `GET /api/v1/admin/codes`
  * answered, and a change refreshes the page so the list re-reads.
  *
- * **One mint per form, however often Save is pressed.** The form carries an
- * idempotency key, drawn afresh only once a mint succeeds, so a retry after
- * an answer that failed (the codes may have been made) answers with the same
- * codes rather than minting more.
+ * **One mint per request, however often Save is pressed.** A request is sent
+ * with an idempotency key, kept until it is answered, so pressing Save again
+ * on the same form after an answer that failed (the codes may have been made)
+ * answers with the same codes rather than minting more. A changed form is a
+ * new request, with a new key.
  */
 
 import { useState } from 'react';
@@ -80,6 +81,16 @@ export function endOfDay(date: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T23:59:59.999Z` : '';
 }
 
+/**
+ * A fresh idempotency key: 128 random bits as hex. `getRandomValues`, not
+ * `randomUUID`, which a browser offers only on a secure origin.
+ */
+export function newIdempotencyKey(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+    b.toString(16).padStart(2, '0')
+  ).join('');
+}
+
 const numberOrNaN = (value: string) => (value.trim() === '' ? Number.NaN : Number(value));
 
 function CreateForm({
@@ -99,16 +110,14 @@ function CreateForm({
   const [uses, setUses] = useState('1');
   const [expires, setExpires] = useState(defaultExpiry);
   const [campaign, setCampaign] = useState('');
-  const [key, setKey] = useState(() => crypto.randomUUID());
-  // A changed field is a different request: it gets a key of its own, or a
-  // mint whose answer was lost would refuse every later Save with 409.
-  const edit = (set: (value: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    set(e.target.value);
-    setKey(crypto.randomUUID());
-  };
+  // The last request sent without a known answer, and its key. The same
+  // request sent again reuses the key, so it cannot mint twice; a changed one
+  // gets a key of its own, or the server would refuse it as a replay (409).
+  const [pending, setPending] = useState<{ request: string; key: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const save = useSaveFailure({
-    fallback: 'The codes could not be made. Try again in a moment: a retry will not make more.',
+    fallback:
+      'The codes could not be made. Try again in a moment: saving the same form again will not make more.',
     fields: NO_SERVER_FIELDS,
   });
 
@@ -119,7 +128,6 @@ function CreateForm({
       maxRedemptions: numberOrNaN(uses),
       expiresAt: endOfDay(expires),
       campaign,
-      idempotencyKey: key,
     });
     if (
       save.block(
@@ -134,12 +142,17 @@ function CreateForm({
     ) {
       return;
     }
+    const request = JSON.stringify(parsed.data);
+    const key = pending?.request === request ? pending.key : newIdempotencyKey();
+    setPending({ request, key });
     setSaving(true);
     try {
       const result = issuedCodesSchema.parse(
-        await apiClient.post<unknown>(ADMIN_CODES_ENDPOINT, { body: parsed.data })
+        await apiClient.post<unknown>(ADMIN_CODES_ENDPOINT, {
+          body: { ...parsed.data, idempotencyKey: key },
+        })
       );
-      setKey(crypto.randomUUID());
+      setPending(null);
       onDone(result);
     } catch (err) {
       save.report(err);
@@ -180,7 +193,7 @@ function CreateForm({
             maxLength={MAX_CAMPAIGN}
             placeholder="e.g. Content Marketing World 2027"
             value={campaign}
-            onChange={edit(setCampaign)}
+            onChange={(e) => setCampaign(e.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -205,7 +218,7 @@ function CreateForm({
             min={1}
             step={1}
             value={credits}
-            onChange={edit(setCredits)}
+            onChange={(e) => setCredits(e.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -230,7 +243,7 @@ function CreateForm({
             min={1}
             step={1}
             value={uses}
-            onChange={edit(setUses)}
+            onChange={(e) => setUses(e.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -253,7 +266,7 @@ function CreateForm({
             max={MAX_BATCH}
             step={1}
             value={howMany}
-            onChange={edit(setHowMany)}
+            onChange={(e) => setHowMany(e.target.value)}
           />
         </div>
         <div className="space-y-2">
@@ -276,7 +289,7 @@ function CreateForm({
             min={minExpiry}
             max={maxExpiry}
             value={expires}
-            onChange={edit(setExpires)}
+            onChange={(e) => setExpires(e.target.value)}
           />
         </div>
       </div>
