@@ -38,7 +38,10 @@ export const metadata: Metadata = {
  *
  * A failed email verification comes back here (the sign-up form passes this
  * page as better-auth's `callbackURL`), with better-auth's `?error=`; the
- * signed-out panel then says the link did not work and how to get a new one.
+ * panel then says the link did not work: signed out, how to get a new one;
+ * signed in (as someone else, which is one way it fails), that the account
+ * it was for is not verified, before offering to redeem as the person signed
+ * in.
  *
  * Page loads count against the per-IP code tier (`lib/app/rate-limit.ts`).
  */
@@ -65,7 +68,7 @@ export default async function RedeemPage({
     } else if (!session) {
       body = <RedeemSignedOut check={check} verificationFailed={verificationFailed} />;
     } else {
-      body = <RedeemSignedIn check={check} />;
+      body = <RedeemSignedIn check={check} verificationFailed={verificationFailed} />;
     }
   }
 

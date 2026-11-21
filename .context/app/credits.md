@@ -221,9 +221,14 @@ it (decided in t-60). One source of truth, as the ledger is for the balance.
   code's row count, only while that is below `maxRedemptions`.
   `(codeId, slot)` is unique, so of redemptions racing for one slot one
   inserts and the rest fail on the index; each tries again in a new
-  transaction (up to `REDEEM_ATTEMPTS`, 20), and takes the next slot or finds
+  transaction, and takes the next slot or finds
   the code used up. Distinct slots each below the maximum cannot number more
-  than it. Every try lost answers 503 `CODE_BUSY`, nothing written.
+  than it.
+- **No one turned away while uses are left.** A try loses its slot only when
+  another redemption commits, so a redeemer loses at most `maxRedemptions`
+  times before finding the code used up. The retries are bounded by that, not
+  by a fixed count a crowd at an event could exhaust (t-60 review; an earlier
+  cap of 20 and its 503 `CODE_BUSY` were dropped).
 - **Once per person per code.** `(codeId, userId)` is unique.
 - **Credited where it is counted.** The redemption and its `REDEEM` entry
   (`redemption:<id>`) are one transaction, with the balance read in it.
@@ -239,10 +244,10 @@ it (decided in t-60). One source of truth, as the ledger is for the balance.
 **The routes.** Both take the code in the body, as typed, so it is never in a
 logged URL.
 
-| Route                       | Who                                         | Answers                                                                                                                                                               |
-| --------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/codes/check`  | anyone                                      | `status`: `active` (credits, expiry), `expired`, `used-up`, `revoked`, or `unknown`                                                                                   |
-| `POST /api/v1/codes/redeem` | a session, or a key with the `assess` scope | the credits, the balance after, the workspace; 404 `CODE_UNKNOWN`, 410 `CODE_EXPIRED` / `CODE_USED_UP` / `CODE_REVOKED`, 409 `CODE_ALREADY_REDEEMED`, 503 `CODE_BUSY` |
+| Route                       | Who                                         | Answers                                                                                                                                              |
+| --------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/codes/check`  | anyone                                      | `status`: `active` (credits, expiry), `expired`, `used-up`, `revoked`, or `unknown`                                                                  |
+| `POST /api/v1/codes/redeem` | a session, or a key with the `assess` scope | the credits, the balance after, the workspace; 404 `CODE_UNKNOWN`, 410 `CODE_EXPIRED` / `CODE_USED_UP` / `CODE_REVOKED`, 409 `CODE_ALREADY_REDEEMED` |
 
 **What a refusal says.** A real code says which of expired, used up or
 revoked it is: knowing a real code cannot be used is worth nothing to someone

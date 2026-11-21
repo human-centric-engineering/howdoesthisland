@@ -25,8 +25,9 @@
  * - 409 `CODE_ALREADY_REDEEMED` — this person has redeemed this code.
  * - 410 `CODE_EXPIRED`, `CODE_USED_UP`, `CODE_REVOKED`.
  * - 429 `RATE_LIMIT_EXCEEDED` — over either cap.
- * - 503 `CODE_BUSY` — every try lost its place to others redeeming the same
- *   code that instant; nothing was written. Try again.
+ *
+ * Many redeeming one code at once never turns one away while uses are left:
+ * a place lost to another redemption is tried again (`redeemCode`).
  */
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth/guards';

@@ -16,6 +16,13 @@
  * each below the maximum cannot number more than it. Slots stay dense because
  * no redemption row is ever deleted (its workspace and person are SET NULL).
  *
+ * **No one is turned away while uses are left.** A try loses its slot only
+ * when another redemption of the code commits, so a redeemer can lose at most
+ * `maxRedemptions` times before the next try finds the code used up. The
+ * retries are bounded by that, not by a fixed number that a crowd redeeming a
+ * QR card together could exhaust (t-60 review). Losing more would mean the
+ * slots are not what this says, and fails loudly.
+ *
  * **One per person per code.** `(codeId, userId)` is unique, so a second
  * redemption by the same person fails on that index whatever the timing, and
  * rolls its transaction back with nothing written.
@@ -50,13 +57,6 @@ export const REDEMPTION_UNIQUE = {
     fields: ['codeId', 'userId'],
   },
 } as const satisfies Record<string, UniqueConstraint>;
-
-/**
- * Tries at a slot another redemption took first. Each lost try means another
- * redemption of the same code succeeded meanwhile, so this many is reached
- * only by that many people redeeming one code in the same instant.
- */
-export const REDEEM_ATTEMPTS = 20;
 
 /** The reference a redemption's credit entry carries. */
 export function redemptionReference(redemptionId: string): string {
@@ -127,11 +127,19 @@ function alreadyRedeemed(): APIError {
   return new APIError('You have already redeemed this code.', REDEEM_REFUSALS.alreadyRedeemed, 409);
 }
 
+/** A try that lost its slot to another redemption, with the code's maximum. */
+interface SlotTaken {
+  slotTaken: true;
+  maxRedemptions: number;
+}
+
 /** One try at the next slot, in its own transaction. */
 async function redeemOnce(
   canonical: string,
   who: Redeemer
-): Promise<Omit<Redemption, 'code'> | 'slot-taken'> {
+): Promise<Omit<Redemption, 'code'> | SlotTaken> {
+  // Read in the transaction, kept for the answer when its insert loses the slot.
+  let maxRedemptions = 0;
   try {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const row = await tx.reviewCode.findUnique({
@@ -146,6 +154,7 @@ async function redeemOnce(
         where: { codeId: row.id, userId: who.userId },
       });
       if (mine > 0) throw alreadyRedeemed();
+      maxRedemptions = row.maxRedemptions;
       const used = row._count.redemptions;
       const status = codeStatus(row, used);
       if (status !== 'active') throw new CodeRefusedError(status);
@@ -186,7 +195,8 @@ async function redeemOnce(
     });
   } catch (err) {
     if (isUniqueViolationOn(err, REDEMPTION_UNIQUE.person)) throw alreadyRedeemed();
-    if (isUniqueViolationOn(err, REDEMPTION_UNIQUE.slot)) return 'slot-taken';
+    if (isUniqueViolationOn(err, REDEMPTION_UNIQUE.slot))
+      return { slotTaken: true, maxRedemptions };
     throw err;
   }
 }
@@ -194,21 +204,24 @@ async function redeemOnce(
 /**
  * Redeem `typed` into `who.orgId`, crediting the workspace with what the code
  * gives. Throws {@link CodeRefusedError} for a code not found or no longer
- * good, 409 `CODE_ALREADY_REDEEMED` for a second redemption by the same
- * person, and 503 `CODE_BUSY` in the unlikely case every try lost its slot.
+ * good, and 409 `CODE_ALREADY_REDEEMED` for a second redemption by the same
+ * person. A slot lost to another redemption is tried again until the code is
+ * redeemed or used up.
  */
 export async function redeemCode(typed: string, who: Redeemer): Promise<Redemption> {
   const canonical = normaliseCode(typed);
   if (!canonical) throw new CodeRefusedError('unknown');
   return runAsSystem('app.codes: redeem', async () => {
-    for (let attempt = 1; attempt <= REDEEM_ATTEMPTS; attempt++) {
+    for (let lost = 0; ; lost++) {
       const result = await redeemOnce(canonical, who);
-      if (result !== 'slot-taken') return { ...result, code: formatCode(canonical) };
+      if (!('slotTaken' in result)) return { ...result, code: formatCode(canonical) };
+      // Each loss is another redemption committed, so after `maxRedemptions`
+      // of them the next try must find the code used up.
+      if (lost >= result.maxRedemptions) {
+        throw new Error(
+          `Redeeming ${formatCode(canonical)} lost its slot ${lost + 1} times, more than its ${result.maxRedemptions} uses`
+        );
+      }
     }
-    throw new APIError(
-      'Many people are redeeming this code at once. Try again in a moment.',
-      REDEEM_REFUSALS.busy,
-      503
-    );
   });
 }

@@ -8,14 +8,15 @@
  * at a time: that the unique `(codeId, slot)` index lets no more than a
  * code's `maxRedemptions` of many redemptions started together through, the
  * rest told the code is used up; that `(codeId, userId)` lets one person
- * through once however many times they press at once; and that a code's uses
- * do not come back when the workspace or the person is erased. Under
- * `TENANCY_MODE=multi`, as the restricted app role.
+ * through once however many times they press at once; that a crowd larger
+ * than any fixed retry count all get through while uses are left; and that a
+ * code's uses do not come back when the workspace or the person is erased.
+ * Under `TENANCY_MODE=multi`, as the restricted app role.
  *
  * In a fresh workspace with fresh people: a code good for 3 redemptions,
- * redeemed by 8 people at once; a second code redeemed by one person 6 times
- * at once. Then the people and the workspace are erased and the rows are
- * checked again. Self-cleaning: the codes and their rows are deleted in
+ * redeemed by 24 people at once; a second code redeemed by one person 6 times
+ * at once; a third, good for 30, redeemed by all 24 at once. Then the people
+ * and the workspace are erased and the rows are checked again. Self-cleaning: the codes and their rows are deleted in
  * `finally` (nothing else ever deletes them).
  *
  * Exit 0 passed, 1 a check failed.
@@ -29,7 +30,8 @@ import { eraseOrg } from '@/lib/privacy/erase-org';
 import { requestUserErasure } from '@/lib/privacy/erasure-requests';
 import { isMultiTenant, runAsOrg, runAsSystem } from '@/lib/tenancy/context';
 
-const PEOPLE = 8;
+const PEOPLE = 24;
+const CROWD_LIMIT = 30;
 const LIMIT = 3;
 const PRESSES = 6;
 const CREDITS = 40;
@@ -86,8 +88,9 @@ async function main(): Promise<number> {
       ).then((r) => r.codes[0]);
     const card = await issue(LIMIT);
     const personal = await issue(PRESSES);
-    if (!card || !personal) throw new Error('could not mint the smoke codes');
-    codeIds.push(card.id, personal.id);
+    const crowdCard = await issue(CROWD_LIMIT);
+    if (!card || !personal || !crowdCard) throw new Error('could not mint the smoke codes');
+    codeIds.push(card.id, personal.id, crowdCard.id);
 
     // Redeemed as the guard would call it: inside the workspace's scope.
     const asOrg = <T>(fn: () => Promise<T>) => runAsOrg(org.id, fn);
@@ -112,6 +115,16 @@ async function main(): Promise<number> {
       `one person pressing ${PRESSES} times at once redeemed once (${tally(presses)})`
     );
 
+    // More people than any fixed retry count, on a code with uses for all.
+    const crowd = await outcomes(
+      userIds.map((userId) => asOrg(() => redeemCode(crowdCard.code, { orgId: org.id, userId })))
+    );
+    check(
+      crowd.every((r) => r === 'ok'),
+      `${PEOPLE} people redeeming a ${CROWD_LIMIT}-use code at once all got it (${tally(crowd)})`
+    );
+    const total = LIMIT + 1 + PEOPLE;
+
     await system(async () => {
       const rows = await prisma.reviewCodeRedemption.findMany({
         where: { codeId: card.id },
@@ -130,13 +143,20 @@ async function main(): Promise<number> {
         await prisma.reviewCodeRedemption.findMany({ where: { codeId: { in: codeIds } } })
       ).every((r) => references.has(`redemption:${r.id}`));
       check(
-        entries.length === LIMIT + 1 && entries.every((e) => e.amount === CREDITS) && allReferenced,
+        entries.length === total && entries.every((e) => e.amount === CREDITS) && allReferenced,
         `the ledger holds one REDEEM entry of ${CREDITS} per redemption, each referencing it (${entries.length})`
       );
       const balance = await getCreditBalance(org.id);
+      check(balance === CREDITS * total, `the balance is ${CREDITS * total} (${balance})`);
+      const crowdSlots = (
+        await prisma.reviewCodeRedemption.findMany({
+          where: { codeId: crowdCard.id },
+          orderBy: { slot: 'asc' },
+        })
+      ).map((r) => r.slot);
       check(
-        balance === CREDITS * (LIMIT + 1),
-        `the balance is ${CREDITS * (LIMIT + 1)} (${balance})`
+        JSON.stringify(crowdSlots) === JSON.stringify(Array.from({ length: PEOPLE }, (_, i) => i)),
+        `the crowd took slots 0 to ${PEOPLE - 1}, one each`
       );
     });
 
@@ -151,8 +171,8 @@ async function main(): Promise<number> {
         where: { codeId: { in: codeIds } },
       });
       check(
-        left.length === LIMIT + 1 && left.every((r) => r.orgId === null),
-        `after the workspace is erased its ${LIMIT + 1} redemptions remain, with no workspace (${left.length})`
+        left.length === total && left.every((r) => r.orgId === null),
+        `after the workspace is erased its ${total} redemptions remain, with no workspace (${left.length})`
       );
       check(
         left.filter((r) => r.userId !== null).every((r) => r.userId === userIds[0]),

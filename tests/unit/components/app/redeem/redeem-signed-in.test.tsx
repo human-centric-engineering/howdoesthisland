@@ -36,6 +36,19 @@ const CHECK = {
 beforeEach(() => vi.clearAllMocks());
 
 describe('RedeemSignedIn', () => {
+  it('says a verification link failed, and whose workspace a redemption goes to, when told', () => {
+    render(<RedeemSignedIn check={CHECK} verificationFailed />);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'A verification link opened here didn’t go through'
+    );
+    expect(screen.getByRole('button', { name: /to my workspace/ })).toBeEnabled();
+  });
+
+  it('says nothing about verification by default', () => {
+    render(<RedeemSignedIn check={CHECK} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('replaces the offer with what was added once redeemed', async () => {
     vi.mocked(apiClient.post).mockResolvedValue(REDEMPTION);
     render(<RedeemSignedIn check={CHECK} />);

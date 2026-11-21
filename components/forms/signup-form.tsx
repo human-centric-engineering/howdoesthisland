@@ -17,7 +17,7 @@ import { PasswordStrength } from '@/components/forms/password-strength';
 import { OAuthButtons } from '@/components/forms/oauth-buttons';
 import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
-import { safeCallbackUrl } from '@/lib/security/sanitize';
+import { normalizeRootRelativePath } from '@/lib/security/sanitize';
 
 /**
  * Signup Form Component
@@ -44,12 +44,14 @@ export function SignupForm() {
 
   // FORK (HowDoesThisLand, t-60): a `callbackUrl` is where the new account
   // goes, as the login form's does: after sign-up, after OAuth, and from the
-  // verification email. Without one, nothing changes: the landing route, and
-  // no `callbackURL`, so the email keeps the platform's verification page.
-  // Ledger: .context/app/platform-divergences.md row 22.
+  // verification email. Without one, or with one that is not a same-origin
+  // path, nothing changes: the landing route, and no `callbackURL`, so the
+  // email keeps the platform's verification page. Checked as safeCallbackUrl
+  // checks it. Ledger: .context/app/platform-divergences.md row 22.
   const callbackParam = searchParams.get('callbackUrl');
-  const callbackUrl = safeCallbackUrl(callbackParam, AUTH_LANDING_ROUTE);
-  const verificationCallback = callbackParam ? { callbackURL: callbackUrl } : {};
+  const acceptedCallback = callbackParam ? normalizeRootRelativePath(callbackParam.trim()) : null;
+  const callbackUrl = acceptedCallback ?? AUTH_LANDING_ROUTE;
+  const verificationCallback = acceptedCallback ? { callbackURL: acceptedCallback } : {};
 
   const [isLoading, setIsLoading] = useState(false);
   const {

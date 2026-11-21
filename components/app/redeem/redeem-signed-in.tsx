@@ -26,7 +26,18 @@ import {
  * they are adding before they add it, and a link opened by anything else
  * redeems nothing.
  */
-export function RedeemSignedIn({ check }: { check: Extract<CodeCheck, { status: 'active' }> }) {
+export function RedeemSignedIn({
+  check,
+  verificationFailed = false,
+}: {
+  check: Extract<CodeCheck, { status: 'active' }>;
+  /**
+   * A verification email's link came back here with better-auth's `?error=`
+   * while someone is signed in: the account it was for is not verified, and
+   * the press would redeem as whoever is signed in.
+   */
+  verificationFailed?: boolean;
+}) {
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState<Redemption | null>(null);
   const save = useSaveFailure({ fallback: 'That did not work. Try again in a moment.' });
@@ -60,6 +71,13 @@ export function RedeemSignedIn({ check }: { check: Extract<CodeCheck, { status: 
 
   return (
     <RedeemPanel slug="Free review code" title="Redeem your code">
+      {verificationFailed && (
+        <p role="alert" className="text-(--hd-ink)">
+          A verification link opened here didn’t go through, so the account it was for isn’t
+          verified. If it was for another account, sign out and open the link again. Redeeming below
+          adds the credits to the account you’re signed in as.
+        </p>
+      )}
       <CodeGives check={check} />
       <div className="space-y-3">
         <Button type="button" onClick={() => void redeem()} disabled={pending}>

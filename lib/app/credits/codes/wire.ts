@@ -206,5 +206,4 @@ export const REDEEM_REFUSALS = {
   'used-up': 'CODE_USED_UP',
   revoked: 'CODE_REVOKED',
   alreadyRedeemed: 'CODE_ALREADY_REDEEMED',
-  busy: 'CODE_BUSY',
 } as const;

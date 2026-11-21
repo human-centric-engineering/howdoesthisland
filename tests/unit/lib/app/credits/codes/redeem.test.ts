@@ -8,8 +8,9 @@
  * it and answers with the balance; it never writes the shared code row; it
  * refuses a code that is not active, a person who has redeemed it already
  * (seen first, or lost on the index), and a workspace that is not active; a
- * slot lost to another redemption is tried again in a new transaction, and
- * after {@link REDEEM_ATTEMPTS} it gives up as `CODE_BUSY`.
+ * slot lost to another redemption is tried again in a new transaction, for
+ * as many as the code has uses (a crowd is never turned away while uses are
+ * left), and losing more than that fails loudly.
  *
  * That the indexes really hold under concurrent transactions is the smoke
  * script's to show, against the database: `npm run smoke:redeem-codes`.
@@ -39,7 +40,6 @@ import { APIError, NotFoundError } from '@/lib/api/errors';
 import {
   checkCode,
   CodeRefusedError,
-  REDEEM_ATTEMPTS,
   redeemCode,
   REDEMPTION_UNIQUE,
   redemptionReference,
@@ -268,14 +268,37 @@ describe('redeemCode', () => {
     expect(db.reviewCodeRedemption.create).toHaveBeenCalledTimes(1);
   });
 
-  it(`gives up as CODE_BUSY after ${REDEEM_ATTEMPTS} lost slots`, async () => {
+  it('keeps trying through a crowd while uses are left, however many it loses to', async () => {
+    // A 100-use card: 30 others commit first, one at a time.
+    let used = 0;
+    db.reviewCode.findUnique.mockImplementation(async () => code({ maxRedemptions: 100 }, used));
+    db.reviewCodeRedemption.create.mockImplementation(async ({ data }: { data: object }) => {
+      if (used < 30) {
+        used++;
+        throw uniqueViolation(REDEMPTION_UNIQUE.slot.index);
+      }
+      return { id: 'redemption-1', ...data };
+    });
+
+    const result = await redeemCode('ABCDEFGHJKMN', WHO);
+
+    expect(result.credits).toBe(500);
+    expect(db.$transaction).toHaveBeenCalledTimes(31);
+    expect(db.reviewCodeRedemption.create.mock.calls.at(-1)?.[0].data.slot).toBe(30);
+  });
+
+  it('fails loudly if it loses more slots than the code has uses', async () => {
+    // Impossible while slots are dense: each loss is a commit, so the code
+    // would be found used up first.
+    db.reviewCode.findUnique.mockResolvedValue(code({ maxRedemptions: 3 }, 0));
     db.reviewCodeRedemption.create.mockRejectedValue(uniqueViolation(REDEMPTION_UNIQUE.slot.index));
 
     const err = await redeemCode('ABCDEFGHJKMN', WHO).catch((e: unknown) => e);
 
-    expect(err).toBeInstanceOf(APIError);
-    expect(err).toMatchObject({ status: 503, code: 'CODE_BUSY' });
-    expect(db.$transaction).toHaveBeenCalledTimes(REDEEM_ATTEMPTS);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(APIError);
+    expect(String(err)).toContain('more than its 3 uses');
+    expect(db.$transaction).toHaveBeenCalledTimes(4);
   });
 
   it('lets any other failure through untried again', async () => {

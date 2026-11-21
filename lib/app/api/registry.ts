@@ -881,12 +881,6 @@ export const APP_ROUTES: readonly RouteContract[] = [
         description: 'The code has been redeemed as many times as it allows.',
       },
       { status: 410, code: 'CODE_REVOKED', description: 'The code has been withdrawn.' },
-      {
-        status: 503,
-        code: 'CODE_BUSY',
-        description:
-          'Many people redeemed this code in the same instant and every try lost its place. Nothing was written: try again.',
-      },
     ],
     response: { status: 200, data: redemptionSchema },
   },

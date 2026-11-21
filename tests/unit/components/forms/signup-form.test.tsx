@@ -855,13 +855,16 @@ describe('components/forms/signup-form', () => {
       await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(AUTH_LANDING_ROUTE));
     });
 
-    it('falls back to the landing route for an unsafe callbackUrl', async () => {
+    it('treats an unsafe callbackUrl as none: the landing route, and no callbackURL', async () => {
       await useCallbackParam('//evil.com');
 
-      await signUpWithSession();
+      const authClient = await signUpWithSession();
 
       await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(AUTH_LANDING_ROUTE));
       expect(mockRouter.push).not.toHaveBeenCalledWith('//evil.com');
+      // No callbackURL, so the verification email keeps the platform's page.
+      const [data] = vi.mocked(authClient.signUp.email).mock.calls[0] ?? [];
+      expect(data).not.toHaveProperty('callbackURL');
     });
   });
 });
