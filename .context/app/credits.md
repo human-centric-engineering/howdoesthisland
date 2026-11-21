@@ -106,15 +106,18 @@ rounded up to a whole credit. One that spent nothing writes no entry.
   spent, or in the balance. A cancelled review whose run died is held back
   for what it spent until the recovery job charges it, and the purge leaves
   it until then. A `store: false` run whose charge failed keeps its hold for
-  two hours, past the recovery job's charge. The balance is read after what
+  an hour and twenty minutes, past the recovery job's charge. The balance is read after what
   is in flight, so a review charged between the two is counted twice, never
   not at all.
-- **Only since charging began.** The recovery job, and a delete of a
-  cancelled review, charge only what was made since the workspace's first
-  credit entry, and within `CHARGE_SWEEP_MS` (a day and an hour). A review
-  starts only on a positive balance, so every review since charging began
-  was made after that entry; one made before it ran before reviews were
-  charged.
+- **Only since charging began.** No review made before its workspace's
+  first credit entry is charged (`chargeStoredReview`): a review starts only
+  on a positive balance, so every review since charging began was made after
+  that entry, and one made before it, still in flight at the deploy, ran
+  before reviews were charged. The recovery job, the check's hold and a
+  delete also leave a cancelled review alone once it was cancelled more than
+  `CHARGE_SWEEP_MS` (a day and an hour) ago. A charge the recovery job
+  cannot make is logged and tried again next tick; the rest of its pass goes
+  on.
 - **Not yet charged, on delete:** `QUEUED` or `RUNNING`, or `CANCELLED` with
   its lease still set (since charging began). A final review is not charged by
   its delete: it was charged as it ended, or ended before reviews were charged.
@@ -133,7 +136,8 @@ A review that passed the check costs what it costs: it is never cut short
 for credits, and is charged in full as it ends, so the balance can go below
 zero. The bound: by at most what the reviews in flight cost beyond their
 estimates, since each started only with a positive remainder covering its
-estimate. At most `RUNNING_PER_WORKSPACE` (3) run at once, and the monthly cap
+estimate, and by up to a credit for each of them, since the check compares
+dollars and each review's charge is rounded up to a whole credit. At most `RUNNING_PER_WORKSPACE` (3) run at once, and the monthly cap
 bounds what they spend. With no history the estimate is `0`, so a workspace's
 first review starts on any positive balance and can take it below zero by up
 to that review's cost. Below zero, every review is refused until an admin

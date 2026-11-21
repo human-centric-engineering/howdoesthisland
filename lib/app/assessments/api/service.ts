@@ -50,7 +50,7 @@ import {
   type BudgetHold,
   type ReviewRate,
 } from '@/lib/app/usage/budget';
-import { chargeEphemeralRun, chargeStoredReview, chargeSweepFloor } from '@/lib/app/credits/charge';
+import { chargeEphemeralRun, chargeStoredReview, uncharged } from '@/lib/app/credits/charge';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -320,11 +320,12 @@ async function createEphemeral(
 }
 
 /**
- * How long a `store: false` run's hold is kept when its charge failed: past
- * the hour its rows must be quiet before the recovery job charges it
- * (`chargeLapsedEphemeralRuns`), and the job's next tick.
+ * How long a `store: false` run's hold is kept when its charge failed: the
+ * hour its rows must be quiet before the recovery job charges it
+ * (`chargeLapsedEphemeralRuns`), and the job's next 15-minute tick, so it is
+ * counted twice for minutes at most, never not at all.
  */
-const UNCHARGED_HOLD_MS = 2 * CANCEL_GRACE_MS;
+const UNCHARGED_HOLD_MS = CANCEL_GRACE_MS + 20 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -480,16 +481,27 @@ export async function cancel(id: string): Promise<AssessmentDetail> {
 async function chargeableOnDelete(
   tx: Pick<Prisma.TransactionClient, 'creditEntry'>,
   orgId: string,
-  row: { status: AssessmentStatus; createdAt: Date; leaseExpiresAt: Date | null },
+  row: {
+    status: AssessmentStatus;
+    createdAt: Date;
+    completedAt: Date | null;
+    leaseExpiresAt: Date | null;
+  },
   now: Date
 ): Promise<boolean> {
+  // Open: charged unless it predates charging (`chargeStoredReview` checks).
   if (row.status === 'QUEUED' || row.status === 'RUNNING') return true;
   // A cancel that ended it charged it then, and cleared the lease (`run.ts`).
-  // One with its lease set is the recovery job's to charge, unless it was
-  // created before charging began (`chargeSweepFloor`).
+  // One with its lease set is the recovery job's to charge, unless it is from
+  // before charging began (`uncharged`).
   if (row.status !== 'CANCELLED' || row.leaseExpiresAt === null) return false;
-  const floor = await chargeSweepFloor(orgId, now, tx);
-  return floor !== null && row.createdAt >= floor;
+  const since = await uncharged(orgId, now, tx);
+  return (
+    since !== null &&
+    row.createdAt >= since.createdAt.gte &&
+    row.completedAt !== null &&
+    row.completedAt > since.completedAt.gt
+  );
 }
 
 /**
@@ -520,6 +532,7 @@ export async function remove(id: string): Promise<{ deleted: true }> {
         contentId: true,
         createdAt: true,
         status: true,
+        completedAt: true,
         leaseExpiresAt: true,
       },
     });

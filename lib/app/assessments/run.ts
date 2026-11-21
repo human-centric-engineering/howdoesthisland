@@ -197,7 +197,12 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     outcome = await stoppedOnError(assessmentId, token).catch(() => 'lease_lost' as const);
   }
   lease.release();
-  if (outcome === 'cancelled') await freePlace(assessmentId, token).catch(() => undefined);
+  if (outcome === 'cancelled') {
+    // Failed, the lease stays set, and the recovery job charges it once lapsed.
+    await freePlace(assessmentId, token).catch((err: unknown) =>
+      logger.error('Could not free a cancelled run’s place, or charge it', err, { assessmentId })
+    );
+  }
   startNextQueued(orgId, assessmentId);
   return outcome;
 }

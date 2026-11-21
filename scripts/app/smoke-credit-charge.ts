@@ -21,7 +21,7 @@
  */
 import type { Prisma } from '@prisma/client';
 import { chargeEphemeralRun, chargeStoredReview } from '@/lib/app/credits/charge';
-import { getCreditBalance } from '@/lib/app/credits/ledger';
+import { getCreditBalance, recordCreditEntry } from '@/lib/app/credits/ledger';
 import { createWorkspaceOrg } from '@/lib/app/workspaces/provision';
 import { prisma } from '@/lib/db/client';
 import { eraseOrg } from '@/lib/privacy/erase-org';
@@ -63,15 +63,19 @@ async function main(): Promise<number> {
   );
   const assessmentId = `smoke-assessment-${stamp}`;
   const runId = `smoke-run-${stamp}`;
-  const since = new Date(Date.now() - 1_000);
   try {
     await runAsOrg(org.id, async () => {
+      // A review made before the workspace's first entry predates charging: not charged.
+      const before = new Date(Date.now() - 1_000);
+      await recordCreditEntry({ orgId: org.id, amount: 5, kind: 'GRANT', reason: 'smoke' });
+      const since = new Date();
       // $0.0246 for the stored review (3 credits), $0.0301 for the run (4 credits).
       await prisma.aiCostLog.createMany({
         data: [
           costRow(org.id, 0.0123, { assessmentId, judge: 'judge_a' }),
           costRow(org.id, 0.0123, { assessmentId, judge: 'judge_b' }),
           costRow(org.id, 0.0301, { ephemeral: true, ephemeralRun: runId, judge: 'judge_a' }),
+          costRow(org.id, 0.05, { assessmentId: `${assessmentId}-early`, judge: 'judge_a' }),
         ],
       });
 
@@ -98,7 +102,7 @@ async function main(): Promise<number> {
       );
 
       const entries = await prisma.creditEntry.findMany({
-        where: { orgId: org.id },
+        where: { orgId: org.id, kind: 'CHARGE' },
         select: { amount: true, kind: true, reference: true },
         orderBy: { amount: 'asc' },
       });
@@ -111,11 +115,14 @@ async function main(): Promise<number> {
         `the ledger holds one charge each: ${JSON.stringify(entries)}`
       );
       const balance = await getCreditBalance(org.id);
-      check(balance === -7, `the balance is -7, below zero by the charges (${balance})`);
+      check(balance === -2, `the balance is -2: 5 granted, below zero by the charges (${balance})`);
 
       // A recovery after the run already charged: nothing more.
       const again = await chargeStoredReview(prisma, org.id, assessmentId, since);
       check(again.credits === 0, 'charging the review again later takes nothing');
+
+      const early = await chargeStoredReview(prisma, org.id, `${assessmentId}-early`, before);
+      check(early.credits === 0, 'a review made before the first credit entry is not charged');
     });
   } finally {
     await system(async () => {

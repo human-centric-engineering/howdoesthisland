@@ -182,7 +182,7 @@ import { isTimeoutError } from '@/lib/privacy/erasure-deadline';
 import { logger } from '@/lib/logging';
 import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
 import { getCreditBalance } from '@/lib/app/credits/ledger';
-import { chargeSweepFloor } from '@/lib/app/credits/charge';
+import { uncharged } from '@/lib/app/credits/charge';
 import { creditsForUsd, usdForCredits, wholeCreditsIn } from '@/lib/app/credits/rate';
 import {
   USAGE_PAGE,
@@ -420,7 +420,7 @@ async function inFlightCost(
     select: { judges: true, stored: true },
   });
   const held = holds.reduce((sum, h) => sum + heldCost(rate, h.judges, h.stored), 0);
-  const floor = await chargeSweepFloor(orgId, now, db);
+  const since = await uncharged(orgId, now, db);
   const open = await db.assessment.findMany({
     where: {
       orgId,
@@ -442,15 +442,9 @@ async function inFlightCost(
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
         // Its run died with its lease set: spent, and not charged until the
         // recovery job clears the lease (`recover.ts`). Those it leaves
-        // alone, from before charging began (`chargeSweepFloor`), are not.
-        ...(floor
-          ? [
-              {
-                status: 'CANCELLED' as const,
-                leaseExpiresAt: { not: null, lte: now },
-                createdAt: { gte: floor },
-              },
-            ]
+        // alone, from before charging began (`uncharged`), are not.
+        ...(since
+          ? [{ status: 'CANCELLED' as const, leaseExpiresAt: { not: null, lte: now }, ...since }]
           : []),
       ],
     },

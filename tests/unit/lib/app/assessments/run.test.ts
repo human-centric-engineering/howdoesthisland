@@ -1612,6 +1612,59 @@ describe('the charge in CopyCredits (t-58)', () => {
     ]);
   });
 
+  it('does not charge a review that was in flight when charging began, as it ends', async () => {
+    billing(0.0123);
+    // Made before the workspace's first entry: started on no balance, before the deploy.
+    const a = fake.seed({ judges: ['judge_a'], createdAt: new Date(Date.now() - 60_000) });
+    fake.credits.length = 0;
+    fake.grant(ORG, 100, new Date());
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+    expect(charges()).toEqual([]);
+  });
+
+  it('the recovery job charges a lapsed cancel by when it was cancelled, not when it was made', async () => {
+    // Waited and ran more than a day, then was cancelled with its run dead.
+    const a = fake.seed({
+      status: 'CANCELLED',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      completedAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: a.id }, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000));
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedCancelled: 1 });
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -2 })]);
+  });
+
+  it('the recovery job goes on past a charge that fails, re-driving the queue', async () => {
+    const stuck = fake.seed({
+      status: 'CANCELLED',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      completedAt: new Date(Date.now() - 60_000),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: stuck.id });
+    const queued = fake.seed({ status: 'QUEUED' });
+    fake.db.creditEntry.createMany.mockRejectedValueOnce(new Error('statement timeout'));
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({
+      chargedCancelled: 0,
+      redriven: 1,
+    });
+    await settle();
+    expect(queued.status).toBe('COMPLETED');
+    expect(error).toHaveBeenCalledWith(
+      'Recovery could not charge a lapsed cancel',
+      expect.any(Error),
+      { assessmentId: stuck.id }
+    );
+    // Nothing charged; in the database its transaction rolled back, so the next pass tries again.
+    expect(charges()).toEqual([]);
+  });
+
   it('the recovery job charges nothing a workspace spent before its first credit entry', async () => {
     const hour = 60 * 60 * 1000;
     // Its only entry was written an hour ago: charging began then.

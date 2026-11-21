@@ -32,9 +32,24 @@ const db = () => fake.db as unknown as EndingClient & ChargeClient;
 
 beforeEach(() => {
   fake = createFakeDb();
+  // The workspace's first entry, long before every review here: charging began.
+  fake.grant(ORG, 1_000);
 });
 
+const charges = () => fake.credits.filter((c) => c.kind === 'CHARGE');
+
 describe('chargeStoredReview', () => {
+  it('charges nothing for a review made before its workspace’s first credit entry, or with none', async () => {
+    fake.addCost(ORG, 0.05, { assessmentId: 'a1' });
+    fake.credits.length = 0;
+    expect(await chargeStoredReview(db(), ORG, 'a1', since)).toEqual({ credits: 0, spentUsd: 0 });
+
+    // Its first entry came after the review was made: in flight when charging began.
+    fake.grant(ORG, 100, new Date(since.getTime() + 1));
+    expect(await chargeStoredReview(db(), ORG, 'a1', since)).toEqual({ credits: 0, spentUsd: 0 });
+    expect(charges()).toEqual([]);
+  });
+
   it('takes its rows since it was created, rounded up to a whole credit, as a negative CHARGE', async () => {
     fake.addCost(ORG, 0.0123, { assessmentId: 'a1' });
     fake.addCost(ORG, 0.02, { assessmentId: 'a1' });
@@ -47,7 +62,7 @@ describe('chargeStoredReview', () => {
       credits: 4,
       spentUsd: expect.closeTo(0.0323, 6),
     });
-    expect(fake.credits).toEqual([
+    expect(charges()).toEqual([
       expect.objectContaining({
         orgId: ORG,
         amount: -4,
@@ -80,7 +95,7 @@ describe('chargeStoredReview', () => {
     );
 
     expect(results.map((r) => r.credits).sort()).toEqual([0, 0, 5]);
-    expect(fake.credits).toHaveLength(1);
+    expect(charges()).toHaveLength(1);
   });
 });
 
@@ -90,14 +105,14 @@ describe('chargeEndedReview', () => {
     fake.addCost(ORG, 0.03, { assessmentId: a.id });
 
     expect(await chargeEndedReview(db(), String(a.id))).toMatchObject({ credits: 3 });
-    expect(fake.credits).toEqual([
+    expect(charges()).toEqual([
       expect.objectContaining({ reference: `assessment:${String(a.id)}` }),
     ]);
   });
 
   it('charges nothing when the review is gone', async () => {
     expect(await chargeEndedReview(db(), 'gone')).toBeNull();
-    expect(fake.credits).toEqual([]);
+    expect(charges()).toEqual([]);
   });
 });
 
@@ -108,7 +123,7 @@ describe('chargeEphemeralRun', () => {
 
     expect((await chargeEphemeralRun(ORG, 'r1', since)).credits).toBe(2);
     expect((await chargeEphemeralRun(ORG, 'r1', since)).credits).toBe(0);
-    expect(fake.credits).toEqual([
+    expect(charges()).toEqual([
       expect.objectContaining({ amount: -2, reference: 'ephemeral-run:r1' }),
     ]);
   });

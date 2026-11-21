@@ -25,6 +25,7 @@ interface ReviewRow {
   costUsd: number;
   judges: string[];
   leaseExpiresAt: Date | null;
+  completedAt?: Date | null;
   createdAt: Date;
 }
 interface HoldRow {
@@ -1432,14 +1433,16 @@ describe('the credits (t-58)', () => {
       status: 'CANCELLED',
       judges: slots(7),
       leaseExpiresAt: new Date(Date.now() - 1_000),
-      createdAt: new Date(Date.now() - 60_000),
+      // Made more than a day ago, cancelled a minute ago: the cancel decides.
+      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      completedAt: new Date(Date.now() - 60_000),
     });
     // Nothing left to land, but its $0.70 is not in the balance yet: 70 held.
     const err = await refusal(() => check(ORG, 'full', 7));
     expect(err.details).toMatchObject({ heldCredits: 70, remainingCredits: 80 });
 
-    // One made before the recovery job's floor holds nothing: it predates the charge.
-    state.reviews.at(-1)!.createdAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    // Cancelled more than a day ago, the recovery job leaves it: it holds nothing.
+    state.reviews.at(-1)!.completedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
     await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 

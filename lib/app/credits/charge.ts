@@ -84,14 +84,19 @@ async function charge(
 /**
  * Charge the stored review `assessmentId` for its cost rows since `since` (its
  * `createdAt`: the index range of the org's rows). Call it from the write that
- * ends the review, in that write's transaction.
+ * ends the review, in that write's transaction. A review made before its
+ * workspace's first credit entry is not charged: it started before charging
+ * began, on no balance (`firstCreditEntryAt`), so one in flight at the deploy
+ * does not take its workspace below zero.
  */
-export function chargeStoredReview(
+export async function chargeStoredReview(
   db: ChargeClient,
   orgId: string,
   assessmentId: string,
   since: Date
 ): Promise<ReviewCharge> {
+  const first = await firstCreditEntryAt(orgId, db);
+  if (!first || since < first) return { credits: 0, spentUsd: 0 };
   return charge(db, orgId, assessmentChargeReference(assessmentId), {
     createdAt: { gte: since },
     metadata: { path: ['assessmentId'], equals: assessmentId },
@@ -129,6 +134,27 @@ export async function chargeEndedReview(
   });
   if (!row?.orgId) return null;
   return chargeStoredReview(db, row.orgId, assessmentId, row.createdAt);
+}
+
+/**
+ * Which cancelled reviews with their lease still set are still to be charged
+ * (t-58): made since the workspace's first credit entry, and cancelled within
+ * {@link CHARGE_SWEEP_MS} (its `completedAt`, not its `createdAt`: a review
+ * may wait or run longer than the window before it is cancelled). `null`
+ * with no entry: none is. A filter on `Assessment`, for the recovery job, the
+ * credit check and a delete.
+ */
+export async function uncharged(
+  orgId: string,
+  now: Date,
+  db: Pick<Prisma.TransactionClient, 'creditEntry'> = prisma
+): Promise<{ createdAt: { gte: Date }; completedAt: { gt: Date } } | null> {
+  const first = await firstCreditEntryAt(orgId, db);
+  if (!first) return null;
+  return {
+    createdAt: { gte: first },
+    completedAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
+  };
 }
 
 /**

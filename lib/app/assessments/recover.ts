@@ -16,7 +16,9 @@
  * whose run died before its last write, its lease run out (`CANCELLED` with a
  * lease set and past). Clearing that lease and charging are one transaction,
  * so the review is charged once and the next pass skips it. Only those
- * created since `chargeSweepFloor`: older ones predate the charge.
+ * since charging began (`uncharged`): older ones predate the charge. A
+ * charge that fails is logged and left for the next pass, and the rest of the
+ * pass goes on.
  * And a `store: false` run left uncharged (its charge failed, or its process
  * died), once its rows have been quiet for an hour (`CANCEL_GRACE_MS`)
  * (`chargeLapsedEphemeralRuns`). At most {@link RECOVERY_BATCH} of each kind
@@ -35,11 +37,8 @@
  */
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
-import {
-  chargeEndedReview,
-  chargeLapsedEphemeralRuns,
-  chargeSweepFloor,
-} from '@/lib/app/credits/charge';
+import { chargeEndedReview, chargeLapsedEphemeralRuns, uncharged } from '@/lib/app/credits/charge';
+import { logger } from '@/lib/logging';
 import { beginAssessment } from '@/lib/app/assessments/run';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
@@ -53,6 +52,25 @@ export interface RecoveryResult {
   chargedCancelled: number;
   /** `store: false` runs left uncharged, now charged. */
   chargedEphemeral: number;
+}
+
+/**
+ * `fn`'s answer, or `fallback` when it throws, logged with `message`: one row
+ * whose charge keeps failing must not stop the pass, which would then never
+ * re-drive the queue or clear dead places. The next pass tries it again.
+ */
+async function orElse<T>(
+  fallback: T,
+  message: string,
+  meta: Record<string, unknown>,
+  fn: () => Promise<T>
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    logger.error(message, err, meta);
+    return fallback;
+  }
 }
 
 export async function recoverAssessments(now: Date = new Date()): Promise<RecoveryResult> {
@@ -73,52 +91,71 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
   });
   let gaveUp = 0;
   for (const { id } of spent) {
-    gaveUp += await prisma.$transaction(async (tx) => {
-      const { count } = await tx.assessment.updateMany({
-        where: { ...stalled, id, attempts: { gte: MAX_ATTEMPTS } },
-        data: {
-          status: 'FAILED',
-          error: `It stopped before finishing ${MAX_ATTEMPTS} times.`,
-          completedAt: now,
-          leaseToken: null,
-          leaseExpiresAt: null,
-        },
-      });
-      if (count === 1) await chargeEndedReview(tx, id);
-      return count;
-    });
+    gaveUp += await orElse(
+      0,
+      'Recovery could not give up on an assessment',
+      { assessmentId: id },
+      () =>
+        prisma.$transaction(async (tx) => {
+          const { count } = await tx.assessment.updateMany({
+            where: { ...stalled, id, attempts: { gte: MAX_ATTEMPTS } },
+            data: {
+              status: 'FAILED',
+              error: `It stopped before finishing ${MAX_ATTEMPTS} times.`,
+              completedAt: now,
+              leaseToken: null,
+              leaseExpiresAt: null,
+            },
+          });
+          if (count === 1) await chargeEndedReview(tx, id);
+          return count;
+        })
+    );
   }
 
   // Cancelled reviews whose run died before its last write (`freePlace`).
-  // Those created before charging began are left alone (`chargeSweepFloor`).
-  const floor = await chargeSweepFloor(orgId, now);
-  const lapsed = {
-    orgId,
-    status: 'CANCELLED' as const,
-    leaseExpiresAt: { not: null, lte: now },
-    createdAt: { gte: floor ?? now },
-  };
-  const cancelled = floor
-    ? await prisma.assessment.findMany({
-        where: lapsed,
-        select: { id: true },
-        take: RECOVERY_BATCH,
-      })
-    : [];
+  // Those from before charging began are left alone (`uncharged`).
   let chargedCancelled = 0;
-  for (const { id } of cancelled) {
-    chargedCancelled += await prisma.$transaction(async (tx) => {
-      const { count } = await tx.assessment.updateMany({
-        where: { ...lapsed, id },
-        data: { leaseExpiresAt: null },
-      });
-      if (count === 1) await chargeEndedReview(tx, id);
-      return count;
+  const since = await orElse(null, 'Recovery could not read the charge floor', { orgId }, () =>
+    uncharged(orgId, now)
+  );
+  if (since) {
+    const lapsed = {
+      orgId,
+      status: 'CANCELLED' as const,
+      leaseExpiresAt: { not: null, lte: now },
+      ...since,
+    };
+    const cancelled = await prisma.assessment.findMany({
+      where: lapsed,
+      select: { id: true },
+      take: RECOVERY_BATCH,
     });
+    for (const { id } of cancelled) {
+      chargedCancelled += await orElse(
+        0,
+        'Recovery could not charge a lapsed cancel',
+        { assessmentId: id },
+        () =>
+          prisma.$transaction(async (tx) => {
+            const { count } = await tx.assessment.updateMany({
+              where: { ...lapsed, id },
+              data: { leaseExpiresAt: null },
+            });
+            if (count === 1) await chargeEndedReview(tx, id);
+            return count;
+          })
+      );
+    }
   }
 
   // `store: false` runs whose own charge never landed (`service.ts`).
-  const chargedEphemeral = await chargeLapsedEphemeralRuns(orgId, now, RECOVERY_BATCH);
+  const chargedEphemeral = await orElse(
+    0,
+    'Recovery could not charge lapsed store: false runs',
+    { orgId },
+    () => chargeLapsedEphemeralRuns(orgId, now, RECOVERY_BATCH)
+  );
 
   // Places whose `store: false` run's process died (`places.ts`): never
   // counted, but only a later take in this workspace would clear them.
