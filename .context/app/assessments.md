@@ -258,8 +258,11 @@ Each route's docblock lists its error codes. A few rules hold across them:
   through `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), is off by
   default in production and on elsewhere. Off, `POST /api/v1/scan` answers 404
   `NOT_FOUND` to everyone, and the OpenAPI document and `/developers` leave it
-  out (the registry's `enabled`, read by `servedRoutes()`). A page that later
-  offers the quick scan checks the switch too. It does not cover the engine's
+  out (the registry's `enabled`, read by `servedRoutes()`). The landing page's
+  self-score (t-62, `selfScore()` in `lib/app/quick-scan/self-score.ts`) runs
+  the same service in process, only with the switch on; off, it returns before
+  any engine call and the hero shows a static marked-up sample instead. A page
+  that later offers the quick scan checks the switch too. It does not cover the engine's
   fallback when a judge fails, calibration's quick mode, or the `quick`
   profile of `POST assessments`.
 - **Who may run the quick scan.** A session or an API key with `assess`,
