@@ -56,8 +56,8 @@ export const appEnvSchema = z.object({
     .transform((val) => (val === undefined ? undefined : val === 'true'))
     .describe('Serve the culture module (defaults to on outside production, off in production)'),
   /**
-   * The quick scan (t-61): `POST /api/v1/scan` and everything on the site
-   * that offers it. `true` or `false`; unset means on outside production and
+   * The quick scan (t-61): `POST /api/v1/scan`, its OpenAPI entry and its
+   * place on `/developers`. `true` or `false`; unset means on outside production and
    * off in production, since the owner may launch without it. Read through
    * `isQuickScanEnabled()` (`lib/app/quick-scan.ts`), never directly.
    */

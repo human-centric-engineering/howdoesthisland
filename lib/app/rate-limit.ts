@@ -31,7 +31,12 @@
  * signed in. All three share one tier keyed on IP, at
  * `CODE_ATTEMPTS_PER_MINUTE_PER_IP`, so a script cannot spread its tries
  * across them. Redeeming is also capped per person in its handler
- * (`lib/app/credits/codes/limiter.ts`).
+ * (`lib/app/credits/codes/limiter.ts`). The quick scan checks a code too
+ * (t-61), but under its own `scan` tier: a proxy rule cannot read the body
+ * to see a code, and a handler's limiter would not share these buckets,
+ * which live in the proxy's module realm. At about 59 bits a code cannot be
+ * guessed at any of these rates, and the scan's 30 a minute per IP bounds
+ * what it adds.
  */
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';

@@ -10,9 +10,11 @@
  * the route answers 404 to everyone, as if it did not exist, and the OpenAPI
  * document and `/developers` leave it out. Off by default in production.
  *
- * **Who may call it:** a browser session, an API key with the `assess`
- * scope, or a caller sending a free review code (`code`) that has not
- * expired, been withdrawn or run out. The code is checked, never used up.
+ * **Who may call it:** a browser session or an API key with the `assess`
+ * scope, through `withAuth` (so a key or session whose workspace is refused
+ * is refused here too), or a caller with neither sending a free review code
+ * (`code`) that has not expired, been withdrawn or run out. The code is
+ * checked, never used up, and checked before the rest of the body.
  *
  * Body: `{ text, framework?, version?, context?, code? }`
  * (`scanRequestSchema`). `framework` defaults to HowDoesThisLand and
@@ -28,7 +30,9 @@
  * - 400 `CONTEXT_INVALID` — the context names an id the version lacks; `details.issues` says which.
  * - 401 `ACCOUNT_REQUIRED` — the body asks for a page (`url`) or a file; or there is no
  *   session, no API key and no code that could be redeemed.
- * - 403 `FORBIDDEN` — an API key without the `assess` scope.
+ * - 401 `UNAUTHORIZED` — an API key that is not valid.
+ * - 403 `FORBIDDEN` — an API key without the `assess` scope, or a key or session
+ *   whose workspace cannot be entered.
  * - 404 `NOT_FOUND` — the quick scan is switched off.
  * - 404 `FRAMEWORK_NOT_FOUND` — no such framework.
  * - 404 `FRAMEWORK_VERSION_NOT_FOUND` — no such published version.
@@ -39,30 +43,51 @@
 import type { NextRequest } from 'next/server';
 import { handleAPIError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { successResponse } from '@/lib/api/responses';
+import { withAuth } from '@/lib/auth/guards';
+import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import { refuseAccountOnlyInput, runQuickScan } from '@/lib/app/assessments/api/scan';
 import { scanRequestSchema } from '@/lib/app/assessments/api/validations';
-import { admitQuickScan, isQuickScanEnabled } from '@/lib/app/quick-scan';
+import { admitWithCode, isQuickScanEnabled, presentsAccount } from '@/lib/app/quick-scan';
+
+async function readJson(request: NextRequest): Promise<unknown> {
+  return request.json().catch(() => {
+    throw new ValidationError('Invalid JSON in request body');
+  });
+}
+
+/** Score the body, once the caller is let in. */
+async function scanBody(raw: unknown): Promise<Response> {
+  refuseAccountOnlyInput(raw);
+  const parsed = scanRequestSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid request body', {
+      errors: parsed.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    });
+  }
+  // A member's `code` is ignored: their account already lets them in.
+  const { code: _code, ...scan } = parsed.data;
+  return successResponse(await runQuickScan(scan));
+}
+
+const scanAsMember = withAuth(async (request: NextRequest) => scanBody(await readJson(request)), {
+  scope: ASSESS_SCOPE,
+  ownership: {
+    decidedBy: 'nothing',
+    because:
+      'The quick scan reads only the framework tables, which are shared config, and stores nothing.',
+  },
+});
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
     if (!isQuickScanEnabled()) throw new NotFoundError();
-    // Read once: the account-only check and the schema both use it.
-    const raw: unknown = await request.json().catch(() => {
-      throw new ValidationError('Invalid JSON in request body');
-    });
-    refuseAccountOnlyInput(raw);
-    const parsed = scanRequestSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid request body', {
-        errors: parsed.error.issues.map((issue) => ({
-          path: issue.path.join('.'),
-          message: issue.message,
-        })),
-      });
-    }
-    const { code, ...scan } = parsed.data;
-    await admitQuickScan(request, code);
-    return successResponse(await runQuickScan(scan));
+    if (await presentsAccount(request)) return await scanAsMember(request);
+    const raw = await readJson(request);
+    await admitWithCode(raw);
+    return await scanBody(raw);
   } catch (error) {
     return handleAPIError(error);
   }

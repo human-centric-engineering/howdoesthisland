@@ -258,15 +258,16 @@ Each route's docblock lists its error codes. A few rules hold across them:
   through `isQuickScanEnabled()` (`lib/app/quick-scan.ts`), is off by default
   in production and on elsewhere. Off, `POST /api/v1/scan` answers 404
   `NOT_FOUND` to everyone, and the OpenAPI document and `/developers` leave it
-  out (the registry's `enabled`, read by `servedRoutes()`). The switch also
-  covers the landing page's live self-score and the "quick scan first" step
-  on `/assess`. It does not cover the engine's fallback when a judge fails,
+  out (the registry's `enabled`, read by `servedRoutes()`). A page that later
+  offers the quick scan checks the switch too. It does not cover the engine's fallback when a judge fails,
   calibration's quick mode, or the `quick` profile of `POST assessments`.
-- **Who may run the quick scan.** A session, an API key with `assess` (a key
-  without it is 403, as on every route), or, with neither, a free review code
-  in the body's `code` that has not expired, been withdrawn or run out. The
-  code is checked with `checkCode()` and never used up. Anything else is 401
-  `ACCOUNT_REQUIRED`, in the same words whatever was wrong with the code.
+- **Who may run the quick scan.** A session or an API key with `assess`,
+  through `withAuth` as on every route (a key without the scope, or a key or
+  session whose workspace is refused, is 403). With neither, a free review
+  code in the body's `code` that has not expired, been withdrawn or run out;
+  it is checked with `checkCode()` before the rest of the body, and never used
+  up. Anything else is 401 `ACCOUNT_REQUIRED`, in the same words whatever was
+  wrong with the code. A caller sending an API key is judged on the key alone.
 
 - **The version.** `framework` defaults to HowDoesThisLand, `version` to its
   latest published one. A retired version is readable but runs nothing new
@@ -340,8 +341,8 @@ Each route's docblock lists its error codes. A few rules hold across them:
   starts no further judge.
   A handler-level limiter (`api/limiter.ts`) under the proxy's section cap. The
   scan's 30/min per IP is the `scan` rule in `lib/app/rate-limit.ts`.
-- **URLs need an account (D14).** The scan takes pasted text only; a `url` or
-  `file` there is 401 `ACCOUNT_REQUIRED`.
+- **URLs and files are `POST assessments` (D14).** The scan takes pasted text
+  only; a `url` or `file` there is 401 `ACCOUNT_REQUIRED`.
 - **The scan needs no workspace.** It reads only the framework tables, which
   are shared config, so it works with no session and no org at `multi`.
 
