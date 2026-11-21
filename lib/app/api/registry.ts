@@ -28,7 +28,8 @@
  * Errors are not declared per route: every route answers the standard error
  * envelope, and its docblock lists the codes. The exception is `errors`: a
  * refusal with a status of its own that a caller has to plan for (402
- * `BUDGET_EXCEEDED`, t-49), which the OpenAPI document then lists.
+ * `INSUFFICIENT_CREDITS`, t-58, and `BUDGET_EXCEEDED`, t-49), which the
+ * OpenAPI document then lists.
  */
 import { z } from 'zod';
 import {
@@ -66,7 +67,7 @@ import {
   invitationIdParamSchema,
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
-import { budgetRefusalDetailsSchema, monthUsageSchema } from '@/lib/app/usage/wire';
+import { monthUsageSchema, reviewRefusalDetailsSchema } from '@/lib/app/usage/wire';
 import {
   adminCreditsListSchema,
   adminCreditsQuerySchema,
@@ -309,11 +310,13 @@ export const assessmentSummarySchema = z.object({
     .string()
     .nullable()
     .describe(
-      'For a failed one that has one: `BUDGET_EXCEEDED` when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started. `null` otherwise.'
+      "For a failed one that has one: `INSUFFICIENT_CREDITS` (the workspace's CopyCredits no longer covered it) or `BUDGET_EXCEEDED` (its monthly AI budget no longer did) when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started and nothing was charged. `null` otherwise."
     ),
-  errorDetails: budgetRefusalDetailsSchema
+  errorDetails: reviewRefusalDetailsSchema
     .nullable()
-    .describe('For `BUDGET_EXCEEDED`: the figures the 402 carries in `details`. `null` otherwise.'),
+    .describe(
+      'For `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED`: the figures that 402 carries in `details`. `null` otherwise.'
+    ),
   createdAt: isoDateTime,
   startedAt: isoDateTime.nullable(),
   completedAt: isoDateTime.nullable(),
@@ -562,9 +565,15 @@ export const APP_ROUTES: readonly RouteContract[] = [
     errors: [
       {
         status: 402,
+        code: 'INSUFFICIENT_CREDITS',
+        description:
+          "The workspace's CopyCredits do not cover the review's estimated cost, or it has none left. No AI reviewer started, nothing was stored and nothing was charged. What is left is the balance less what the workspace's reviews already starting, queued or running (stored or not) have spent and are yet to spend: a review is charged for what it actually spent, rounded up to a whole credit, once it ends, so requests sent together cannot each spend the same credits. A review that started may cost more than its estimate and take the balance below zero; below zero, every review is refused until credits are added. `details` carries, in whole credits, `estimateCredits`, its `basis` (as for `BUDGET_EXCEEDED`), `balanceCredits`, `heldCredits`, `remainingCredits`, and `usagePage`. Credits come from a review code or from HowDoesThisLand. A `quick` review is never refused this way.",
+      },
+      {
+        status: 402,
         code: 'BUDGET_EXCEEDED',
         description:
-          "The review's estimated cost is more than what is left of the workspace's monthly AI budget, or none is left. No AI reviewer started and nothing was stored. What is left holds back what the workspace's reviews already starting, queued or running (stored or not) are yet to spend, so requests sent together cannot each spend the same remainder. `details` carries `estimateUsd`, its `basis` (`profile`, `judges`, `kept-nowhere` for an estimate from the workspace's `store: false` reviews, or `none`), `remainingUsd`, `inFlightUsd`, `limitUsd` and `usagePage`. A `quick` review is never refused this way.",
+          "The review's estimated cost is more than what is left of the workspace's monthly AI budget, its safety ceiling whatever its credits, or none is left. Checked after the credits. No AI reviewer started and nothing was stored. What is left holds back what the workspace's reviews already starting, queued or running (stored or not) are yet to spend, so requests sent together cannot each spend the same remainder. `details` carries `estimateUsd`, its `basis` (`profile`, `judges`, `kept-nowhere` for an estimate from the workspace's `store: false` reviews, or `none`), `remainingUsd`, `inFlightUsd`, `limitUsd` and `usagePage`. A `quick` review is never refused this way.",
       },
     ],
     response: {

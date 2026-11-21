@@ -7,10 +7,10 @@ credits later. The rulings are the planning decisions that superseded D6 and D7
 
 ## The two limits, and what each is for
 
-| Limit                                                  | Job                                                                         | Where                                            |
-| ------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------ |
-| **CopyCredits**                                        | What people buy. A review needs enough of them before it starts (t-58).     | `lib/app/credits/`, table `app_credit_entry`     |
-| **Monthly spending limit** (`quotas.monthlyBudgetUsd`) | A safety ceiling on one workspace's AI spend in a month, whatever the path. | Sunrise's `spend-caps.ts`, checked per paid call |
+| Limit                                                  | Job                                                                                        | Where                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| **CopyCredits**                                        | What people buy. A review needs enough before it starts, and is charged as it ends (t-58). | `lib/app/credits/`, table `app_credit_entry`     |
+| **Monthly spending limit** (`quotas.monthlyBudgetUsd`) | A safety ceiling on one workspace's AI spend in a month, whatever the path.                | Sunrise's `spend-caps.ts`, checked per paid call |
 
 - A new workspace starts with **0 credits** and the **$10** monthly limit
   (`WORKSPACE_MONTHLY_BUDGET_USD`).
@@ -53,6 +53,95 @@ themselves credits. The route tests check that an org OWNER is refused.
 
 **Where people see them:** `/usage` and `GET /api/v1/usage` (`credits`: balance
 and this month's charges).
+
+## The check before a review starts
+
+t-58, in `lib/app/usage/budget.ts`, the same check that holds the monthly
+budget (§19: the estimate, the holds for reviews in flight and requests
+arriving together, the advisory lock, and the check again when a queued
+review is claimed). It checks the credits first, then the cap.
+
+- **What is left** is the balance less what the workspace's reviews in flight
+  have spent so far and are yet to spend, compared in dollars at
+  `CREDITS_PER_USD`. The spent part is the one change beyond "what is left":
+  the cap's monthly spend already counts it, but the balance does not until
+  the review is charged as it ends.
+- **Refused** 402 `INSUFFICIENT_CREDITS` when the balance is `0` or below,
+  nothing is left, or the estimate is more. `details`, in whole credits:
+  `estimateCredits` (rounded up), `basis`, `balanceCredits`, `heldCredits`
+  (rounded up), `remainingCredits` (rounded down), `usagePage`. The message
+  says credits come from a review code or from HowDoesThisLand.
+- **The cap still refuses** 402 `BUDGET_EXCEEDED` when the credits cover a
+  review but the month's limit does not. `BUDGET_EXCEEDED` keeps its meaning,
+  so a new code was added rather than the old one changed (decided in t-58):
+  a caller can tell "buy credits" from "an admin must raise the limit".
+- A balance that cannot be read is not checked (logged), as a cap that cannot
+  be: the other bound and the per-judge gate still apply.
+- A `quick` review calls no model and is never refused or charged.
+
+## The charge
+
+`lib/app/credits/charge.ts`. A review that ends is charged for its recorded
+cost rows (`AiCostLog`, every billed attempt included), at `creditsForUsd()`,
+rounded up to a whole credit. One that spent nothing writes no entry.
+
+| Review                     | Charged by                                                                                                                            | `reference`             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Completed, partial, failed | the write that ends it (`finish()`, the last attempt's failure), in the same transaction                                              | `assessment:<id>`       |
+| Cancelled while running    | the run's last write once its judges in flight land (`freePlace`), in the same transaction                                            | `assessment:<id>`       |
+| Cancelled, never claimed   | the cancel itself                                                                                                                     | `assessment:<id>`       |
+| Cancelled, its lease out   | the recovery job, clearing the lapsed lease in the same transaction (the cancel does not: the run may be alive, its renewals failing) | `assessment:<id>`       |
+| Given up on                | the recovery job's give-up write                                                                                                      | `assessment:<id>`       |
+| Deleted, not yet charged   | the delete, in its transaction, even while a run holds it (that run's process may be gone)                                            | `assessment:<id>`       |
+| `store: false`             | the request once the run ends, however it ends, before its hold is released                                                           | `ephemeral-run:<runId>` |
+| `store: false`, left over  | the recovery job, once the run's rows are an hour quiet (its charge failed, or it died)                                               | `ephemeral-run:<runId>` |
+
+- **Once.** The insert skips a duplicate `(kind, reference)` (ON CONFLICT DO
+  NOTHING), so finishers that race write one entry. A stored review is never
+  claimed again once final, so its one charge covers every attempt's rows,
+  re-drives and recoveries included. `npm run smoke:credit-charge` races
+  eight finishers against the database.
+- **Held or charged, never neither.** Charging in the write that ends a
+  review means the check sees it either in flight, holding back what it has
+  spent, or in the balance. A cancelled review whose run died is held back
+  for what it spent until the recovery job charges it, and the purge leaves
+  it until then. A `store: false` run whose charge failed keeps its hold for
+  an hour and twenty minutes, past the recovery job's charge. The balance is read after what
+  is in flight, so a review charged between the two is counted twice, never
+  not at all.
+- **Only since charging began.** No review made before its workspace's
+  first credit entry is charged (`chargeStoredReview`): a review starts only
+  on a positive balance, so every review since charging began was made after
+  that entry, and one made before it, still in flight at the deploy, ran
+  before reviews were charged. The recovery job, the check's hold and a
+  delete also leave a cancelled review alone once it was cancelled more than
+  `CHARGE_SWEEP_MS` (a day and an hour) ago. A charge the recovery job
+  cannot make is logged and tried again next tick; the rest of its pass goes
+  on.
+- **Not yet charged, on delete:** `QUEUED` or `RUNNING`, or `CANCELLED` with
+  its lease still set (since charging began). A final review is not charged by
+  its delete: it was charged as it ended, or ended before reviews were charged.
+- **In the write that ends it, deliberately.** A charge that fails rolls the
+  end back with it, so a review is never final and uncharged; the run hands
+  it back to the queue as any database failure does.
+- **What it can miss:** a cost row that lands after the charge, from a run
+  that lost its lease while another finished the review, or after a delete or
+  a lapsed cancel lease, or from a `store: false` run after an hour's quiet.
+  At most `JUDGES_IN_FLIGHT` calls each time, still bounded by the monthly
+  cap. The recovery job charges at most `RECOVERY_BATCH` of each kind a tick.
+
+## Overdraft
+
+A review that passed the check costs what it costs: it is never cut short
+for credits, and is charged in full as it ends, so the balance can go below
+zero. The bound: by at most what the reviews in flight cost beyond their
+estimates, since each started only with a positive remainder covering its
+estimate, and by up to a credit for each of them, since the check compares
+dollars and each review's charge is rounded up to a whole credit. At most `RUNNING_PER_WORKSPACE` (3) run at once, and the monthly cap
+bounds what they spend. With no history the estimate is `0`, so a workspace's
+first review starts on any positive balance and can take it below zero by up
+to that review's cost. Below zero, every review is refused until an admin
+adds credits; the per-judge gate stays as the backstop.
 
 ## Paths that spend AI money, besides reviews
 

@@ -42,14 +42,21 @@ export function ReportPending({ assessment }: { assessment: ReportAssessment }) 
   );
 }
 
+/** What a review refused as it was claimed was refused for, by its `errorCode` (t-53, t-58). */
+const REFUSED_FOR: Record<string, string> = {
+  INSUFFICIENT_CREDITS: 'the workspace’s CopyCredits',
+  BUDGET_EXCEEDED: 'the workspace’s monthly AI budget',
+};
+
 export function ReportNoResult({ assessment }: { assessment: ReportAssessment }) {
   const cancelled = assessment.status === 'cancelled';
-  if (!cancelled && assessment.errorCode === 'BUDGET_EXCEEDED') {
+  const refusedFor = cancelled ? null : REFUSED_FOR[assessment.errorCode ?? ''];
+  if (refusedFor) {
     return (
       <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="This review was not started">
         <p>
-          By the time its turn came, the workspace&rsquo;s monthly AI budget no longer covered it.
-          Nothing was charged.
+          By the time its turn came, {refusedFor} no longer covered it, so no AI reviewer was
+          started for it.
         </p>
         {assessment.error ? <p className="mt-3 text-base">{assessment.error}</p> : null}
         <p className="mt-3 text-base">

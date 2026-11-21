@@ -85,10 +85,11 @@ from either of the first two.
   stays `QUEUED`. When a run ends, however it ends, it starts the workspace's
   oldest queued assessment itself.
 - **The budget, again (t-53).** Once claimed, an assessment that has no
-  judge run yet is checked against the workspace's monthly budget, holding
-  back only the reviews in flight created before it: it may have waited in
-  the queue while other spend landed. One that would now pass it is `FAILED` at once,
-  calling no judge, with `errorCode` `BUDGET_EXCEEDED`, the figures in
+  judge run yet is checked against the workspace's credits and monthly
+  budget, holding back only the reviews in flight created before it: it may
+  have waited in the queue while other spend landed. One they no longer
+  cover is `FAILED` at once, calling no judge, with `errorCode`
+  `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED`, the figures in
   `errorDetails` and the reason in `error`. Its place is freed and the next
   queued one starts. A re-drive with judge runs is not checked again. See
   [`usage.md`](./usage.md#checked-again-when-it-is-claimed).
@@ -115,9 +116,15 @@ from either of the first two.
 - **`FAILED`** is for a version that can no longer be run, a text the engine
   cannot score (its quick scan or `assemble()` threw, which would throw
   again), an assessment that ran out of attempts, and one the budget refused
-  as it was claimed. `error` says which; `errorCode` is `BUDGET_EXCEEDED` for
-  the last and `null` for the rest.
-- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease. The
+  as it was claimed. `error` says which; `errorCode` is `INSUFFICIENT_CREDITS`
+  or `BUDGET_EXCEEDED` for the last and `null` for the rest.
+- **The charge (t-58).** Every write that ends an assessment (completed,
+  partial, failed, or a cancelled run's last) charges the workspace's
+  CopyCredits for its cost rows in the same transaction, once. See
+  [`credits.md`](./credits.md#the-charge).
+- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease, even
+  one that ran out: the run may be alive with its renewals failing, and the
+  recovery job charges it once lapsed (t-58). The
   run asks before each judge starts, so no further judge is called. Judges
   already in flight finish and their rows are saved, since their cost is
   already spent. Only the run that held the token saves them. The cancelled
@@ -165,8 +172,13 @@ tick's invocation alive until the run ends. A run killed part-way leaves a
 lease that runs out, and a later tick takes the run over, at the cost of an
 attempt.
 
+It also charges what was never charged (t-58, [`credits.md`](./credits.md#the-charge)):
+a review it gives up on, a cancelled review whose run died (clearing its
+lapsed lease), and a `store: false` run whose own charge did not land, once
+its cost rows are an hour quiet. At most three of each a tick.
+
 It is idempotent: a second pass finds every row final or held by a live
-lease.
+lease, and every charge already written.
 
 ## Retention
 
@@ -207,8 +219,9 @@ sooner, which is harmless. Each pass:
 replies, because a re-driven run reads its finished judges' replies back. So is
 a `CANCELLED` one that may still have judges in flight, since they can land on
 it after the cancel. A lease that ran out is no guide (a renewal can fail while
-the run lives), so one is taken once its judges have all landed (the lease cleared) or an hour
-after the cancel (`CANCEL_GRACE_MS`, past any judge's timeout and retries). A succeeded run found with no reply on a re-drive is counted
+the run lives), so one is taken once its judges have all landed (the lease cleared, or the
+recovery job's charge cleared it) or a day and an hour after the cancel (`CHARGE_SWEEP_MS`,
+past any judge's timeout and the recovery job's charge, t-58). A succeeded run found with no reply on a re-drive is counted
 as a failed judge rather than called again, so the workspace is not billed
 twice. A window that does not parse is never purged on: for content that is no
 window, and for replies `GET` answers `judgeReplyRetention: null` and no reply
@@ -259,14 +272,18 @@ Each route's docblock lists its error codes. A few rules hold across them:
   framework cannot score (its quick scan or `assemble()` throwing) is 422
   `NOT_SCORABLE`, with what the judges had spent in `details.costUsd`: the
   stored run's `failed`, with no row to record it on.
-- **The monthly budget (t-49).** Before anything is fetched or counted,
-  `prepareAssessment` estimates the review and refuses it with 402
-  `BUDGET_EXCEEDED` when the estimate is more than what is left of the
-  workspace's budget, stored or not. See [`usage.md`](./usage.md#refused-before-it-starts).
+- **Credits and the monthly budget (t-58, t-49).** Before anything is
+  fetched or counted, `prepareAssessment` estimates the review and refuses
+  it with 402 `INSUFFICIENT_CREDITS` when the estimate is more than what is
+  left of the workspace's credits, or `BUDGET_EXCEEDED` when it is more than
+  what is left of its monthly budget, stored or not. See
+  [`usage.md`](./usage.md#refused-before-it-starts). A `store: false` run is
+  charged once it ends, before its hold is released.
   A stored review that passes here and then waits in the queue is checked
-  again when it is claimed; one refused then reads `failed` with `errorCode`
-  `BUDGET_EXCEEDED` and `errorDetails` holding the 402's `details` (t-53).
-  The report page says it was not started for the budget and links `/usage`.
+  again when it is claimed; one refused then reads `failed` with that
+  `errorCode` and `errorDetails` holding the 402's `details` (t-53).
+  The report page says it was not started, for the credits or the budget,
+  and links `/usage`.
 - **Running places (t-28).** A `store: false` run that calls judges holds one
   of the workspace's three running places while it runs, shared with stored
   runs both ways. It has no `Assessment` row, so it holds an

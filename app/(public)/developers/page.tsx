@@ -94,8 +94,13 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
   [400, 'PROFILE_UNKNOWN', 'No such `profile` or AI reviewer, or one switched off.'],
   [
     402,
+    'INSUFFICIENT_CREDITS',
+    'Your workspace’s CopyCredits do not cover the review, or none are left. No AI reviewer started and nothing was kept or charged, stored or not. `details` gives, in whole credits, the estimate (`estimateCredits`) and where it came from (`basis`, as below), your balance (`balanceCredits`), what your reviews already starting, queued or running have spent and are yet to spend (`heldCredits`), and what is left (`remainingCredits`). A review is charged once it ends, for what it actually spent, rounded up to a whole credit; one that costs more than its estimate can take the balance below zero, and then every review is refused until credits are added. Credits come from a review code or from HowDoesThisLand; your balance is on `/usage`. A `quick` review is never refused this way.',
+  ],
+  [
+    402,
     'BUDGET_EXCEEDED',
-    'The review would cost more than is left of your workspace’s monthly AI budget, or none is left. No AI reviewer started and nothing was kept, stored or not. `details` gives the estimate (`estimateUsd`) and where it came from (`basis`: your past reviews of the profile, your recent AI reviewer calls, your `store: false` reviews’ calls as `kept-nowhere`, or `none`), what is left (`remainingUsd`, once what your reviews already starting, queued or running are yet to spend, `inFlightUsd`, is held back, so requests sent together cannot each spend the same remainder) and the budget (`limitUsd`); your usage is on `/usage`, and an admin can raise the budget. A `quick` review is never refused this way.',
+    'Checked after your credits. The review would cost more than is left of your workspace’s monthly AI budget, its safety ceiling, or none is left. No AI reviewer started and nothing was kept, stored or not. `details` gives the estimate (`estimateUsd`) and where it came from (`basis`: your past reviews of the profile, your recent AI reviewer calls, your `store: false` reviews’ calls as `kept-nowhere`, or `none`), what is left (`remainingUsd`, once what your reviews already starting, queued or running are yet to spend, `inFlightUsd`, is held back, so requests sent together cannot each spend the same remainder) and the budget (`limitUsd`); your usage is on `/usage`, and an admin can raise the budget. A `quick` review is never refused this way.',
   ],
   [404, 'FRAMEWORK_NOT_FOUND', 'No published framework by that `framework` slug.'],
   [404, 'FRAMEWORK_VERSION_NOT_FOUND', 'No published version by that `framework` and `version`.'],

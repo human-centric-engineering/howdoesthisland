@@ -55,8 +55,14 @@ vi.mock('@/lib/db/client', () => ({
       aiApiKey: { findFirst: mocks.apiKey, update: vi.fn(async () => ({})) },
       user: { findUnique: vi.fn(async () => null) },
       org: { findUnique: vi.fn(async () => null) },
-      // The month's spend, which the budget check (t-49) reads with the cap.
-      aiCostLog: { aggregate: mocks.monthSpend, findMany: mocks.costRows },
+      // The month's spend, which the budget check (t-49) reads with the cap; a
+      // review's own rows, which its charge sums (t-58), from the fake's.
+      aiCostLog: {
+        aggregate: vi.fn((args: { where?: { metadata?: unknown } }) =>
+          args.where?.metadata ? fake.db.aiCostLog.aggregate(args) : mocks.monthSpend(args)
+        ),
+        findMany: mocks.costRows,
+      },
       // No workspace has a judge run on record, so the per-judge tier is empty.
       judgeRun: { ...fake.db.judgeRun, findMany: vi.fn(async () => []) },
     };
@@ -287,6 +293,9 @@ beforeEach(() => {
   aiAssessmentLimiter.reset(`user:${BOB}`);
   resetKicksForTests();
   signedIn(ALICE, WS_A);
+  // Credits to spare unless a test sets them (t-58), so the cap is what t-49's tests measure.
+  fake.grant(WS_A, 1_000_000);
+  fake.grant(WS_B, 1_000_000);
 });
 
 afterEach(async () => {
@@ -438,8 +447,10 @@ describe('POST /api/v1/assessments — store: false', () => {
     expect(fake.db.content.create).not.toHaveBeenCalled();
     expect(fake.db.assessment.create).not.toHaveBeenCalled();
     expect(fake.db.judgeRun.upsert).not.toHaveBeenCalled();
-    // The one transaction is the running place it took (t-28), gone again.
-    expect(fake.db.$transaction).toHaveBeenCalledTimes(1);
+    // Two transactions: the budget hold (t-50; taken whenever there are
+    // credits to check, t-58) and the running place (t-28), both gone again.
+    expect(fake.db.$transaction).toHaveBeenCalledTimes(2);
+    expect(fake.holds).toEqual([]);
     expect([fake.contents, fake.assessments, fake.judgeRuns, fake.places]).toEqual([
       [],
       [],
@@ -1378,5 +1389,219 @@ describe('a queued review checked against the budget again as it is claimed (t-5
       errorCode: 'BUDGET_EXCEEDED',
       errorDetails: null,
     });
+  });
+});
+
+describe('POST /api/v1/assessments — CopyCredits (t-58)', () => {
+  const nine = Array.from({ length: 9 }, (_, i) => `judge_${i}`);
+  /** The workspace's balance, in place of the credits to spare every test starts with. */
+  function credits(balance: number) {
+    fake.credits.length = 0;
+    if (balance !== 0) fake.grant(WS_A, balance);
+  }
+  /** $1.00 (100 credits) a full review, as in t-49's tests. */
+  function fullReviewsAtOneDollar() {
+    for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1, judges: nine });
+  }
+  const charges = () => fake.credits.filter((c) => c.kind === 'CHARGE');
+
+  for (const store of [true, false]) {
+    const label = store ? 'stored' : 'store: false';
+
+    it(`${label}: 402 INSUFFICIENT_CREDITS with none, starting no judge, writing and charging nothing`, async () => {
+      credits(0);
+      const before = fake.assessments.length;
+
+      const res = await post({ source: { text: TEXT }, store, ...(store ? {} : { wait: true }) });
+
+      const body = await json(res);
+      expect(res.status).toBe(402);
+      expect(body.error?.code).toBe('INSUFFICIENT_CREDITS');
+      expect(body.error?.details).toEqual({
+        estimateCredits: 0,
+        basis: 'none',
+        balanceCredits: 0,
+        heldCredits: 0,
+        remainingCredits: 0,
+        usagePage: '/usage',
+      });
+      expect(body.error?.message).toContain('review code');
+      expect(mocks.runJudge).not.toHaveBeenCalled();
+      expect(fake.assessments).toHaveLength(before);
+      expect(charges()).toEqual([]);
+    });
+
+    it(`${label}: 402 when the estimate is over the balance, and runs when it is not`, async () => {
+      fullReviewsAtOneDollar();
+      credits(99);
+      const refused = await post({
+        source: { text: TEXT },
+        store,
+        ...(store ? {} : { wait: true }),
+      });
+      expect(refused.status).toBe(402);
+      expect((await json(refused)).error?.details).toMatchObject({
+        estimateCredits: 100,
+        balanceCredits: 99,
+        remainingCredits: 99,
+      });
+
+      credits(100);
+      const ran = await post({ source: { text: TEXT }, store, ...(store ? {} : { wait: true }) });
+      expect(ran.status).toBe(store ? 202 : 200);
+    });
+  }
+
+  it('charges a store: false review once for its rows, by the run its judges tagged', async () => {
+    let runId: string | undefined;
+    mocks.runJudge.mockImplementation(
+      async (slot: string, input: { costTags?: { ephemeralRun?: string } }) => {
+        runId = input.costTags?.ephemeralRun;
+        fake.addCost(WS_A, 0.0151, { ephemeral: true, ephemeralRun: runId, judge: slot });
+        return reply(slot);
+      }
+    );
+
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false, wait: true });
+
+    expect(res.status).toBe(200);
+    // $0.0302 is 3.02 credits: 4.
+    expect(charges()).toEqual([
+      expect.objectContaining({ orgId: WS_A, amount: -4, reference: `ephemeral-run:${runId}` }),
+    ]);
+    // Charged before its hold was released.
+    expect(fake.holds).toEqual([]);
+  });
+
+  it('keeps a store: false review’s hold when its charge fails, until the recovery job can charge it', async () => {
+    mocks.runJudge.mockImplementation(
+      async (slot: string, input: { costTags?: { ephemeralRun?: string } }) => {
+        const run = input.costTags?.ephemeralRun;
+        fake.addCost(WS_A, 0.0151, { ephemeral: true, ephemeralRun: run, judge: slot });
+        return reply(slot);
+      }
+    );
+    fake.db.creditEntry.createMany.mockRejectedValueOnce(new Error('connection reset'));
+
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false, wait: true });
+
+    // The review is the caller's all the same.
+    expect(res.status).toBe(200);
+    expect(charges()).toEqual([]);
+    // Held on, past the hour of quiet the recovery job waits for.
+    expect(fake.holds).toEqual([expect.objectContaining({ judges: 2, stored: false })]);
+    const kept = fake.holds[0]?.leaseExpiresAt as Date;
+    expect(kept.getTime()).toBeGreaterThan(Date.now() + 60 * 60 * 1000);
+  });
+
+  it('charges a store: false review whose result could not be scored for what its judges spent', async () => {
+    mocks.runJudge.mockImplementation(
+      async (slot: string, input: { costTags?: { ephemeralRun?: string } }) => {
+        fake.addCost(WS_A, 0.02, { ephemeral: true, ephemeralRun: input.costTags?.ephemeralRun });
+        return reply(slot);
+      }
+    );
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('cannot score');
+    });
+
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false, wait: true });
+
+    expect(res.status).toBe(422);
+    expect(charges()).toEqual([expect.objectContaining({ amount: -4 })]);
+  });
+
+  it('charges a stored review as it completes, once', async () => {
+    mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
+      fake.addCost(WS_A, 0.01, { assessmentId: input.assessmentId, judge: slot });
+      return reply(slot);
+    });
+
+    const res = await post({ source: { text: TEXT }, judges: TWO, wait: true });
+    const id = String((await json(res)).data?.id);
+
+    expect(res.status).toBe(200);
+    expect(charges()).toEqual([
+      expect.objectContaining({ orgId: WS_A, amount: -2, reference: `assessment:${id}` }),
+    ]);
+  });
+
+  it('a delete charges an open review for what its runs spent', async () => {
+    const queued = fake.seed({ status: 'QUEUED', attempts: 1 });
+    fake.addCost(WS_A, 0.03, { assessmentId: queued.id });
+    expect((await del(String(queued.id))).status).toBe(200);
+    expect(charges()).toEqual([
+      expect.objectContaining({ amount: -3, reference: `assessment:${String(queued.id)}` }),
+    ]);
+  });
+
+  it('a delete charges a review a live run holds, since that run may be gone', async () => {
+    const running = fake.seed({
+      status: 'RUNNING',
+      leaseToken: 'alive',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+    fake.addCost(WS_A, 0.03, { assessmentId: running.id });
+    expect((await del(String(running.id))).status).toBe(200);
+    expect(charges()).toEqual([
+      expect.objectContaining({ amount: -3, reference: `assessment:${String(running.id)}` }),
+    ]);
+  });
+
+  it('a delete charges a cancelled review whose judges were still landing, live lease or lapsed', async () => {
+    for (const leaseExpiresAt of [new Date(Date.now() + 60_000), new Date(Date.now() - 60_000)]) {
+      const cancelled = fake.seed({
+        status: 'CANCELLED',
+        completedAt: new Date(Date.now() - 120_000),
+        leaseToken: 'cancelled-run',
+        leaseExpiresAt,
+      });
+      fake.addCost(WS_A, 0.02, { assessmentId: cancelled.id });
+      expect((await del(String(cancelled.id))).status).toBe(200);
+    }
+    expect(charges()).toHaveLength(2);
+    expect(charges().every((c) => c.amount === -2)).toBe(true);
+  });
+
+  it('a delete charges nothing for a review that ended: charged as it ended, or before charging began', async () => {
+    // Final, with no charge entry: it ended before reviews were charged.
+    const old = fake.seed({ status: 'COMPLETED', completedAt: new Date(Date.now() - 86_400_000) });
+    fake.addCost(WS_A, 0.05, { assessmentId: old.id });
+    // Cancelled, its lease cleared: the cancel charged it.
+    const cancelled = fake.seed({
+      status: 'CANCELLED',
+      completedAt: new Date(),
+      leaseExpiresAt: null,
+    });
+    fake.addCost(WS_A, 0.05, { assessmentId: cancelled.id });
+    // Cancelled with a lease left set, but made before charging began.
+    const stale = fake.seed({
+      status: 'CANCELLED',
+      createdAt: new Date(Date.now() - 3 * 86_400_000),
+      completedAt: new Date(Date.now() - 3 * 86_400_000),
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 3 * 86_400_000),
+    });
+    fake.addCost(WS_A, 0.05, { assessmentId: stale.id });
+
+    for (const a of [old, cancelled, stale]) expect((await del(String(a.id))).status).toBe(200);
+    expect(charges()).toEqual([]);
+  });
+
+  it('a queued review the credits no longer cover is failed with INSUFFICIENT_CREDITS as it is claimed', async () => {
+    fullReviewsAtOneDollar();
+    const queued = fake.seed({ judges: nine, profile: 'full' });
+    credits(40);
+
+    expect(await runAsOrg(WS_A, () => runAssessment(String(queued.id)))).toBe('failed');
+
+    const body = await json(await getOne(String(queued.id)));
+    expect(body.data).toMatchObject({
+      status: 'failed',
+      errorCode: 'INSUFFICIENT_CREDITS',
+      errorDetails: { estimateCredits: 100, balanceCredits: 40, remainingCredits: 40 },
+    });
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+    expect(charges()).toEqual([]);
   });
 });

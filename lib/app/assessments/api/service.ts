@@ -13,11 +13,14 @@
  *   `ephemeral: true` and with no `assessmentId` (§8.2). A run that calls
  *   judges holds one of the workspace's running places while it runs, shared
  *   with stored runs (`places.ts`, t-28); with none free it is refused with
- *   `WorkspaceBusyError`, which the route answers 429 `WORKSPACE_BUSY`.
+ *   `WorkspaceBusyError`, which the route answers 429 `WORKSPACE_BUSY`. It is
+ *   charged in CopyCredits for its cost rows once it ends, however it ends,
+ *   before its budget hold is released (t-58).
  *
  * Runs in the caller's tenant context (the route's guard). Every refusal is
  * an `APIError`, so the guard answers it with its status and code.
  */
+import type { AssessmentStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { APIError, NotFoundError } from '@/lib/api/errors';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
@@ -47,10 +50,11 @@ import {
   type BudgetHold,
   type ReviewRate,
 } from '@/lib/app/usage/budget';
+import { chargeEphemeralRun, chargeStoredReview, uncharged } from '@/lib/app/credits/charge';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
-import { POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
+import { CANCEL_GRACE_MS, POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
 import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
@@ -286,17 +290,42 @@ async function createEphemeral(
   caller: Caller,
   signal?: AbortSignal
 ): Promise<CreatedAssessment> {
-  const { resolved, ctx, profile, judges } = prepared;
+  const { resolved, ctx, profile, judges, hold } = prepared;
   const source = await intake(body.source);
+  const runId = crypto.randomUUID();
   const run = () =>
-    refusingAsApi(() => runEphemeral(resolved, source, ctx, profile, judges, caller, signal));
+    refusingAsApi(() =>
+      runEphemeral(resolved, source, ctx, profile, judges, caller, runId, signal)
+    );
   // A run that calls judges takes one of the workspace's places, or is
   // refused with `WorkspaceBusyError` (t-28). The quick scan calls no model.
   const orgId = requireOrgId();
-  const assessment =
-    judges.length > 0 ? await withPlace(orgId, run, () => startNextQueued(orgId)) : await run();
-  return { kind: 'ephemeral', assessment };
+  if (judges.length === 0) return { kind: 'ephemeral', assessment: await run() };
+  const began = new Date();
+  try {
+    const assessment = await withPlace(orgId, run, () => startNextQueued(orgId));
+    return { kind: 'ephemeral', assessment };
+  } finally {
+    // However it ended: what its judges were billed is spent (t-58). Before
+    // the caller releases the hold, so it is held or charged throughout. A
+    // charge that fails here is taken by the recovery job, from the rows, and
+    // the hold is kept until then rather than released.
+    try {
+      await chargeEphemeralRun(orgId, runId, began);
+    } catch (err) {
+      logger.error('Could not charge a store: false review', err, { runId });
+      await hold?.keepFor(UNCHARGED_HOLD_MS);
+    }
+  }
 }
+
+/**
+ * How long a `store: false` run's hold is kept when its charge failed: the
+ * hour its rows must be quiet before the recovery job charges it
+ * (`chargeLapsedEphemeralRuns`), and the job's next 15-minute tick, so it is
+ * counted twice for minutes at most, never not at all.
+ */
+const UNCHARGED_HOLD_MS = CANCEL_GRACE_MS + 20 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -344,6 +373,7 @@ async function runEphemeral(
   profile: JudgeProfile,
   judges: readonly string[],
   caller: Caller,
+  runId: string,
   signal?: AbortSignal
 ): Promise<EphemeralAssessment> {
   const text = assessableText(source.text);
@@ -352,7 +382,6 @@ async function runEphemeral(
   const quick = notScorable(() => engine.quickScan(text, ctx), 0);
   // Who the calls are for, as the stored run says it (`run.ts`), so the
   // privacy layer applies the same policy and the user's own known values.
-  const runId = crypto.randomUUID();
   const scope = createPrivacyScope({
     scopeId: `assessment:ephemeral:${runId}`,
     orgId: requireOrgId(),
@@ -448,11 +477,39 @@ export async function cancel(id: string): Promise<AssessmentDetail> {
   return assessment;
 }
 
+/** Whether a review being deleted has not been charged yet: see {@link remove}. */
+async function chargeableOnDelete(
+  tx: Pick<Prisma.TransactionClient, 'creditEntry'>,
+  orgId: string,
+  row: {
+    status: AssessmentStatus;
+    createdAt: Date;
+    completedAt: Date | null;
+    leaseExpiresAt: Date | null;
+  },
+  now: Date
+): Promise<boolean> {
+  // Open: charged unless it predates charging (`chargeStoredReview` checks).
+  if (row.status === 'QUEUED' || row.status === 'RUNNING') return true;
+  // A cancel that ended it charged it then, and cleared the lease (`run.ts`).
+  // One with its lease set is the recovery job's to charge, unless it is from
+  // before charging began (`uncharged`).
+  if (row.status !== 'CANCELLED' || row.leaseExpiresAt === null) return false;
+  const since = await uncharged(orgId, now, tx);
+  return (
+    since !== null &&
+    row.createdAt >= since.createdAt.gte &&
+    row.completedAt !== null &&
+    row.completedAt > since.completedAt.gt
+  );
+}
+
 /**
  * Delete an assessment, its judge runs, and its text unless another
  * assessment shares it. Allowed in any state: a run still going writes only
  * under its lease, to a row that is gone, so it stores nothing more. Its
- * cost rows stay, as the usage record.
+ * cost rows stay, as the usage record, and what they say it spent is
+ * charged here unless it was already (t-58).
  *
  * Its cached report PDFs go first (t-31). If storage refuses, the row stays
  * and the delete fails, so trying again finishes it: the other order could
@@ -471,12 +528,27 @@ export async function remove(id: string): Promise<{ deleted: true }> {
   await prisma.$transaction(async (tx) => {
     const row = await tx.assessment.findUnique({
       where: { id, orgId },
-      select: { contentId: true },
+      select: {
+        contentId: true,
+        createdAt: true,
+        status: true,
+        completedAt: true,
+        leaseExpiresAt: true,
+      },
     });
     if (!row) throw new NotFoundError('Assessment not found');
     // A delete that lost a race with another one has nothing left: 404.
     const { count } = await tx.assessment.deleteMany({ where: { id, orgId } });
     if (count === 0) throw new NotFoundError('Assessment not found');
+    // Charged for what it spent (t-58) when it has not been yet: still open,
+    // or cancelled with its lease not cleared. Charged here even while a run
+    // holds it, since that run's process may be gone, and nothing reads a
+    // deleted row's spend again; judges still in flight are missed
+    // (`charge.ts`). A final review was charged as it ended, or ended before
+    // reviews were charged: not charged again.
+    if (await chargeableOnDelete(tx, orgId, row, new Date())) {
+      await chargeStoredReview(tx, orgId, id, row.createdAt);
+    }
     await tx.content.deleteMany({
       where: { id: row.contentId, orgId, assessments: { none: {} } },
     });

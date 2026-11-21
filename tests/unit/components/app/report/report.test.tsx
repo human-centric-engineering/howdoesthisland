@@ -210,6 +210,27 @@ describe('report states', () => {
     expect(screen.queryByText(/Run the review again/)).not.toBeInTheDocument();
   });
 
+  it('a review refused for credits as it was claimed names the credits, with its message (t-58)', () => {
+    const message = 'This review would cost about 100 CopyCredits, more than the 40 left.';
+    render(
+      <ReportNoResult
+        assessment={apiAssessment({
+          status: 'failed',
+          result: null,
+          error: message,
+          errorCode: 'INSUFFICIENT_CREDITS',
+        })}
+      />
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'This review was not started'
+    );
+    expect(screen.getByText(/CopyCredits no longer covered it/)).toBeInTheDocument();
+    expect(screen.queryByText(/monthly AI budget/)).not.toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /usage/ })).toHaveAttribute('href', '/usage');
+  });
+
   it('unreadable says it was logged', () => {
     render(<ReportUnreadable />);
     expect(screen.getByText(/logged/)).toBeInTheDocument();

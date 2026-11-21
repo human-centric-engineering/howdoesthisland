@@ -29,3 +29,9 @@ export function creditsForUsd(usd: number): number {
 export function usdForCredits(credits: number): number {
   return credits / CREDITS_PER_USD;
 }
+
+/** The whole credits `usd` is worth, rounded down: what is left, never more than there is. */
+export function wholeCreditsIn(usd: number): number {
+  if (!Number.isFinite(usd) || usd <= 0) return 0;
+  return Math.floor(usd * CREDITS_PER_USD + 1e-9);
+}

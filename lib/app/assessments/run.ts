@@ -42,11 +42,20 @@
  * checked against the workspace's budget once claimed (`budgetRefusal` in
  * `lib/app/usage/budget.ts`): it may have waited in the queue while other
  * spend landed. Only the reviews in flight created before it are held back,
- * so of two claimed together the older runs. One that would now pass the
- * budget is finished `FAILED`, `errorCode` `BUDGET_EXCEEDED`, with the reason
- * in `error` and the figures in `errorDetails`, and no judge is called. Its
- * `startedAt` is cleared, since it never started. A check that cannot read
- * the cap or the history refuses nothing.
+ * so of two claimed together the older runs. One its credits or the budget
+ * no longer cover is finished `FAILED`, `errorCode` `INSUFFICIENT_CREDITS` or
+ * `BUDGET_EXCEEDED`, with the reason in `error` and the figures in
+ * `errorDetails`, and no judge is called. Its `startedAt` is cleared, since
+ * it never started. A check that can read neither bound, or not the history,
+ * refuses nothing.
+ *
+ * **The charge** (t-58, `lib/app/credits/charge.ts`). Every write that ends
+ * a review charges the workspace's CopyCredits for its cost rows in the same
+ * transaction: {@link finish}, the last attempt's failure, and a cancelled
+ * run's last write ({@link freePlace}). A cancel of a review no run has
+ * claimed charges as it cancels; one whose run's lease ran out is charged by
+ * the recovery job. A review deleted before it was charged is charged
+ * by the delete (`remove` in `api/service.ts`), from its rows.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
  * assessment back to the queue under the same attempt count, so the recovery
@@ -92,6 +101,7 @@ import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { budgetRefusal } from '@/lib/app/usage/budget';
+import { chargeEndedReview } from '@/lib/app/credits/charge';
 
 /** How a call to {@link runAssessment} ended. */
 export type RunOutcome =
@@ -187,7 +197,12 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     outcome = await stoppedOnError(assessmentId, token).catch(() => 'lease_lost' as const);
   }
   lease.release();
-  if (outcome === 'cancelled') await freePlace(assessmentId, token).catch(() => undefined);
+  if (outcome === 'cancelled') {
+    // Failed, the lease stays set, and the recovery job charges it once lapsed.
+    await freePlace(assessmentId, token).catch((err: unknown) =>
+      logger.error('Could not free a cancelled run’s place, or charge it', err, { assessmentId })
+    );
+  }
   startNextQueued(orgId, assessmentId);
   return outcome;
 }
@@ -198,11 +213,15 @@ const STOPPED_ON_ERROR = 'Its run stopped on an error that was not a judge’s.'
 async function stoppedOnError(assessmentId: string, token: string): Promise<RunOutcome> {
   const ours = { id: assessmentId, leaseToken: token, status: 'RUNNING' as const };
   const released = { leaseToken: null, leaseExpiresAt: null, error: STOPPED_ON_ERROR };
-  const failed = await prisma.assessment.updateMany({
-    where: { ...ours, attempts: { gte: MAX_ATTEMPTS } },
-    data: { ...released, status: 'FAILED', completedAt: new Date() },
+  const failed = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.assessment.updateMany({
+      where: { ...ours, attempts: { gte: MAX_ATTEMPTS } },
+      data: { ...released, status: 'FAILED', completedAt: new Date() },
+    });
+    if (count === 1) await chargeEndedReview(tx, assessmentId);
+    return count;
   });
-  if (failed.count === 1) return 'failed';
+  if (failed === 1) return 'failed';
   const requeued = await prisma.assessment.updateMany({
     where: ours,
     // The note is kept for the recovery job's give-up; a claim clears it.
@@ -441,7 +460,7 @@ async function refuseOverBudget(
     error: refusal.reason,
     // The claim set it; nothing ran.
     startedAt: null,
-    errorCode: 'BUDGET_EXCEEDED',
+    errorCode: refusal.code,
     errorDetails: { ...refusal.details },
   });
   return written ? 'failed' : await lostTo(row.id);
@@ -679,17 +698,23 @@ async function lostTo(assessmentId: string): Promise<'cancelled' | 'lease_lost'>
   return row?.status === 'CANCELLED' ? 'cancelled' : 'lease_lost';
 }
 
-/** Write the final state, if the lease is still ours. Answers whether it was. */
+/**
+ * Write the final state, if the lease is still ours, and charge the review
+ * for what it spent in the same transaction (t-58). Answers whether it was.
+ */
 async function finish(
   assessmentId: string,
   token: string,
   data: Omit<Prisma.AssessmentUpdateManyMutationInput, 'leaseToken' | 'leaseExpiresAt'>
 ): Promise<boolean> {
-  const { count } = await prisma.assessment.updateMany({
-    where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
-    data: { ...data, completedAt: new Date(), leaseToken: null, leaseExpiresAt: null },
+  return await prisma.$transaction(async (tx) => {
+    const { count } = await tx.assessment.updateMany({
+      where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
+      data: { ...data, completedAt: new Date(), leaseToken: null, leaseExpiresAt: null },
+    });
+    if (count === 1) await chargeEndedReview(tx, assessmentId);
+    return count === 1;
   });
-  return count === 1;
 }
 
 /**
@@ -697,21 +722,45 @@ async function finish(
  * cancelled: `false` when it is already final, or not this workspace's.
  */
 export async function cancelAssessment(assessmentId: string): Promise<boolean> {
-  const { count } = await prisma.assessment.updateMany({
-    where: { id: assessmentId, orgId: requireOrgId(), status: { in: ['QUEUED', 'RUNNING'] } },
-    // The token and lease stay: the run that held them can still save the
-    // judges it has in flight, and no other run can (see `saveJudgeRun`), and
-    // the run keeps its place in the workspace's limit until they land
-    // (`freePlace`), or its lease runs out.
-    data: { status: 'CANCELLED', completedAt: new Date() },
+  const orgId = requireOrgId();
+  const open = { id: assessmentId, orgId, status: { in: ['QUEUED' as const, 'RUNNING' as const] } };
+  const now = new Date();
+  return await prisma.$transaction(async (tx) => {
+    // No run holds it (queued): nothing is left to land, so it ends here, and
+    // is charged for what earlier runs spent. A lease run out is not taken
+    // for no run: the run may be alive with its renewals failing, its judges
+    // still landing. It keeps its lease, and the recovery job charges it.
+    const idle = await tx.assessment.updateMany({
+      where: { ...open, leaseExpiresAt: null },
+      data: { status: 'CANCELLED', completedAt: now },
+    });
+    if (idle.count === 1) {
+      await chargeEndedReview(tx, assessmentId);
+      return true;
+    }
+    const { count } = await tx.assessment.updateMany({
+      where: open,
+      // The token and lease stay: the run that held them can still save the
+      // judges it has in flight, and no other run can (see `saveJudgeRun`), and
+      // the run keeps its place in the workspace's limit until they land
+      // (`freePlace`, which charges it), or its lease runs out (the recovery
+      // job charges it then, as it does one already run out).
+      data: { status: 'CANCELLED', completedAt: now },
+    });
+    return count === 1;
   });
-  return count === 1;
 }
 
-/** A cancelled run's judges have all landed: give up its place in the workspace's limit. */
+/**
+ * A cancelled run's judges have all landed: give up its place in the
+ * workspace's limit, and charge it for what it spent (t-58).
+ */
 async function freePlace(assessmentId: string, token: string): Promise<void> {
-  await prisma.assessment.updateMany({
-    where: { id: assessmentId, leaseToken: token, status: 'CANCELLED' },
-    data: { leaseExpiresAt: null },
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.assessment.updateMany({
+      where: { id: assessmentId, leaseToken: token, status: 'CANCELLED' },
+      data: { leaseExpiresAt: null },
+    });
+    if (count === 1) await chargeEndedReview(tx, assessmentId);
   });
 }
