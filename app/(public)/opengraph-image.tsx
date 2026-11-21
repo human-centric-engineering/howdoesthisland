@@ -6,9 +6,15 @@ import { HOME_COPY } from '@/components/app/marketing/home-copy';
 /**
  * The shared-link card for `/` (t-62), and for any public page that sets no
  * image of its own. Generated once at build: paper, the headline with its
- * turn in proof red, and the mark beside the wordmark. Satori's default face,
- * not Fraunces: the brand fonts come from `next/font`, which has no file
- * this route can read.
+ * turn in proof red, and the mark beside the wordmark.
+ *
+ * The card is set in Fraunces from static Bold and Bold
+ * Italic files in `components/app/brand/fonts/` (OFL, licence beside them).
+ * The site's Fraunces comes from `next/font`, which has no file this route
+ * can read, and Satori renders neither a variable font nor a weight or
+ * style it was not given, so the default face would show them regular and
+ * upright. Giving `fonts` replaces the default face, so the slug line is in
+ * Fraunces Bold too.
  */
 
 export const alt = `HowDoesThisLand: ${HOME_COPY.h1Lead} ${HOME_COPY.h1Turn}`;
@@ -21,8 +27,14 @@ const MUTED = '#6b6a66';
 const RED = '#d7263d';
 const RULE = '#d6d4cc';
 
+const FONTS = join(process.cwd(), 'components/app/brand/fonts');
+
 export default async function Image() {
-  const mark = await readFile(join(process.cwd(), 'public/brand/mark-512.png'));
+  const [mark, bold, boldItalic] = await Promise.all([
+    readFile(join(process.cwd(), 'public/brand/mark-512.png')),
+    readFile(join(FONTS, 'Fraunces-Bold.ttf')),
+    readFile(join(FONTS, 'Fraunces-BoldItalic.ttf')),
+  ]);
   const markSrc = `data:image/png;base64,${mark.toString('base64')}`;
 
   return new ImageResponse(
@@ -46,6 +58,7 @@ export default async function Image() {
         style={{
           display: 'flex',
           flexDirection: 'column',
+          fontFamily: 'Fraunces',
           fontSize: 76,
           fontWeight: 700,
           lineHeight: 1.02,
@@ -65,9 +78,17 @@ export default async function Image() {
         }}
       >
         <img src={markSrc} width={64} height={64} alt="" />
-        <span style={{ fontSize: 40, fontWeight: 700 }}>HowDoesThisLand</span>
+        <span style={{ fontFamily: 'Fraunces', fontSize: 40, fontWeight: 700 }}>
+          HowDoesThisLand
+        </span>
       </div>
     </div>,
-    size
+    {
+      ...size,
+      fonts: [
+        { name: 'Fraunces', data: bold, weight: 700, style: 'normal' },
+        { name: 'Fraunces', data: boldItalic, weight: 700, style: 'italic' },
+      ],
+    }
   );
 }
