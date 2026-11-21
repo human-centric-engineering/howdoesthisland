@@ -491,3 +491,37 @@ enum CreditEntryKind {
   /// A review was charged for what it spent (t-58).
   CHARGE
 }
+
+// ─── Free review codes (t-59, f-credits) ─────────────────────────────────────
+
+/// A free review code: someone who redeems it gets `creditsPerRedemption`
+/// CopyCredits for their workspace (t-60), up to `maxRedemptions` times (1 for
+/// a personal code, N for a QR card). Design: .context/app/credits.md.
+/// Install-level shared config (`globalConfig`): no `orgId`, made by platform
+/// admins, redeemed into whichever workspace redeems it.
+model ReviewCode {
+  id                   String    @id @default(cuid())
+  /// The code itself, canonical: upper case, no separators, from the
+  /// unambiguous alphabet in `lib/app/credits/codes/generate.ts`. Stored, not
+  /// hashed, so the admin page can show its link and QR again (t-59 decision).
+  code                 String    @unique
+  creditsPerRedemption Int
+  maxRedemptions       Int
+  /// How many times it has been redeemed (t-60 increments it).
+  redemptionCount      Int       @default(0)
+  expiresAt            DateTime
+  /// Which campaign, card run or representative it was made for.
+  campaign             String
+  /// Who made it. FK → user, ON DELETE SET NULL (the code outlives its maker).
+  createdByUserId      String?
+  revokedAt            DateTime?
+  /// The issuing call's idempotency key, and the code's place in its batch,
+  /// so a retried call mints its codes once. Null for a call without a key.
+  idempotencyKey       String?
+  batchIndex           Int       @default(0)
+  createdAt            DateTime  @default(now())
+
+  @@unique([idempotencyKey, batchIndex])
+  @@index([createdAt])
+  @@map("app_review_code")
+}
