@@ -59,7 +59,7 @@ export const appEnvSchema = z.object({
    * The quick scan (t-61): `POST /api/v1/scan`, its OpenAPI entry and its
    * place on `/developers`. `true` or `false`; unset means on outside production and
    * off in production, since the owner may launch without it. Read through
-   * `isQuickScanEnabled()` (`lib/app/quick-scan.ts`), never directly.
+   * `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), never directly.
    */
   QUICK_SCAN_ENABLED: z
     .enum(['true', 'false'])

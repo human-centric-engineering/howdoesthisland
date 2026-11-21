@@ -6,7 +6,7 @@
  * config (readable anonymously at `TENANCY_MODE=multi`). Pasted text only: a
  * page or a file goes to `POST /api/v1/assessments` (D14).
  *
- * **Behind a switch** (`isQuickScanEnabled()`, `lib/app/quick-scan.ts`): off,
+ * **Behind a switch** (`isQuickScanEnabled()`, `lib/app/quick-scan/switch.ts`): off,
  * the route answers 404 to everyone, as if it did not exist, and the OpenAPI
  * document and `/developers` leave it out. Off by default in production.
  *
@@ -47,7 +47,8 @@ import { withAuth } from '@/lib/auth/guards';
 import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import { refuseAccountOnlyInput, runQuickScan } from '@/lib/app/assessments/api/scan';
 import { scanRequestSchema } from '@/lib/app/assessments/api/validations';
-import { admitWithCode, isQuickScanEnabled, presentsAccount } from '@/lib/app/quick-scan';
+import { admitWithCode, presentsAccount } from '@/lib/app/quick-scan/access';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
 async function readJson(request: NextRequest): Promise<unknown> {
   return request.json().catch(() => {

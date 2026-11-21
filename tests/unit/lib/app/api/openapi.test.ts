@@ -419,11 +419,12 @@ describe('what each auth kind becomes', () => {
     ],
   ];
 
-  it('names ACCOUNT_REQUIRED as the 401 of a route a code opens', () => {
+  it('names ACCOUNT_REQUIRED as the 401 of a route a code opens, and UNAUTHORIZED for a bad key', () => {
     const open = responsesOf(
       route({ auth: { who: 'signed-in', apiKeyScope: 'assess', orCode: true } })
     );
     expect(open['401']?.description).toMatch(/^`ACCOUNT_REQUIRED`/);
+    expect(open['401']?.description).toContain('`UNAUTHORIZED`: an API key that is not valid.');
     const closed = responsesOf(route({ auth: { who: 'signed-in', apiKeyScope: 'assess' } }));
     expect(closed['401']?.description).toMatch(/^`UNAUTHORIZED`/);
   });

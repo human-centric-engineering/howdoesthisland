@@ -255,7 +255,7 @@ one says what purging an assessment does to it.
 Each route's docblock lists its error codes. A few rules hold across them:
 
 - **The quick scan is behind a switch** (t-61). `QUICK_SCAN_ENABLED`, read
-  through `isQuickScanEnabled()` (`lib/app/quick-scan.ts`), is off by default
+  through `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), is off by default
   in production and on elsewhere. Off, `POST /api/v1/scan` answers 404
   `NOT_FOUND` to everyone, and the OpenAPI document and `/developers` leave it
   out (the registry's `enabled`, read by `servedRoutes()`). A page that later

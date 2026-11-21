@@ -83,5 +83,5 @@ export const appOwnModules: readonly string[] = [
   // A workspace's CopyCredits ledger, the rate, and the admin grant (t-57).
   'lib/app/credits/',
   // The quick-scan switch, and who may run the quick scan (t-61).
-  'lib/app/quick-scan.ts',
+  'lib/app/quick-scan/',
 ];

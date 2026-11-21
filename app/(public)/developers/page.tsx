@@ -17,7 +17,7 @@ import { connection } from 'next/server';
 import { env } from '@/lib/env';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { openApiDocument } from '@/lib/app/api/openapi';
-import { isQuickScanEnabled } from '@/lib/app/quick-scan';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import {
   AI_ASSESSMENTS_PER_MINUTE,
   RUNNING_PER_WORKSPACE,
@@ -277,7 +277,7 @@ export default async function DevelopersPage() {
             </li>
             <li>
               Put the key and the address in your shell, then send your first review. This one is
-              the quick scan, so it costs nothing and keeps nothing.
+              the <code>quick</code> profile, so it costs nothing and keeps nothing.
             </li>
           </ol>
           <CodeBlock>{`export HDTL_URL="${baseUrl}"\nexport HDTL_KEY="sk_…"`}</CodeBlock>

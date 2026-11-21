@@ -4,7 +4,7 @@
  * It needs no workspace: it reads only the framework tables, which are shared
  * config (`version.ts`), and writes nothing. It takes pasted text only;
  * fetching a page or reading a file is `POST /api/v1/assessments` (D14). Whether it is
- * offered at all, and who may run it, is `lib/app/quick-scan.ts` (t-61).
+ * offered at all, and who may run it, is `lib/app/quick-scan/` (t-61).
  */
 import { z } from 'zod';
 import { APIError } from '@/lib/api/errors';

@@ -50,7 +50,7 @@ import {
   scanRequestSchema,
 } from '@/lib/app/assessments/api/validations';
 import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-auth';
-import { isQuickScanEnabled } from '@/lib/app/quick-scan';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import {
   appRetentionSchema,
   judgeReplyRetentionSchema,

@@ -372,6 +372,13 @@ describe('who may run the quick scan (t-61)', () => {
     });
   });
 
+  it('500, not the code path, when the session lookup fails, even with a good code', async () => {
+    mocks.getSession.mockRejectedValue(new Error('session store down'));
+    const res = await scan({ text: TEXT });
+    expect(res.status).toBe(500);
+    expect(touched).not.toContain('reviewCode');
+  });
+
   it('401 ACCOUNT_REQUIRED with no session, no key and no code', async () => {
     expect(await refusal(await scanAs({ text: TEXT }))).toMatchObject({
       status: 401,

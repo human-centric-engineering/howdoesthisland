@@ -1,34 +1,18 @@
 /**
- * The quick-scan switch, and who may run the quick scan (t-61).
+ * Who may run the quick scan (t-61), once its switch (`./switch.ts`) is on.
  *
- * The owner may launch without the quick scan, so it sits behind one switch:
- * `QUICK_SCAN_ENABLED`, on by default outside production and off in
- * production, as the culture switch is (`lib/app/frameworks/culture.ts`).
- * Off, `POST /api/v1/scan` answers 404 and is absent from its OpenAPI
- * document and `/developers`. A page that later offers the quick scan checks
- * it too. It does **not** cover the engine's fallback when a judge fails,
- * calibration's quick mode, or the `quick` profile of `POST assessments`,
- * which a workspace member runs with their own account.
- *
- * With it on, the route takes a browser session or an API key with the
- * `assess` scope, through `withAuth` like every other guarded route, or a
- * free review code that could still be redeemed. The code is checked, never
- * consumed: running the quick scan does not use up one of its redemptions.
- *
- * Read per call, not at module load, so a test can flip it.
+ * The route takes a browser session or an API key with the `assess` scope,
+ * through `withAuth` like every other guarded route, or a free review code
+ * that could still be redeemed. The code is checked, never consumed: running
+ * the quick scan does not use up one of its redemptions.
  */
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { APIError } from '@/lib/api/errors';
 import { API_KEY_PREFIX } from '@/lib/auth/api-keys';
-import { getServerSession } from '@/lib/auth/utils';
+import { auth } from '@/lib/auth/config';
 import { checkCode } from '@/lib/app/credits/codes/redeem';
 import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
-import { env } from '@/lib/env';
-
-export function isQuickScanEnabled(): boolean {
-  return env.QUICK_SCAN_ENABLED ?? env.NODE_ENV !== 'production';
-}
 
 /** The refusal for a caller with no account, no key and no code that could be redeemed. */
 export class QuickScanAccountRequiredError extends APIError {
@@ -48,11 +32,14 @@ export class QuickScanAccountRequiredError extends APIError {
  * decides whether the key or session may act (its scope, its workspace).
  * A key is recognised by its header, not looked up, so the guard looks it up
  * once; a key the guard then refuses is refused, whatever code the body holds.
+ * The session is asked of better-auth directly, not through
+ * `getServerSession()`, which answers a failed lookup as "no session": a
+ * member whose lookup fails gets the 500, not the code path's 401.
  */
 export async function presentsAccount(request: NextRequest): Promise<boolean> {
   const authorization = request.headers.get('authorization');
   if (authorization?.startsWith(`Bearer ${API_KEY_PREFIX}`)) return true;
-  return (await getServerSession()) !== null;
+  return (await auth.api.getSession({ headers: request.headers })) !== null;
 }
 
 const codeOnly = z.object({ code: z.string().max(MAX_TYPED_CODE) });

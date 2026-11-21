@@ -5,10 +5,10 @@
  * (`tests/unit/app/api/v1/scan/route.test.ts`).
  *
  * FORK NOTE: this is HowDoesThisLand's own test of its own module, so it
- * reads the real `lib/app/quick-scan.ts` on purpose. A fork that changes the
+ * reads the real `lib/app/quick-scan/switch.ts` on purpose. A fork that changes the
  * switch's default changes the table below to match.
  *
- * @see lib/app/quick-scan.ts
+ * @see lib/app/quick-scan/switch.ts
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +18,7 @@ const mockEnv = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
-import { isQuickScanEnabled } from '@/lib/app/quick-scan';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
 describe('isQuickScanEnabled', () => {
   it.each([
