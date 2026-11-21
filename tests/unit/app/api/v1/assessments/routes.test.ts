@@ -1473,6 +1473,27 @@ describe('POST /api/v1/assessments — CopyCredits (t-58)', () => {
     expect(fake.holds).toEqual([]);
   });
 
+  it('keeps a store: false review’s hold when its charge fails, until the recovery job can charge it', async () => {
+    mocks.runJudge.mockImplementation(
+      async (slot: string, input: { costTags?: { ephemeralRun?: string } }) => {
+        const run = input.costTags?.ephemeralRun;
+        fake.addCost(WS_A, 0.0151, { ephemeral: true, ephemeralRun: run, judge: slot });
+        return reply(slot);
+      }
+    );
+    fake.db.creditEntry.createMany.mockRejectedValueOnce(new Error('connection reset'));
+
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false, wait: true });
+
+    // The review is the caller's all the same.
+    expect(res.status).toBe(200);
+    expect(charges()).toEqual([]);
+    // Held on, past the hour of quiet the recovery job waits for.
+    expect(fake.holds).toEqual([expect.objectContaining({ judges: 2, stored: false })]);
+    const kept = fake.holds[0]?.leaseExpiresAt as Date;
+    expect(kept.getTime()).toBeGreaterThan(Date.now() + 60 * 60 * 1000);
+  });
+
   it('charges a store: false review whose result could not be scored for what its judges spent', async () => {
     mocks.runJudge.mockImplementation(
       async (slot: string, input: { costTags?: { ephemeralRun?: string } }) => {
@@ -1553,9 +1574,10 @@ describe('POST /api/v1/assessments — CopyCredits (t-58)', () => {
       leaseExpiresAt: null,
     });
     fake.addCost(WS_A, 0.05, { assessmentId: cancelled.id });
-    // Cancelled with a lease left set, but long before charging began.
+    // Cancelled with a lease left set, but made before charging began.
     const stale = fake.seed({
       status: 'CANCELLED',
+      createdAt: new Date(Date.now() - 3 * 86_400_000),
       completedAt: new Date(Date.now() - 3 * 86_400_000),
       leaseToken: 'dead',
       leaseExpiresAt: new Date(Date.now() - 3 * 86_400_000),

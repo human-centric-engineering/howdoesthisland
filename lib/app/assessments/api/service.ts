@@ -20,7 +20,7 @@
  * Runs in the caller's tenant context (the route's guard). Every refusal is
  * an `APIError`, so the guard answers it with its status and code.
  */
-import type { AssessmentStatus } from '@prisma/client';
+import type { AssessmentStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { APIError, NotFoundError } from '@/lib/api/errors';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
@@ -50,11 +50,11 @@ import {
   type BudgetHold,
   type ReviewRate,
 } from '@/lib/app/usage/budget';
-import { chargeEphemeralRun, chargeStoredReview } from '@/lib/app/credits/charge';
+import { chargeEphemeralRun, chargeStoredReview, chargeSweepFloor } from '@/lib/app/credits/charge';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
-import { CHARGE_SWEEP_MS, POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
+import { CANCEL_GRACE_MS, POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
 import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
@@ -290,7 +290,7 @@ async function createEphemeral(
   caller: Caller,
   signal?: AbortSignal
 ): Promise<CreatedAssessment> {
-  const { resolved, ctx, profile, judges } = prepared;
+  const { resolved, ctx, profile, judges, hold } = prepared;
   const source = await intake(body.source);
   const runId = crypto.randomUUID();
   const run = () =>
@@ -308,12 +308,23 @@ async function createEphemeral(
   } finally {
     // However it ended: what its judges were billed is spent (t-58). Before
     // the caller releases the hold, so it is held or charged throughout. A
-    // charge that fails here is taken by the recovery job, from the rows.
-    await chargeEphemeralRun(orgId, runId, began).catch((err: unknown) =>
-      logger.error('Could not charge a store: false review', err, { runId })
-    );
+    // charge that fails here is taken by the recovery job, from the rows, and
+    // the hold is kept until then rather than released.
+    try {
+      await chargeEphemeralRun(orgId, runId, began);
+    } catch (err) {
+      logger.error('Could not charge a store: false review', err, { runId });
+      await hold?.keepFor(UNCHARGED_HOLD_MS);
+    }
   }
 }
+
+/**
+ * How long a `store: false` run's hold is kept when its charge failed: past
+ * the hour its rows must be quiet before the recovery job charges it
+ * (`chargeLapsedEphemeralRuns`), and the job's next tick.
+ */
+const UNCHARGED_HOLD_MS = 2 * CANCEL_GRACE_MS;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -466,18 +477,19 @@ export async function cancel(id: string): Promise<AssessmentDetail> {
 }
 
 /** Whether a review being deleted has not been charged yet: see {@link remove}. */
-function chargeableOnDelete(
-  row: { status: AssessmentStatus; completedAt: Date | null; leaseExpiresAt: Date | null },
+async function chargeableOnDelete(
+  tx: Pick<Prisma.TransactionClient, 'creditEntry'>,
+  orgId: string,
+  row: { status: AssessmentStatus; createdAt: Date; leaseExpiresAt: Date | null },
   now: Date
-): boolean {
+): Promise<boolean> {
   if (row.status === 'QUEUED' || row.status === 'RUNNING') return true;
   // A cancel that ended it charged it then, and cleared the lease (`run.ts`).
-  return (
-    row.status === 'CANCELLED' &&
-    row.leaseExpiresAt !== null &&
-    row.completedAt !== null &&
-    row.completedAt.getTime() > now.getTime() - CHARGE_SWEEP_MS
-  );
+  // One with its lease set is the recovery job's to charge, unless it was
+  // created before charging began (`chargeSweepFloor`).
+  if (row.status !== 'CANCELLED' || row.leaseExpiresAt === null) return false;
+  const floor = await chargeSweepFloor(orgId, now, tx);
+  return floor !== null && row.createdAt >= floor;
 }
 
 /**
@@ -508,7 +520,6 @@ export async function remove(id: string): Promise<{ deleted: true }> {
         contentId: true,
         createdAt: true,
         status: true,
-        completedAt: true,
         leaseExpiresAt: true,
       },
     });
@@ -522,7 +533,7 @@ export async function remove(id: string): Promise<{ deleted: true }> {
     // deleted row's spend again; judges still in flight are missed
     // (`charge.ts`). A final review was charged as it ended, or ended before
     // reviews were charged: not charged again.
-    if (chargeableOnDelete(row, new Date())) {
+    if (await chargeableOnDelete(tx, orgId, row, new Date())) {
       await chargeStoredReview(tx, orgId, id, row.createdAt);
     }
     await tx.content.deleteMany({

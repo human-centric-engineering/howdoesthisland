@@ -112,6 +112,8 @@ const runsOf = (assessmentId: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks();
   fake = createFakeDb();
+  // Charging began before every review here: the recovery job's floor.
+  fake.grant(ORG, 1_000_000);
   mocks.engineForVersion.mockResolvedValue({
     version: { id: 'version-1', status: 'PUBLISHED' },
     engine,
@@ -1521,6 +1523,26 @@ describe('the charge in CopyCredits (t-58)', () => {
     expect(charges()).toEqual([]);
   });
 
+  it('leaves a cancel whose run’s lease ran out to the recovery job, which charges what landed since', async () => {
+    // Its renewals failing, or its process gone: a cancel cannot tell which.
+    const a = fake.seed({
+      status: 'RUNNING',
+      leaseToken: 'quiet',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+    });
+    fake.addCost(ORG, 0.01, { assessmentId: a.id });
+
+    expect(await inOrg(() => cancelAssessment(String(a.id)))).toBe(true);
+    expect(a).toMatchObject({ status: 'CANCELLED', leaseToken: 'quiet' });
+    expect(a.leaseExpiresAt).not.toBeNull();
+    expect(charges()).toEqual([]);
+
+    // A judge it still had out lands, then the recovery job charges both.
+    fake.addCost(ORG, 0.01, { assessmentId: a.id });
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedCancelled: 1 });
+    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -2 })]);
+  });
+
   it('the recovery job charges a cancelled review whose run died, once', async () => {
     const a = fake.seed({
       status: 'CANCELLED',
@@ -1529,12 +1551,13 @@ describe('the charge in CopyCredits (t-58)', () => {
       completedAt: new Date(Date.now() - 60_000),
     });
     fake.addCost(ORG, 0.02, { assessmentId: a.id });
-    // Cancelled long before reviews were charged: left alone.
+    // Made before the workspace's first credit entry, before reviews were charged: left alone.
     const old = fake.seed({
       status: 'CANCELLED',
       leaseToken: 'dead',
       leaseExpiresAt: new Date(Date.now() - 5_000),
-      completedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      completedAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(-1_000),
     });
     fake.addCost(ORG, 0.02, { assessmentId: old.id });
 
@@ -1587,6 +1610,40 @@ describe('the charge in CopyCredits (t-58)', () => {
       expect.objectContaining({ reference: 'ephemeral-run:charged' }),
       expect.objectContaining({ orgId: ORG, amount: -3, reference: 'ephemeral-run:lost' }),
     ]);
+  });
+
+  it('the recovery job charges nothing a workspace spent before its first credit entry', async () => {
+    const hour = 60 * 60 * 1000;
+    // Its only entry was written an hour ago: charging began then.
+    fake.credits.length = 0;
+    fake.grant(ORG, 100, new Date(Date.now() - hour));
+    const before = fake.seed({
+      status: 'CANCELLED',
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 5_000),
+      completedAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(Date.now() - 2 * hour),
+    });
+    fake.addCost(ORG, 0.02, { assessmentId: before.id });
+    fake.addCost(
+      ORG,
+      0.02,
+      { ephemeral: true, ephemeralRun: 'before', judge: 'judge_a' },
+      new Date(Date.now() - 3 * hour)
+    );
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({
+      chargedCancelled: 0,
+      chargedEphemeral: 0,
+    });
+
+    // With no entry at all, nothing it spent was ever to be charged.
+    fake.credits.length = 0;
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({
+      chargedCancelled: 0,
+      chargedEphemeral: 0,
+    });
+    expect(charges()).toEqual([]);
   });
 
   it('the recovery job charges at most a batch of lapsed cancels a tick', async () => {
@@ -1711,7 +1768,7 @@ describe('the recovery job’s charges when a row moved under it (t-58)', () => 
 
     expect(await inOrg(() => recoverAssessments())).toMatchObject({ gaveUp: 0 });
     expect(a.status).toBe('COMPLETED');
-    expect(fake.credits).toEqual([]);
+    expect(fake.credits.filter((c) => c.kind === 'CHARGE')).toEqual([]);
   });
 
   it('does not charge a lapsed cancel whose run cleared its lease first', async () => {
@@ -1731,6 +1788,6 @@ describe('the recovery job’s charges when a row moved under it (t-58)', () => 
       });
 
     expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedCancelled: 0 });
-    expect(fake.credits).toEqual([]);
+    expect(fake.credits.filter((c) => c.kind === 'CHARGE')).toEqual([]);
   });
 });

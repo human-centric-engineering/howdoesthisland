@@ -351,22 +351,25 @@ describe('with a content window', () => {
     expect(ids(db.replies)).toEqual(ids([queued.reply, running.reply]));
   });
 
-  it('leaves a cancelled assessment whose judges may still land, by the cancel time not the lease', async () => {
+  it('leaves a cancelled assessment whose judges may still land or that is not charged yet, by the cancel time not the lease', async () => {
     const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000);
     // Cancelled ten minutes ago: its lease has lapsed (a cancelled run stops
     // renewing it), but a judge can still be out.
     const recent = piece(WS, 120, 'CANCELLED', minutesAgo(8), minutesAgo(10));
-    // Cancelled two hours ago, lease long lapsed: past any judge's timeout.
-    piece(WS, 120, 'CANCELLED', minutesAgo(118), minutesAgo(120));
+    // Cancelled two hours ago, lease lapsed and still set: past any judge's
+    // timeout, but the recovery job has not charged it yet (t-58).
+    const uncharged = piece(WS, 120, 'CANCELLED', minutesAgo(118), minutesAgo(120));
+    // Cancelled more than a day ago: the recovery job never will.
+    piece(WS, 120, 'CANCELLED', minutesAgo(26 * 60 - 2), minutesAgo(26 * 60));
     // Every judge landed: `freePlace` cleared the lease.
     piece(WS, 120, 'CANCELLED', null, minutesAgo(10));
 
     const result = await purgeExpiredContent(NOW);
 
     expect(result).toMatchObject({ assessments: 2, contents: 2 });
-    expect(ids(db.assessments)).toEqual([recent.assessment.id]);
-    expect(ids(db.contents)).toEqual([recent.content.id]);
-    expect(ids(db.replies)).toEqual([recent.reply.id]);
+    expect(ids(db.assessments)).toEqual(ids([recent.assessment, uncharged.assessment]));
+    expect(ids(db.contents)).toEqual(ids([recent.content, uncharged.content]));
+    expect(ids(db.replies)).toEqual(ids([recent.reply, uncharged.reply]));
   });
 
   it("deletes a purged assessment's cached report PDFs, and only those", async () => {

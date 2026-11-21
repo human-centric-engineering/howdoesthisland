@@ -172,7 +172,6 @@ import { z } from 'zod';
 import { APIError, ErrorCodes } from '@/lib/api/errors';
 import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
 import {
-  CHARGE_SWEEP_MS,
   JUDGES_IN_FLIGHT,
   LEASE_MS,
   LEASE_RENEW_MS,
@@ -183,6 +182,7 @@ import { isTimeoutError } from '@/lib/privacy/erasure-deadline';
 import { logger } from '@/lib/logging';
 import { orgCapStateOrSkip } from '@/lib/orchestration/llm/spend-caps';
 import { getCreditBalance } from '@/lib/app/credits/ledger';
+import { chargeSweepFloor } from '@/lib/app/credits/charge';
 import { creditsForUsd, usdForCredits, wholeCreditsIn } from '@/lib/app/credits/rate';
 import {
   USAGE_PAGE,
@@ -420,6 +420,7 @@ async function inFlightCost(
     select: { judges: true, stored: true },
   });
   const held = holds.reduce((sum, h) => sum + heldCost(rate, h.judges, h.stored), 0);
+  const floor = await chargeSweepFloor(orgId, now, db);
   const open = await db.assessment.findMany({
     where: {
       orgId,
@@ -440,12 +441,17 @@ async function inFlightCost(
         { status: { in: ['QUEUED', 'RUNNING'] } },
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
         // Its run died with its lease set: spent, and not charged until the
-        // recovery job clears the lease (`recover.ts`). Older ones predate the charge.
-        {
-          status: 'CANCELLED',
-          leaseExpiresAt: { not: null, lte: now },
-          completedAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
-        },
+        // recovery job clears the lease (`recover.ts`). Those it leaves
+        // alone, from before charging began (`chargeSweepFloor`), are not.
+        ...(floor
+          ? [
+              {
+                status: 'CANCELLED' as const,
+                leaseExpiresAt: { not: null, lte: now },
+                createdAt: { gte: floor },
+              },
+            ]
+          : []),
       ],
     },
     select: { id: true, status: true, judges: true, costUsd: true, leaseExpiresAt: true },
@@ -504,6 +510,23 @@ function unreadable(orgId: string, err: unknown): null {
     error: err instanceof Error ? err.message : String(err),
   });
   return null;
+}
+
+/**
+ * `budget` with its balance read again through `db`, after what is in flight
+ * was: a review that ended between the two reads is then counted twice (its
+ * spend in flight and its charge in the balance), never not at all. Read
+ * before (as {@link readBudget} does, to refuse early with nothing left), a
+ * review charged in between has left the reviews in flight while the balance
+ * does not show its charge yet (t-58).
+ */
+async function withBalanceNow(
+  budget: Budget,
+  orgId: string,
+  db: Pick<Prisma.TransactionClient, 'creditEntry'>
+): Promise<Budget> {
+  if (budget.balance === null) return budget;
+  return { ...budget, balance: await getCreditBalance(orgId, db) };
 }
 
 /** The balance, or `null` when it cannot be read: logged, and the cap and the per-judge gate apply. */
@@ -665,16 +688,14 @@ export async function budgetRefusal(
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
   if (!budget) return null;
-  let inFlight = NONE_IN_FLIGHT;
-  if (!usedUp(budget)) {
-    try {
-      inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date(), self);
-    } catch (err) {
-      return unreadable(orgId, err);
-    }
+  if (usedUp(budget)) return refusalFor(budget, judgeCount, NONE_IN_FLIGHT, true);
+  try {
+    const inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date(), self);
+    // A review claimed is a stored one.
+    return refusalFor(await withBalanceNow(budget, orgId, prisma), judgeCount, inFlight, true);
+  } catch (err) {
+    return unreadable(orgId, err);
   }
-  // A review claimed is a stored one.
-  return refusalFor(budget, judgeCount, inFlight, true);
 }
 
 /**
@@ -694,15 +715,22 @@ export async function assertReviewFits(
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
   if (!budget) return null;
-  let inFlight = NONE_IN_FLIGHT;
-  if (!usedUp(budget)) {
+  let refusal: BudgetRefusal | null;
+  if (usedUp(budget)) {
+    refusal = refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored);
+  } else {
     try {
-      inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date());
+      const inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date());
+      refusal = refusalFor(
+        await withBalanceNow(budget, orgId, prisma),
+        judgeCount,
+        inFlight,
+        stored
+      );
     } catch (err) {
       return unreadable(orgId, err);
     }
   }
-  const refusal = refusalFor(budget, judgeCount, inFlight, stored);
   if (refusal) refuse(refusal);
   return budget.rate;
 }
@@ -712,6 +740,13 @@ export interface BudgetHold {
   readonly id: string;
   /** Stop renewing and delete it. Safe to call more than once; never throws. */
   release: () => Promise<void>;
+  /**
+   * Stop renewing and leave it to run out `ms` from now instead of deleting
+   * it, so it goes on holding what it held: a `store: false` run whose charge
+   * failed, until the recovery job charges it (t-58). A later `release` does
+   * nothing. Never throws.
+   */
+  keepFor: (ms: number) => Promise<void>;
 }
 
 /**
@@ -757,6 +792,23 @@ function keepHold(orgId: string, id: string): BudgetHold {
 
   return {
     id,
+    keepFor: async (ms: number) => {
+      if (released) return;
+      released = true;
+      clearInterval(timer);
+      try {
+        await prisma.budgetHold.updateMany({
+          where: { id },
+          data: { leaseExpiresAt: new Date(Date.now() + ms) },
+        });
+      } catch (err) {
+        // Its lease runs out on its own, sooner: the recovery job still charges.
+        logger.warn('Budget hold not kept', {
+          holdId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
     release: async () => {
       if (released) return;
       released = true;
@@ -816,10 +868,11 @@ export async function reserveReviewBudget(
     taken = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey(orgId)}, 0))`;
       const now = new Date();
+      const inFlight = await inFlightCost(tx, orgId, budget.rate, now);
       const refusal = refusalFor(
-        budget,
+        await withBalanceNow(budget, orgId, tx),
         judgeCount,
-        await inFlightCost(tx, orgId, budget.rate, now),
+        inFlight,
         stored
       );
       if (refusal) return { refusal };

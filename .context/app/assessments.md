@@ -122,7 +122,9 @@ from either of the first two.
   partial, failed, or a cancelled run's last) charges the workspace's
   CopyCredits for its cost rows in the same transaction, once. See
   [`credits.md`](./credits.md#the-charge).
-- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease. The
+- **Cancel** (`cancelAssessment`) sets `CANCELLED` and keeps the lease, even
+  one that ran out: the run may be alive with its renewals failing, and the
+  recovery job charges it once lapsed (t-58). The
   run asks before each judge starts, so no further judge is called. Judges
   already in flight finish and their rows are saved, since their cost is
   already spent. Only the run that held the token saves them. The cancelled
@@ -217,8 +219,9 @@ sooner, which is harmless. Each pass:
 replies, because a re-driven run reads its finished judges' replies back. So is
 a `CANCELLED` one that may still have judges in flight, since they can land on
 it after the cancel. A lease that ran out is no guide (a renewal can fail while
-the run lives), so one is taken once its judges have all landed (the lease cleared) or an hour
-after the cancel (`CANCEL_GRACE_MS`, past any judge's timeout and retries). A succeeded run found with no reply on a re-drive is counted
+the run lives), so one is taken once its judges have all landed (the lease cleared, or the
+recovery job's charge cleared it) or a day and an hour after the cancel (`CHARGE_SWEEP_MS`,
+past any judge's timeout and the recovery job's charge, t-58). A succeeded run found with no reply on a re-drive is counted
 as a failed judge rather than called again, so the workspace is not billed
 twice. A window that does not parse is never purged on: for content that is no
 window, and for replies `GET` answers `judgeReplyRetention: null` and no reply

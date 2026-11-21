@@ -16,7 +16,7 @@
  * whose run died before its last write, its lease run out (`CANCELLED` with a
  * lease set and past). Clearing that lease and charging are one transaction,
  * so the review is charged once and the next pass skips it. Only those
- * cancelled within {@link CHARGE_SWEEP_MS}: older ones predate the charge.
+ * created since `chargeSweepFloor`: older ones predate the charge.
  * And a `store: false` run left uncharged (its charge failed, or its process
  * died), once its rows have been quiet for an hour (`CANCEL_GRACE_MS`)
  * (`chargeLapsedEphemeralRuns`). At most {@link RECOVERY_BATCH} of each kind
@@ -34,8 +34,12 @@
  * the first pass's live lease, and changes nothing.
  */
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
-import { CHARGE_SWEEP_MS, MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
-import { chargeEndedReview, chargeLapsedEphemeralRuns } from '@/lib/app/credits/charge';
+import { MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
+import {
+  chargeEndedReview,
+  chargeLapsedEphemeralRuns,
+  chargeSweepFloor,
+} from '@/lib/app/credits/charge';
 import { beginAssessment } from '@/lib/app/assessments/run';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
@@ -86,17 +90,21 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
   }
 
   // Cancelled reviews whose run died before its last write (`freePlace`).
+  // Those created before charging began are left alone (`chargeSweepFloor`).
+  const floor = await chargeSweepFloor(orgId, now);
   const lapsed = {
     orgId,
     status: 'CANCELLED' as const,
     leaseExpiresAt: { not: null, lte: now },
-    completedAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
+    createdAt: { gte: floor ?? now },
   };
-  const cancelled = await prisma.assessment.findMany({
-    where: lapsed,
-    select: { id: true },
-    take: RECOVERY_BATCH,
-  });
+  const cancelled = floor
+    ? await prisma.assessment.findMany({
+        where: lapsed,
+        select: { id: true },
+        take: RECOVERY_BATCH,
+      })
+    : [];
   let chargedCancelled = 0;
   for (const { id } of cancelled) {
     chargedCancelled += await prisma.$transaction(async (tx) => {

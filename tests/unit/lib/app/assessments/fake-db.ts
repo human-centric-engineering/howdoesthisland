@@ -371,6 +371,11 @@ export function createFakeDb() {
       findMany: vi.fn(async ({ where }: { where?: Row }) =>
         credits.filter((r) => matches(r, where))
       ),
+      // Only `orderBy: { createdAt: 'asc' }` is asked for: the earliest.
+      findFirst: vi.fn(async ({ where }: { where?: Row }) => {
+        const rows = credits.filter((r) => matches(r, where));
+        return rows.sort((a, b) => Number(a.createdAt) - Number(b.createdAt))[0] ?? null;
+      }),
       aggregate: vi.fn(async ({ where }: { where?: Row }) => {
         const rows = credits.filter((r) => matches(r, where));
         return {
@@ -485,17 +490,13 @@ export function createFakeDb() {
     costRows.push({ id: `cost-${seq}`, orgId, totalCostUsd, metadata, createdAt });
   }
 
-  /** Give `orgId` credits, as an admin's grant would. */
-  function grant(orgId: string, amount: number): void {
+  /**
+   * Give `orgId` credits, as an admin's grant would: by default long ago, so
+   * every review a test seeds was made since charging began.
+   */
+  function grant(orgId: string, amount: number, createdAt = new Date(0)): void {
     seq += 1;
-    credits.push({
-      id: `credit-${seq}`,
-      orgId,
-      amount,
-      kind: 'GRANT',
-      reference: null,
-      createdAt: new Date(),
-    });
+    credits.push({ id: `credit-${seq}`, orgId, amount, kind: 'GRANT', reference: null, createdAt });
   }
 
   return {

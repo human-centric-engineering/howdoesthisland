@@ -85,16 +85,16 @@ review is claimed). It checks the credits first, then the cap.
 cost rows (`AiCostLog`, every billed attempt included), at `creditsForUsd()`,
 rounded up to a whole credit. One that spent nothing writes no entry.
 
-| Review                     | Charged by                                                                                 | `reference`             |
-| -------------------------- | ------------------------------------------------------------------------------------------ | ----------------------- |
-| Completed, partial, failed | the write that ends it (`finish()`, the last attempt's failure), in the same transaction   | `assessment:<id>`       |
-| Cancelled while running    | the run's last write once its judges in flight land (`freePlace`), in the same transaction | `assessment:<id>`       |
-| Cancelled with no run      | the cancel itself                                                                          | `assessment:<id>`       |
-| Cancelled, its run died    | the recovery job, clearing the lapsed lease in the same transaction                        | `assessment:<id>`       |
-| Given up on                | the recovery job's give-up write                                                           | `assessment:<id>`       |
-| Deleted, not yet charged   | the delete, in its transaction, even while a run holds it (that run's process may be gone) | `assessment:<id>`       |
-| `store: false`             | the request once the run ends, however it ends, before its hold is released                | `ephemeral-run:<runId>` |
-| `store: false`, left over  | the recovery job, once the run's rows are an hour quiet (its charge failed, or it died)    | `ephemeral-run:<runId>` |
+| Review                     | Charged by                                                                                                                            | `reference`             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Completed, partial, failed | the write that ends it (`finish()`, the last attempt's failure), in the same transaction                                              | `assessment:<id>`       |
+| Cancelled while running    | the run's last write once its judges in flight land (`freePlace`), in the same transaction                                            | `assessment:<id>`       |
+| Cancelled, never claimed   | the cancel itself                                                                                                                     | `assessment:<id>`       |
+| Cancelled, its lease out   | the recovery job, clearing the lapsed lease in the same transaction (the cancel does not: the run may be alive, its renewals failing) | `assessment:<id>`       |
+| Given up on                | the recovery job's give-up write                                                                                                      | `assessment:<id>`       |
+| Deleted, not yet charged   | the delete, in its transaction, even while a run holds it (that run's process may be gone)                                            | `assessment:<id>`       |
+| `store: false`             | the request once the run ends, however it ends, before its hold is released                                                           | `ephemeral-run:<runId>` |
+| `store: false`, left over  | the recovery job, once the run's rows are an hour quiet (its charge failed, or it died)                                               | `ephemeral-run:<runId>` |
 
 - **Once.** The insert skips a duplicate `(kind, reference)` (ON CONFLICT DO
   NOTHING), so finishers that race write one entry. A stored review is never
@@ -104,11 +104,23 @@ rounded up to a whole credit. One that spent nothing writes no entry.
 - **Held or charged, never neither.** Charging in the write that ends a
   review means the check sees it either in flight, holding back what it has
   spent, or in the balance. A cancelled review whose run died is held back
-  for what it spent until the recovery job charges it.
+  for what it spent until the recovery job charges it, and the purge leaves
+  it until then. A `store: false` run whose charge failed keeps its hold for
+  two hours, past the recovery job's charge. The balance is read after what
+  is in flight, so a review charged between the two is counted twice, never
+  not at all.
+- **Only since charging began.** The recovery job, and a delete of a
+  cancelled review, charge only what was made since the workspace's first
+  credit entry, and within `CHARGE_SWEEP_MS` (a day and an hour). A review
+  starts only on a positive balance, so every review since charging began
+  was made after that entry; one made before it ran before reviews were
+  charged.
 - **Not yet charged, on delete:** `QUEUED` or `RUNNING`, or `CANCELLED` with
-  its lease still set. A final review is not charged by its delete: it was
-  charged as it ended, or ended before reviews were charged (as is a cancelled
-  one older than `CHARGE_SWEEP_MS`, a day and an hour).
+  its lease still set (since charging began). A final review is not charged by
+  its delete: it was charged as it ended, or ended before reviews were charged.
+- **In the write that ends it, deliberately.** A charge that fails rolls the
+  end back with it, so a review is never final and uncharged; the run hands
+  it back to the queue as any database failure does.
 - **What it can miss:** a cost row that lands after the charge, from a run
   that lost its lease while another finished the review, or after a delete or
   a lapsed cancel lease, or from a `store: false` run after an hour's quiet.

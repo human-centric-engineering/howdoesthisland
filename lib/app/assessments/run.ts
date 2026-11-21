@@ -52,8 +52,9 @@
  * **The charge** (t-58, `lib/app/credits/charge.ts`). Every write that ends
  * a review charges the workspace's CopyCredits for its cost rows in the same
  * transaction: {@link finish}, the last attempt's failure, and a cancelled
- * run's last write ({@link freePlace}). A cancel with no run to finish it
- * charges as it cancels. A review deleted before it was charged is charged
+ * run's last write ({@link freePlace}). A cancel of a review no run has
+ * claimed charges as it cancels; one whose run's lease ran out is charged by
+ * the recovery job. A review deleted before it was charged is charged
  * by the delete (`remove` in `api/service.ts`), from its rows.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
@@ -720,11 +721,13 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
   const open = { id: assessmentId, orgId, status: { in: ['QUEUED' as const, 'RUNNING' as const] } };
   const now = new Date();
   return await prisma.$transaction(async (tx) => {
-    // No run holds it (queued, or its run's process died): nothing is left to
-    // land, so it ends here, and is charged for what earlier runs spent.
+    // No run holds it (queued): nothing is left to land, so it ends here, and
+    // is charged for what earlier runs spent. A lease run out is not taken
+    // for no run: the run may be alive with its renewals failing, its judges
+    // still landing. It keeps its lease, and the recovery job charges it.
     const idle = await tx.assessment.updateMany({
-      where: { ...open, OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: now } }] },
-      data: { status: 'CANCELLED', completedAt: now, leaseExpiresAt: null },
+      where: { ...open, leaseExpiresAt: null },
+      data: { status: 'CANCELLED', completedAt: now },
     });
     if (idle.count === 1) {
       await chargeEndedReview(tx, assessmentId);
@@ -736,7 +739,7 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
       // judges it has in flight, and no other run can (see `saveJudgeRun`), and
       // the run keeps its place in the workspace's limit until they land
       // (`freePlace`, which charges it), or its lease runs out (the recovery
-      // job charges it then).
+      // job charges it then, as it does one already run out).
       data: { status: 'CANCELLED', completedAt: now },
     });
     return count === 1;

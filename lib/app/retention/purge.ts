@@ -20,9 +20,10 @@
  * in flight: they can land on it after the cancel (`saveJudgeRun`). A lease
  * that ran out is no guide, because a renewal can fail while the run lives
  * (the run renews a cancelled one until its judges land, `run.ts`). One is taken once its judges have all landed
- * (`freePlace` clears the lease) or {@link CANCEL_GRACE_MS} after the cancel,
- * past any judge's timeout and retries. The recovery job finishes or fails
- * the live ones, and a later pass takes them.
+ * (`freePlace` clears the lease, as does the recovery job's charge of one
+ * whose run died, t-58) or {@link CHARGE_SWEEP_MS} after the cancel, past any
+ * judge's timeout and retries and the recovery job's charge. The recovery job
+ * finishes or fails the live ones, and a later pass takes them.
  *
  * An assessment's cached report PDFs (t-31, `lib/app/reports/pdf/cache.ts`)
  * are deleted before its row. One whose files storage would not delete is
@@ -37,7 +38,7 @@
  * Idempotent: a second pass finds nothing older than either window, and
  * changes nothing.
  */
-import { CANCEL_GRACE_MS } from '@/lib/app/assessments/limits';
+import { CHARGE_SWEEP_MS } from '@/lib/app/assessments/limits';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { logger } from '@/lib/logging';
@@ -53,13 +54,15 @@ const LIVE = ['QUEUED', 'RUNNING'] as const;
 /**
  * An assessment no run can still write to: not live, and either holding no
  * lease (every final state but a cancel with judges out clears it) or ended
- * (`completedAt`, which a cancel sets) more than {@link CANCEL_GRACE_MS} ago.
+ * (`completedAt`, which a cancel sets) more than {@link CHARGE_SWEEP_MS} ago.
  */
 const settled = (now: Date) => ({
   status: { notIn: [...LIVE] },
   OR: [
     { leaseExpiresAt: null },
-    { completedAt: { lt: new Date(now.getTime() - CANCEL_GRACE_MS) } },
+    // A cancel whose lease is still set is not charged yet: the recovery job
+    // charges it and clears the lease (t-58). A day on, it never will.
+    { completedAt: { lt: new Date(now.getTime() - CHARGE_SWEEP_MS) } },
   ],
 });
 

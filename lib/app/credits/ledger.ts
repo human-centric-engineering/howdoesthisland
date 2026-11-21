@@ -14,9 +14,10 @@
  *
  * Every read names the org, so it answers for that workspace whatever scope
  * the caller is in. Writes go through {@link recordCreditEntry}, which takes a
- * client so a caller can record an entry inside its own transaction (t-58
- * charges a review where its run ends; t-60 credits a redemption where it is
- * counted).
+ * client so a caller can record an entry inside its own transaction (t-60
+ * credits a redemption where it is counted). The charge (`./charge.ts`, t-58)
+ * writes its own, inside the transaction that ends a review, so it can skip a
+ * duplicate rather than fail on it, under the same rule ({@link assertCreditAmount}).
  */
 import type { CreditEntry, CreditEntryKind, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
@@ -36,6 +37,17 @@ export interface NewCreditEntry {
 }
 
 /**
+ * Throw unless `amount` is a whole number of credits other than `0`: every
+ * entry's rule, for a writer that cannot go through {@link recordCreditEntry}
+ * (the charge, which skips a duplicate rather than failing on it).
+ */
+export function assertCreditAmount(amount: number): void {
+  if (!Number.isInteger(amount) || amount === 0) {
+    throw new Error(`A credit entry moves a whole number of credits, not ${amount}`);
+  }
+}
+
+/**
  * Record one change to a workspace's balance. Throws on an amount that is not
  * a whole number, or is `0`: a row that changes nothing is noise in a ledger
  * people read. A second entry with the same `kind` and `reference` fails on
@@ -45,9 +57,7 @@ export async function recordCreditEntry(
   entry: NewCreditEntry,
   db: CreditWriter = prisma
 ): Promise<CreditEntry> {
-  if (!Number.isInteger(entry.amount) || entry.amount === 0) {
-    throw new Error(`A credit entry moves a whole number of credits, not ${entry.amount}`);
-  }
+  assertCreditAmount(entry.amount);
   return db.creditEntry.create({
     data: {
       orgId: entry.orgId,
@@ -92,4 +102,23 @@ export async function getCreditBalances(orgIds: string[]): Promise<Map<string, n
     if (group.orgId) balances.set(group.orgId, group._sum.amount ?? 0);
   }
   return balances;
+}
+
+/**
+ * When the workspace's first entry was written, or `null` with none: the
+ * floor of what a recovery sweep charges (t-58). A review starts only on a
+ * positive balance, so every review since charging began was created after
+ * its workspace's first entry; one created before it ran before then, and was
+ * never meant to be charged.
+ */
+export async function firstCreditEntryAt(
+  orgId: string,
+  db: Pick<Prisma.TransactionClient, 'creditEntry'> = prisma
+): Promise<Date | null> {
+  const first = await db.creditEntry.findFirst({
+    where: { orgId },
+    orderBy: { createdAt: 'asc' },
+    select: { createdAt: true },
+  });
+  return first?.createdAt ?? null;
 }

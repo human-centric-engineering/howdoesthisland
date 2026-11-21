@@ -36,6 +36,7 @@ import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import { creditsForUsd } from '@/lib/app/credits/rate';
+import { assertCreditAmount, firstCreditEntryAt } from '@/lib/app/credits/ledger';
 import { CANCEL_GRACE_MS, CHARGE_SWEEP_MS } from '@/lib/app/assessments/limits';
 
 /** A client that can read cost rows and write a charge: `prisma`, or a transaction's. */
@@ -70,6 +71,7 @@ async function charge(
   const spentUsd = _sum.totalCostUsd ?? 0;
   const credits = creditsForUsd(spentUsd);
   if (credits === 0) return { credits: 0, spentUsd };
+  assertCreditAmount(-credits);
   // ON CONFLICT DO NOTHING: a duplicate is the review already charged, and
   // leaves a caller's transaction usable, which a failed insert would not.
   const { count } = await db.creditEntry.createMany({
@@ -129,6 +131,23 @@ export async function chargeEndedReview(
   return chargeStoredReview(db, row.orgId, assessmentId, row.createdAt);
 }
 
+/**
+ * The earliest a recovery sweep looks for what was never charged (t-58): the
+ * later of the workspace's first credit entry (`firstCreditEntryAt`: rows
+ * before it ran before charging began) and {@link CHARGE_SWEEP_MS} ago.
+ * `null` with no entry: nothing it has spent was ever to be charged.
+ */
+export async function chargeSweepFloor(
+  orgId: string,
+  now: Date,
+  db: Pick<Prisma.TransactionClient, 'creditEntry'> = prisma
+): Promise<Date | null> {
+  const first = await firstCreditEntryAt(orgId, db);
+  if (!first) return null;
+  const window = now.getTime() - CHARGE_SWEEP_MS;
+  return first.getTime() > window ? first : new Date(window);
+}
+
 /** A `store: false` run's cost row, as `run-judge.ts` and the editor tag it. */
 const ephemeralRunRow = z.object({
   ephemeralRun: z.string(),
@@ -141,18 +160,20 @@ const ephemeralRunRow = z.object({
  * something and were never charged: their own charge failed, or their
  * process died before it (`service.ts`). Only runs whose last row is older
  * than `CANCEL_GRACE_MS`, so a run still going is not charged before its
- * last calls land, and newer than `CHARGE_SWEEP_MS`. Answers how many it charged.
+ * last calls land, and none before {@link chargeSweepFloor}. Answers how many it charged.
  */
 export async function chargeLapsedEphemeralRuns(
   orgId: string,
   now: Date,
   limit: number
 ): Promise<number> {
+  const floor = await chargeSweepFloor(orgId, now);
+  if (!floor) return 0;
   const quietSince = now.getTime() - CANCEL_GRACE_MS;
   const rows = await prisma.aiCostLog.findMany({
     where: {
       orgId,
-      createdAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
+      createdAt: { gte: floor },
       metadata: { path: ['ephemeral'], equals: true },
     },
     select: { createdAt: true, totalCostUsd: true, metadata: true },

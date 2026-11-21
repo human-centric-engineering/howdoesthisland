@@ -25,7 +25,6 @@ interface ReviewRow {
   costUsd: number;
   judges: string[];
   leaseExpiresAt: Date | null;
-  completedAt?: Date | null;
   createdAt: Date;
 }
 interface HoldRow {
@@ -68,7 +67,7 @@ const state = vi.hoisted(() => ({
 }));
 
 type Where = Record<string, unknown>;
-/** Equality, `{ in }`, `{ not }`, `{ gt }`, `{ lt }` and a top-level `OR`: what the queries ask. */
+/** Equality, `{ in }`, `{ not }`, `{ gt }`, `{ gte }`, `{ lt }`, `{ lte }`, `OR` and `AND`: what the queries ask. */
 const matches = (row: Record<string, unknown>, where: Where): boolean =>
   Object.entries(where).every(([k, v]) => {
     if (k === 'OR') return (v as Where[]).some((w) => matches(row, w));
@@ -84,6 +83,7 @@ const matches = (row: Record<string, unknown>, where: Where): boolean =>
     }
     if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
     if ('lte' in v) return value instanceof Date && value <= (v as { lte: Date }).lte;
+    if ('gte' in v) return value instanceof Date && value >= (v as { gte: Date }).gte;
     if ('lt' in v) {
       const lt = (v as { lt: Date | string }).lt;
       if (typeof lt === 'string') return typeof value === 'string' && value < lt;
@@ -113,6 +113,8 @@ vi.mock('@/lib/db/client', () => {
         if (state.creditsFail) throw new Error('ledger unreadable');
         return { _sum: { amount: state.credits } };
       }),
+      // The workspace's first entry: long before every review here.
+      findFirst: vi.fn(async () => ({ createdAt: new Date(0) })),
     },
     budgetHold: {
       findMany: vi.fn(async ({ where }: { where: Where }) =>
@@ -1430,15 +1432,39 @@ describe('the credits (t-58)', () => {
       status: 'CANCELLED',
       judges: slots(7),
       leaseExpiresAt: new Date(Date.now() - 1_000),
-      completedAt: new Date(Date.now() - 60_000),
+      createdAt: new Date(Date.now() - 60_000),
     });
     // Nothing left to land, but its $0.70 is not in the balance yet: 70 held.
     const err = await refusal(() => check(ORG, 'full', 7));
     expect(err.details).toMatchObject({ heldCredits: 70, remainingCredits: 80 });
 
-    // One cancelled before reviews were charged holds nothing.
-    state.reviews.at(-1)!.completedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    // One made before the recovery job's floor holds nothing: it predates the charge.
+    state.reviews.at(-1)!.createdAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+
+  it('reads the balance again after the reviews in flight, so one charged between the reads is counted', async () => {
+    // A review ended and was charged 90 between the first read of the balance
+    // and the read of what is in flight: it is no longer in flight.
+    state.credits = 10;
+    for (const claim of [false, true]) {
+      vi.mocked(prisma.creditEntry.aggregate).mockResolvedValueOnce({
+        _sum: { amount: 100 },
+      } as never);
+      if (claim) {
+        const refused = await budgetRefusal(ORG, 'full', 7, {
+          id: 'queued',
+          createdAt: new Date(),
+        });
+        expect(refused).toMatchObject({
+          code: 'INSUFFICIENT_CREDITS',
+          details: { balanceCredits: 10 },
+        });
+      } else {
+        const err = await refusal(() => check(ORG, 'full', 7));
+        expect(err.details).toMatchObject({ balanceCredits: 10, remainingCredits: 10 });
+      }
+    }
   });
 
   it('refuses every review while the balance is below zero, naming it', async () => {
