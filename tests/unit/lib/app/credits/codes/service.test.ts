@@ -3,7 +3,8 @@
  * records its maker and batch, a repeated idempotency key answers with the
  * first mint's codes or is refused for a different request, a race on one key
  * reads back the winner's codes, a taken code is drawn again, the list's
- * status and what is left follow the row, and a revoke keeps its first time.
+ * status and what is left follow the code's redemption rows (t-60: counted,
+ * never stored on the code), and a revoke keeps its first time.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma, type ReviewCode } from '@prisma/client';
@@ -27,6 +28,7 @@ import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import { prisma } from '@/lib/db/client';
 import {
   codeStatus,
+  type CountedReviewCode,
   issueCodes,
   listCodes,
   redeemLink,
@@ -46,13 +48,13 @@ const INPUT: IssueCodes = {
   idempotencyKey: 'lead-42',
 };
 
-function row(overrides: Partial<ReviewCode> = {}): ReviewCode {
+/** A code as the service reads it, with `used` redemption rows. */
+function row(overrides: Partial<ReviewCode> = {}, used = 0): CountedReviewCode {
   return {
     id: 'c1',
     code: 'ABCDEFGHJKMN',
     creditsPerRedemption: 300,
     maxRedemptions: 1,
-    redemptionCount: 0,
     expiresAt: new Date(EXPIRES),
     campaign: 'Lead test',
     createdByUserId: 'admin-1',
@@ -61,6 +63,7 @@ function row(overrides: Partial<ReviewCode> = {}): ReviewCode {
     batchIndex: 0,
     createdAt: new Date('2026-11-21T09:00:00.000Z'),
     ...overrides,
+    _count: { redemptions: used },
   };
 }
 
@@ -170,29 +173,31 @@ describe('issueCodes', () => {
 describe('codeStatus', () => {
   const now = new Date('2026-12-01T00:00:00.000Z');
   it.each([
-    ['active', row(), 'active'],
-    ['used up', row({ redemptionCount: 1 }), 'used-up'],
-    ['expired', row({ expiresAt: now }), 'expired'],
+    ['active', row(), 0, 'active'],
+    ['used up', row(), 1, 'used-up'],
+    ['expired', row({ expiresAt: now }), 0, 'expired'],
     [
       'revoked, even once used up and expired',
-      row({ revokedAt: now, redemptionCount: 1, expiresAt: now }),
+      row({ revokedAt: now, expiresAt: now }),
+      1,
       'revoked',
     ],
-    ['expired before used up', row({ redemptionCount: 1, expiresAt: now }), 'expired'],
-  ])('%s', (_name, r, status) => {
-    expect(codeStatus(r, now)).toBe(status);
+    ['expired before used up', row({ expiresAt: now }), 1, 'expired'],
+  ])('%s', (_name, r, used, status) => {
+    expect(codeStatus(r, used, now)).toBe(status);
   });
 });
 
 describe('listCodes', () => {
   it('shows what is used and left of each code, newest first', async () => {
-    db.findMany.mockResolvedValue([row({ maxRedemptions: 25, redemptionCount: 7 })]);
+    db.findMany.mockResolvedValue([row({ maxRedemptions: 25 }, 7)]);
     const { codes, truncated } = await listCodes();
     expect(codes[0]).toMatchObject({ redemptionsUsed: 7, redemptionsLeft: 18, status: 'active' });
     expect(truncated).toBe(false);
     expect(db.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {},
+        include: { _count: { select: { redemptions: true } } },
         orderBy: expect.arrayContaining([{ createdAt: 'desc' }]),
       })
     );

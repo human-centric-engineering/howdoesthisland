@@ -1,7 +1,11 @@
 /**
  * Free review codes for platform admins (t-59): minting them, listing them
- * with what is left of each, and revoking one. Redeeming is t-60. Design:
- * .context/app/credits.md.
+ * with what is left of each, and revoking one. Redeeming is t-60
+ * (`./redeem.ts`). Design: .context/app/credits.md.
+ *
+ * **What is used of a code is counted, not stored**: its
+ * `ReviewCodeRedemption` rows (t-60), so the code row stays config that only
+ * platform admins write.
  *
  * **Install-level.** A code is shared config (`globalConfig`), not any
  * workspace's: it is made here and redeemed into whichever workspace redeems
@@ -15,7 +19,7 @@
  * unique `(idempotencyKey, batchIndex)` lets one through, and the other reads
  * back what it made.
  */
-import type { ReviewCode } from '@prisma/client';
+import type { Prisma, ReviewCode } from '@prisma/client';
 import { ConflictError, NotFoundError } from '@/lib/api/errors';
 import { prisma } from '@/lib/db/client';
 import { isUniqueViolationOn, type UniqueConstraint } from '@/lib/db/unique-violation';
@@ -53,15 +57,28 @@ export function redeemLink(code: string): string {
   return url.toString();
 }
 
-/** Why a code can no longer be redeemed, or `active`. */
-export function codeStatus(row: ReviewCode, now: Date = new Date()): CodeStatus {
+/** Read with a code, so what is used of it comes back with it. */
+export const WITH_REDEMPTION_COUNT = {
+  _count: { select: { redemptions: true } },
+} as const satisfies Prisma.ReviewCodeInclude;
+
+/** A code with how many times it has been redeemed. */
+export type CountedReviewCode = ReviewCode & { _count: { redemptions: number } };
+
+/** Why a code can no longer be redeemed, or `active`, given how many times it has been. */
+export function codeStatus(
+  row: ReviewCode,
+  redemptionsUsed: number,
+  now: Date = new Date()
+): CodeStatus {
   if (row.revokedAt) return 'revoked';
   if (row.expiresAt <= now) return 'expired';
-  if (row.redemptionCount >= row.maxRedemptions) return 'used-up';
+  if (redemptionsUsed >= row.maxRedemptions) return 'used-up';
   return 'active';
 }
 
-export function toCodeView(row: ReviewCode, now: Date = new Date()): ReviewCodeView {
+export function toCodeView(row: CountedReviewCode, now: Date = new Date()): ReviewCodeView {
+  const used = row._count.redemptions;
   return {
     id: row.id,
     code: row.code,
@@ -69,9 +86,9 @@ export function toCodeView(row: ReviewCode, now: Date = new Date()): ReviewCodeV
     campaign: row.campaign,
     creditsPerRedemption: row.creditsPerRedemption,
     maxRedemptions: row.maxRedemptions,
-    redemptionsUsed: row.redemptionCount,
-    redemptionsLeft: Math.max(0, row.maxRedemptions - row.redemptionCount),
-    status: codeStatus(row, now),
+    redemptionsUsed: used,
+    redemptionsLeft: Math.max(0, row.maxRedemptions - used),
+    status: codeStatus(row, used, now),
     expiresAt: row.expiresAt.toISOString(),
     revokedAt: row.revokedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -85,8 +102,12 @@ function drawCodes(count: number): string[] {
   return [...codes];
 }
 
-function findBatch(idempotencyKey: string): Promise<ReviewCode[]> {
-  return prisma.reviewCode.findMany({ where: { idempotencyKey }, orderBy: { batchIndex: 'asc' } });
+function findBatch(idempotencyKey: string): Promise<CountedReviewCode[]> {
+  return prisma.reviewCode.findMany({
+    where: { idempotencyKey },
+    include: WITH_REDEMPTION_COUNT,
+    orderBy: { batchIndex: 'asc' },
+  });
 }
 
 /**
@@ -94,7 +115,7 @@ function findBatch(idempotencyKey: string): Promise<ReviewCode[]> {
  * A key reused for a different request is refused rather than answered with
  * codes the caller did not ask for.
  */
-function replay(batch: ReviewCode[], input: IssueCodes): IssuedCodes {
+function replay(batch: CountedReviewCode[], input: IssueCodes): IssuedCodes {
   const first = batch[0];
   const same =
     batch.length === input.count &&
@@ -140,7 +161,11 @@ export async function issueCodes(input: IssueCodes, actorUserId: string): Promis
           })),
         });
         rows.sort((a, b) => a.batchIndex - b.batchIndex);
-        return { codes: rows.map((row) => toCodeView(row)), replayed: false };
+        // Just made: none is redeemed yet.
+        return {
+          codes: rows.map((row) => toCodeView({ ...row, _count: { redemptions: 0 } })),
+          replayed: false,
+        };
       } catch (err) {
         // Another call with this key got there first: answer with what it made.
         if (key && isUniqueViolationOn(err, REVIEW_CODE_UNIQUE.batch)) {
@@ -173,6 +198,7 @@ export async function listCodes(q?: string): Promise<AdminCodesList> {
               ],
             }
           : {},
+      include: WITH_REDEMPTION_COUNT,
       orderBy: [{ createdAt: 'desc' }, { batchIndex: 'asc' }, { id: 'asc' }],
       take: ADMIN_CODES_LIST_LIMIT + 1,
     });
@@ -196,7 +222,10 @@ export async function revokeCode(id: string): Promise<ReviewCodeView> {
       where: { id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
-    const row = await prisma.reviewCode.findUnique({ where: { id } });
+    const row = await prisma.reviewCode.findUnique({
+      where: { id },
+      include: WITH_REDEMPTION_COUNT,
+    });
     if (!row) throw new NotFoundError('Code not found');
     return toCodeView(row);
   });

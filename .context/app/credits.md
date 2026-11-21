@@ -147,8 +147,9 @@ adds credits; the per-judge gate stays as the backstop.
 
 t-59, `lib/app/credits/codes/`, table `app_review_code`. A code gives the
 workspace that redeems it `creditsPerRedemption` credits, up to
-`maxRedemptions` times, until `expiresAt`. Redeeming it is t-60, which writes a
-`REDEEM` entry and counts it in `redemptionCount`.
+`maxRedemptions` times, until `expiresAt`. Redeeming it is t-60
+([below](#redeeming-a-code)), which writes a redemption row and a `REDEEM`
+entry. What is used of a code is the count of its redemption rows.
 
 | Kind of code    | `count` | `maxRedemptions` |
 | --------------- | ------- | ---------------- |
@@ -204,6 +205,91 @@ to mint a code for a qualified lead later; that wiring is not built.
   new request with a new key.
 - `GET /api/v1/admin/codes?q=` lists the newest 200, by campaign or code;
   `DELETE /api/v1/admin/codes/{id}` revokes.
+
+### Redeeming a code
+
+t-60, `lib/app/credits/codes/redeem.ts`, table `app_review_code_redemption`.
+
+**The code row is never written by a redemption.** A code is shared config
+(`globalConfig`), which only platform admins change, and Sunrise's
+shared-settings check (`scripts/ci/shared-settings-writes.ts`) refuses a
+customer route that writes one. A redemption is the workspace's, so the count
+lives with the redemptions: t-59's stored `redemptionCount` was dropped for
+it (decided in t-60). One source of truth, as the ledger is for the balance.
+
+- **Never more than the maximum.** A redemption takes the next `slot`, the
+  code's row count, only while that is below `maxRedemptions`.
+  `(codeId, slot)` is unique, so of redemptions racing for one slot one
+  inserts and the rest fail on the index; each tries again in a new
+  transaction, and takes the next slot or finds
+  the code used up. Distinct slots each below the maximum cannot number more
+  than it.
+- **No one turned away while uses are left.** A try loses its slot only when
+  another redemption commits, so a redeemer loses at most `maxRedemptions`
+  times before finding the code used up. The retries are bounded by that, not
+  by a fixed count a crowd at an event could exhaust (t-60 review; an earlier
+  cap of 20 and its 503 `CODE_BUSY` were dropped).
+- **Once per person per code.** `(codeId, userId)` is unique.
+- **Credited where it is counted.** The redemption and its `REDEEM` entry
+  (`redemption:<id>`) are one transaction, with the balance read in it.
+- **Uses never come back.** No redemption row is deleted, so slots stay dense.
+  The code FK is RESTRICT; the workspace and the person are SET NULL on
+  erasure (the person's FK is hand-written, drift probe in
+  `lib/app/db-drift.ts`). A workspace deleted after redeeming a personal code
+  does not make it redeemable again, and the person still cannot redeem it
+  twice.
+- `npm run smoke:redeem-codes` races eight people for a three-use code and one
+  person pressing six times, at `multi`, then erases them and the workspace.
+
+**The routes.** Both take the code in the body, as typed, so it is never in a
+logged URL.
+
+| Route                       | Who                                         | Answers                                                                                                                                              |
+| --------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/codes/check`  | anyone                                      | `status`: `active` (credits, expiry), `expired`, `used-up`, `revoked`, or `unknown`                                                                  |
+| `POST /api/v1/codes/redeem` | a session, or a key with the `assess` scope | the credits, the balance after, the workspace; 404 `CODE_UNKNOWN`, 410 `CODE_EXPIRED` / `CODE_USED_UP` / `CODE_REVOKED`, 409 `CODE_ALREADY_REDEEMED` |
+
+**What a refusal says.** A real code says which of expired, used up or
+revoked it is: knowing a real code cannot be used is worth nothing to someone
+guessing. Anything malformed or not found is `unknown`, alike, so a guess
+learns nothing about why it missed.
+
+**Guessing.** A code is about 59 bits, so the caps stop a script hammering the
+lookup, not a guesser:
+
+- the `redeem` proxy rule (`lib/app/rate-limit.ts`), keyed on IP,
+  `CODE_ATTEMPTS_PER_MINUTE_PER_IP` (120) across the page and both routes. It is
+  the looser of the two because a QR card is handed out at events, where a room
+  scanning together shares one address, and one person's way through takes
+  several requests (raised from 30 in t-60's review);
+- per person in the redeem handler, `REDEEM_ATTEMPTS_PER_MINUTE_PER_USER` (10),
+  every attempt counted, a malformed one too.
+
+**The page, `/redeem?code=…`** (`app/(public)/redeem/page.tsx`): the link and
+QR land here.
+
+- No code: a box to type one into (a plain GET form back to the page).
+- Not redeemable: which, as above, and a box for another.
+- Signed out: what it gives, and **Create an account** / **Sign in**, each with
+  `callbackUrl=/redeem?code=…`, so the person comes back here. The sign-up form
+  carries the callback through email verification and OAuth (a carried edit,
+  ledger row 22; sunrise#1315).
+  - A verification link that fails (expired, used) comes back here with
+    better-auth's `?error=`, not to the platform's verification page; the
+    panel then says so, and that signing in sends a new link.
+  - **Known limit:** a verification email sent again from the platform's pages
+    (`/verify-email`, the login form) carries no callback, so it lands on the
+    landing route. The code's own link still works once the person is
+    verified. Part of sunrise#1315.
+- Signed in: what it gives, and one press that redeems into the active
+  workspace, then the balance and where to go next. A press, not a
+  redemption on load, so the person sees what they add, and a link opened by
+  anything else redeems nothing (decided in t-60). Or, if they already have,
+  says so, ahead of the code's own state: someone who used a personal code's
+  one redemption is told they have it, not that it is used up.
+
+**Privacy.** The rows are in the person's subject export (`codeRedemptions`)
+and the workspace's org export.
 
 ## Paths that spend AI money, besides reviews
 

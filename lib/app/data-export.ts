@@ -154,6 +154,13 @@ export function initAppSubjectSources(): void {
         description:
           'Free review codes you made as an admin: their campaign, credits, limits and expiry, without the codes themselves or the keys their callers sent.',
       },
+      {
+        model: 'ReviewCodeRedemption',
+        section: 'codeRedemptions',
+        disposition: 'export',
+        description:
+          'Free review codes you redeemed: when, into which workspace, and the credits each gave.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -204,6 +211,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     calibrationRuns,
     creditEntries,
     reviewCodes,
+    codeRedemptions,
   ] = await Promise.all([
     // The ones to them, without the inviter's id (their name is in the
     // invitation email, and the id is someone else's data).
@@ -259,6 +267,12 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       omit: { code: true, idempotencyKey: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // The codes they redeemed (t-60). The row names the code by id, not the
+    // code itself.
+    prisma.reviewCodeRedemption.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
   return {
     workspaceInvitations: [
@@ -271,5 +285,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     calibrationRuns,
     creditEntries,
     reviewCodes,
+    codeRedemptions,
   };
 }

@@ -25,12 +25,20 @@
  * `SHARED_REPORT_VIEWS_PER_MINUTE`. With no session the section cap would
  * key on IP anyway, but at 100/min, which is a guessing rate this does not
  * need to allow; the page is matched too, since it reads the same row.
+ *
+ * t-60: a free review code is checked on `/redeem` and through
+ * `POST /api/v1/codes/{check,redeem}`, by people with no account as well as
+ * signed in. All three share one tier keyed on IP, at
+ * `CODE_ATTEMPTS_PER_MINUTE_PER_IP`, so a script cannot spread its tries
+ * across them. Redeeming is also capped per person in its handler
+ * (`lib/app/credits/codes/limiter.ts`).
  */
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';
 import { registerRateLimitRule, type RateLimitRule } from '@/lib/security/rate-limit-policy';
 import { SCANS_PER_MINUTE } from '@/lib/app/assessments/limits';
 import { SHARED_REPORT_VIEWS_PER_MINUTE } from '@/lib/app/reports/share/limits';
+import { CODE_ATTEMPTS_PER_MINUTE_PER_IP } from '@/lib/app/credits/codes/limits';
 
 /** The tier and the path it covers, for the tests. */
 export const SCAN_TIER = 'scan';
@@ -65,9 +73,23 @@ const sharedReportRule: RateLimitRule = {
   key: 'ip',
 };
 
+/** The code tier and the paths it covers: the page, the check and redeeming. */
+export const REDEEM_TIER = 'redeem';
+export const REDEEM_LIMIT_PATHS = /^\/(redeem|api\/v1\/codes\/(check|redeem))\/?$/;
+
+const redeemLimiter = createRateLimiter({
+  interval: 60_000,
+  maxRequests: CODE_ATTEMPTS_PER_MINUTE_PER_IP,
+  uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
+});
+
+const redeemRule: RateLimitRule = { match: REDEEM_LIMIT_PATHS, tier: REDEEM_TIER, key: 'ip' };
+
 export function registerAppRateLimits(): void {
   registerRateLimitTier(SCAN_TIER, scanLimiter);
   registerRateLimitRule(scanRule);
   registerRateLimitTier(SHARED_REPORT_TIER, sharedReportLimiter);
   registerRateLimitRule(sharedReportRule);
+  registerRateLimitTier(REDEEM_TIER, redeemLimiter);
+  registerRateLimitRule(redeemRule);
 }

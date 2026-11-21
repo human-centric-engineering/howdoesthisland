@@ -17,6 +17,7 @@ import { PasswordStrength } from '@/components/forms/password-strength';
 import { OAuthButtons } from '@/components/forms/oauth-buttons';
 import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
+import { normalizeRootRelativePath } from '@/lib/security/sanitize';
 
 /**
  * Signup Form Component
@@ -40,6 +41,17 @@ export function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { track, identify } = useAnalytics();
+
+  // FORK (HowDoesThisLand, t-60): a `callbackUrl` is where the new account
+  // goes, as the login form's does: after sign-up, after OAuth, and from the
+  // verification email. Without one, or with one that is not a same-origin
+  // path, nothing changes: the landing route, and no `callbackURL`, so the
+  // email keeps the platform's verification page. Checked as safeCallbackUrl
+  // checks it. Ledger: .context/app/platform-divergences.md row 22.
+  const callbackParam = searchParams.get('callbackUrl');
+  const acceptedCallback = callbackParam ? normalizeRootRelativePath(callbackParam.trim()) : null;
+  const callbackUrl = acceptedCallback ?? AUTH_LANDING_ROUTE;
+  const verificationCallback = acceptedCallback ? { callbackURL: acceptedCallback } : {};
 
   const [isLoading, setIsLoading] = useState(false);
   const {
@@ -85,6 +97,7 @@ export function SignupForm() {
           email: data.email,
           password: data.password,
           name: data.name,
+          ...verificationCallback,
         },
         {
           onRequest: () => {
@@ -103,7 +116,7 @@ export function SignupForm() {
 
             if (session) {
               // Session created → verification not required or auto-verified (OAuth)
-              router.push(AUTH_LANDING_ROUTE);
+              router.push(callbackUrl);
             } else {
               // No session → verification required, show "check email" page
               router.push('/verify-email?email=' + encodeURIComponent(data.email));
@@ -128,7 +141,7 @@ export function SignupForm() {
       <NoScriptNotice />
 
       {/* OAuth Buttons */}
-      <OAuthButtons callbackUrl={AUTH_LANDING_ROUTE} />
+      <OAuthButtons callbackUrl={callbackUrl} />
 
       {/* Email/Password Form */}
       <form

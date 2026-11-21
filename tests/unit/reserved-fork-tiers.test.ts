@@ -252,6 +252,8 @@ describe('reserved fork tiers', () => {
       'enum CreditEntryKind {',
       // FORK (HowDoesThisLand): free review codes (t-59).
       'model ReviewCode {',
+      // FORK (HowDoesThisLand): a code's redemptions (t-60).
+      'model ReviewCodeRedemption {',
     ]);
   });
 

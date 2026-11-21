@@ -117,4 +117,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_review_code',
     probe: constraintExists('app_review_code_createdByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-60: the hand-written FK from a redemption to who redeemed. SET NULL: a
+  // use outlives the person's erasure, so the code's count never goes down.
+  registerAppDriftProbe({
+    name: 'app_review_code_redemption_userId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_review_code_redemption',
+    probe: constraintExists('app_review_code_redemption_userId_fkey', 'ON DELETE SET NULL'),
+  });
 }

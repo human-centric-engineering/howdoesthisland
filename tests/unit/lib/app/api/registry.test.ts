@@ -85,6 +85,8 @@ const APP_ROUTE_DIRS = [
   'admin/credits',
   'admin/frameworks',
   'assessments',
+  // Checking and redeeming free review codes (t-60).
+  'codes',
   'frameworks',
   'openapi.json',
   'scan',

@@ -16,6 +16,7 @@ vi.mock('@/lib/db/client', () => ({
     reportShare: { findMany: vi.fn() },
     calibrationRun: { findMany: vi.fn() },
     creditEntry: { findMany: vi.fn() },
+    reviewCodeRedemption: { findMany: vi.fn() },
   },
 }));
 
@@ -66,6 +67,7 @@ describe('initAppOrgSources', () => {
     ],
     ['CalibrationRun', 'calibrationRuns', () => prisma.calibrationRun.findMany, {}],
     ['CreditEntry', 'creditEntries', () => prisma.creditEntry.findMany, {}],
+    ['ReviewCodeRedemption', 'codeRedemptions', () => prisma.reviewCodeRedemption.findMany, {}],
   ] as const)('declares %s, fetched for the exported org', async (model, section, read, extra) => {
     const rows = [{ id: 'row-1', orgId: 'org-1' }];
     vi.mocked(read()).mockResolvedValue(rows as never);
