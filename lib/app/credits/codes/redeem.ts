@@ -127,9 +127,10 @@ function alreadyRedeemed(): APIError {
   return new APIError('You have already redeemed this code.', REDEEM_REFUSALS.alreadyRedeemed, 409);
 }
 
-/** A try that lost its slot to another redemption, with the code's maximum. */
+/** A try that lost its slot to another redemption, with the code's id and maximum. */
 interface SlotTaken {
   slotTaken: true;
+  codeId: string;
   maxRedemptions: number;
 }
 
@@ -139,6 +140,7 @@ async function redeemOnce(
   who: Redeemer
 ): Promise<Omit<Redemption, 'code'> | SlotTaken> {
   // Read in the transaction, kept for the answer when its insert loses the slot.
+  let codeId = '';
   let maxRedemptions = 0;
   try {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -154,6 +156,7 @@ async function redeemOnce(
         where: { codeId: row.id, userId: who.userId },
       });
       if (mine > 0) throw alreadyRedeemed();
+      codeId = row.id;
       maxRedemptions = row.maxRedemptions;
       const used = row._count.redemptions;
       const status = codeStatus(row, used);
@@ -196,7 +199,7 @@ async function redeemOnce(
   } catch (err) {
     if (isUniqueViolationOn(err, REDEMPTION_UNIQUE.person)) throw alreadyRedeemed();
     if (isUniqueViolationOn(err, REDEMPTION_UNIQUE.slot))
-      return { slotTaken: true, maxRedemptions };
+      return { slotTaken: true, codeId, maxRedemptions };
     throw err;
   }
 }
@@ -218,8 +221,9 @@ export async function redeemCode(typed: string, who: Redeemer): Promise<Redempti
       // Each loss is another redemption committed, so after `maxRedemptions`
       // of them the next try must find the code used up.
       if (lost >= result.maxRedemptions) {
+        // Named by id: the code itself is a bearer credential, kept out of logs.
         throw new Error(
-          `Redeeming ${formatCode(canonical)} lost its slot ${lost + 1} times, more than its ${result.maxRedemptions} uses`
+          `Redeeming review code ${result.codeId} lost its slot ${lost + 1} times, more than its ${result.maxRedemptions} uses`
         );
       }
     }

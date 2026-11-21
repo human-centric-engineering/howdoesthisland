@@ -297,7 +297,9 @@ describe('redeemCode', () => {
 
     expect(err).toBeInstanceOf(Error);
     expect(err).not.toBeInstanceOf(APIError);
-    expect(String(err)).toContain('more than its 3 uses');
+    expect(String(err)).toContain('review code code-1 lost its slot 4 times, more than its 3 uses');
+    // The code is a bearer credential: never in a message that reaches the logs.
+    expect(String(err)).not.toContain('ABCD');
     expect(db.$transaction).toHaveBeenCalledTimes(4);
   });
 
