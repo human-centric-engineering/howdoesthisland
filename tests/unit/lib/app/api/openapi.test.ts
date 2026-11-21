@@ -432,6 +432,8 @@ describe('what each auth kind becomes', () => {
   it('says why a session-only route answers 403', () => {
     const responses = responsesOf(route({ auth: { who: 'signed-in', apiKeyScope: null } }));
     expect(responses['403']?.description).toMatch(/an API key, which this route refuses/);
+    // The guard also refuses a caller whose workspace it cannot enter.
+    expect(responses['403']?.description).toMatch(/whose workspace cannot be entered/);
   });
 
   it.each(cases)('%s', (_name, auth, security, statuses, note) => {

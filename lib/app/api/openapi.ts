@@ -216,7 +216,7 @@ function forbiddenNote(auth: Exclude<RouteAuth, { who: 'anyone' }>): string {
       : auth.apiKeyScope
         ? `an API key without the \`${auth.apiKeyScope}\` scope`
         : 'an API key, which this route refuses';
-  return `\`FORBIDDEN\`: ${role ? `${role}, or ` : ''}${key}.`;
+  return `\`FORBIDDEN\`: ${role ? `${role}, ` : ''}${key}, or a key or session whose workspace cannot be entered (suspended, or no longer theirs).`;
 }
 
 /** What `parameters()` reads of an object schema's JSON Schema. */

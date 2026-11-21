@@ -34,7 +34,10 @@ export class QuickScanAccountRequiredError extends APIError {
  * once; a key the guard then refuses is refused, whatever code the body holds.
  * The session is asked of better-auth directly, not through
  * `getServerSession()`, which answers a failed lookup as "no session": a
- * member whose lookup fails gets the 500, not the code path's 401.
+ * member whose lookup fails gets the 500, not the code path's 401. The guard
+ * then looks the session up again: a second read, accepted because
+ * better-auth's cookie cache (`lib/auth/config.ts`, five minutes) answers it
+ * without the database, and `withAuth` takes no session from outside.
  */
 export async function presentsAccount(request: NextRequest): Promise<boolean> {
   const authorization = request.headers.get('authorization');
@@ -46,7 +49,7 @@ const codeOnly = z.object({ code: z.string().max(MAX_TYPED_CODE) });
 
 /**
  * Let a caller with no account in on the `code` in their body, or refuse
- * them, before the rest of the body is checked. A code is admitted only while
+ * them, once the JSON is parsed and before the rest of the body is checked. A code is admitted only while
  * it could still be redeemed, and every other answer (missing, malformed,
  * unknown, expired, revoked, used up) is the same 401, so the route says no
  * more about a code than `POST /api/v1/codes/check` does.

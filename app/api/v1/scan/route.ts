@@ -14,7 +14,8 @@
  * scope, through `withAuth` (so a key or session whose workspace is refused
  * is refused here too), or a caller with neither sending a free review code
  * (`code`) that has not expired, been withdrawn or run out. The code is
- * checked, never used up, and checked before the rest of the body.
+ * checked, never used up, and checked once the JSON is parsed, before the
+ * rest of the body. A member's `code` is ignored, not validated.
  *
  * Body: `{ text, framework?, version?, context?, code? }`
  * (`scanRequestSchema`). `framework` defaults to HowDoesThisLand and
@@ -41,6 +42,7 @@
  * - 429 `RATE_LIMIT_EXCEEDED` — over the per-IP cap.
  */
 import type { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { handleAPIError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { successResponse } from '@/lib/api/responses';
 import { withAuth } from '@/lib/auth/guards';
@@ -56,6 +58,16 @@ async function readJson(request: NextRequest): Promise<unknown> {
   });
 }
 
+const bodyObject = z.record(z.string(), z.unknown());
+
+/** The body without its `code`: a member's account lets them in, so their code is not looked at. */
+function withoutCode(raw: unknown): unknown {
+  const parsed = bodyObject.safeParse(raw);
+  if (!parsed.success) return raw;
+  const { code: _code, ...rest } = parsed.data;
+  return rest;
+}
+
 /** Score the body, once the caller is let in. */
 async function scanBody(raw: unknown): Promise<Response> {
   refuseAccountOnlyInput(raw);
@@ -68,19 +80,22 @@ async function scanBody(raw: unknown): Promise<Response> {
       })),
     });
   }
-  // A member's `code` is ignored: their account already lets them in.
+  // Checked by `admitWithCode` for a caller with no account; not needed here.
   const { code: _code, ...scan } = parsed.data;
   return successResponse(await runQuickScan(scan));
 }
 
-const scanAsMember = withAuth(async (request: NextRequest) => scanBody(await readJson(request)), {
-  scope: ASSESS_SCOPE,
-  ownership: {
-    decidedBy: 'nothing',
-    because:
-      'The quick scan reads only the framework tables, which are shared config, and stores nothing.',
-  },
-});
+const scanAsMember = withAuth(
+  async (request: NextRequest) => scanBody(withoutCode(await readJson(request))),
+  {
+    scope: ASSESS_SCOPE,
+    ownership: {
+      decidedBy: 'nothing',
+      because:
+        'The quick scan reads only the framework tables, which are shared config, and stores nothing.',
+    },
+  }
+);
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {

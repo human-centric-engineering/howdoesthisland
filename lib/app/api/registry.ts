@@ -123,9 +123,11 @@ export type RouteAuth =
 
 export interface RouteContract {
   /**
-   * A route behind a switch: served, and published in the OpenAPI document
-   * and on `/developers`, only while this answers `true` (`servedRoutes()`).
-   * Read per call. Absent: always served.
+   * A route behind a switch: published in the OpenAPI document and on
+   * `/developers` only while this answers `true` (`servedRoutes()`). Read per
+   * call. Absent: always published. It does not gate the handler: the route
+   * must check the same switch itself and answer 404 while it is off, as
+   * `POST /api/v1/scan` does.
    */
   enabled?: () => boolean;
   method: HttpMethod;

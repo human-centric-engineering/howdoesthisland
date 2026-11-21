@@ -323,6 +323,9 @@ describe('who may run the quick scan (t-61)', () => {
   it('a signed-in member sending a code is let in on the session, and the code is not read', async () => {
     signedIn();
     expect((await scanAs({ text: TEXT, code: UNKNOWN })).status).toBe(200);
+    // Not validated either: a member's code is ignored, whatever it holds.
+    expect((await scanAs({ text: TEXT, code: 42 })).status).toBe(200);
+    expect((await scanAs({ text: TEXT, code: 'A'.repeat(65) })).status).toBe(200);
     expect(touched).not.toContain('reviewCode');
   });
 
