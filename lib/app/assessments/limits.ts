@@ -89,5 +89,5 @@ export const EVENTS_MAX_MS = 5 * 60_000;
  */
 export const AI_ASSESSMENTS_PER_MINUTE = 10;
 
-/** Free quick scans per IP per minute (`POST scan`, D7). */
+/** Quick scans per IP per minute (`POST scan`), whoever is calling. */
 export const SCANS_PER_MINUTE = 30;

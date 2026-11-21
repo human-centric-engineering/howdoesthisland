@@ -4,7 +4,8 @@
  *
  * The body is the document itself, not the success envelope, so a tool can
  * load the URL as it is. A conditional GET: the `ETag` is the document's
- * hash, and it changes only when a deploy changes the registry.
+ * hash, and it changes when a deploy changes the registry or the quick-scan
+ * switch (`lib/app/quick-scan/switch.ts`) adds or drops `POST /api/v1/scan`.
  *
  * Authentication: none. Rate limiting: the `/api/v1` section cap, keyed on
  * the caller's IP when anonymous (`lib/security/rate-limit-policy.ts`).

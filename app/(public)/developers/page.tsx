@@ -17,6 +17,7 @@ import { connection } from 'next/server';
 import { env } from '@/lib/env';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { openApiDocument } from '@/lib/app/api/openapi';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import {
   AI_ASSESSMENTS_PER_MINUTE,
   RUNNING_PER_WORKSPACE,
@@ -128,34 +129,41 @@ const REVIEW_ERRORS: [status: number, code: string, meaning: string][] = [
 
 const LIMITS = SECURITY_CONSTANTS.RATE_LIMIT.LIMITS;
 
-/** Each per-minute cap, and what it counts. */
-const RATE_LIMITS: [what: string, perMinute: number, keyedOn: string][] = [
-  [
-    'Every route under `/api/v1` not named below',
-    LIMITS.API,
-    'Per person with a browser session; per IP address with a key',
-  ],
-  [
-    'Routes under `/api/v1/admin`, in place of the cap above',
-    LIMITS.ADMIN,
-    'Per person with a browser session; per IP address with a key',
-  ],
-  [
-    'Reviews by the AI reviewers (`POST /api/v1/assessments`, any profile but `quick`)',
-    AI_ASSESSMENTS_PER_MINUTE,
-    'Per person, on top of the first cap',
-  ],
-  [
-    'The free quick scan (`POST /api/v1/scan`), in place of the first cap',
-    SCANS_PER_MINUTE,
-    'Per IP address',
-  ],
-  [
-    'Opening a shared report (`GET /api/v1/shared-reports/{token}`), in place of the first cap',
-    SHARED_REPORT_VIEWS_PER_MINUTE,
-    'Per IP address',
-  ],
+type RateLimitRow = [what: string, perMinute: number, keyedOn: string];
+
+/** The quick scan's cap, listed only while the quick scan is switched on (t-61). */
+const QUICK_SCAN_LIMIT: RateLimitRow = [
+  'The quick scan (`POST /api/v1/scan`), in place of the first cap',
+  SCANS_PER_MINUTE,
+  'Per IP address',
 ];
+
+/** Each per-minute cap, and what it counts. */
+function rateLimits(quickScan: boolean): RateLimitRow[] {
+  return [
+    [
+      'Every route under `/api/v1` not named below',
+      LIMITS.API,
+      'Per person with a browser session; per IP address with a key',
+    ],
+    [
+      'Routes under `/api/v1/admin`, in place of the cap above',
+      LIMITS.ADMIN,
+      'Per person with a browser session; per IP address with a key',
+    ],
+    [
+      'Reviews by the AI reviewers (`POST /api/v1/assessments`, any profile but `quick`)',
+      AI_ASSESSMENTS_PER_MINUTE,
+      'Per person, on top of the first cap',
+    ],
+    ...(quickScan ? [QUICK_SCAN_LIMIT] : []),
+    [
+      'Opening a shared report (`GET /api/v1/shared-reports/{token}`), in place of the first cap',
+      SHARED_REPORT_VIEWS_PER_MINUTE,
+      'Per IP address',
+    ],
+  ];
+}
 
 /** A scope's name and what it lets a key do; a scope with no description is shown by name. */
 function describeScope(scope: string): { label: string; detail: string | null } {
@@ -268,8 +276,8 @@ export default async function DevelopersPage() {
               with the <code>assess</code> scope. Its value is shown once: keep it somewhere safe.
             </li>
             <li>
-              Put the key and the address in your shell, then send your first review. This one uses
-              the free quick scan, so it costs nothing and keeps nothing.
+              Put the key and the address in your shell, then send your first review. This one is
+              the <code>quick</code> profile, so it costs nothing and keeps nothing.
             </li>
           </ol>
           <CodeBlock>{`export HDTL_URL="${baseUrl}"\nexport HDTL_KEY="sk_…"`}</CodeBlock>
@@ -325,8 +333,8 @@ export default async function DevelopersPage() {
             <div className="space-y-1">
               <h3 className="font-semibold">No key needed</h3>
               <p className="text-muted-foreground text-sm">
-                The frameworks the reviews score against, the free quick scan, shared reports and
-                this API’s own description.
+                The frameworks the reviews score against, shared reports and this API’s own
+                description.
               </p>
               <RouteLinks ops={anonymous} />
             </div>
@@ -362,7 +370,7 @@ export default async function DevelopersPage() {
                 </tr>
               </thead>
               <tbody>
-                {RATE_LIMITS.map(([what, perMinute, keyedOn]) => (
+                {rateLimits(isQuickScanEnabled()).map(([what, perMinute, keyedOn]) => (
                   <tr key={what} className="border-t align-top">
                     <td className="py-1 pr-4">
                       <Prose>{what}</Prose>

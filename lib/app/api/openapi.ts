@@ -15,7 +15,10 @@
  *   cookie, or a bearer API key holding `apiKeyScope` where one is accepted;
  *   a session or a key with the `admin` scope for a platform admin. A 401
  *   and a 403 for every route that needs a caller: one that refuses API keys
- *   answers a key with 403.
+ *   answers a key with 403. `orCode` adds the empty requirement `{}`, since
+ *   a free review code in the body stands in for a credential, and its 401
+ *   is `ACCOUNT_REQUIRED`.
+ * - `enabled` → a route whose switch is off is left out of the document.
  * - `params` / `query` / `body` → parameters and the request body, with a
  *   400 `VALIDATION_ERROR`; `invalidParamsStatus: 404` answers a bad path
  *   with a 404 instead.
@@ -43,7 +46,7 @@
 import { z } from 'zod';
 import { computeETag } from '@/lib/api/etag';
 import {
-  APP_ROUTES,
+  servedRoutes,
   assessmentContextField,
   assessmentResultField,
   sharedResultField,
@@ -152,10 +155,14 @@ function authNote(auth: RouteAuth): string | null {
   switch (auth.who) {
     case 'anyone':
       return null;
-    case 'signed-in':
-      return auth.apiKeyScope
+    case 'signed-in': {
+      const who = auth.apiKeyScope
         ? `A session, or an API key with the \`${auth.apiKeyScope}\` scope.`
         : 'A browser session; API keys are refused.';
+      return auth.orCode
+        ? `${who} With neither, a free review code in \`code\` that has not expired, been withdrawn or run out. The code is checked, never used up.`
+        : who;
+    }
     case 'platform-admin':
       return 'A platform admin: a session, or an API key with the `admin` scope.';
     case 'workspace-admin': {
@@ -178,6 +185,13 @@ function security(auth: RouteAuth): JsonObject[] {
     case 'platform-admin':
       return [{ session: [] }, { apiKey: ['admin'] }];
     case 'signed-in':
+      // `{}`: no credential, which a free review code in the body stands in for.
+      return [
+        ...(auth.apiKeyScope
+          ? [{ session: [] }, { apiKey: [auth.apiKeyScope] }]
+          : [{ session: [] }]),
+        ...(auth.orCode ? [{}] : []),
+      ];
     case 'workspace-admin':
       return auth.apiKeyScope
         ? [{ session: [] }, { apiKey: [auth.apiKeyScope] }]
@@ -202,7 +216,7 @@ function forbiddenNote(auth: Exclude<RouteAuth, { who: 'anyone' }>): string {
       : auth.apiKeyScope
         ? `an API key without the \`${auth.apiKeyScope}\` scope`
         : 'an API key, which this route refuses';
-  return `\`FORBIDDEN\`: ${role ? `${role}, or ` : ''}${key}.`;
+  return `\`FORBIDDEN\`: ${role ? `${role}, ` : ''}${key}, or a key or session whose workspace cannot be entered (suspended, or no longer theirs).`;
 }
 
 /** What `parameters()` reads of an object schema's JSON Schema. */
@@ -264,7 +278,11 @@ function operation(route: RouteContract): JsonObject {
     (request.params !== undefined && !paramsFail404) || request.query || request.body;
   if (validated) responses['400'] = errorRef('`VALIDATION_ERROR`: the request does not parse.');
   if (auth.who !== 'anyone') {
-    responses['401'] = errorRef('`UNAUTHORIZED`: no caller.');
+    responses['401'] = errorRef(
+      auth.who === 'signed-in' && auth.orCode
+        ? '`ACCOUNT_REQUIRED`: no session, no key, and no free review code that could still be redeemed. `UNAUTHORIZED`: an API key that is not valid.'
+        : '`UNAUTHORIZED`: no caller.'
+    );
     responses['403'] = errorRef(forbiddenNote(auth));
   }
   if (paramsFail404) {
@@ -331,9 +349,9 @@ const ERROR_ENVELOPE: JsonSchema = {
   required: ['success', 'error'],
 };
 
-/** The document for `routes` (the registry, unless a test passes its own). */
+/** The document for `routes` (the routes served now, unless a test passes its own). */
 export function buildOpenApiDocument(
-  routes: readonly RouteContract[] = APP_ROUTES
+  routes: readonly RouteContract[] = servedRoutes()
 ): OpenApiDocument {
   const paths: Record<string, Record<string, JsonObject>> = {};
   for (const route of routes) {
@@ -385,19 +403,22 @@ export function buildOpenApiDocument(
   };
 }
 
-let cached: { document: OpenApiDocument; etag: string } | null = null;
+let cached: { served: string; document: OpenApiDocument; etag: string } | null = null;
 
 /**
- * The registry's document and its `ETag`, built once per process: the
- * registry is fixed at build time.
+ * The served routes' document and its `ETag`. The registry is fixed at build
+ * time, but a switch (`RouteContract.enabled`) is read per call, so the
+ * document is built again only when the set of routes served has changed.
  */
 export function publishedOpenApi(): { document: OpenApiDocument; etag: string } {
-  if (!cached) {
-    const document = buildOpenApiDocument();
-    cached = { document, etag: computeETag(document) };
+  const routes = servedRoutes();
+  const served = routes.map(operationId).join(' ');
+  if (cached?.served !== served) {
+    const document = buildOpenApiDocument(routes);
+    cached = { served, document, etag: computeETag(document) };
   }
-  return cached;
+  return { document: cached.document, etag: cached.etag };
 }
 
-/** The registry's document. */
+/** The served routes' document. */
 export const openApiDocument = (): OpenApiDocument => publishedOpenApi().document;

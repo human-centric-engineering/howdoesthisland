@@ -1,11 +1,10 @@
 /**
- * The free quick scan (t-24, D7): deterministic, no model called, nothing
- * stored.
+ * The quick scan (t-24): deterministic, no model called, nothing stored.
  *
- * Open to anyone, signed in or not, and needs no workspace: it reads only the
- * framework tables, which are shared config (`version.ts`), and writes
- * nothing. It takes pasted text only; fetching a page or reading a file needs
- * an account (D14).
+ * It needs no workspace: it reads only the framework tables, which are shared
+ * config (`version.ts`), and writes nothing. It takes pasted text only;
+ * fetching a page or reading a file is `POST /api/v1/assessments` (D14). Whether it is
+ * offered at all, and who may run it, is `lib/app/quick-scan/` (t-61).
  */
 import { z } from 'zod';
 import { APIError } from '@/lib/api/errors';
@@ -17,7 +16,7 @@ import { scoresOf } from '@/lib/app/assessments/run';
 import type { QuickScanView } from '@/lib/app/assessments/api/views';
 import type { scanRequestSchema } from '@/lib/app/assessments/api/validations';
 
-/** Keys a signed-in caller may send to `POST assessments`, and an anonymous scan may not. */
+/** Keys `POST assessments` takes and the quick scan does not, whoever is calling. */
 const ACCOUNT_ONLY = ['url', 'file', 'source'] as const;
 
 const bodyObject = z.record(z.string(), z.unknown());
@@ -31,7 +30,7 @@ export function refuseAccountOnlyInput(body: unknown): void {
   if (!parsed.success) return;
   if (ACCOUNT_ONLY.some((key) => key in parsed.data)) {
     throw new APIError(
-      'Fetching a page or reading a file needs an account. Paste the text here, or sign in and use POST /api/v1/assessments.',
+      'The quick scan takes pasted text only. To assess a page or a file, use POST /api/v1/assessments with an account.',
       'ACCOUNT_REQUIRED',
       401
     );
@@ -39,7 +38,7 @@ export function refuseAccountOnlyInput(body: unknown): void {
 }
 
 export async function runQuickScan(
-  body: z.infer<typeof scanRequestSchema>
+  body: Omit<z.infer<typeof scanRequestSchema>, 'code'>
 ): Promise<QuickScanView> {
   const resolved = await versionToScore(body);
   const ctx = contextFor(resolved, body.context);

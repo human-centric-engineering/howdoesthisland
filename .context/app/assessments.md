@@ -241,18 +241,35 @@ one says what purging an assessment does to it.
 
 ## The API
 
-| Route                                     | Who                            | What                                                                                                     |
-| ----------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/scan`                       | anyone, 30/min per IP          | The quick scan of pasted text. Deterministic, no AI, nothing stored.                                     |
-| `POST /api/v1/assessments`                | session, or key with `assess`  | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                            |
-| `GET /api/v1/assessments`                 | same                           | The workspace's assessments, newest first; `page`, `limit`, `status`.                                    |
-| `GET /api/v1/assessments/{id}`            | same                           | One assessment: its copy (`text`), its judges and, once final, its result.                               |
-| `GET /api/v1/assessments/{id}/events`     | same                           | Progress as Server-Sent Events.                                                                          |
-| `POST /api/v1/assessments/{id}/cancel`    | same                           | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                     |
-| `DELETE /api/v1/assessments/{id}`         | same                           | Delete it, its judge runs and replies, and its text (unless another assessment shares it).               |
-| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports` | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`. |
+| Route                                     | Who                                                              | What                                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/scan`                       | session, key with `assess`, or a free review code; 30/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.       |
+| `POST /api/v1/assessments`                | session, or key with `assess`                                    | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                            |
+| `GET /api/v1/assessments`                 | same                                                             | The workspace's assessments, newest first; `page`, `limit`, `status`.                                    |
+| `GET /api/v1/assessments/{id}`            | same                                                             | One assessment: its copy (`text`), its judges and, once final, its result.                               |
+| `GET /api/v1/assessments/{id}/events`     | same                                                             | Progress as Server-Sent Events.                                                                          |
+| `POST /api/v1/assessments/{id}/cancel`    | same                                                             | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                     |
+| `DELETE /api/v1/assessments/{id}`         | same                                                             | Delete it, its judge runs and replies, and its text (unless another assessment shares it).               |
+| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                   | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`. |
 
 Each route's docblock lists its error codes. A few rules hold across them:
+
+- **The quick scan is behind a switch** (t-61). `QUICK_SCAN_ENABLED`, read
+  through `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), is off by
+  default in production and on elsewhere. Off, `POST /api/v1/scan` answers 404
+  `NOT_FOUND` to everyone, and the OpenAPI document and `/developers` leave it
+  out (the registry's `enabled`, read by `servedRoutes()`). A page that later
+  offers the quick scan checks the switch too. It does not cover the engine's
+  fallback when a judge fails, calibration's quick mode, or the `quick`
+  profile of `POST assessments`.
+- **Who may run the quick scan.** A session or an API key with `assess`,
+  through `withAuth` as on every route (a key without the scope, or a key or
+  session whose workspace is refused, is 403); their `code` is ignored. With
+  neither, a free review code in the body's `code` that has not expired, been
+  withdrawn or run out; it is checked with `checkCode()` once the JSON is
+  parsed, before the rest of the body, and never used up. Anything else is
+  401 `ACCOUNT_REQUIRED`, in the same words whatever was wrong with the code.
+  A caller sending an API key is judged on the key alone.
 
 - **The version.** `framework` defaults to HowDoesThisLand, `version` to its
   latest published one. A retired version is readable but runs nothing new
@@ -326,8 +343,8 @@ Each route's docblock lists its error codes. A few rules hold across them:
   starts no further judge.
   A handler-level limiter (`api/limiter.ts`) under the proxy's section cap. The
   scan's 30/min per IP is the `scan` rule in `lib/app/rate-limit.ts`.
-- **URLs need an account (D14).** The scan takes pasted text only; a `url` or
-  `file` there is 401 `ACCOUNT_REQUIRED`.
+- **URLs and files are `POST assessments` (D14).** The scan takes pasted text
+  only; a `url` or `file` there is 401 `ACCOUNT_REQUIRED`.
 - **The scan needs no workspace.** It reads only the framework tables, which
   are shared config, so it works with no session and no org at `multi`.
 

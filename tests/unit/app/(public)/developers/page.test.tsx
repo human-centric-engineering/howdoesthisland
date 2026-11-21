@@ -16,14 +16,19 @@ vi.mock('next/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/server')>()),
   connection: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('@/lib/env', () => ({
-  env: { NODE_ENV: 'test', NEXT_PUBLIC_APP_URL: 'https://docs.example.test' },
+const mockEnv = vi.hoisted(() => ({
+  NODE_ENV: 'test' as const,
+  NEXT_PUBLIC_APP_URL: 'https://docs.example.test',
+  QUICK_SCAN_ENABLED: undefined as boolean | undefined,
 }));
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 import DevelopersPage, { metadata } from '@/app/(public)/developers/page';
 import { RECIPES } from '@/components/app/developers/recipes';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { AI_ASSESSMENTS_PER_MINUTE } from '@/lib/app/assessments/limits';
+
+const SCAN = 'POST /api/v1/scan';
 
 describe('DevelopersPage', () => {
   it('renders per request, so the limits are the running server’s', async () => {
@@ -103,5 +108,23 @@ describe('DevelopersPage', () => {
     expect(listed).toContain(
       'POST /api/v1/admin/frameworks/{slug}/versions/{version}/calibration-runs'
     );
+  });
+
+  it('lists the quick scan, its route and its cap, only while its switch is on (t-61)', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = true;
+    const on = render(await DevelopersPage());
+    const operations = (el: HTMLElement) =>
+      [...el.querySelectorAll('[data-operation]')].map((op) => op.getAttribute('data-operation'));
+    expect(operations(on.container)).toContain(SCAN);
+    expect(on.container.querySelector('#errors-and-limits')?.textContent).toContain('/api/v1/scan');
+    on.unmount();
+
+    mockEnv.QUICK_SCAN_ENABLED = false;
+    const off = render(await DevelopersPage());
+    expect(operations(off.container)).not.toContain(SCAN);
+    // Nowhere on the page: not the reference, the scope lists or the limits.
+    expect(off.container.textContent).not.toContain('/api/v1/scan');
+    off.unmount();
+    mockEnv.QUICK_SCAN_ENABLED = undefined;
   });
 });

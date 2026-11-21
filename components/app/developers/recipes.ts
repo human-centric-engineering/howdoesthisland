@@ -43,7 +43,7 @@ const ASSESSMENTS = '/api/v1/assessments';
 /** The other readers the CFO recipe suggests: exec role ids in the shipped model (test). */
 export const CFO_ALTERNATE_ROLES = ['cto', 'procurement'] as const;
 
-/** The first review in Getting started: the free quick scan, kept nowhere. */
+/** The first review in Getting started: the quick scan, kept nowhere. */
 export const FIRST_REVIEW: Pick<Recipe, 'method' | 'path' | 'scope' | 'body'> = {
   method: 'POST',
   path: ASSESSMENTS,
@@ -101,7 +101,7 @@ export const RECIPES: readonly Recipe[] = [
     id: 'recipe-ci-gate',
     title: 'Gate copy in CI',
     intro:
-      'Fail a build when copy scores under a threshold. The `quick` profile is the free quick scan: no AI reviewers, no charge, an answer straight away, and it does not count against the per-minute cap on reviews by the AI reviewers. `store: false` keeps nothing, so a pipeline does not fill your workspace with drafts.',
+      'Fail a build when copy scores under a threshold. The `quick` profile is the quick scan: no AI reviewers, no charge, an answer straight away, and it does not count against the per-minute cap on reviews by the AI reviewers. `store: false` keeps nothing, so a pipeline does not fill your workspace with drafts.',
     method: 'POST',
     path: ASSESSMENTS,
     scope: 'assess',

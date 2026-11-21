@@ -15,9 +15,9 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · .context/security/rate-limiting.md
  *
- * HowDoesThisLand (t-24): the free quick scan (`POST /api/v1/scan`, D7) is
- * anonymous, so the section cap's session-user key would fall back to IP at
- * the section's 100/min. It gets its own tier, keyed on IP for everyone,
+ * HowDoesThisLand (t-24): the quick scan (`POST /api/v1/scan`) takes callers
+ * with no account who hold a free review code (t-61), so the section cap's
+ * session-user key would fall back to IP at the section's 100/min. It gets its own tier, keyed on IP for everyone,
  * signed in or not, at `SCANS_PER_MINUTE`.
  *
  * t-32: a share link (`/r/{token}` and `GET /api/v1/shared-reports/{token}`)
@@ -31,7 +31,12 @@
  * signed in. All three share one tier keyed on IP, at
  * `CODE_ATTEMPTS_PER_MINUTE_PER_IP`, so a script cannot spread its tries
  * across them. Redeeming is also capped per person in its handler
- * (`lib/app/credits/codes/limiter.ts`).
+ * (`lib/app/credits/codes/limiter.ts`). The quick scan checks a code too
+ * (t-61), but under its own `scan` tier: a proxy rule cannot read the body
+ * to see a code, and a handler's limiter would not share these buckets,
+ * which live in the proxy's module realm. At about 59 bits a code cannot be
+ * guessed at any of these rates, and the scan's 30 a minute per IP bounds
+ * what it adds.
  */
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';
