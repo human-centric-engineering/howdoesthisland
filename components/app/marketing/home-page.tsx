@@ -29,7 +29,7 @@ import { selfScore } from '@/lib/app/quick-scan/self-score';
  */
 
 const description =
-  'HowDoesThisLand reads your CV, pitch or proposal the way your reader will. Nine AI reviewers score its credibility, emotion, logic and timing, and show you how to strengthen the case.';
+  'HowDoesThisLand reads your CV, pitch or proposal the way your reader will. A panel of AI reviewers scores its credibility, emotion, logic and timing, and shows you how to strengthen the case.';
 const title = 'HowDoesThisLand: find out why your words aren’t landing';
 
 export const metadata: Metadata = {

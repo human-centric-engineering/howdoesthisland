@@ -122,19 +122,24 @@ describe('the landing page', () => {
     );
   });
 
-  it('never calls the free offer a scan, and counts nine AI reviewers', async () => {
+  it('never calls the free offer a scan, and never counts the AI reviewers', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
     const { container } = render(await HomePage());
     const text = container.textContent ?? '';
-    expect(text).not.toMatch(/free (quick )?scan|10 seconds|six judges/i);
-    expect(text).toContain('Nine AI reviewers');
+    expect(text).not.toMatch(/free (quick )?scan|10 seconds/i);
+    // The panel can change, so the page names it without a number.
+    expect(text).toContain('A panel of AI reviewers');
+    expect(text).not.toMatch(
+      /\b(two|three|four|five|six|seven|eight|nine|ten|\d+) (AI )?(reviewers|judges)\b/i
+    );
   });
 
   it('declares its title, description and social cards', () => {
     expect(metadata.title).toEqual({
       absolute: 'HowDoesThisLand: find out why your words aren’t landing',
     });
-    expect(metadata.description).toMatch(/Nine AI reviewers/);
+    expect(metadata.description).toMatch(/A panel of AI reviewers/);
+    expect(metadata.description).not.toMatch(/\bnine\b/i);
     expect(metadata.openGraph).toMatchObject({ type: 'website' });
     expect(metadata.twitter).toMatchObject({ card: 'summary_large_image' });
   });

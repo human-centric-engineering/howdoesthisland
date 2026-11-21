@@ -1,8 +1,10 @@
 /**
  * The landing page's copy (t-62), adapted from the prototype's `homeCopy`
- * (`prototype/src/App.jsx`), with what is now wrong corrected: nine AI
- * reviewers, not six judges; the free offer is a review unlocked by a code,
- * never "free in 10 seconds" and never a scan.
+ * (`prototype/src/App.jsx`), with what is now wrong corrected: the free offer
+ * is a review unlocked by a code, never "free in 10 seconds" and never a
+ * scan. The review is described as a panel of AI reviewers, never counted
+ * or listed one by one, so the panel can change without the page going
+ * stale (the owner's ruling, 2026-11-21).
  *
  * Kept apart from the page so the self-score reviews exactly the words the
  * page shows: {@link HOME_PAGE_TEXT} is built from these strings, not
@@ -13,7 +15,7 @@ export const HOME_COPY = {
   slug: 'Galley 01 · The art of changing minds',
   h1Lead: 'Find out why your words aren’t landing,',
   h1Turn: 'before your reader does.',
-  sub: 'HowDoesThisLand reads your CV, pitch or proposal the way your reader will. Nine AI reviewers score its credibility, emotion, logic and timing, show you where each one works, and help you strengthen the case so your reader can say yes for their own reasons.',
+  sub: 'HowDoesThisLand reads your CV, pitch or proposal the way your reader will. A panel of AI reviewers scores its credibility, emotion, logic and timing, shows you where each one works, and helps you strengthen the case so your reader can say yes for their own reasons.',
   story:
     'It’s eleven at night, the deadline is tomorrow, and you’ve reread your proposal so many times you can’t tell if it’s any good.',
   story2:
@@ -21,7 +23,7 @@ export const HOME_COPY = {
   compare:
     'Unlike a grammar checker, which tells you whether a sentence is correct, or a colleague, who tells you whether they like it, HowDoesThisLand tells you whether it will persuade the person you’re sending it to, and why.',
   nowH: 'Fluent writing is now free. Trust isn’t.',
-  now: 'Since anyone can now produce polished copy in seconds, polish no longer persuades. Readers have learned to spot the formula, and research on persuasion knowledge shows that when people notice a tactic, they push back. What wins now is what was always hardest to fake: real evidence, honest limits and a clear reason to act. The best persuasion still works when the reader can see exactly how it’s done.',
+  now: 'Since anyone can now produce polished copy in seconds, polish no longer persuades. Readers have learned to spot the formula, and research on persuasion knowledge shows that when people notice a tactic, they push back. What wins now is what was always hardest to fake: real evidence, honest limits and a clear reason to act. The only persuasion that still lands is the kind that holds up when your reader can see exactly how it works.',
   rootsH: 'Rooted in 2,400 years of rhetoric.',
   roots:
     'Aristotle named three ways to persuade: the speaker’s character, the audience’s feelings and the argument itself. The Greeks added kairos, the right moment. HowDoesThisLand keeps those four at its core, then tests each one against modern research, because an old idea earns its place only if it still works.',
@@ -32,8 +34,8 @@ export const HOME_COPY = {
       body: 'Paste your copy, upload a Word file, PDF or slides, or give the address of a page. Say who will read it, because a sceptical CTO reads differently from a time-poor board.',
     },
     {
-      title: 'Nine AI reviewers read it',
-      body: 'One each for ethos, pathos, logos and kairos, then reviewers for purpose and fit, craft, the audience and culture, and an influence panel drawing on schools of persuasion research. Every note quotes your copy, so you can check it.',
+      title: 'A panel of AI reviewers reads it',
+      body: 'Each reviewer reads through a different lens, from credibility, emotion, logic and timing to purpose, craft and the reader you have in mind. Every note quotes your copy, so you can check it.',
     },
     {
       title: 'Edit, then review again',
