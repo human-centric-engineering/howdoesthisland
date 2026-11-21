@@ -84,9 +84,11 @@ export default async function HomePage() {
         <div className="grid items-start gap-10 px-6 py-10 md:px-12 md:py-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div>
             <p className="hd-slug">{C.slug}</p>
-            <h1 className="mt-4 max-w-[13ch] text-5xl leading-[0.95] font-extrabold sm:text-6xl xl:text-7xl">
-              {C.h1Lead}{' '}
-              <em className="font-sans font-normal text-(--hd-red) italic">{C.h1Turn}</em>
+            <h1 className="mt-4 text-5xl leading-[0.95] font-extrabold sm:text-6xl xl:text-7xl">
+              <span className="block max-w-[13ch]">{C.h1Lead}</span>{' '}
+              <em className="mt-3 block text-right font-sans text-[0.8em] font-normal text-(--hd-red) italic sm:whitespace-nowrap">
+                {C.h1Turn}
+              </em>
             </h1>
             <p className="mt-6 max-w-[54ch] text-lg leading-relaxed text-(--hd-muted)">{C.sub}</p>
             <div className="mt-8">
