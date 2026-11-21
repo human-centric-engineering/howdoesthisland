@@ -145,3 +145,66 @@ export const DEFAULT_EXPIRY_DAYS = 90;
 export function dateFromNow(days: number, now: number = Date.now()): string {
   return new Date(now + days * DAY_MS).toISOString().slice(0, 10);
 }
+
+// ─── Redeeming (t-60) ────────────────────────────────────────────────────────
+
+/** Where a code is checked and redeemed: in a body, so a code is never in a URL the API logs. */
+export const CODES_CHECK_ENDPOINT = '/api/v1/codes/check';
+export const CODES_REDEEM_ENDPOINT = '/api/v1/codes/redeem';
+
+/** The longest code a caller may send: a code with dashes and spaces is 14 or so. */
+export const MAX_TYPED_CODE = 64;
+
+/**
+ * `POST /api/v1/codes/check` and `POST /api/v1/codes/redeem`: a code as
+ * someone typed it, in any case, with or without dashes or spaces. One that
+ * is not a code's shape is `unknown`, as one that does not exist is.
+ */
+export const typedCodeSchema = z
+  .object({ code: z.string().max(MAX_TYPED_CODE, `${MAX_TYPED_CODE} characters at most`) })
+  .strict();
+
+/**
+ * What a code would give, or why it cannot. A code that exists says which of
+ * `expired`, `used-up` or `revoked` it is: knowing a real code cannot be used
+ * is worth nothing to someone guessing. Anything else, malformed or not
+ * found, is `unknown`, alike.
+ */
+export const codeCheckSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('active'),
+    /** As people read it: `ABCD-EFGH-JKMN`. */
+    code: z.string(),
+    /** CopyCredits one redemption gives. */
+    credits: z.number().int(),
+    expiresAt: z.iso.datetime(),
+  }),
+  z.object({ status: z.literal('expired'), code: z.string(), expiresAt: z.iso.datetime() }),
+  z.object({ status: z.literal('used-up'), code: z.string() }),
+  z.object({ status: z.literal('revoked'), code: z.string() }),
+  z.object({ status: z.literal('unknown') }),
+]);
+
+export type CodeCheck = z.infer<typeof codeCheckSchema>;
+
+/** A redemption: what it gave the workspace, and the balance after it. */
+export const redemptionSchema = z.object({
+  redemptionId: z.string(),
+  code: z.string(),
+  credits: z.number().int(),
+  /** The workspace's CopyCredits balance once this is added. */
+  balance: z.number().int(),
+  workspace: z.object({ id: z.string(), name: z.string() }),
+});
+
+export type Redemption = z.infer<typeof redemptionSchema>;
+
+/** The error codes a refused redemption answers with. */
+export const REDEEM_REFUSALS = {
+  unknown: 'CODE_UNKNOWN',
+  expired: 'CODE_EXPIRED',
+  'used-up': 'CODE_USED_UP',
+  revoked: 'CODE_REVOKED',
+  alreadyRedeemed: 'CODE_ALREADY_REDEEMED',
+  busy: 'CODE_BUSY',
+} as const;

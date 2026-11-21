@@ -79,8 +79,11 @@ import {
   adminCodesQuerySchema,
   codeIdParamSchema,
   issueCodesSchema,
+  codeCheckSchema,
   issuedCodesSchema,
+  redemptionSchema,
   reviewCodeSchema,
+  typedCodeSchema,
 } from '@/lib/app/credits/codes/wire';
 
 /** Every method a Next.js route handler can export. */
@@ -838,5 +841,53 @@ export const APP_ROUTES: readonly RouteContract[] = [
     request: { params: codeIdParamSchema, invalidParamsStatus: 404 },
     errors: [{ status: 404, code: 'NOT_FOUND', description: 'No code has this id.' }],
     response: { status: 200, data: reviewCodeSchema },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/codes/check',
+    summary:
+      'Check a free review code before redeeming it: `active` with the CopyCredits it gives and when it expires, or why it cannot be redeemed (`expired`, `used-up`, `revoked`). Anything malformed or not found is `unknown`, alike. The code goes in the body, as typed: any case, with or without dashes. Nothing is written. Limited per IP, with the redeem page and redeeming.',
+    auth: { who: 'anyone' },
+    request: { body: typedCodeSchema },
+    response: { status: 200, data: codeCheckSchema },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/codes/redeem',
+    summary:
+      'Redeem a free review code into the workspace you act in: its CopyCredits are added to the balance, once per person per code, and never more times than the code allows however many redeem at once. Answers with the credits given, the balance after, and the workspace. Limited per IP and per person.',
+    auth: ASSESS,
+    request: { body: typedCodeSchema },
+    errors: [
+      {
+        status: 404,
+        code: 'CODE_UNKNOWN',
+        description: 'No such code: malformed or not found, alike. Nothing was written.',
+      },
+      {
+        status: 404,
+        code: 'NOT_FOUND',
+        description: 'The workspace you act in is not active.',
+      },
+      {
+        status: 409,
+        code: 'CODE_ALREADY_REDEEMED',
+        description: 'You have already redeemed this code. Each person redeems a code once.',
+      },
+      { status: 410, code: 'CODE_EXPIRED', description: 'The code has expired.' },
+      {
+        status: 410,
+        code: 'CODE_USED_UP',
+        description: 'The code has been redeemed as many times as it allows.',
+      },
+      { status: 410, code: 'CODE_REVOKED', description: 'The code has been withdrawn.' },
+      {
+        status: 503,
+        code: 'CODE_BUSY',
+        description:
+          'Many people redeemed this code in the same instant and every try lost its place. Nothing was written: try again.',
+      },
+    ],
+    response: { status: 200, data: redemptionSchema },
   },
 ];

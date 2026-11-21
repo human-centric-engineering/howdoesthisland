@@ -231,7 +231,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/rate-limit.ts',
     risk: 'a stray tier or rule would re-cap every install',
     // FORK (HowDoesThisLand): pinned to our rules, the free quick scan's
-    // per-IP cap (t-24) and the share links' (t-32). Ledger:
+    // per-IP cap (t-24), the share links' (t-32) and the review codes' (t-60). Ledger:
     // .context/app/platform-divergences.md row 2.
     assert: () => {
       registerAppRateLimits();
@@ -239,6 +239,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       expect(added.map((r) => [String(r.match), r.tier, r.key])).toEqual([
         [String(/^\/api\/v1\/scan\/?$/), 'scan', 'ip'],
         [String(/^\/(r|api\/v1\/shared-reports)\/[^/]+\/?$/), 'shared-report', 'ip'],
+        [String(/^\/(redeem|api\/v1\/codes\/(check|redeem))\/?$/), 'redeem', 'ip'],
       ]);
     },
   },
@@ -356,8 +357,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: async () => {
       // FORK (HowDoesThisLand): pinned to our sections and sources, the
       // workspace invitations (t-9), content and assessments (t-22), share
-      // links (t-32), calibration runs (t-37), credit entries (t-57) and
-      // review codes (t-59). The reads are stubbed: this pins the shape, not the query. Ledger:
+      // links (t-32), calibration runs (t-37), credit entries (t-57), review
+      // codes (t-59) and their redemptions (t-60). The reads are stubbed: this pins the shape, not the query. Ledger:
       // .context/app/platform-divergences.md row 2.
       const reads = [
         vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
@@ -367,6 +368,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.calibrationRun, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.creditEntry, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCode, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.reviewCodeRedemption, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
@@ -376,6 +378,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         calibrationRuns: [],
         creditEntries: [],
         reviewCodes: [],
+        codeRedemptions: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -390,6 +393,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['CalibrationRun', 'calibrationRuns'],
         ['CreditEntry', 'creditEntries'],
         ['ReviewCode', 'reviewCodes'],
+        ['ReviewCodeRedemption', 'codeRedemptions'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22), their replies
@@ -414,8 +418,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppOrgSourceRegistryForTests();
       // The reads trigger the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our sources, the workspace
-      // invitations (t-9), assessments (t-22), judge replies (t-26) and share
-      // links (t-32). Ledger:
+      // invitations (t-9), assessments (t-22), judge replies (t-26), share
+      // links (t-32), credit entries (t-57) and code redemptions (t-60). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppOrgSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
@@ -426,6 +430,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
         ['CreditEntry', 'creditEntries'],
+        ['ReviewCodeRedemption', 'codeRedemptions'],
       ]);
       // FORK (HowDoesThisLand): the running places (t-28) and the budget holds
       // (t-50), leases. Ledger row 2.
@@ -443,8 +448,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppOwnerClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our models, the workspace invitation
-      // (t-9), content and assessments (t-22) and share links (t-32), as not
-      // personal. Ledger:
+      // (t-9), content and assessments (t-22), share links (t-32), and the
+      // credit (t-57) and code (t-59, t-60) models, as not personal. Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(
         Object.entries(appOwnerClassifications()).map(([model, rule]) => [model, rule.kind])
@@ -456,6 +461,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['CalibrationRun', 'not-personal'],
         ['CreditEntry', 'not-personal'],
         ['ReviewCode', 'not-personal'],
+        ['ReviewCodeRedemption', 'not-personal'],
       ]);
     },
   },
