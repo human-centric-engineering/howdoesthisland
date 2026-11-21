@@ -17,10 +17,16 @@
  * `/` is neither a path to the engine work `POST /api/v1/scan` rate-limits
  * nor an unthrottled database read.
  *
+ * A view waits on a stage only when nothing has been kept from it yet. Once a
+ * version has been found and a score kept, a refresh of the lookup, or a scan
+ * for a newly published version, runs behind the view, which answers with the
+ * last good score meanwhile; so a slow database holds `/` only on a process's
+ * first view. The kept score names the version that scored it.
+ *
  * A failure is logged and answered `null` (the page then shows what it shows
  * with the switch off), so the landing page never fails because the
  * framework has no published version or the scan refused its own copy.
- * While the lookup is failing, the last good score is shown instead, so a
+ * Once a score has been kept, a failing stage answers with it instead, so a
  * short database blip does not hide it. Either stage is retried at most once
  * a {@link RETRY_FAILED_MS}; each distinct failure is logged once, and again
  * only after that stage has recovered. A stage that has not answered in
@@ -86,13 +92,14 @@ function failed(stage: Stage, message: string, meta: Record<string, unknown>): n
 
 /**
  * One run of a stage, kept so later views share it: its answer (`null` on a
- * failure or a timeout), when it started, and whether the run itself has
- * settled, which a timed-out answer does not mean.
+ * failure or a timeout), when it started, whether that answer is in, and
+ * whether the run itself has settled, which a timed-out answer does not mean.
  */
 interface Kept<T> {
   key: string;
   startedAt: number;
   running: boolean;
+  answered: boolean;
   failed: boolean;
   answer: Promise<T | null>;
 }
@@ -104,6 +111,7 @@ function start<T>(stage: Stage, key: string, work: () => Promise<T | null>): Kep
     key,
     startedAt: Date.now(),
     running: true,
+    answered: false,
     failed: false,
     answer: withTimeout(stage, run),
   };
@@ -111,6 +119,7 @@ function start<T>(stage: Stage, key: string, work: () => Promise<T | null>): Kep
     kept.running = false;
   });
   void kept.answer.then((value) => {
+    kept.answered = true;
     if (value === null) kept.failed = true;
     else lastLogged[stage] = null;
   });
@@ -133,9 +142,11 @@ interface LatestVersion {
 }
 
 let lookup: Kept<LatestVersion> | null = null;
+/** The last version a lookup found, used while a refresh runs or fails. */
+let lastVersion: LatestVersion | null = null;
 /** The last score, keyed on the version, copy and context it was scored with. */
 let scan: Kept<SelfScore> | null = null;
-/** The last score that succeeded, shown while the lookup is failing. */
+/** The last score that succeeded, shown while a stage is running or failing. */
 let lastGood: SelfScore | null = null;
 
 export async function selfScore(
@@ -146,18 +157,25 @@ export async function selfScore(
 
   if (!stillAnswers(lookup, 'latest', LOOKUP_TTL_MS)) {
     lookup = start('lookup', 'latest', findLatestVersion);
+    void lookup.answer.then((found) => {
+      if (found) lastVersion = found;
+    });
   }
-  const version = await lookup.answer;
-  if (!version) return lastGood;
+  // Wait only for a first lookup; a refresh runs behind the view.
+  const version = lastVersion ?? (await lookup.answer);
+  if (!version) return null;
 
   // The page's copy is a few KB, so the key is the inputs themselves.
   const key = JSON.stringify([version.id, version.sourceSha256, text, context]);
   if (!stillAnswers(scan, key, Infinity)) {
     scan = start('scan', key, () => scoreWith(text, context, version.version));
+    void scan.answer.then((score) => {
+      if (score) lastGood = score;
+    });
   }
-  const score = await scan.answer;
-  if (score) lastGood = score;
-  return score;
+  // Wait only when there is no score to show; a new run finishes behind the view.
+  if (lastGood && !scan.answered) return lastGood;
+  return (await scan.answer) ?? lastGood;
 }
 
 async function findLatestVersion(): Promise<LatestVersion | null> {

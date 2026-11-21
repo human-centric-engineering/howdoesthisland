@@ -105,7 +105,8 @@ export function SampleMarkUp() {
         ))}
       </ol>
       <p className="mt-5 border-t border-dashed border-(--hd-rule) pt-4 text-sm text-(--hd-muted)">
-        An example of the notes a review writes. Yours quote your own copy, every one.
+        An example of the notes a review writes. In yours, a note about a line quotes that line
+        exactly.
       </p>
     </section>
   );
