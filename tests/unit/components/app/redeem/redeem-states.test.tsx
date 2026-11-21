@@ -71,12 +71,14 @@ describe('redeemReturnPath', () => {
 });
 
 describe('CodeEntryForm', () => {
-  it('is a GET form to /redeem with a required input named code', () => {
+  it('is a GET form to /redeem with an input named code, left for the page to check', () => {
     render(<CodeEntryForm />);
     const form = codeInput().closest('form');
     expect(form).toHaveAttribute('method', 'get');
     expect(form).toHaveAttribute('action', '/redeem');
-    expect(codeInput()).toBeRequired();
+    // The page answers an empty or malformed code itself, so the browser does not block it.
+    expect(codeInput()).not.toBeRequired();
+    expect(codeInput().closest('form')).toHaveAttribute('novalidate');
     expect(screen.getByLabelText('Your code')).toBe(codeInput());
     expect(screen.getByRole('button', { name: 'Check code' })).toHaveAttribute('type', 'submit');
   });

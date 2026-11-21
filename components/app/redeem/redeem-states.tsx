@@ -55,7 +55,9 @@ export function RedeemPanel({
  */
 export function CodeEntryForm({ defaultValue = '' }: { defaultValue?: string }) {
   return (
-    <form method="get" action={REDEEM_PATH} className="space-y-3 text-base">
+    // No browser checks (noValidate): the page answers an empty or malformed code itself.
+    // form-method-ignore: the code belongs in the URL, as the QR link carries it.
+    <form method="get" action={REDEEM_PATH} noValidate className="space-y-3 text-base">
       <Label htmlFor="redeem-code">Your code</Label>
       <div className="flex flex-col gap-3 sm:flex-row">
         <Input
@@ -65,7 +67,6 @@ export function CodeEntryForm({ defaultValue = '' }: { defaultValue?: string }) 
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
-          required
           aria-describedby="redeem-code-hint"
           className="font-mono sm:max-w-xs"
         />
