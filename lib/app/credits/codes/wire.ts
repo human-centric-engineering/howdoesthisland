@@ -131,3 +131,11 @@ export type AdminCodesList = z.infer<typeof adminCodesListSchema>;
 
 /** `DELETE /api/v1/admin/codes/{id}`: a code's id. */
 export const codeIdParamSchema = z.object({ id: z.cuid() });
+
+/** How long a new code lasts unless the admin says otherwise. */
+export const DEFAULT_EXPIRY_DAYS = 90;
+
+/** `YYYY-MM-DD`, `days` from `now`, in UTC: the admin form's first expiry. */
+export function dateFromNow(days: number, now: number = Date.now()): string {
+  return new Date(now + days * DAY_MS).toISOString().slice(0, 10);
+}

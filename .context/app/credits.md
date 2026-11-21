@@ -143,6 +143,59 @@ first review starts on any positive balance and can take it below zero by up
 to that review's cost. Below zero, every review is refused until an admin
 adds credits; the per-judge gate stays as the backstop.
 
+## Free review codes
+
+t-59, `lib/app/credits/codes/`, table `app_review_code`. A code gives the
+workspace that redeems it `creditsPerRedemption` credits, up to
+`maxRedemptions` times, until `expiresAt`. Redeeming it is t-60, which writes a
+`REDEEM` entry and counts it in `redemptionCount`.
+
+| Kind of code    | `count` | `maxRedemptions` |
+| --------------- | ------- | ---------------- |
+| Personal        | 1       | 1                |
+| QR card         | 1       | N                |
+| Batch for a rep | N       | 1                |
+
+- **Install-level.** `ReviewCode` is `globalConfig`: no `orgId`, made by
+  platform admins and redeemed into whichever workspace redeems it. The write
+  routes declare `writesSharedSettings`, so at `multi` an admin mints and
+  revokes from the install org (a session in another org gets 403 `FORBIDDEN`,
+  reason `shared_settings_install_org_only`).
+- **The code.** Twelve characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no
+  `0`/`O`, `1`/`I`/`L`), about 59 bits, shown as `ABCD-EFGH-JKMN`. Stored
+  canonical (upper case, no dashes). `normaliseCode()` reads what someone
+  typed, in any case, with or without dashes or spaces.
+- **Stored, not hashed (t-59 decision).** The admin page shows every code's
+  link and QR, to reprint a card or resend a personal code, and a hash cannot
+  give that back. What a stolen code is worth is bounded: its credits, its
+  redemptions left, its expiry, and revoking it. The subject export leaves the
+  code out of a maker's copy: it is a credential, not data about them.
+- **The link** is `NEXT_PUBLIC_APP_URL` + `/redeem?code=<code>`; the QR
+  encodes it (`uqr`, error correction M, four-module margin). The page draws
+  it in the browser and downloads it as SVG or a PNG of about 1,000px.
+- **Status**, in this order: `revoked`, `expired`, `used-up`, `active`.
+- **Revoking** sets `revokedAt` once; the row stays, and credits a code
+  already gave stay given.
+- **Creator** (`createdByUserId`): hand-written FK to `user`, SET NULL, drift
+  probe in `lib/app/db-drift.ts`; the codes a person made are in their subject
+  export.
+
+### The issuing API
+
+`POST /api/v1/admin/codes` (platform admin, session or `admin` API key)
+mints `count` codes alike, with a `campaign` label. It is shaped for ConQuest
+to mint a code for a qualified lead later; that wiring is not built.
+
+- **`idempotencyKey`** makes a retried call mint once. The same key and body
+  answer **200** with the codes first minted (`replayed: true`); a new mint
+  answers **201**. The same key with a different body is **409** `CONFLICT`.
+  `(idempotencyKey, batchIndex)` is unique, so two calls racing with one key
+  mint once: the loser reads back the winner's codes.
+- The admin form sends a key of its own, drawn again only after a mint
+  succeeds, so pressing again after a failed answer cannot mint twice.
+- `GET /api/v1/admin/codes?q=` lists the newest 200, by campaign or code;
+  `DELETE /api/v1/admin/codes/{id}` revokes.
+
 ## Paths that spend AI money, besides reviews
 
 From t-57's audit (2026-11-20). Credits gate **reviews** only, so every other
