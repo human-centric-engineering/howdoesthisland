@@ -152,7 +152,7 @@ export function initAppSubjectSources(): void {
         section: 'reviewCodes',
         disposition: 'export',
         description:
-          'Free review codes you made as an admin: their campaign, credits, limits and expiry, without the codes themselves.',
+          'Free review codes you made as an admin: their campaign, credits, limits and expiry, without the codes themselves or the keys their callers sent.',
       },
     ],
     excluded: [
@@ -251,11 +251,12 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       where: { actorUserId: userId },
       orderBy: { createdAt: 'asc' },
     }),
-    // The codes they made as an admin (t-59), without the code: it is a
-    // bearer credential for the install's credits, not data about them.
+    // The codes they made as an admin (t-59), without the code, a bearer
+    // credential for the install's credits, or the idempotency key, a
+    // caller's bookkeeping that may carry someone else's id (a lead's).
     prisma.reviewCode.findMany({
       where: { createdByUserId: userId },
-      omit: { code: true },
+      omit: { code: true, idempotencyKey: true },
       orderBy: { createdAt: 'asc' },
     }),
   ]);

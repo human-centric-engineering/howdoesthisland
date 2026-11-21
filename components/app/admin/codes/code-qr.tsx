@@ -32,7 +32,7 @@ function download(blob: Blob, name: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** One path of every dark module, so the SVG is one element, not hundreds. */

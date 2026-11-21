@@ -159,7 +159,7 @@ describe('collectAppSubjectData', () => {
     expect(data.creditEntries).toEqual([{ id: 'entry-1' }]);
   });
 
-  it('reads the review codes they made, without the codes themselves', async () => {
+  it('reads the review codes they made, without the codes or their idempotency keys', async () => {
     vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCode.findMany).mockResolvedValue([{ id: 'code-1' }] as never);
 
@@ -167,7 +167,7 @@ describe('collectAppSubjectData', () => {
 
     expect(vi.mocked(prisma.reviewCode.findMany)).toHaveBeenCalledWith({
       where: { createdByUserId: 'user-1' },
-      omit: { code: true },
+      omit: { code: true, idempotencyKey: true },
       orderBy: { createdAt: 'asc' },
     });
     expect(data.reviewCodes).toEqual([{ id: 'code-1' }]);

@@ -11,7 +11,8 @@
  * with an idempotency key, kept until it is answered, so pressing Save again
  * on the same form after an answer that failed (the codes may have been made)
  * answers with the same codes rather than minting more. A changed form is a
- * new request, with a new key.
+ * new request, with a new key. The key lives in the form, so a reload or a
+ * search starts afresh: the failure message says to check the list first.
  */
 
 import { useState } from 'react';
@@ -117,7 +118,7 @@ function CreateForm({
   const [saving, setSaving] = useState(false);
   const save = useSaveFailure({
     fallback:
-      'The codes could not be made. Try again in a moment: saving the same form again will not make more.',
+      'The answer did not arrive, so the codes may have been made. Check the list before trying again.',
     fields: NO_SERVER_FIELDS,
   });
 

@@ -169,7 +169,8 @@ workspace that redeems it `creditsPerRedemption` credits, up to
   link and QR, to reprint a card or resend a personal code, and a hash cannot
   give that back. What a stolen code is worth is bounded: its credits, its
   redemptions left, its expiry, and revoking it. The subject export leaves the
-  code out of a maker's copy: it is a credential, not data about them.
+  code out of a maker's copy: it is a credential, not data about them. It
+  leaves out the idempotency key too, which may carry a lead's id.
 - **The link** is `NEXT_PUBLIC_APP_URL` + `/redeem?code=<code>`; the QR
   encodes it (`uqr`, error correction M, four-module margin). The page draws
   it in the browser and downloads it as SVG or a PNG of about 1,000px.
@@ -197,8 +198,9 @@ to mint a code for a qualified lead later; that wiring is not built.
   used answers with its codes, or 409. Send keys unique to the caller: the
   form sends 128 random bits; an integration should prefix its own ids
   (`conquest:lead-123`).
-- The admin form keeps a request's key until it is answered, so saving the
-  same form again after a failed answer cannot mint twice; a changed form is a
+- The admin form keeps a request's key until it is answered, so saving the same form again after a failed answer cannot mint twice while the
+  page stays open (a reload or a search starts afresh, so its message says to
+  check the list first); a changed form is a
   new request with a new key.
 - `GET /api/v1/admin/codes?q=` lists the newest 200, by campaign or code;
   `DELETE /api/v1/admin/codes/{id}` revokes.
