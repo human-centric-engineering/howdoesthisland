@@ -64,7 +64,6 @@ export default async function Image() {
           paddingTop: 28,
         }}
       >
-        {}
         <img src={markSrc} width={64} height={64} alt="" />
         <span style={{ fontSize: 40, fontWeight: 700 }}>HowDoesThisLand</span>
       </div>
