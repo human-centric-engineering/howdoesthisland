@@ -23,7 +23,7 @@ export const HOME_COPY = {
   compare:
     'Unlike a grammar checker, which tells you whether a sentence is correct, or a colleague, who tells you whether they like it, HowDoesThisLand tells you whether it will persuade the person you’re sending it to, and why.',
   nowH: 'Fluent writing is now free. Trust isn’t.',
-  now: 'Since anyone can now produce polished copy in seconds, polish no longer persuades. Readers have learned to spot the formula, and research on persuasion knowledge shows that when people notice a tactic, they push back. What wins now is what was always hardest to fake: real evidence, honest limits and a clear reason to act. The only persuasion that still lands is the kind that holds up when your reader can see exactly how it works.',
+  now: 'Since anyone can now produce polished copy in seconds, polish no longer persuades. Readers have learned to spot the formula, and research on persuasion knowledge shows that when people notice a tactic, they push back. What wins now is what was always hardest to fake: real evidence, honest limits and a clear reason to act.',
   rootsH: 'Rooted in 2,400 years of rhetoric.',
   roots:
     'Aristotle named three ways to persuade: the speaker’s character, the audience’s feelings and the argument itself. The Greeks added kairos, the right moment. HowDoesThisLand keeps those four at its core, then tests each one against modern research, because an old idea earns its place only if it still works.',
