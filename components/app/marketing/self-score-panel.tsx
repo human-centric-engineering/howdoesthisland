@@ -1,6 +1,11 @@
 import { ScoreBars } from '@/components/app/report/charts/score-bars';
 import { HOME_APPEALS } from '@/components/app/marketing/home-copy';
-import type { SelfScore } from '@/lib/app/quick-scan/self-score';
+import type { SelfScore, SelfScoreAppeal } from '@/lib/app/quick-scan/self-score';
+
+const NAME = Object.fromEntries(HOME_APPEALS.map((a) => [a.id, a.name])) as Record<
+  SelfScoreAppeal,
+  string
+>;
 
 /**
  * "We ran this page through HowDoesThisLand" (t-62): the landing page's own
@@ -8,8 +13,7 @@ import type { SelfScore } from '@/lib/app/quick-scan/self-score';
  * `selfScore()` answered, which it does only with the quick-scan switch on.
  */
 export function SelfScorePanel({ score }: { score: SelfScore }) {
-  const nameOf = new Map<string, string>(HOME_APPEALS.map((a) => [a.id, a.name]));
-  const weakest = nameOf.get(score.weakest) ?? score.weakest;
+  const weakest = NAME[score.weakest];
   return (
     <section
       aria-labelledby="self-score-heading"
@@ -38,7 +42,7 @@ export function SelfScorePanel({ score }: { score: SelfScore }) {
           testId="self-score-appeals"
           rows={score.appeals.map((a) => ({
             id: a.id,
-            label: nameOf.get(a.id) ?? a.id,
+            label: NAME[a.id],
             score: a.score,
             colour: `var(--hd-${a.id})`,
           }))}
