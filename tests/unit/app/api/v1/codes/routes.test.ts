@@ -8,6 +8,11 @@
  * `tests/unit/lib/app/credits/codes/redeem.test.ts`), the per-person limiter,
  * and the Prisma reads the guard makes.
  *
+ * FORK NOTE — the proxy-rule case reads `@/lib/app/rate-limit` for real on
+ * purpose: it is this fork's `redeem` rule under test. A change to that rule
+ * should change it; the seam's pinned rules are in
+ * tests/unit/lib/app/defaults.test.ts (ledger row 2).
+ *
  * @see app/api/v1/codes/check/route.ts · app/api/v1/codes/redeem/route.ts
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
