@@ -170,8 +170,13 @@ tick's invocation alive until the run ends. A run killed part-way leaves a
 lease that runs out, and a later tick takes the run over, at the cost of an
 attempt.
 
+It also charges what was never charged (t-58, [`credits.md`](./credits.md#the-charge)):
+a review it gives up on, a cancelled review whose run died (clearing its
+lapsed lease), and a `store: false` run whose own charge did not land, once
+its cost rows are an hour quiet. At most three of each a tick.
+
 It is idempotent: a second pass finds every row final or held by a live
-lease.
+lease, and every charge already written.
 
 ## Retention
 

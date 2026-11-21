@@ -52,6 +52,7 @@ import {
   JUDGES_IN_FLIGHT,
   LEASE_MS,
   LEASE_RENEW_MS,
+  RECOVERY_BATCH,
 } from '@/lib/app/assessments/limits';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { cancelAssessment, runAssessment } from '@/lib/app/assessments/run';
@@ -1003,6 +1004,7 @@ describe('the recovery job', () => {
       redriven: 0,
       gaveUp: 0,
       chargedCancelled: 0,
+      chargedEphemeral: 0,
     });
     expect(queued).toMatchObject({ status: 'QUEUED', attempts: 0 });
   });
@@ -1074,6 +1076,7 @@ describe('the recovery job', () => {
       redriven: 2,
       gaveUp: 1,
       chargedCancelled: 0,
+      chargedEphemeral: 0,
     });
     await settle();
 
@@ -1106,6 +1109,7 @@ describe('the recovery job', () => {
       redriven: 0,
       gaveUp: 0,
       chargedCancelled: 0,
+      chargedEphemeral: 0,
     });
 
     expect(mocks.runJudge).toHaveBeenCalledTimes(calls);
@@ -1143,6 +1147,7 @@ describe('the recovery job', () => {
       redriven: 1,
       gaveUp: 0,
       chargedCancelled: 0,
+      chargedEphemeral: 0,
     });
     expect(a.status).toBe('RUNNING');
 
@@ -1222,6 +1227,7 @@ describe('a succeeded judge whose reply is gone (t-26)', () => {
       redriven: 1,
       gaveUp: 0,
       chargedCancelled: 0,
+      chargedEphemeral: 0,
     });
     await settle();
 
@@ -1536,14 +1542,70 @@ describe('the charge in CopyCredits (t-58)', () => {
       redriven: 0,
       gaveUp: 0,
       chargedCancelled: 1,
+      chargedEphemeral: 0,
     });
     expect(await inOrg(() => recoverAssessments())).toEqual({
       redriven: 0,
       gaveUp: 0,
       chargedCancelled: 0,
+      chargedEphemeral: 0,
     });
     expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -2 })]);
     expect(a.leaseExpiresAt).toBeNull();
+  });
+
+  it('the recovery job charges a store: false run left uncharged, once its rows are an hour quiet', async () => {
+    const hour = 60 * 60 * 1000;
+    const ago = (ms: number) => new Date(Date.now() - ms);
+    const row = (run: string, extra: Row = {}) => ({
+      ephemeral: true,
+      ephemeralRun: run,
+      judge: 'judge_a',
+      ...extra,
+    });
+    // Its own charge never landed: two rows, quiet for two hours.
+    fake.addCost(ORG, 0.02, row('lost'), ago(3 * hour));
+    fake.addCost(ORG, 0.01, row('lost'), ago(2 * hour));
+    // Still landing calls: left for a later pass.
+    fake.addCost(ORG, 0.05, row('going'), ago(5 * 60 * 1000));
+    // Charged already, by its run.
+    fake.addCost(ORG, 0.05, row('charged'), ago(2 * hour));
+    fake.credits.push({
+      id: 'c1',
+      orgId: ORG,
+      amount: -5,
+      kind: 'CHARGE',
+      reference: 'ephemeral-run:charged',
+    });
+    // A calibration run's rows, and rows from before charging began.
+    fake.addCost(ORG, 0.05, row('calibration', { calibrationRunId: 'cal' }), ago(2 * hour));
+    fake.addCost(ORG, 0.05, row('old'), ago(3 * 24 * hour));
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedEphemeral: 1 });
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedEphemeral: 0 });
+    expect(charges()).toEqual([
+      expect.objectContaining({ reference: 'ephemeral-run:charged' }),
+      expect.objectContaining({ orgId: ORG, amount: -3, reference: 'ephemeral-run:lost' }),
+    ]);
+  });
+
+  it('the recovery job charges at most a batch of lapsed cancels a tick', async () => {
+    const cancelled = Array.from({ length: RECOVERY_BATCH + 1 }, () => {
+      const a = fake.seed({
+        status: 'CANCELLED',
+        leaseToken: 'dead',
+        leaseExpiresAt: new Date(Date.now() - 5_000),
+        completedAt: new Date(Date.now() - 60_000),
+      });
+      fake.addCost(ORG, 0.01, { assessmentId: a.id });
+      return a;
+    });
+
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({
+      chargedCancelled: RECOVERY_BATCH,
+    });
+    expect(await inOrg(() => recoverAssessments())).toMatchObject({ chargedCancelled: 1 });
+    expect(charges()).toHaveLength(cancelled.length);
   });
 
   it('the recovery job charges a review it gives up on, in the write that gives up', async () => {
@@ -1583,7 +1645,7 @@ describe('the charge in CopyCredits (t-58)', () => {
     expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -3 })]);
   });
 
-  it('charges a review deleted while its run went on, from its rows', async () => {
+  it('charges nothing for a review deleted while its run went on: the delete charges it', async () => {
     const a = fake.seed({ judges: ['judge_a'] });
     mocks.runJudge.mockImplementation(async (slot: string, input: { assessmentId?: string }) => {
       fake.addCost(ORG, 0.05, { assessmentId: input.assessmentId, judge: slot });
@@ -1592,7 +1654,7 @@ describe('the charge in CopyCredits (t-58)', () => {
     });
 
     expect(await inOrg(() => runAssessment(String(a.id)))).toBe('lease_lost');
-    expect(charges()).toEqual([expect.objectContaining({ ...chargeOf(a), amount: -5 })]);
+    expect(charges()).toEqual([]);
   });
 
   it('charges a run that lost its lease nothing: the run that has it charges as it ends', async () => {

@@ -92,8 +92,9 @@ rounded up to a whole credit. One that spent nothing writes no entry.
 | Cancelled with no run      | the cancel itself                                                                          | `assessment:<id>`       |
 | Cancelled, its run died    | the recovery job, clearing the lapsed lease in the same transaction                        | `assessment:<id>`       |
 | Given up on                | the recovery job's give-up write                                                           | `assessment:<id>`       |
-| Deleted                    | the delete, or, while a run still holds it, that run as it ends                            | `assessment:<id>`       |
+| Deleted, not yet charged   | the delete, in its transaction, even while a run holds it (that run's process may be gone) | `assessment:<id>`       |
 | `store: false`             | the request once the run ends, however it ends, before its hold is released                | `ephemeral-run:<runId>` |
+| `store: false`, left over  | the recovery job, once the run's rows are an hour quiet (its charge failed, or it died)    | `ephemeral-run:<runId>` |
 
 - **Once.** The insert skips a duplicate `(kind, reference)` (ON CONFLICT DO
   NOTHING), so finishers that race write one entry. A stored review is never
@@ -102,11 +103,17 @@ rounded up to a whole credit. One that spent nothing writes no entry.
   eight finishers against the database.
 - **Held or charged, never neither.** Charging in the write that ends a
   review means the check sees it either in flight, holding back what it has
-  spent, or in the balance.
+  spent, or in the balance. A cancelled review whose run died is held back
+  for what it spent until the recovery job charges it.
+- **Not yet charged, on delete:** `QUEUED` or `RUNNING`, or `CANCELLED` with
+  its lease still set. A final review is not charged by its delete: it was
+  charged as it ended, or ended before reviews were charged (as is a cancelled
+  one older than `CHARGE_SWEEP_MS`, a day and an hour).
 - **What it can miss:** a cost row that lands after the charge, from a run
   that lost its lease while another finished the review, or after a delete or
-  a lapsed cancel lease. At most `JUDGES_IN_FLIGHT` calls each time, still
-  bounded by the monthly cap.
+  a lapsed cancel lease, or from a `store: false` run after an hour's quiet.
+  At most `JUDGES_IN_FLIGHT` calls each time, still bounded by the monthly
+  cap. The recovery job charges at most `RECOVERY_BATCH` of each kind a tick.
 
 ## Overdraft
 

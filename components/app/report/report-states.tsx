@@ -54,7 +54,10 @@ export function ReportNoResult({ assessment }: { assessment: ReportAssessment })
   if (refusedFor) {
     return (
       <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="This review was not started">
-        <p>By the time its turn came, {refusedFor} no longer covered it. Nothing was charged.</p>
+        <p>
+          By the time its turn came, {refusedFor} no longer covered it, so no AI reviewer was
+          started for it.
+        </p>
         {assessment.error ? <p className="mt-3 text-base">{assessment.error}</p> : null}
         <p className="mt-3 text-base">
           <Link href={USAGE_PAGE} className="underline">

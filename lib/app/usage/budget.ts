@@ -172,6 +172,7 @@ import { z } from 'zod';
 import { APIError, ErrorCodes } from '@/lib/api/errors';
 import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
 import {
+  CHARGE_SWEEP_MS,
   JUDGES_IN_FLIGHT,
   LEASE_MS,
   LEASE_RENEW_MS,
@@ -438,18 +439,27 @@ async function inFlightCost(
       OR: [
         { status: { in: ['QUEUED', 'RUNNING'] } },
         { status: 'CANCELLED', leaseExpiresAt: { gt: now } },
+        // Its run died with its lease set: spent, and not charged until the
+        // recovery job clears the lease (`recover.ts`). Older ones predate the charge.
+        {
+          status: 'CANCELLED',
+          leaseExpiresAt: { not: null, lte: now },
+          completedAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
+        },
       ],
     },
-    select: { id: true, status: true, judges: true, costUsd: true },
+    select: { id: true, status: true, judges: true, costUsd: true, leaseExpiresAt: true },
   });
+  // Only a live run has calls still to land; a lapsed cancel holds back only what it spent.
+  const live = open.filter((r) => r.status !== 'CANCELLED' || (r.leaseExpiresAt ?? now) > now);
   const runs =
-    open.length > 0
+    live.length > 0
       ? await db.judgeRun.findMany({
-          where: { orgId, assessmentId: { in: open.map((r) => r.id) } },
+          where: { orgId, assessmentId: { in: live.map((r) => r.id) } },
           select: { assessmentId: true, status: true, errorCode: true },
         })
       : [];
-  const yet = open.reduce((sum, r) => {
+  const yet = live.reduce((sum, r) => {
     const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
     const unsettled = Math.max(0, r.judges.length - done);
     const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;

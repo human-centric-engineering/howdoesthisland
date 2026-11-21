@@ -53,8 +53,8 @@
  * a review charges the workspace's CopyCredits for its cost rows in the same
  * transaction: {@link finish}, the last attempt's failure, and a cancelled
  * run's last write ({@link freePlace}). A cancel with no run to finish it
- * charges as it cancels. A review deleted while its run went on is charged
- * as the run ends, from the rows, since there is no row left to end.
+ * charges as it cancels. A review deleted before it was charged is charged
+ * by the delete (`remove` in `api/service.ts`), from its rows.
  *
  * **An error that is not a judge's** (the database failing part-way) hands the
  * assessment back to the queue under the same attempt count, so the recovery
@@ -100,7 +100,7 @@ import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { budgetRefusal } from '@/lib/app/usage/budget';
-import { chargeEndedReview, chargeStoredReview } from '@/lib/app/credits/charge';
+import { chargeEndedReview } from '@/lib/app/credits/charge';
 
 /** How a call to {@link runAssessment} ended. */
 export type RunOutcome =
@@ -159,8 +159,6 @@ export async function beginAssessment(assessmentId: string): Promise<StartedRun 
 async function execute(assessmentId: string, orgId: string, token: string): Promise<RunOutcome> {
   const lease = holdLease(assessmentId, token);
   let outcome: RunOutcome;
-  /** When the review was created: what a deleted review's rows are read from. */
-  let startedFrom: Date | null = null;
   try {
     const row = await prisma.assessment.findUnique({
       where: { id: assessmentId, orgId },
@@ -176,7 +174,6 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         judgeRuns: { include: { reply: { select: { output: true } } } },
       },
     });
-    startedFrom = row?.createdAt ?? null;
     const refused = row ? await refuseOverBudget(row, orgId, token) : null;
     if (!row) {
       outcome = 'lease_lost';
@@ -200,11 +197,6 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
   }
   lease.release();
   if (outcome === 'cancelled') await freePlace(assessmentId, token).catch(() => undefined);
-  if (outcome === 'lease_lost' && startedFrom) {
-    await chargeIfDeleted(assessmentId, orgId, startedFrom).catch((err: unknown) =>
-      logger.error('Could not charge a deleted assessment', err, { assessmentId })
-    );
-  }
   startNextQueued(orgId, assessmentId);
   return outcome;
 }
@@ -717,13 +709,6 @@ async function finish(
     if (count === 1) await chargeEndedReview(tx, assessmentId);
     return count === 1;
   });
-}
-
-/** A review deleted while this run went on: charge its rows, the only record left (t-58). */
-async function chargeIfDeleted(assessmentId: string, orgId: string, since: Date): Promise<void> {
-  const exists = await prisma.assessment.count({ where: { id: assessmentId } });
-  if (exists > 0) return;
-  await chargeStoredReview(prisma, orgId, assessmentId, since);
 }
 
 /**

@@ -53,6 +53,15 @@ export const LEASE_RENEW_MS = 30_000;
  */
 export const CANCEL_GRACE_MS = 60 * 60 * 1000;
 
+/**
+ * How far back a review ended without its charge is still charged (t-58): a
+ * cancelled review whose lease ran out, and a `store: false` run whose charge
+ * failed or whose process died. A lease lasts at most {@link CANCEL_GRACE_MS}
+ * after the cancel, and a day more covers recovery ticks that did not run.
+ * Older rows ended before reviews were charged.
+ */
+export const CHARGE_SWEEP_MS = CANCEL_GRACE_MS + 24 * 60 * 60 * 1000;
+
 /** The longest text accepted (§8.2). Longer is refused, never truncated. */
 export const MAX_CONTENT_CHARS = 40_000;
 

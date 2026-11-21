@@ -19,6 +19,7 @@
  *
  * Exit 0 passed, 1 a check failed.
  */
+import type { Prisma } from '@prisma/client';
 import { chargeEphemeralRun, chargeStoredReview } from '@/lib/app/credits/charge';
 import { getCreditBalance } from '@/lib/app/credits/ledger';
 import { createWorkspaceOrg } from '@/lib/app/workspaces/provision';
@@ -37,7 +38,7 @@ function check(ok: boolean, what: string): void {
 const system = <T>(fn: () => Promise<T>) => runAsSystem('smoke: credit charge', fn);
 
 /** A cost row as `run-judge.ts` writes one. */
-function costRow(orgId: string, totalCostUsd: number, metadata: Record<string, unknown>) {
+function costRow(orgId: string, totalCostUsd: number, metadata: Prisma.InputJsonObject) {
   return {
     orgId,
     model: 'smoke-model',

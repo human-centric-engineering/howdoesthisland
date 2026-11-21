@@ -15,7 +15,9 @@
  *   (`freePlace`). A cancelled review whose run died is charged by the
  *   recovery job, which clears its lease as it does.
  * - **`store: false`**, once its run ends, before its budget hold is released
- *   (`service.ts`). Its rows carry `ephemeralRun`.
+ *   (`service.ts`). Its rows carry `ephemeralRun`. One whose charge failed,
+ *   or whose process died first, is charged by the recovery job once its
+ *   rows have been quiet for `CANCEL_GRACE_MS` ({@link chargeLapsedEphemeralRuns}).
  *
  * **Once.** The entry's reference is `assessment:<id>` or
  * `ephemeral-run:<runId>`, and `(kind, reference)` is unique, so the insert
@@ -26,12 +28,15 @@
  *
  * **What it can miss.** A row that lands after the charge: a judge of a run
  * that lost its lease while another finished the review, or one that landed
- * after a delete or a lapsed cancel lease. At most `JUDGES_IN_FLIGHT` calls
- * each time, and the monthly cap still bounds them.
+ * after a delete or a lapsed cancel lease, or a `store: false` run's call
+ * that lands after an hour's quiet. At most `JUDGES_IN_FLIGHT` calls each
+ * time, and the monthly cap still bounds them.
  */
 import type { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import { creditsForUsd } from '@/lib/app/credits/rate';
+import { CANCEL_GRACE_MS, CHARGE_SWEEP_MS } from '@/lib/app/assessments/limits';
 
 /** A client that can read cost rows and write a charge: `prisma`, or a transaction's. */
 export type ChargeClient = Pick<Prisma.TransactionClient, 'aiCostLog' | 'creditEntry'>;
@@ -122,4 +127,71 @@ export async function chargeEndedReview(
   });
   if (!row?.orgId) return null;
   return chargeStoredReview(db, row.orgId, assessmentId, row.createdAt);
+}
+
+/** A `store: false` run's cost row, as `run-judge.ts` and the editor tag it. */
+const ephemeralRunRow = z.object({
+  ephemeralRun: z.string(),
+  // A calibration run's judges are tagged ephemeral too; they are no review of the workspace's.
+  calibrationRunId: z.string().optional(),
+});
+
+/**
+ * Charge up to `limit` of the workspace's `store: false` runs that spent
+ * something and were never charged: their own charge failed, or their
+ * process died before it (`service.ts`). Only runs whose last row is older
+ * than `CANCEL_GRACE_MS`, so a run still going is not charged before its
+ * last calls land, and newer than `CHARGE_SWEEP_MS`. Answers how many it charged.
+ */
+export async function chargeLapsedEphemeralRuns(
+  orgId: string,
+  now: Date,
+  limit: number
+): Promise<number> {
+  const quietSince = now.getTime() - CANCEL_GRACE_MS;
+  const rows = await prisma.aiCostLog.findMany({
+    where: {
+      orgId,
+      createdAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
+      metadata: { path: ['ephemeral'], equals: true },
+    },
+    select: { createdAt: true, totalCostUsd: true, metadata: true },
+  });
+  const runs = new Map<string, { first: Date; last: Date; spentUsd: number }>();
+  for (const row of rows) {
+    const parsed = ephemeralRunRow.safeParse(row.metadata);
+    if (!parsed.success || parsed.data.calibrationRunId !== undefined) continue;
+    const run = runs.get(parsed.data.ephemeralRun);
+    if (!run) {
+      runs.set(parsed.data.ephemeralRun, {
+        first: row.createdAt,
+        last: row.createdAt,
+        spentUsd: row.totalCostUsd,
+      });
+      continue;
+    }
+    if (row.createdAt < run.first) run.first = row.createdAt;
+    if (row.createdAt > run.last) run.last = row.createdAt;
+    run.spentUsd += row.totalCostUsd;
+  }
+  const quiet = [...runs].filter(
+    ([, run]) => run.last.getTime() <= quietSince && creditsForUsd(run.spentUsd) > 0
+  );
+  if (quiet.length === 0) return 0;
+  const charged = await prisma.creditEntry.findMany({
+    where: {
+      kind: 'CHARGE',
+      reference: { in: quiet.map(([runId]) => ephemeralRunChargeReference(runId)) },
+    },
+    select: { reference: true },
+  });
+  const done = new Set(charged.map((entry) => entry.reference));
+  let count = 0;
+  for (const [runId, run] of quiet) {
+    if (count >= limit) break;
+    if (done.has(ephemeralRunChargeReference(runId))) continue;
+    const { credits } = await chargeEphemeralRun(orgId, runId, run.first);
+    if (credits > 0) count += 1;
+  }
+  return count;
 }

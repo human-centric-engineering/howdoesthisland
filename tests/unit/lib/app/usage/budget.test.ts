@@ -25,6 +25,7 @@ interface ReviewRow {
   costUsd: number;
   judges: string[];
   leaseExpiresAt: Date | null;
+  completedAt?: Date | null;
   createdAt: Date;
 }
 interface HoldRow {
@@ -76,7 +77,11 @@ const matches = (row: Record<string, unknown>, where: Where): boolean =>
     if (v instanceof Date) return value instanceof Date && value.getTime() === v.getTime();
     if (typeof v !== 'object' || v === null) return value === v;
     if ('in' in v) return (v as { in: unknown[] }).in.includes(value);
-    if ('not' in v) return value !== v.not;
+    if ('not' in v) {
+      if (value === v.not) return false;
+      const { not: _not, ...rest } = v as Where;
+      return Object.keys(rest).length === 0 || matches({ [k]: value }, { [k]: rest });
+    }
     if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
     if ('lte' in v) return value instanceof Date && value <= (v as { lte: Date }).lte;
     if ('lt' in v) {
@@ -140,6 +145,7 @@ vi.mock('@/lib/db/client', () => {
           status: r.status,
           costUsd: r.costUsd,
           judges: r.judges,
+          leaseExpiresAt: r.leaseExpiresAt,
           createdAt: r.createdAt,
           judgeRuns: state.runs
             .filter((run) => run.assessmentId === r.id)
@@ -1415,6 +1421,23 @@ describe('the credits (t-58)', () => {
 
     // Its lease gone, it has been charged (`freePlace`): its spend is in the balance.
     state.reviews.at(-1)!.leaseExpiresAt = null;
+    await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+  });
+
+  it('holds back what a cancelled review spent once its run died, until the recovery job charges it', async () => {
+    state.credits = 150;
+    review(0.7, {
+      status: 'CANCELLED',
+      judges: slots(7),
+      leaseExpiresAt: new Date(Date.now() - 1_000),
+      completedAt: new Date(Date.now() - 60_000),
+    });
+    // Nothing left to land, but its $0.70 is not in the balance yet: 70 held.
+    const err = await refusal(() => check(ORG, 'full', 7));
+    expect(err.details).toMatchObject({ heldCredits: 70, remainingCredits: 80 });
+
+    // One cancelled before reviews were charged holds nothing.
+    state.reviews.at(-1)!.completedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
   });
 

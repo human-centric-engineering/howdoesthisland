@@ -34,9 +34,9 @@
  * guarantees the check: a request checked behind another sees its hold.
  *
  * For the credits (t-58): `aiCostLog` rows in `costRows`, with `aggregate`
- * summing `totalCostUsd` (`createdAt: { gte }` and a `metadata: { path,
- * equals }` filter honoured), and `creditEntry` rows in `credits`, with
- * `aggregate` summing `amount` and `createMany` honouring the `(kind,
+ * summing `totalCostUsd` and `findMany` (`createdAt` bounds and a `metadata:
+ * { path, equals }` filter honoured), and `creditEntry` rows in `credits`, with
+ * `findMany`, `aggregate` summing `amount` and `createMany` honouring the `(kind,
  * reference)` unique index under `skipDuplicates`, as Postgres's ON CONFLICT
  * DO NOTHING does. `addCost()` writes a cost row as `run-judge.ts` would.
  */
@@ -353,6 +353,9 @@ export function createFakeDb() {
       }),
     },
     aiCostLog: {
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        costRows.filter((r) => matches(r, where))
+      ),
       aggregate: vi.fn(async ({ where }: { where?: Row }) => {
         const rows = costRows.filter((r) => matches(r, where));
         return {
@@ -365,6 +368,9 @@ export function createFakeDb() {
       }),
     },
     creditEntry: {
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        credits.filter((r) => matches(r, where))
+      ),
       aggregate: vi.fn(async ({ where }: { where?: Row }) => {
         const rows = credits.filter((r) => matches(r, where));
         return {

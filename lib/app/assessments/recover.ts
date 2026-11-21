@@ -17,6 +17,10 @@
  * lease set and past). Clearing that lease and charging are one transaction,
  * so the review is charged once and the next pass skips it. Only those
  * cancelled within {@link CHARGE_SWEEP_MS}: older ones predate the charge.
+ * And a `store: false` run left uncharged (its charge failed, or its process
+ * died), once its rows have been quiet for an hour (`CANCEL_GRACE_MS`)
+ * (`chargeLapsedEphemeralRuns`). At most {@link RECOVERY_BATCH} of each kind
+ * per tick; the next tick takes the rest.
  *
  * Claims are taken one at a time, so they never conflict with each other on
  * the workspace's running count. The pass does not wait for the runs it
@@ -30,8 +34,8 @@
  * the first pass's live lease, and changes nothing.
  */
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
-import { CANCEL_GRACE_MS, MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
-import { chargeEndedReview } from '@/lib/app/credits/charge';
+import { CHARGE_SWEEP_MS, MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
+import { chargeEndedReview, chargeLapsedEphemeralRuns } from '@/lib/app/credits/charge';
 import { beginAssessment } from '@/lib/app/assessments/run';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
@@ -43,14 +47,9 @@ export interface RecoveryResult {
   gaveUp: number;
   /** Cancelled assessments whose run died, now charged. */
   chargedCancelled: number;
+  /** `store: false` runs left uncharged, now charged. */
+  chargedEphemeral: number;
 }
-
-/**
- * How far back a cancelled review whose lease ran out is charged: a lease
- * lasts at most {@link CANCEL_GRACE_MS} after the cancel, and a day more
- * covers ticks that did not run. Older rows ended before reviews were charged.
- */
-export const CHARGE_SWEEP_MS = CANCEL_GRACE_MS + 24 * 60 * 60 * 1000;
 
 export async function recoverAssessments(now: Date = new Date()): Promise<RecoveryResult> {
   const orgId = requireOrgId();
@@ -66,6 +65,7 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
   const spent = await prisma.assessment.findMany({
     where: { ...stalled, attempts: { gte: MAX_ATTEMPTS } },
     select: { id: true },
+    take: RECOVERY_BATCH,
   });
   let gaveUp = 0;
   for (const { id } of spent) {
@@ -92,7 +92,11 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
     leaseExpiresAt: { not: null, lte: now },
     completedAt: { gt: new Date(now.getTime() - CHARGE_SWEEP_MS) },
   };
-  const cancelled = await prisma.assessment.findMany({ where: lapsed, select: { id: true } });
+  const cancelled = await prisma.assessment.findMany({
+    where: lapsed,
+    select: { id: true },
+    take: RECOVERY_BATCH,
+  });
   let chargedCancelled = 0;
   for (const { id } of cancelled) {
     chargedCancelled += await prisma.$transaction(async (tx) => {
@@ -104,6 +108,9 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
       return count;
     });
   }
+
+  // `store: false` runs whose own charge never landed (`service.ts`).
+  const chargedEphemeral = await chargeLapsedEphemeralRuns(orgId, now, RECOVERY_BATCH);
 
   // Places whose `store: false` run's process died (`places.ts`): never
   // counted, but only a later take in this workspace would clear them.
@@ -123,5 +130,5 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
     keepRunningAfterResponse(run.done, 'app: assessment re-drive', { assessmentId: id });
   }
 
-  return { redriven, gaveUp, chargedCancelled };
+  return { redriven, gaveUp, chargedCancelled, chargedEphemeral };
 }

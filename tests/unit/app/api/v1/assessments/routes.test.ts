@@ -1505,29 +1505,16 @@ describe('POST /api/v1/assessments — CopyCredits (t-58)', () => {
     ]);
   });
 
-  it('a delete charges a review no run holds for what earlier runs spent, and a final one not again', async () => {
+  it('a delete charges an open review for what its runs spent', async () => {
     const queued = fake.seed({ status: 'QUEUED', attempts: 1 });
     fake.addCost(WS_A, 0.03, { assessmentId: queued.id });
     expect((await del(String(queued.id))).status).toBe(200);
     expect(charges()).toEqual([
       expect.objectContaining({ amount: -3, reference: `assessment:${String(queued.id)}` }),
     ]);
-
-    // Ended and charged already: the delete's charge is skipped as a duplicate.
-    const done = fake.seed({ status: 'COMPLETED' });
-    fake.addCost(WS_A, 0.05, { assessmentId: done.id });
-    fake.credits.push({
-      id: 'charged',
-      orgId: WS_A,
-      amount: -5,
-      kind: 'CHARGE',
-      reference: `assessment:${String(done.id)}`,
-    });
-    expect((await del(String(done.id))).status).toBe(200);
-    expect(charges()).toHaveLength(2);
   });
 
-  it('a delete leaves a review a live run holds to that run', async () => {
+  it('a delete charges a review a live run holds, since that run may be gone', async () => {
     const running = fake.seed({
       status: 'RUNNING',
       leaseToken: 'alive',
@@ -1535,6 +1522,47 @@ describe('POST /api/v1/assessments — CopyCredits (t-58)', () => {
     });
     fake.addCost(WS_A, 0.03, { assessmentId: running.id });
     expect((await del(String(running.id))).status).toBe(200);
+    expect(charges()).toEqual([
+      expect.objectContaining({ amount: -3, reference: `assessment:${String(running.id)}` }),
+    ]);
+  });
+
+  it('a delete charges a cancelled review whose judges were still landing, live lease or lapsed', async () => {
+    for (const leaseExpiresAt of [new Date(Date.now() + 60_000), new Date(Date.now() - 60_000)]) {
+      const cancelled = fake.seed({
+        status: 'CANCELLED',
+        completedAt: new Date(Date.now() - 120_000),
+        leaseToken: 'cancelled-run',
+        leaseExpiresAt,
+      });
+      fake.addCost(WS_A, 0.02, { assessmentId: cancelled.id });
+      expect((await del(String(cancelled.id))).status).toBe(200);
+    }
+    expect(charges()).toHaveLength(2);
+    expect(charges().every((c) => c.amount === -2)).toBe(true);
+  });
+
+  it('a delete charges nothing for a review that ended: charged as it ended, or before charging began', async () => {
+    // Final, with no charge entry: it ended before reviews were charged.
+    const old = fake.seed({ status: 'COMPLETED', completedAt: new Date(Date.now() - 86_400_000) });
+    fake.addCost(WS_A, 0.05, { assessmentId: old.id });
+    // Cancelled, its lease cleared: the cancel charged it.
+    const cancelled = fake.seed({
+      status: 'CANCELLED',
+      completedAt: new Date(),
+      leaseExpiresAt: null,
+    });
+    fake.addCost(WS_A, 0.05, { assessmentId: cancelled.id });
+    // Cancelled with a lease left set, but long before charging began.
+    const stale = fake.seed({
+      status: 'CANCELLED',
+      completedAt: new Date(Date.now() - 3 * 86_400_000),
+      leaseToken: 'dead',
+      leaseExpiresAt: new Date(Date.now() - 3 * 86_400_000),
+    });
+    fake.addCost(WS_A, 0.05, { assessmentId: stale.id });
+
+    for (const a of [old, cancelled, stale]) expect((await del(String(a.id))).status).toBe(200);
     expect(charges()).toEqual([]);
   });
 
