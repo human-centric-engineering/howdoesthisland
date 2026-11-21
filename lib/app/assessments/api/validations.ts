@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
 import { DEFAULT_INTAKE_LIMITS } from '@/lib/app/intake/extract-text';
 import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
+import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
 
 /**
  * Pasted text. The precise limit ({@link MAX_CONTENT_CHARS} code points) is
@@ -27,11 +28,15 @@ const versionChoice = {
 /** Who the text is for, checked against the version's ids before anything runs. */
 const contextField = z.record(z.string(), z.unknown()).optional();
 
-/** POST /api/v1/scan: pasted text only (D7, D14). */
+/**
+ * POST /api/v1/scan: pasted text only (D7, D14). `code` is a free review
+ * code, as typed, for a caller with no account (t-61): checked, never used up.
+ */
 export const scanRequestSchema = z.strictObject({
   text: textField,
   ...versionChoice,
   context: contextField,
+  code: z.string().max(MAX_TYPED_CODE, `${MAX_TYPED_CODE} characters at most`).optional(),
 });
 
 /** The largest upload, as base64: four characters per three bytes. */

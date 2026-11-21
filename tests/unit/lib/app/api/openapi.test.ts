@@ -14,11 +14,16 @@ import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-vi.mock('@/lib/env', () => ({ env: { NODE_ENV: 'test' } }));
+const mockEnv = vi.hoisted(() => ({
+  NODE_ENV: 'test' as const,
+  QUICK_SCAN_ENABLED: undefined as boolean | undefined,
+}));
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 import {
   buildOpenApiDocument,
   openApiDocument,
+  publishedOpenApi,
   operationId,
   type OpenApiDocument,
 } from '@/lib/app/api/openapi';
@@ -385,6 +390,13 @@ describe('what each auth kind becomes', () => {
       /`assess` scope/,
     ],
     [
+      'signed-in, a key with a scope, or a free review code (the quick scan)',
+      { who: 'signed-in', apiKeyScope: 'assess', orCode: true },
+      [{ session: [] }, { apiKey: ['assess'] }, {}],
+      ['401', '403'],
+      /`assess` scope\. With neither, a free review code in `code`/,
+    ],
+    [
       'workspace-admin, platform admins anywhere',
       { who: 'workspace-admin', apiKeyScope: null, platformAdmin: 'anywhere' },
       [{ session: [] }],
@@ -406,6 +418,15 @@ describe('what each auth kind becomes', () => {
       /platform admin/,
     ],
   ];
+
+  it('names ACCOUNT_REQUIRED as the 401 of a route a code opens', () => {
+    const open = responsesOf(
+      route({ auth: { who: 'signed-in', apiKeyScope: 'assess', orCode: true } })
+    );
+    expect(open['401']?.description).toMatch(/^`ACCOUNT_REQUIRED`/);
+    const closed = responsesOf(route({ auth: { who: 'signed-in', apiKeyScope: 'assess' } }));
+    expect(closed['401']?.description).toMatch(/^`UNAUTHORIZED`/);
+  });
 
   it('says why a session-only route answers 403', () => {
     const responses = responsesOf(route({ auth: { who: 'signed-in', apiKeyScope: null } }));
@@ -495,5 +516,36 @@ describe("an assessment's context and result", () => {
   it('leaves no assessment route with an open context or result', () => {
     const text = JSON.stringify(doc.paths);
     expect(text).not.toMatch(/"(context|result)":\{\}/);
+  });
+});
+
+describe('a route behind a switch (t-61)', () => {
+  const SCAN = 'POST /api/v1/scan';
+  const listed = (doc: OpenApiDocument) =>
+    Object.entries(doc.paths).flatMap(([path, item]) =>
+      Object.keys(item).map((m) => `${m.toUpperCase()} ${path}`)
+    );
+
+  it('the quick scan is the one switchable route, on the quick-scan switch', () => {
+    const switchable = APP_ROUTES.filter((r) => r.enabled).map((r) => `${r.method} ${r.path}`);
+    expect(switchable).toEqual([SCAN]);
+  });
+
+  it('is published while its switch is on, and left out while it is off, with a new ETag', () => {
+    mockEnv.QUICK_SCAN_ENABLED = true;
+    const on = publishedOpenApi();
+    expect(listed(on.document)).toContain(SCAN);
+    expect(listed(openApiDocument())).toContain(SCAN);
+
+    mockEnv.QUICK_SCAN_ENABLED = false;
+    const off = publishedOpenApi();
+    expect(listed(off.document)).not.toContain(SCAN);
+    expect(listed(off.document)).toHaveLength(APP_ROUTES.length - 1);
+    expect(off.etag).not.toBe(on.etag);
+    expect(errorsOf(off.document)).toEqual([]);
+
+    mockEnv.QUICK_SCAN_ENABLED = true;
+    expect(publishedOpenApi().etag).toBe(on.etag);
+    mockEnv.QUICK_SCAN_ENABLED = undefined;
   });
 });

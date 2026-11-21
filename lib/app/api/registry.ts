@@ -50,6 +50,7 @@ import {
   scanRequestSchema,
 } from '@/lib/app/assessments/api/validations';
 import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-auth';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan';
 import {
   appRetentionSchema,
   judgeReplyRetentionSchema,
@@ -95,7 +96,9 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
  * Who may call a route.
  *
  * - `anyone` — no sign-in; anonymous callers are rate-limited by IP.
- * - `signed-in` — any session.
+ * - `signed-in` — any session. With `orCode`, a caller with neither a
+ *   session nor a key may instead send a free review code in the body's
+ *   `code`, one that could still be redeemed (the quick scan, t-61).
  * - `workspace-admin` — the workspace the path names, as its `OWNER` or
  *   `ADMIN` acting in it, or a platform admin (the authorization policy's
  *   answer for an org resource). `platformAdmin` says where that platform
@@ -111,7 +114,7 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
 export type RouteAuth =
   | { who: 'anyone' }
   | { who: 'platform-admin' }
-  | { who: 'signed-in'; apiKeyScope: string | null }
+  | { who: 'signed-in'; apiKeyScope: string | null; orCode?: true }
   | {
       who: 'workspace-admin';
       apiKeyScope: string | null;
@@ -119,6 +122,12 @@ export type RouteAuth =
     };
 
 export interface RouteContract {
+  /**
+   * A route behind a switch: served, and published in the OpenAPI document
+   * and on `/developers`, only while this answers `true` (`servedRoutes()`).
+   * Read per call. Absent: always served.
+   */
+  enabled?: () => boolean;
   method: HttpMethod;
   /** The URL path, with each dynamic segment as `{name}`, e.g. `/api/v1/frameworks/{slug}`. */
   path: string;
@@ -484,6 +493,8 @@ const kindParams = versionParams.extend({ kind: kindParam });
 
 /** A browser session, or an API key with the `assess` scope. */
 const ASSESS: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE };
+/** The quick scan's callers (t-61): as `ASSESS`, or anyone with a free review code. */
+const QUICK_SCAN: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE, orCode: true };
 const assessmentParams = assessmentIdParamSchema;
 
 /** Browser-session routes: an API key is refused. */
@@ -556,13 +567,14 @@ export const APP_ROUTES: readonly RouteContract[] = [
     },
   },
 
-  // The quick scan and assessments (t-24).
+  // The quick scan (t-24), behind its switch (t-61), and assessments (t-24).
   {
+    enabled: isQuickScanEnabled,
     method: 'POST',
     path: '/api/v1/scan',
     summary:
-      'Run the free quick scan on pasted text: deterministic, no AI, nothing stored. Limited per IP.',
-    auth: { who: 'anyone' },
+      'Run the quick scan on pasted text: deterministic, no AI, nothing stored. Needs an account, an API key, or a free review code. Limited per IP.',
+    auth: QUICK_SCAN,
     request: { body: scanRequestSchema },
     response: { status: 200, data: quickScanViewSchema },
   },
@@ -885,3 +897,8 @@ export const APP_ROUTES: readonly RouteContract[] = [
     response: { status: 200, data: redemptionSchema },
   },
 ];
+
+/** The routes served right now: every one but those whose switch is off. */
+export function servedRoutes(): RouteContract[] {
+  return APP_ROUTES.filter((route) => route.enabled?.() ?? true);
+}

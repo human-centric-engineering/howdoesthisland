@@ -15,9 +15,9 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · .context/security/rate-limiting.md
  *
- * HowDoesThisLand (t-24): the free quick scan (`POST /api/v1/scan`, D7) is
- * anonymous, so the section cap's session-user key would fall back to IP at
- * the section's 100/min. It gets its own tier, keyed on IP for everyone,
+ * HowDoesThisLand (t-24): the quick scan (`POST /api/v1/scan`) takes callers
+ * with no account who hold a free review code (t-61), so the section cap's
+ * session-user key would fall back to IP at the section's 100/min. It gets its own tier, keyed on IP for everyone,
  * signed in or not, at `SCANS_PER_MINUTE`.
  *
  * t-32: a share link (`/r/{token}` and `GET /api/v1/shared-reports/{token}`)

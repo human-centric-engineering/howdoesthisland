@@ -1,11 +1,10 @@
 /**
- * The free quick scan (t-24, D7): deterministic, no model called, nothing
- * stored.
+ * The quick scan (t-24): deterministic, no model called, nothing stored.
  *
- * Open to anyone, signed in or not, and needs no workspace: it reads only the
- * framework tables, which are shared config (`version.ts`), and writes
- * nothing. It takes pasted text only; fetching a page or reading a file needs
- * an account (D14).
+ * It needs no workspace: it reads only the framework tables, which are shared
+ * config (`version.ts`), and writes nothing. It takes pasted text only;
+ * fetching a page or reading a file needs an account (D14). Whether it is
+ * offered at all, and who may run it, is `lib/app/quick-scan.ts` (t-61).
  */
 import { z } from 'zod';
 import { APIError } from '@/lib/api/errors';
@@ -39,7 +38,7 @@ export function refuseAccountOnlyInput(body: unknown): void {
 }
 
 export async function runQuickScan(
-  body: z.infer<typeof scanRequestSchema>
+  body: Omit<z.infer<typeof scanRequestSchema>, 'code'>
 ): Promise<QuickScanView> {
   const resolved = await versionToScore(body);
   const ctx = contextFor(resolved, body.context);

@@ -1,13 +1,15 @@
 /**
- * Tests: POST /api/v1/scan — the free quick scan (t-24, D7, D14).
+ * Tests: POST /api/v1/scan — the quick scan (t-24, D14), behind its switch
+ * and open only to a session, an `assess` key or a free review code (t-61).
  *
- * At `TENANCY_MODE=multi`, with no session and no tenant context: the
- * reconciliation's hypothesis was that the scan needs no org because it
- * reads only the framework tables, which are shared config. The route, the
- * service, the store and the engine run for real, on the committed 0.5.1
- * file in the framework store's in-memory repo. Prisma is a stand-in that
- * records any model it is asked for, so "stores nothing" is checked as
- * "touched nothing".
+ * At `TENANCY_MODE=multi`, with no tenant context: the reconciliation's
+ * hypothesis was that the scan needs no org because it reads only the
+ * framework tables, which are shared config. The route, the service, the
+ * store and the engine run for real, on the committed 0.5.1 file in the
+ * framework store's in-memory repo. Prisma is a stand-in that records any
+ * model it is asked for, so "stores nothing" is checked as "touched nothing
+ * but the code it checked". A code is checked by t-60's real `checkCode`,
+ * reading the rows `CODES` holds.
  *
  * The per-IP cap is checked through the real rate-limit dispatcher, which
  * loads `lib/app/rate-limit.ts` the way the proxy does.
@@ -22,23 +24,38 @@ const mockEnv = vi.hoisted(() => ({
   NODE_ENV: 'test' as const,
   TENANCY_MODE: 'multi',
   CULTURE_MODULE_ENABLED: true,
+  QUICK_SCAN_ENABLED: true,
 }));
 vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 /** Every Prisma model the code under test asked for. */
 const touched = vi.hoisted(() => [] as string[]);
+/** Review code rows by their canonical code, for `checkCode`. */
+const CODES = vi.hoisted(() => new Map<string, Record<string, unknown>>());
 vi.mock('@/lib/db/client', () => ({
   prisma: new Proxy(
     {},
     {
       get(_target, model) {
         touched.push(String(model));
+        if (model === 'reviewCode') {
+          return {
+            findUnique: vi.fn(({ where }: { where: { code: string } }) =>
+              Promise.resolve(CODES.get(where.code) ?? null)
+            ),
+          };
+        }
         return new Proxy({}, { get: () => vi.fn() });
       },
     }
   ),
 }));
 const mockGetSession = vi.hoisted(() => vi.fn());
+const mockResolveApiKey = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/auth/api-keys', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth/api-keys')>()),
+  resolveApiKey: mockResolveApiKey,
+}));
 vi.mock('@/lib/auth/config', () => ({ auth: { api: { getSession: mockGetSession } } }));
 vi.mock('@/lib/logging', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -73,15 +90,58 @@ function repo(): FakeFrameworkRepo {
   return prismaFrameworkRepo;
 }
 
-function scan(body: unknown, raw = false): Promise<Response> {
+const DAY = 24 * 60 * 60 * 1000;
+
+/** A review code row as `checkCode` reads it. */
+function codeRow(code: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: `id-${code}`,
+    code,
+    creditsPerRedemption: 500,
+    maxRedemptions: 3,
+    expiresAt: new Date(Date.now() + 30 * DAY),
+    revokedAt: null,
+    _count: { redemptions: 0 },
+    ...over,
+  };
+}
+
+/** Codes as people type them, and their rows. */
+const ACTIVE = 'abcd-efgh-jkmn';
+const EXPIRED = 'BCDE-FGHJ-KMNP';
+const REVOKED = 'CDEF-GHJK-MNPQ';
+const USED_UP = 'DEFG-HJKM-NPQR';
+const UNKNOWN = 'EFGH-JKMN-PQRS';
+
+function seedCodes(): void {
+  CODES.clear();
+  CODES.set('ABCDEFGHJKMN', codeRow('ABCDEFGHJKMN'));
+  CODES.set('BCDEFGHJKMNP', codeRow('BCDEFGHJKMNP', { expiresAt: new Date(Date.now() - DAY) }));
+  CODES.set('CDEFGHJKMNPQ', codeRow('CDEFGHJKMNPQ', { revokedAt: new Date(Date.now() - DAY) }));
+  CODES.set('DEFGHJKMNPQR', codeRow('DEFGHJKMNPQR', { _count: { redemptions: 3 } }));
+}
+
+/**
+ * POST a scan. Unless `body` names its own `code` (or is sent raw), it
+ * carries `ACTIVE`: the caller holding a free review code and no account.
+ */
+function scan(body: unknown, raw = false, headers: Record<string, string> = {}): Promise<Response> {
+  const withCode =
+    !raw && typeof body === 'object' && body !== null && !('code' in body)
+      ? { ...body, code: ACTIVE }
+      : body;
   return POST(
     new NextRequest('http://localhost/api/v1/scan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: raw ? String(body) : JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: raw ? String(body) : JSON.stringify(withCode),
     })
   );
 }
+
+/** A scan by a caller sending only what `body` holds: no code added. */
+const scanAs = (body: Record<string, unknown>, headers: Record<string, string> = {}) =>
+  scan({ code: undefined, ...body }, false, headers);
 
 interface Envelope {
   success: boolean;
@@ -110,11 +170,16 @@ beforeAll(async () => {
 beforeEach(() => {
   touched.length = 0;
   mockGetSession.mockReset();
+  mockGetSession.mockResolvedValue(null);
+  mockResolveApiKey.mockReset();
+  mockResolveApiKey.mockResolvedValue(null);
   mockEnv.CULTURE_MODULE_ENABLED = true;
+  mockEnv.QUICK_SCAN_ENABLED = true;
+  seedCodes();
 });
 
-describe('POST /api/v1/scan with no session, at multi', () => {
-  it('answers the quick scan, as the registry declares it, touching no database model', async () => {
+describe('POST /api/v1/scan with a free review code and no session, at multi', () => {
+  it('answers the quick scan, as the registry declares it, touching only the code it checked', async () => {
     expect(getTenantContext()).toBeNull();
     const res = await scan({ text: TEXT, context: { contentType: 'sales_email' } });
 
@@ -130,9 +195,10 @@ describe('POST /api/v1/scan with no session, at multi', () => {
     });
     // The result is the quick scan's alone: no judge, no AI.
     expect(JSON.stringify(body.data?.result)).not.toContain('"source":"ai"');
-    // Nothing stored, nothing read outside the framework store, no session asked for.
-    expect(touched).toEqual([]);
-    expect(mockGetSession).not.toHaveBeenCalled();
+    // Nothing stored, and nothing read outside the framework store but the
+    // code: not its redemptions, and no redemption written, since a scan
+    // never uses one up.
+    expect(touched).toEqual(['reviewCode']);
   });
 
   it('is deterministic: the same text and context score the same', async () => {
@@ -144,6 +210,99 @@ describe('POST /api/v1/scan with no session, at multi', () => {
   it('scores against the version asked for', async () => {
     const res = await scan({ text: TEXT, framework: 'howdoesthisland', version: '0.5.1' });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('the quick-scan switch (t-61)', () => {
+  it('404 NOT_FOUND while it is off, whoever calls, before the body is read', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = false;
+    mockGetSession.mockResolvedValue({ user: { id: 'u1' }, session: { id: 's1' } });
+    mockResolveApiKey.mockResolvedValue({ session: {}, scopes: ['assess'], rateLimitRpm: null });
+
+    expect(await refusal(await scan({ text: TEXT }))).toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    });
+    expect(await refusal(await scan('{not json', true))).toMatchObject({ status: 404 });
+    expect(
+      await refusal(await scanAs({ text: TEXT }, { Authorization: 'Bearer sk_test' }))
+    ).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(mockResolveApiKey).not.toHaveBeenCalled();
+    expect(touched).toEqual([]);
+  });
+
+  it('is off in production when unset, and on otherwise', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = undefined;
+    Object.assign(mockEnv, { NODE_ENV: 'production' });
+    try {
+      expect((await scan({ text: TEXT })).status).toBe(404);
+    } finally {
+      Object.assign(mockEnv, { NODE_ENV: 'test' });
+    }
+    expect((await scan({ text: TEXT })).status).toBe(200);
+  });
+});
+
+describe('who may run the quick scan (t-61)', () => {
+  it('a signed-in caller, with no code, reading no code', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'u1' }, session: { id: 's1' } });
+    expect((await scanAs({ text: TEXT })).status).toBe(200);
+    expect(touched).toEqual([]);
+  });
+
+  it('an API key with the assess scope, or the admin scope, with no session asked for', async () => {
+    for (const scopes of [['assess'], ['admin']]) {
+      mockResolveApiKey.mockResolvedValue({ session: {}, scopes, rateLimitRpm: null });
+      expect((await scanAs({ text: TEXT }, { Authorization: 'Bearer sk_test' })).status).toBe(200);
+    }
+    expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it('403 FORBIDDEN for a key without the assess scope, even with a good code', async () => {
+    mockResolveApiKey.mockResolvedValue({ session: {}, scopes: ['reports'], rateLimitRpm: null });
+    expect(
+      await refusal(await scan({ text: TEXT }, false, { Authorization: 'Bearer sk_test' }))
+    ).toMatchObject({ status: 403, code: 'FORBIDDEN' });
+  });
+
+  it('401 ACCOUNT_REQUIRED with no session, no key and no code', async () => {
+    expect(await refusal(await scanAs({ text: TEXT }))).toMatchObject({
+      status: 401,
+      code: 'ACCOUNT_REQUIRED',
+    });
+    expect(mockGetSession).toHaveBeenCalled();
+    expect(touched).toEqual([]);
+  });
+
+  it.each([
+    ['expired', EXPIRED],
+    ['revoked', REVOKED],
+    ['used-up', USED_UP],
+    ['unknown', UNKNOWN],
+    ['malformed', 'not a code'],
+  ])('401 ACCOUNT_REQUIRED, said alike, for a code that is %s', async (_label, code) => {
+    const res = await scanAs({ text: TEXT, code });
+    const body = await read(res);
+    expect(res.status).toBe(401);
+    expect(body.error?.code).toBe('ACCOUNT_REQUIRED');
+    // The same words whichever it is: the scan is not a way to learn a code's state.
+    const none = await read(await scanAs({ text: TEXT }));
+    expect(body.error?.message).toBe(none.error?.message);
+  });
+
+  it('accepts a code however it is typed, and does not use one up', async () => {
+    for (const code of ['ABCDEFGHJKMN', ' abcd efgh jkmn ']) {
+      expect((await scanAs({ text: TEXT, code })).status).toBe(200);
+    }
+    // Only the code was read: no redemption counted or written.
+    expect(touched.every((model) => model === 'reviewCode')).toBe(true);
+  });
+
+  it('400 VALIDATION_ERROR for a code longer than any typed code', async () => {
+    expect((await refusal(await scanAs({ text: TEXT, code: 'A'.repeat(65) }))).code).toBe(
+      'VALIDATION_ERROR'
+    );
   });
 });
 

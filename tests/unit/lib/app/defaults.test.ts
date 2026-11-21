@@ -538,11 +538,13 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/env.ts',
     risk: 'a stray key would make an unset env var fail boot on every install',
     // FORK (HowDoesThisLand): pinned to our keys, the culture switch (D11,
-    // t-11) and the PDF renderer's Chromium path (t-31), both optional, so an
-    // unset env still parses. Ledger: .context/app/platform-divergences.md row 2.
+    // t-11), the quick-scan switch (t-61) and the PDF renderer's Chromium
+    // path (t-31), all optional, so an unset env still parses. Ledger:
+    // .context/app/platform-divergences.md row 2.
     assert: () => {
       expect(Object.keys(appEnvSchema.shape)).toEqual([
         'CULTURE_MODULE_ENABLED',
+        'QUICK_SCAN_ENABLED',
         'PDF_CHROMIUM_PATH',
       ]);
       expect(appEnvSchema.parse({})).toEqual({});
