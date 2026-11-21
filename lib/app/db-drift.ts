@@ -109,4 +109,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_credit_entry',
     probe: constraintExists('app_credit_entry_actorUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-59: the hand-written FK from a free review code to its maker. SET NULL:
+  // the code outlives its maker's erasure.
+  registerAppDriftProbe({
+    name: 'app_review_code_createdByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_review_code',
+    probe: constraintExists('app_review_code_createdByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

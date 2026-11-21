@@ -74,6 +74,14 @@ import {
   creditChangeResultSchema,
   creditChangeSchema,
 } from '@/lib/app/credits/wire';
+import {
+  adminCodesListSchema,
+  adminCodesQuerySchema,
+  codeIdParamSchema,
+  issueCodesSchema,
+  issuedCodesSchema,
+  reviewCodeSchema,
+} from '@/lib/app/credits/codes/wire';
 
 /** Every method a Next.js route handler can export. */
 export const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
@@ -792,5 +800,43 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: { who: 'platform-admin' },
     request: { params: orgIdParamSchema, body: creditChangeSchema },
     response: { status: 201, data: creditChangeResultSchema },
+  },
+
+  // Free review codes, for platform admins (t-59).
+  {
+    method: 'GET',
+    path: '/api/v1/admin/codes',
+    summary:
+      'List free review codes, newest first, each with its redeem link, the redemptions used and left, and whether it can still be redeemed. `q` narrows by campaign or code.',
+    auth: { who: 'platform-admin' },
+    request: { query: adminCodesQuerySchema },
+    response: { status: 200, data: adminCodesListSchema },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/codes',
+    summary:
+      'Mint free review codes: `count` codes alike, each giving `creditsPerRedemption` CopyCredits to the workspace that redeems it, up to `maxRedemptions` times (1 for a personal code, more for a QR card), until `expiresAt`. Each answers with its redeem link, which is what its QR encodes. With an `idempotencyKey`, a retried call mints once: the same key and body answer 200 with the codes first minted (`replayed: true`); a new mint answers 201.',
+    auth: { who: 'platform-admin' },
+    request: { body: issueCodesSchema },
+    errors: [
+      {
+        status: 409,
+        code: 'CONFLICT',
+        description:
+          'The `idempotencyKey` already minted codes for a different request. Nothing was minted; use a new key.',
+      },
+    ],
+    response: { status: [200, 201], data: issuedCodesSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/admin/codes/{id}',
+    summary:
+      'Revoke a free review code: it can no longer be redeemed, and credits it already gave stay given. Revoking a revoked code changes nothing. Answers with the code.',
+    auth: { who: 'platform-admin' },
+    request: { params: codeIdParamSchema, invalidParamsStatus: 404 },
+    errors: [{ status: 404, code: 'NOT_FOUND', description: 'No code has this id.' }],
+    response: { status: 200, data: reviewCodeSchema },
   },
 ];

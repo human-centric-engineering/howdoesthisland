@@ -267,13 +267,13 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/admin-nav.ts',
     risk: 'a stray section would appear in every install’s admin sidebar',
     // FORK (HowDoesThisLand): pinned to our one section: the Frameworks page
-    // (t-38) and the CopyCredits page (t-57).
+    // (t-38), the CopyCredits page (t-57) and the review codes page (t-59).
     assert: () => {
       __resetNavRegistryForTests();
       initAppNav();
       expect(
         getRegisteredNavSections().map((s) => [s.title, (s.items ?? []).map((i) => i.href)])
-      ).toEqual([['HowDoesThisLand', ['/admin/frameworks', '/admin/credits']]]);
+      ).toEqual([['HowDoesThisLand', ['/admin/frameworks', '/admin/credits', '/admin/codes']]]);
       __resetNavRegistryForTests();
     },
   },
@@ -315,9 +315,11 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/admin-breadcrumbs.ts',
     risk: 'a stray label would rename a breadcrumb segment, and the page title, on every install’s admin',
-    // FORK (HowDoesThisLand): pinned to our one label, the CopyCredits page (t-57).
+    // FORK (HowDoesThisLand): pinned to our labels, the CopyCredits page (t-57)
+    // and the review codes page (t-59).
     // Ledger: .context/app/platform-divergences.md row 2.
-    assert: () => expect(appSegmentLabels).toEqual({ credits: 'CopyCredits' }),
+    assert: () =>
+      expect(appSegmentLabels).toEqual({ credits: 'CopyCredits', codes: 'Review codes' }),
   },
   {
     seam: 'lib/app/footer.ts',
@@ -354,7 +356,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: async () => {
       // FORK (HowDoesThisLand): pinned to our sections and sources, the
       // workspace invitations (t-9), content and assessments (t-22), share
-      // links (t-32), calibration runs (t-37) and credit entries (t-57). The reads are stubbed: this pins the shape, not the query. Ledger:
+      // links (t-32), calibration runs (t-37), credit entries (t-57) and
+      // review codes (t-59). The reads are stubbed: this pins the shape, not the query. Ledger:
       // .context/app/platform-divergences.md row 2.
       const reads = [
         vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
@@ -363,6 +366,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.reportShare, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.calibrationRun, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.creditEntry, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.reviewCode, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
@@ -371,6 +375,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         reportShares: [],
         calibrationRuns: [],
         creditEntries: [],
+        reviewCodes: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -384,6 +389,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
         ['CreditEntry', 'creditEntries'],
+        ['ReviewCode', 'reviewCodes'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22), their replies
@@ -449,6 +455,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'not-personal'],
         ['CalibrationRun', 'not-personal'],
         ['CreditEntry', 'not-personal'],
+        ['ReviewCode', 'not-personal'],
       ]);
     },
   },
@@ -459,12 +466,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppTenancyClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our one registration, the framework
-      // store's shared-config tables (t-10). Ledger: .context/app/platform-divergences.md row 2.
+      // store's shared-config tables (t-10) and the free review codes (t-59).
+      // Ledger: .context/app/platform-divergences.md row 2.
       expect([...appTenancyClassifications().keys()].sort()).toEqual([
         'Framework',
         'FrameworkLink',
         'FrameworkNode',
         'FrameworkVersion',
+        'ReviewCode',
       ]);
     },
   },

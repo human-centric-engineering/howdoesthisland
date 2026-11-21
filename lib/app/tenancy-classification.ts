@@ -63,6 +63,8 @@ export function initAppTenancyClassification(): void {
     // HowDoesThisLand (t-10): the framework store. Every workspace reads the
     // same published versions; only the import and publish scripts write
     // them, in the system scope (lib/app/frameworks/repo.ts).
-    globalConfig: ['Framework', 'FrameworkVersion', 'FrameworkNode', 'FrameworkLink'],
+    // t-59: free review codes. Made by platform admins for the install, and
+    // redeemed into whichever workspace redeems one (lib/app/credits/codes/).
+    globalConfig: ['Framework', 'FrameworkVersion', 'FrameworkNode', 'FrameworkLink', 'ReviewCode'],
   });
 }

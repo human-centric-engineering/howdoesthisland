@@ -250,6 +250,8 @@ describe('reserved fork tiers', () => {
       // FORK (HowDoesThisLand): the CopyCredits ledger (t-57).
       'model CreditEntry {',
       'enum CreditEntryKind {',
+      // FORK (HowDoesThisLand): free review codes (t-59).
+      'model ReviewCode {',
     ]);
   });
 
