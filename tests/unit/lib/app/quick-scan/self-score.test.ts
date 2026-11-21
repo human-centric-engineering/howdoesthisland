@@ -32,6 +32,7 @@ vi.mock('@/lib/logging', () => ({ logger }));
 type SelfScoreModule = typeof import('@/lib/app/quick-scan/self-score');
 let selfScore: SelfScoreModule['selfScore'];
 let RETRY_FAILED_MS: number;
+let SCORE_TIMEOUT_MS: number;
 
 const CONTEXT = { contentType: 'landing_page' };
 
@@ -62,7 +63,8 @@ beforeEach(async () => {
   findFramework.mockResolvedValue(served({ id: 'v51', version: '0.5.1', status: 'PUBLISHED' }));
   // The score is kept in module state: each test starts with none.
   vi.resetModules();
-  ({ selfScore, RETRY_FAILED_MS } = await import('@/lib/app/quick-scan/self-score'));
+  ({ selfScore, RETRY_FAILED_MS, SCORE_TIMEOUT_MS } =
+    await import('@/lib/app/quick-scan/self-score'));
 });
 
 afterEach(() => {
@@ -220,6 +222,58 @@ describe('selfScore, kept per framework version', () => {
     runQuickScan.mockRejectedValue(new Error('scan refused'));
     await selfScore('other copy', CONTEXT);
 
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers null when a scan stalls, and does not hold later views on it', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockReturnValue(new Promise(() => {}));
+
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(SCORE_TIMEOUT_MS);
+    await expect(first).resolves.toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith('Self-score timed out', {
+      afterMs: SCORE_TIMEOUT_MS,
+    });
+
+    // Within the retry window a view answers at once, without a new run.
+    await expect(selfScore('copy', CONTEXT)).resolves.toBeNull();
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    expect(runQuickScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask the database again within the retry window after a lookup fails', async () => {
+    vi.useFakeTimers();
+    findFramework.mockRejectedValue(new Error('connection refused'));
+    await selfScore('copy', CONTEXT);
+    await selfScore('copy', CONTEXT);
+    expect(findFramework).toHaveBeenCalledTimes(1);
+
+    findFramework.mockResolvedValue(served({ id: 'v51', version: '0.5.1', status: 'PUBLISHED' }));
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    expect(findFramework).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs a repeat lookup failure after the lookup has recovered, even when the score was kept', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    await selfScore('copy', CONTEXT);
+
+    findFramework.mockRejectedValueOnce(new Error('connection refused'));
+    await selfScore('copy', CONTEXT);
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    // Recovered: served from the kept score, with no new scan.
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+
+    findFramework.mockRejectedValueOnce(new Error('connection refused'));
+    await selfScore('copy', CONTEXT);
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 });

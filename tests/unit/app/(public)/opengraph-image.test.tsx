@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import Image, { alt, contentType, size } from '@/app/(public)/opengraph-image';
+import * as twitterImage from '@/app/(public)/twitter-image';
 
 describe('opengraph-image', () => {
   it('declares a 1200×630 PNG with the headline as its alt text', () => {
@@ -23,4 +24,11 @@ describe('opengraph-image', () => {
     // The PNG signature.
     expect([...bytes.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
   }, 20_000);
+
+  it('gives the Twitter card the same image, so twitter:image is set', () => {
+    expect(twitterImage.default).toBe(Image);
+    expect(twitterImage.alt).toBe(alt);
+    expect(twitterImage.size).toBe(size);
+    expect(twitterImage.contentType).toBe(contentType);
+  });
 });

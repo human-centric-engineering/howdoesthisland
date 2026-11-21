@@ -19,8 +19,12 @@
  * A failure is logged and answered `null` (the page then shows what it shows
  * with the switch off), so the landing page never fails because the
  * framework has no published version or the scan refused its own copy. A
- * failure is retried at most once a {@link RETRY_FAILED_MS}, so a transient
- * error recovers, and each distinct failure is logged once, not per view.
+ * failure, of the version lookup or of the scan, is retried at most once a
+ * {@link RETRY_FAILED_MS}, so a transient error recovers and a degraded
+ * database is not asked again on every view; each distinct failure is
+ * logged once, and again only after that stage has recovered. A scan that
+ * has not answered in {@link SCORE_TIMEOUT_MS} counts as failed, so one
+ * stalled run cannot hold every later view of `/`.
  */
 import { z } from 'zod';
 import { logger } from '@/lib/logging';
@@ -31,6 +35,8 @@ import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
 /** How long a failed self-score is answered `null` before it is tried again. */
 export const RETRY_FAILED_MS = 60_000;
+/** How long a page view waits for a scan before answering `null`. */
+export const SCORE_TIMEOUT_MS = 10_000;
 
 const APPEALS = ['ethos', 'pathos', 'logos', 'kairos'] as const;
 export type SelfScoreAppeal = (typeof APPEALS)[number];
@@ -63,16 +69,24 @@ export interface SelfScore {
  * with. One slot: the page scores one copy, and a new version replaces it.
  */
 let memo: { key: string; score: Promise<SelfScore | null>; failedAt: number | null } | null = null;
-/** The last failure logged, so a lasting one is logged once. */
-let lastLogged: string | null = null;
+/** When the version lookup last failed or found no published version. */
+let lookupFailedAt: number | null = null;
 
-function failed(message: string, meta: Record<string, unknown>): null {
+type Stage = 'lookup' | 'scan';
+/** The last failure logged per stage, so a lasting one is logged once. */
+const lastLogged: Record<Stage, string | null> = { lookup: null, scan: null };
+
+function failed(stage: Stage, message: string, meta: Record<string, unknown>): null {
   const seen = JSON.stringify([message, meta]);
-  if (seen !== lastLogged) {
-    lastLogged = seen;
+  if (seen !== lastLogged[stage]) {
+    lastLogged[stage] = seen;
     logger.warn(message, meta);
   }
   return null;
+}
+
+function withinRetryWindow(failedAt: number | null): boolean {
+  return failedAt !== null && Date.now() - failedAt < RETRY_FAILED_MS;
 }
 
 export async function selfScore(
@@ -80,42 +94,56 @@ export async function selfScore(
   context: Record<string, unknown>
 ): Promise<SelfScore | null> {
   if (!isQuickScanEnabled()) return null;
+  if (withinRetryWindow(lookupFailedAt)) return null;
   let version;
   try {
     const framework = await prismaFrameworkCatalog.findFramework(DEFAULT_FRAMEWORK);
     // Newest first, so the first published is the latest.
     version = framework?.versions.find((v) => v.status === 'PUBLISHED');
   } catch (err) {
-    return failed('Self-score could not run', {
+    lookupFailedAt = Date.now();
+    return failed('lookup', 'Self-score could not run', {
       error: err instanceof Error ? err.message : String(err),
     });
   }
   if (!version) {
-    return failed('Self-score could not run', {
+    lookupFailedAt = Date.now();
+    return failed('lookup', 'Self-score could not run', {
       error: `${DEFAULT_FRAMEWORK} has no published version.`,
     });
   }
+  lookupFailedAt = null;
+  lastLogged.lookup = null;
 
   // The page's copy is a few KB, so the key is the inputs themselves.
   const key = JSON.stringify([version.id, version.sourceSha256, text, context]);
   const current = memo;
-  if (
-    current?.key === key &&
-    (current.failedAt === null || Date.now() - current.failedAt < RETRY_FAILED_MS)
-  ) {
+  if (current?.key === key && (current.failedAt === null || withinRetryWindow(current.failedAt))) {
     return current.score;
   }
   const entry: NonNullable<typeof memo> = {
     key,
     failedAt: null,
-    score: scoreWith(text, context, version.version),
+    score: withTimeout(scoreWith(text, context, version.version)),
   };
   memo = entry;
   void entry.score.then((score) => {
     if (score === null) entry.failedAt = Date.now();
-    else lastLogged = null;
+    else lastLogged.scan = null;
   });
   return entry.score;
+}
+
+/** The run, or `null` once {@link SCORE_TIMEOUT_MS} has passed without it. */
+function withTimeout(run: Promise<SelfScore | null>): Promise<SelfScore | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<null>((resolve) => {
+    timer = setTimeout(
+      () => resolve(failed('scan', 'Self-score timed out', { afterMs: SCORE_TIMEOUT_MS })),
+      SCORE_TIMEOUT_MS
+    );
+  });
+  return Promise.race([run, timedOut]).finally(() => clearTimeout(timer));
 }
 
 /** One run of the quick scan, pinned to the version the memo is keyed on. */
@@ -128,7 +156,9 @@ async function scoreWith(
     const view = await runQuickScan({ text, context, version });
     const parsed = scoresSchema.safeParse(view.result);
     if (!parsed.success) {
-      return failed('Self-score result has no appeal scores', { issues: parsed.error.issues });
+      return failed('scan', 'Self-score result has no appeal scores', {
+        issues: parsed.error.issues,
+      });
     }
     const { scores } = parsed.data;
     const appeals = APPEALS.map((id) => ({ id, score: scores[id] }));
@@ -141,7 +171,7 @@ async function scoreWith(
       scoredWith: `${view.framework.slug}@${view.framework.version}`,
     };
   } catch (err) {
-    return failed('Self-score could not run', {
+    return failed('scan', 'Self-score could not run', {
       error: err instanceof Error ? err.message : String(err),
     });
   }
