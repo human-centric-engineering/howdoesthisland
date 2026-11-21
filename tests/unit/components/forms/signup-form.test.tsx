@@ -771,4 +771,97 @@ describe('components/forms/signup-form', () => {
       expect(mockIdentify).not.toHaveBeenCalled(); // test-review:accept no_arg_called — error-path guard: function must not be called;
     });
   });
+
+  // FORK (HowDoesThisLand, t-60): `callbackUrl` says where a new account goes.
+  describe('callbackUrl (t-60)', () => {
+    async function useCallbackParam(value?: string) {
+      const { useSearchParams } = await import('next/navigation');
+      const params = new URLSearchParams();
+      if (value !== undefined) params.set('callbackUrl', value);
+      vi.mocked(useSearchParams).mockReturnValue(
+        params as unknown as ReturnType<typeof useSearchParams>
+      );
+    }
+
+    async function signUpWithSession() {
+      const user = userEvent.setup();
+      const { authClient } = await import('@/lib/auth/client');
+      vi.mocked(authClient.signUp.email).mockImplementation(async (_data, callbacks) => {
+        void callbacks?.onSuccess?.(
+          {} as unknown as Parameters<NonNullable<typeof callbacks.onSuccess>>[0]
+        );
+      });
+      vi.mocked(authClient.getSession).mockResolvedValue({ data: { user: { id: 'user-123' } } });
+
+      render(<SignupForm />);
+      await user.type(screen.getByLabelText(/full name/i), 'John Doe');
+      await user.type(screen.getByLabelText(/email/i), 'test@example.com');
+      await user.type(screen.getByLabelText(/^password$/i), 'Password123!');
+      await user.type(screen.getByLabelText(/confirm password/i), 'Password123!');
+      await user.click(screen.getByRole('button', { name: /create account/i }));
+      return authClient;
+    }
+
+    it('passes a safe callbackUrl to signUp.email and pushes there on a session', async () => {
+      await useCallbackParam('/redeem?code=ABCD');
+
+      const authClient = await signUpWithSession();
+
+      await waitFor(() => {
+        expect(authClient.signUp.email).toHaveBeenCalledWith(
+          {
+            name: 'John Doe',
+            email: 'test@example.com',
+            password: 'Password123!',
+            callbackURL: '/redeem?code=ABCD',
+          },
+          expect.any(Object)
+        );
+      });
+      await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/redeem?code=ABCD'));
+      expect(mockRouter.push).not.toHaveBeenCalledWith(AUTH_LANDING_ROUTE);
+    });
+
+    it('hands the callbackUrl to the OAuth buttons', async () => {
+      await useCallbackParam('/redeem?code=ABCD');
+      const user = userEvent.setup();
+      const { authClient } = await import('@/lib/auth/client');
+      // The shared mock has no `signIn`; give the OAuth button one to call.
+      const social = vi.fn().mockResolvedValue(undefined);
+      Object.assign(authClient, { signIn: { social } });
+
+      render(<SignupForm />);
+      await user.click(screen.getByRole('button', { name: /google/i }));
+
+      await waitFor(() => expect(social).toHaveBeenCalledTimes(1));
+      expect(social).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'google', callbackURL: '/redeem?code=ABCD' })
+      );
+    });
+
+    it('sends no callbackURL key and lands on the landing route without the param', async () => {
+      await useCallbackParam();
+
+      const authClient = await signUpWithSession();
+
+      await waitFor(() => expect(authClient.signUp.email).toHaveBeenCalledTimes(1));
+      const [data] = vi.mocked(authClient.signUp.email).mock.calls[0] ?? [];
+      expect(data).toEqual({
+        name: 'John Doe',
+        email: 'test@example.com',
+        password: 'Password123!',
+      });
+      expect(data).not.toHaveProperty('callbackURL');
+      await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(AUTH_LANDING_ROUTE));
+    });
+
+    it('falls back to the landing route for an unsafe callbackUrl', async () => {
+      await useCallbackParam('//evil.com');
+
+      await signUpWithSession();
+
+      await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith(AUTH_LANDING_ROUTE));
+      expect(mockRouter.push).not.toHaveBeenCalledWith('//evil.com');
+    });
+  });
 });
