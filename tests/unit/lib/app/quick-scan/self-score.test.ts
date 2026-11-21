@@ -32,7 +32,9 @@ vi.mock('@/lib/logging', () => ({ logger }));
 type SelfScoreModule = typeof import('@/lib/app/quick-scan/self-score');
 let selfScore: SelfScoreModule['selfScore'];
 let RETRY_FAILED_MS: number;
-let SCORE_TIMEOUT_MS: number;
+let LOOKUP_TTL_MS: number;
+let TIMEOUT_MS: number;
+let ABANDON_AFTER_MS: number;
 
 const CONTEXT = { contentType: 'landing_page' };
 
@@ -63,7 +65,7 @@ beforeEach(async () => {
   findFramework.mockResolvedValue(served({ id: 'v51', version: '0.5.1', status: 'PUBLISHED' }));
   // The score is kept in module state: each test starts with none.
   vi.resetModules();
-  ({ selfScore, RETRY_FAILED_MS, SCORE_TIMEOUT_MS } =
+  ({ selfScore, RETRY_FAILED_MS, LOOKUP_TTL_MS, TIMEOUT_MS, ABANDON_AFTER_MS } =
     await import('@/lib/app/quick-scan/self-score'));
 });
 
@@ -148,41 +150,58 @@ describe('selfScore', () => {
   });
 });
 
+const V52 = served(
+  { id: 'v52', version: '0.5.2', status: 'PUBLISHED' },
+  { id: 'v51', version: '0.5.1', status: 'PUBLISHED' }
+);
+
 describe('selfScore, kept per framework version', () => {
-  it('scores once for many page views of the same copy and version', async () => {
+  it('scores once, and looks the version up once, for many views within the lookup window', async () => {
     runQuickScan.mockResolvedValue(scanView(SOLID));
     const first = await selfScore('copy', CONTEXT);
     const again = await Promise.all([selfScore('copy', CONTEXT), selfScore('copy', CONTEXT)]);
 
-    expect(runQuickScan).toHaveBeenCalledTimes(1);
     expect(again).toEqual([first, first]);
-    // Each view still checks which version is the latest.
-    expect(findFramework).toHaveBeenCalledTimes(3);
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+    expect(findFramework).toHaveBeenCalledTimes(1);
   });
 
-  it('runs one scan for concurrent first views', async () => {
+  it('shares one lookup and one scan between concurrent first views', async () => {
     runQuickScan.mockResolvedValue(scanView(SOLID));
     await Promise.all([selfScore('copy', CONTEXT), selfScore('copy', CONTEXT)]);
+    expect(findFramework).toHaveBeenCalledTimes(1);
     expect(runQuickScan).toHaveBeenCalledTimes(1);
   });
 
-  it('scores again when a new version is published', async () => {
+  it('looks the version up again after the lookup window, and rescores a newly published one', async () => {
+    vi.useFakeTimers();
     runQuickScan.mockResolvedValue(scanView(SOLID));
     await selfScore('copy', CONTEXT);
-    findFramework.mockResolvedValue(
-      served(
-        { id: 'v52', version: '0.5.2', status: 'PUBLISHED' },
-        { id: 'v51', version: '0.5.1', status: 'PUBLISHED' }
-      )
-    );
-    await selfScore('copy', CONTEXT);
+    findFramework.mockResolvedValue(V52);
 
+    // Still within the window: the old version answers.
+    await selfScore('copy', CONTEXT);
+    expect(findFramework).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
+    await selfScore('copy', CONTEXT);
+    expect(findFramework).toHaveBeenCalledTimes(2);
     expect(runQuickScan).toHaveBeenCalledTimes(2);
     expect(runQuickScan).toHaveBeenLastCalledWith({
       text: 'copy',
       context: CONTEXT,
       version: '0.5.2',
     });
+  });
+
+  it('does not rescore when the lookup finds the same version again', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    await selfScore('copy', CONTEXT);
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
+    await selfScore('copy', CONTEXT);
+    expect(findFramework).toHaveBeenCalledTimes(2);
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
   });
 
   it('scores again when the copy or the context changes', async () => {
@@ -193,7 +212,7 @@ describe('selfScore, kept per framework version', () => {
     expect(runQuickScan).toHaveBeenCalledTimes(3);
   });
 
-  it('retries a failure only after the retry window, and logs a lasting one once', async () => {
+  it('retries a failed scan only after the retry window, and logs a lasting one once', async () => {
     vi.useFakeTimers();
     runQuickScan.mockRejectedValue(new Error('scan refused'));
 
@@ -212,7 +231,7 @@ describe('selfScore, kept per framework version', () => {
     expect(runQuickScan).toHaveBeenCalledTimes(3);
   });
 
-  it('logs a failure again after the score has recovered', async () => {
+  it('logs a scan failure again after the scan has recovered', async () => {
     vi.useFakeTimers();
     runQuickScan.mockRejectedValue(new Error('scan refused'));
     await selfScore('copy', CONTEXT);
@@ -230,20 +249,59 @@ describe('selfScore, kept per framework version', () => {
     runQuickScan.mockReturnValue(new Promise(() => {}));
 
     const first = selfScore('copy', CONTEXT);
-    await vi.advanceTimersByTimeAsync(SCORE_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
     await expect(first).resolves.toBeNull();
-    expect(logger.warn).toHaveBeenCalledWith('Self-score timed out', {
-      afterMs: SCORE_TIMEOUT_MS,
-    });
+    expect(logger.warn).toHaveBeenCalledWith('Self-score scan timed out', { afterMs: TIMEOUT_MS });
 
-    // Within the retry window a view answers at once, without a new run.
+    // A later view answers at once from the timed-out run.
     await expect(selfScore('copy', CONTEXT)).resolves.toBeNull();
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts no second scan beside a stalled one until it looks abandoned', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockReturnValue(new Promise(() => {}));
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await first;
+
+    // Past the retry window, but the first run is still going.
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    await selfScore('copy', CONTEXT);
     expect(runQuickScan).toHaveBeenCalledTimes(1);
 
     runQuickScan.mockResolvedValue(scanView(SOLID));
-    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    vi.advanceTimersByTime(ABANDON_AFTER_MS);
     await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
     expect(runQuickScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a failed scan once its run has settled', async () => {
+    vi.useFakeTimers();
+    let settle: (v: unknown) => void = () => {};
+    runQuickScan.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await first;
+    // The slow run finishes late; its answer came too late for the view.
+    settle(scanView(SOLID));
+    await vi.advanceTimersByTimeAsync(0);
+
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    expect(runQuickScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers null when a lookup stalls, and does not hold later views on it', async () => {
+    vi.useFakeTimers();
+    findFramework.mockReturnValue(new Promise(() => {}));
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await expect(first).resolves.toBeNull();
+    await expect(selfScore('copy', CONTEXT)).resolves.toBeNull();
+    expect(findFramework).toHaveBeenCalledTimes(1);
+    expect(runQuickScan).not.toHaveBeenCalled();
   });
 
   it('does not ask the database again within the retry window after a lookup fails', async () => {
@@ -260,19 +318,32 @@ describe('selfScore, kept per framework version', () => {
     expect(findFramework).toHaveBeenCalledTimes(2);
   });
 
-  it('logs a repeat lookup failure after the lookup has recovered, even when the score was kept', async () => {
+  it('shows the last good score while the lookup is failing', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    const good = await selfScore('copy', CONTEXT);
+
+    findFramework.mockRejectedValue(new Error('connection refused'));
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
+    await expect(selfScore('copy', CONTEXT)).resolves.toEqual(good);
+    await expect(selfScore('copy', CONTEXT)).resolves.toEqual(good);
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a repeat lookup failure after the lookup has recovered', async () => {
     vi.useFakeTimers();
     runQuickScan.mockResolvedValue(scanView(SOLID));
     await selfScore('copy', CONTEXT);
 
     findFramework.mockRejectedValueOnce(new Error('connection refused'));
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
     await selfScore('copy', CONTEXT);
     vi.advanceTimersByTime(RETRY_FAILED_MS);
-    // Recovered: served from the kept score, with no new scan.
-    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    await selfScore('copy', CONTEXT); // recovered
     expect(runQuickScan).toHaveBeenCalledTimes(1);
 
     findFramework.mockRejectedValueOnce(new Error('connection refused'));
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
     await selfScore('copy', CONTEXT);
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
