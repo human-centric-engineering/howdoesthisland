@@ -29,7 +29,7 @@ describe('SelfScorePanel', () => {
     const panel = screen.getByTestId('self-score');
     expect(panel).toHaveTextContent('Quick scan · howdoesthisland@0.5.1');
     expect(panel).toHaveTextContent('Solid · out of 100');
-    expect(panel).toHaveTextContent('Solid, not perfect. Weakest appeal: pathos.');
+    expect(panel).toHaveTextContent('Solid. Weakest appeal: pathos.');
   });
 
   it('names each appeal beside its score', () => {
@@ -46,10 +46,10 @@ describe('SelfScorePanel', () => {
     }
   });
 
-  it('does not call a perfect score imperfect', () => {
-    render(<SelfScorePanel score={{ ...SCORE, overall: 100, band: 'Exceptional' }} />);
+  it('names a low band plainly, with no hedge that only fits a high score', () => {
+    render(<SelfScorePanel score={{ ...SCORE, overall: 35, band: 'Weak' }} />);
     const panel = screen.getByTestId('self-score');
-    expect(panel).toHaveTextContent('Exceptional. Weakest appeal');
+    expect(panel).toHaveTextContent('Weak. Weakest appeal: pathos.');
     expect(panel).not.toHaveTextContent('not perfect');
   });
 });

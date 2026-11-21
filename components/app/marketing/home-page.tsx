@@ -24,7 +24,8 @@ import { selfScore } from '@/lib/app/quick-scan/self-score';
  * The hero's panel is the page's own copy scored live by the quick scan, with
  * the quick-scan switch on, or a static marked-up sample with it off
  * (`selfScore()` returns `null` off, before any engine call). Rendered per
- * request, so the switch and the score are the running server's.
+ * request, so the switch is the running server's; the score is kept per
+ * published framework version (`self-score.ts`), not rerun per view.
  */
 
 const description =

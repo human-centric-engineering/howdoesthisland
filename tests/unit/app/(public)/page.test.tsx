@@ -25,11 +25,26 @@ vi.mock('@/lib/env', () => ({ env: mockEnv }));
 const runQuickScan = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/app/assessments/api/scan', () => ({ runQuickScan }));
 
-import HomePage, { metadata } from '@/app/(public)/page';
+const findFramework = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/app/frameworks/api/catalog', () => ({
+  prismaFrameworkCatalog: { findFramework },
+}));
+
 import { HOME_CONTEXT, HOME_PAGE_TEXT } from '@/components/app/marketing/home-copy';
 
-beforeEach(() => {
+type PageModule = typeof import('@/app/(public)/page');
+let HomePage: PageModule['default'];
+let metadata: PageModule['metadata'];
+
+beforeEach(async () => {
   vi.clearAllMocks();
+  // The self-score is kept per framework version in module state: each test starts with none.
+  vi.resetModules();
+  ({ default: HomePage, metadata } = await import('@/app/(public)/page'));
+  findFramework.mockResolvedValue({
+    slug: 'howdoesthisland',
+    versions: [{ id: 'v51', version: '0.5.1', status: 'PUBLISHED', sourceSha256: 'sha' }],
+  });
   runQuickScan.mockResolvedValue({
     framework: { slug: 'howdoesthisland', version: '0.5.1' },
     wordCount: 500,
@@ -43,7 +58,7 @@ beforeEach(() => {
 });
 
 describe('the landing page', () => {
-  it('renders per request, so the switch and the score are the running server’s', async () => {
+  it('renders per request, so the switch is the running server’s', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
     const { connection } = await import('next/server');
     await HomePage();
@@ -54,7 +69,11 @@ describe('the landing page', () => {
     mockEnv.QUICK_SCAN_ENABLED = true;
     const { container } = render(await HomePage());
 
-    expect(runQuickScan).toHaveBeenCalledWith({ text: HOME_PAGE_TEXT, context: HOME_CONTEXT });
+    expect(runQuickScan).toHaveBeenCalledWith({
+      text: HOME_PAGE_TEXT,
+      context: HOME_CONTEXT,
+      version: '0.5.1',
+    });
     const panel = screen.getByTestId('self-score');
     expect(panel).toHaveTextContent('We ran this page through HowDoesThisLand');
     expect(panel).toHaveTextContent('63');
@@ -67,6 +86,7 @@ describe('the landing page', () => {
     const { container } = render(await HomePage());
 
     expect(runQuickScan).not.toHaveBeenCalled();
+    expect(findFramework).not.toHaveBeenCalled();
     expect(container.querySelector('[data-testid="self-score"]')).toBeNull();
     expect(container.textContent).not.toMatch(/quick scan/i);
     expect(screen.getByTestId('sample-mark-up')).toHaveTextContent('What a review marks up');

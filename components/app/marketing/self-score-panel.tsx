@@ -9,7 +9,7 @@ const NAME = Object.fromEntries(HOME_APPEALS.map((a) => [a.id, a.name])) as Reco
 
 /**
  * "We ran this page through HowDoesThisLand" (t-62): the landing page's own
- * copy, scored by the quick scan as the page renders. Shown only when
+ * copy, scored by the quick scan (once per framework version). Shown only when
  * `selfScore()` answered, which it does only with the quick-scan switch on.
  */
 export function SelfScorePanel({ score }: { score: SelfScore }) {
@@ -25,7 +25,8 @@ export function SelfScorePanel({ score }: { score: SelfScore }) {
         We ran this page through HowDoesThisLand
       </h2>
       <p className="mt-1 text-sm text-(--hd-muted)">
-        Scored each time the page loads, by the quick scan alone: no AI reviewers.
+        Scored by the quick scan alone, no AI reviewers, and again when a new framework version is
+        published.
       </p>
       <p className="mt-5 flex items-baseline gap-3">
         <span className="font-serif text-6xl leading-none font-extrabold tabular-nums">
@@ -49,9 +50,8 @@ export function SelfScorePanel({ score }: { score: SelfScore }) {
         />
       </div>
       <p className="mt-5 border-t border-dashed border-(--hd-rule) pt-4 text-sm">
-        <b>{score.overall < 100 ? `${score.band}, not perfect.` : `${score.band}.`}</b> Weakest
-        appeal: {weakest.toLowerCase()}. We’re new, so there are no customer quotes here yet, and we
-        won’t invent them.
+        <b>{score.band}.</b> Weakest appeal: {weakest.toLowerCase()}. We’re new, so there are no
+        customer quotes here yet, and we won’t invent them.
       </p>
     </section>
   );

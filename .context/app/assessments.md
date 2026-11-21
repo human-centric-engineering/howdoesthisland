@@ -261,7 +261,10 @@ Each route's docblock lists its error codes. A few rules hold across them:
   out (the registry's `enabled`, read by `servedRoutes()`). The landing page's
   self-score (t-62, `selfScore()` in `lib/app/quick-scan/self-score.ts`) runs
   the same service in process, only with the switch on; off, it returns before
-  any engine call and the hero shows a static marked-up sample instead. A page
+  any engine call and the hero shows a static marked-up sample instead. It
+  scores once per published framework version and keeps the result in process
+  (a failure is retried at most once a minute and logged once), so anonymous
+  views of `/` never become an unthrottled path to engine work. A page
   that later offers the quick scan checks the switch too. It does not cover the engine's
   fallback when a judge fails, calibration's quick mode, or the `quick`
   profile of `POST assessments`.
