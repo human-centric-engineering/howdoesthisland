@@ -8,6 +8,7 @@ import {
   adminCodesListSchema,
   dateFromNow,
   DEFAULT_EXPIRY_DAYS,
+  MAX_EXPIRY_DAYS,
   MAX_CODE_SEARCH,
 } from '@/lib/app/credits/codes/wire';
 
@@ -66,6 +67,8 @@ export default async function CodesPage({
         initial={list}
         query={query}
         defaultExpiry={dateFromNow(DEFAULT_EXPIRY_DAYS)}
+        minExpiry={dateFromNow(0)}
+        maxExpiry={dateFromNow(MAX_EXPIRY_DAYS - 1)}
       />
     </div>
   );

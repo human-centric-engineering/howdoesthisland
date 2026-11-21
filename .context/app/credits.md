@@ -189,6 +189,8 @@ to mint a code for a qualified lead later; that wiring is not built.
 - **`idempotencyKey`** makes a retried call mint once. The same key and body
   answer **200** with the codes first minted (`replayed: true`); a new mint
   answers **201**. The same key with a different body is **409** `CONFLICT`.
+  A retry is validated like a first call, so one sent after `expiresAt` has
+  passed is refused 400: give a code more life than the caller retries for.
   `(idempotencyKey, batchIndex)` is unique, so two calls racing with one key
   mint once: the loser reads back the winner's codes.
 - The admin form sends a key of its own, drawn again only after a mint

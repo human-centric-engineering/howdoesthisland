@@ -26,8 +26,13 @@ function download(blob: Blob, name: string) {
   const a = document.createElement('a');
   a.href = url;
   a.download = name;
+  // In the document, and the URL kept until the click has been handled:
+  // Safari and older Firefox drop a download from a detached link, or from a
+  // URL revoked in the same tick.
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /** One path of every dark module, so the SVG is one element, not hundreds. */

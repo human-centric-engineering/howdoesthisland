@@ -84,9 +84,13 @@ const numberOrNaN = (value: string) => (value.trim() === '' ? Number.NaN : Numbe
 
 function CreateForm({
   defaultExpiry,
+  minExpiry,
+  maxExpiry,
   onDone,
 }: {
   defaultExpiry: string;
+  minExpiry: string;
+  maxExpiry: string;
   onDone: (result: IssuedCodes) => void;
 }) {
   const router = useRouter();
@@ -96,6 +100,12 @@ function CreateForm({
   const [expires, setExpires] = useState(defaultExpiry);
   const [campaign, setCampaign] = useState('');
   const [key, setKey] = useState(() => crypto.randomUUID());
+  // A changed field is a different request: it gets a key of its own, or a
+  // mint whose answer was lost would refuse every later Save with 409.
+  const edit = (set: (value: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    set(e.target.value);
+    setKey(crypto.randomUUID());
+  };
   const [saving, setSaving] = useState(false);
   const save = useSaveFailure({
     fallback: 'The codes could not be made. Try again in a moment: a retry will not make more.',
@@ -170,7 +180,7 @@ function CreateForm({
             maxLength={MAX_CAMPAIGN}
             placeholder="e.g. Content Marketing World 2027"
             value={campaign}
-            onChange={(e) => setCampaign(e.target.value)}
+            onChange={edit(setCampaign)}
           />
         </div>
         <div className="space-y-2">
@@ -195,7 +205,7 @@ function CreateForm({
             min={1}
             step={1}
             value={credits}
-            onChange={(e) => setCredits(e.target.value)}
+            onChange={edit(setCredits)}
           />
         </div>
         <div className="space-y-2">
@@ -220,7 +230,7 @@ function CreateForm({
             min={1}
             step={1}
             value={uses}
-            onChange={(e) => setUses(e.target.value)}
+            onChange={edit(setUses)}
           />
         </div>
         <div className="space-y-2">
@@ -243,7 +253,7 @@ function CreateForm({
             max={MAX_BATCH}
             step={1}
             value={howMany}
-            onChange={(e) => setHowMany(e.target.value)}
+            onChange={edit(setHowMany)}
           />
         </div>
         <div className="space-y-2">
@@ -263,8 +273,10 @@ function CreateForm({
             id="code-expiresAt"
             name="code-expiresAt"
             type="date"
+            min={minExpiry}
+            max={maxExpiry}
             value={expires}
-            onChange={(e) => setExpires(e.target.value)}
+            onChange={edit(setExpires)}
           />
         </div>
       </div>
@@ -327,9 +339,18 @@ export interface CodesPanelProps {
   query: string;
   /** The expiry date field's first value, `YYYY-MM-DD`. */
   defaultExpiry: string;
+  /** The earliest and latest days the date field offers, `YYYY-MM-DD` (today and three years ahead). */
+  minExpiry: string;
+  maxExpiry: string;
 }
 
-export function CodesPanel({ initial, query, defaultExpiry }: CodesPanelProps) {
+export function CodesPanel({
+  initial,
+  query,
+  defaultExpiry,
+  minExpiry,
+  maxExpiry,
+}: CodesPanelProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [search, setSearch] = useState(query);
@@ -346,6 +367,8 @@ export function CodesPanel({ initial, query, defaultExpiry }: CodesPanelProps) {
     <div className="space-y-6">
       <CreateForm
         defaultExpiry={defaultExpiry}
+        minExpiry={minExpiry}
+        maxExpiry={maxExpiry}
         onDone={(result) => {
           setMade(result);
           router.refresh();

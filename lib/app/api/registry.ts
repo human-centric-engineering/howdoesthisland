@@ -816,7 +816,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'POST',
     path: '/api/v1/admin/codes',
     summary:
-      'Mint free review codes: `count` codes alike, each giving `creditsPerRedemption` CopyCredits to the workspace that redeems it, up to `maxRedemptions` times (1 for a personal code, more for a QR card), until `expiresAt`. Each answers with its redeem link, which is what its QR encodes. With an `idempotencyKey`, a retried call mints once: the same key and body answer 200 with the codes first minted (`replayed: true`); a new mint answers 201.',
+      'Mint free review codes: `count` codes alike, each giving `creditsPerRedemption` CopyCredits to the workspace that redeems it, up to `maxRedemptions` times (1 for a personal code, more for a QR card), until `expiresAt`. Each answers with its redeem link, which is what its QR encodes. With an `idempotencyKey`, a retried call mints once: the same key and body answer 200 with the codes first minted (`replayed: true`); a new mint answers 201. A retry is checked like a first call, so one sent after `expiresAt` has passed is refused (400): give a code more life than the caller retries for.',
     auth: { who: 'platform-admin' },
     request: { body: issueCodesSchema },
     errors: [

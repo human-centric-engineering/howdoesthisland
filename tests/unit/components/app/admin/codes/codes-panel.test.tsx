@@ -57,7 +57,15 @@ const LIST: AdminCodesList = { codes: [CARD, REVOKED], truncated: false };
 
 function setup(list: AdminCodesList = LIST) {
   const user = userEvent.setup();
-  render(<CodesPanel initial={list} query="" defaultExpiry="2027-02-19" />);
+  render(
+    <CodesPanel
+      initial={list}
+      query=""
+      defaultExpiry="2027-02-19"
+      minExpiry="2026-11-21"
+      maxExpiry="2029-11-20"
+    />
+  );
   return { user };
 }
 
@@ -116,6 +124,8 @@ describe('the list', () => {
         initial={{ codes: [], truncated: false }}
         query="zzz"
         defaultExpiry="2027-02-19"
+        minExpiry="2026-11-21"
+        maxExpiry="2029-11-20"
       />
     );
     expect(screen.getByText('No code matches “zzz”.')).toBeInTheDocument();
@@ -166,6 +176,30 @@ describe('making codes', () => {
     const keys = postedBodies().map((b) => b.idempotencyKey);
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it('sends a new key once a field changes after a failed answer, so the edited form is not refused as a replay', async () => {
+    vi.mocked(apiClient.post)
+      .mockRejectedValueOnce(new APIClientError('Network error', 'NETWORK_ERROR', 0))
+      .mockResolvedValueOnce({ codes: [CARD], replayed: false });
+    const { user } = setup();
+    await fillForm(user);
+    await user.click(screen.getByRole('button', { name: 'Make codes' }));
+    await waitFor(() => expect(nav.refresh).toHaveBeenCalledTimes(1));
+
+    await user.type(field('code-campaign'), ' B');
+    await user.click(screen.getByRole('button', { name: 'Make codes' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(2));
+
+    const [first, second] = postedBodies();
+    expect(second?.campaign).toBe('Spring stand card B');
+    expect(second?.idempotencyKey).not.toBe(first?.idempotencyKey);
+  });
+
+  it('offers expiry days from today to three years ahead', () => {
+    setup();
+    expect(field('code-expiresAt').getAttribute('min')).toBe('2026-11-21');
+    expect(field('code-expiresAt').getAttribute('max')).toBe('2029-11-20');
   });
 
   it('refuses a form without a campaign or credits before sending it', async () => {
