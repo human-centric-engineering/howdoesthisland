@@ -1,6 +1,7 @@
 /**
  * Tests: POST /api/v1/scan — the quick scan (t-24, D14), behind its switch
- * and open only to a session, an `assess` key or a free review code (t-61).
+ * (t-61), open to anyone (t-68): signed out, the scores and a caveat; with a
+ * session or an `assess` key, the full result. A free review code is ignored.
  *
  * The guard is real: a session or key goes through `withAuth`, which looks
  * the key up and enters its workspace, so a refused workspace is refused
@@ -11,9 +12,8 @@
  * framework tables, which are shared config. The route, the service, the
  * store and the engine run for real, on the committed 0.5.1 file in the
  * framework store's in-memory repo. Prisma is a stand-in that records any
- * model it is asked for, so "stores nothing" is checked as "touched nothing
- * but the code it checked". A code is checked by t-60's real `checkCode`,
- * reading the rows `CODES` holds.
+ * model it is asked for, so "stores nothing" is checked as "touched nothing".
+ * `CODES` holds review-code rows, so a test can show a code is never read.
  *
  * The per-IP cap is checked through the real rate-limit dispatcher, which
  * loads `lib/app/rate-limit.ts` the way the proxy does.
@@ -95,7 +95,8 @@ import { prismaFrameworkRepo } from '@/lib/app/frameworks/repo';
 import { FakeFrameworkRepo, OPEN_GATE } from '@/tests/unit/lib/app/frameworks/fake-repo';
 import { getTenantContext } from '@/lib/tenancy/context';
 import { MAX_CONTENT_CHARS, SCANS_PER_MINUTE } from '@/lib/app/assessments/limits';
-import { quickScanViewSchema } from '@/lib/app/api/registry';
+import { quickScanSummarySchema, quickScanViewSchema } from '@/lib/app/api/registry';
+import { QUICK_SCAN_CAVEAT } from '@/lib/app/quick-scan/summary';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 
 const RAW = readFileSync('lib/app/frameworks/howdoesthisland/data/model-0.5.1.json', 'utf8');
@@ -179,7 +180,8 @@ function seedCodes(): void {
 
 /**
  * POST a scan. Unless `body` names its own `code` (or is sent raw), it
- * carries `ACTIVE`: the caller holding a free review code and no account.
+ * carries `ACTIVE`, which the quick scan ignores (t-68): a code makes no
+ * difference to what anyone gets.
  */
 function scan(body: unknown, raw = false, headers: Record<string, string> = {}): Promise<Response> {
   const withCode =
@@ -245,38 +247,61 @@ beforeEach(() => {
   seedCodes();
 });
 
-describe('POST /api/v1/scan with a free review code and no session, at multi', () => {
-  it('answers the quick scan, as the registry declares it, touching only the code it checked', async () => {
+describe('POST /api/v1/scan signed out, at multi (t-68)', () => {
+  it('answers the scores and a caveat, and nothing else, as the registry declares it', async () => {
     expect(getTenantContext()).toBeNull();
-    const res = await scan({ text: TEXT, context: { contentType: 'sales_email' } });
+    const res = await scanAs({ text: TEXT, context: { contentType: 'sales_email' } });
 
     expect(res.status).toBe(200);
     const body = await read(res);
-    expect(quickScanViewSchema.parse(body.data)).toEqual(body.data);
+    expect(quickScanSummarySchema.parse(body.data)).toEqual(body.data);
     expect(body.data).toMatchObject({
       framework: { slug: 'howdoesthisland', version: '0.5.1' },
       wordCount: 22,
       overall: expect.any(Number),
       band: expect.any(String),
-      context: { contentType: 'sales_email', archetype: 'general' },
+      caveat: QUICK_SCAN_CAVEAT,
     });
-    // The result is the quick scan's alone: no judge, no AI.
-    expect(JSON.stringify(body.data?.result)).not.toContain('"source":"ai"');
-    // Nothing stored, and nothing read outside the framework store but the
-    // code: not its redemptions, and no redemption written, since a scan
-    // never uses one up.
-    expect(touched).toEqual(['reviewCode']);
+    // Each appeal's score, in the version's order, and no matched lines or notes:
+    // a free, open scan must not be a way to probe the model's patterns.
+    const appeals = body.data?.appeals as { id: string; score: number }[];
+    expect(appeals.map((a) => a.id)).toEqual(['ethos', 'pathos', 'logos', 'kairos']);
+    expect(body.data).not.toHaveProperty('result');
+    expect(body.data).not.toHaveProperty('context');
+    expect(JSON.stringify(body.data)).not.toContain('"highlights"');
+    // Nothing stored, and nothing read outside the framework store.
+    expect(touched).toEqual([]);
   });
 
   it('is deterministic: the same text and context score the same', async () => {
-    const first = await read(await scan({ text: TEXT }));
-    const second = await read(await scan({ text: TEXT }));
+    const first = await read(await scanAs({ text: TEXT }));
+    const second = await read(await scanAs({ text: TEXT }));
     expect(second.data).toEqual(first.data);
   });
 
   it('scores against the version asked for', async () => {
-    const res = await scan({ text: TEXT, framework: 'howdoesthisland', version: '0.5.1' });
+    const res = await scanAs({ text: TEXT, framework: 'howdoesthisland', version: '0.5.1' });
     expect(res.status).toBe(200);
+  });
+
+  it('ignores a code it could not even parse as one, rather than refusing the scan', async () => {
+    for (const code of ['A'.repeat(65), 42]) {
+      expect((await scanAs({ text: TEXT, code })).status).toBe(200);
+    }
+  });
+
+  it.each([
+    ['active', ACTIVE],
+    ['expired', EXPIRED],
+    ['revoked', REVOKED],
+    ['used-up', USED_UP],
+    ['unknown', UNKNOWN],
+    ['malformed', 'not a code'],
+  ])('ignores a free review code (%s): the same scores, and no code read', async (_label, code) => {
+    const withCode = await read(await scanAs({ text: TEXT, code }));
+    const without = await read(await scanAs({ text: TEXT }));
+    expect(withCode.data).toEqual(without.data);
+    expect(touched).toEqual([]);
   });
 });
 
@@ -300,22 +325,30 @@ describe('the quick-scan switch (t-61)', () => {
     expect(touched).toEqual([]);
   });
 
-  it('is off in production when unset, and on otherwise', async () => {
+  it('is on when unset, production included (t-68), and off only when set false', async () => {
     mockEnv.QUICK_SCAN_ENABLED = undefined;
     Object.assign(mockEnv, { NODE_ENV: 'production' });
     try {
-      expect((await scan({ text: TEXT })).status).toBe(404);
+      expect((await scan({ text: TEXT })).status).toBe(200);
     } finally {
       Object.assign(mockEnv, { NODE_ENV: 'test' });
     }
     expect((await scan({ text: TEXT })).status).toBe(200);
+    mockEnv.QUICK_SCAN_ENABLED = false;
+    expect((await scan({ text: TEXT })).status).toBe(404);
   });
 });
 
-describe('who may run the quick scan (t-61)', () => {
-  it('a signed-in member, through the guard, inside their workspace, reading no code', async () => {
+describe('who gets the full result (t-61, t-68)', () => {
+  it('a signed-in member, through the guard, inside their workspace, gets the full result', async () => {
     signedIn();
-    expect((await scanAs({ text: TEXT })).status).toBe(200);
+    const res = await scanAs({ text: TEXT });
+    expect(res.status).toBe(200);
+    const body = await read(res);
+    expect(quickScanViewSchema.parse(body.data)).toEqual(body.data);
+    expect(body.data).toHaveProperty('result');
+    // The result is the quick scan's alone: no judge, no AI.
+    expect(JSON.stringify(body.data?.result)).not.toContain('"source":"ai"');
     expect(mocks.membership).toHaveBeenCalled();
     expect(touched).not.toContain('reviewCode');
   });
@@ -329,14 +362,16 @@ describe('who may run the quick scan (t-61)', () => {
     expect(touched).not.toContain('reviewCode');
   });
 
-  it('an API key with the assess scope, entering the workspace it was minted in', async () => {
+  it('an API key with the assess scope, entering the workspace it was minted in, gets the full result', async () => {
     withKey(['assess']);
-    expect((await scanAs({ text: TEXT }, KEY_HEADERS)).status).toBe(200);
+    const res = await scanAs({ text: TEXT }, KEY_HEADERS);
+    expect(res.status).toBe(200);
+    expect((await read(res)).data).toHaveProperty('result');
     expect(mocks.apiKey).toHaveBeenCalledTimes(1);
     expect(touched).not.toContain('reviewCode');
   });
 
-  it('403 FORBIDDEN for a key without the assess scope, even with a good code', async () => {
+  it('403 FORBIDDEN for a key without the assess scope, ', async () => {
     withKey(['reports']);
     expect(await refusal(await scan({ text: TEXT }, false, KEY_HEADERS))).toMatchObject({
       status: 403,
@@ -353,74 +388,49 @@ describe('who may run the quick scan (t-61)', () => {
     });
   });
 
-  it('403 FORBIDDEN for a key or a session whose workspace is suspended, even with a good code', async () => {
+  it('403 FORBIDDEN for a key whose workspace is suspended', async () => {
     withKey(['assess'], WS_SUSPENDED);
     expect(await refusal(await scan({ text: TEXT }, false, KEY_HEADERS))).toMatchObject({
       status: 403,
       code: 'FORBIDDEN',
     });
-    mocks.apiKey.mockResolvedValue(null);
+  });
+
+  it('the signed-out answer, not a refusal, for a session whose workspace is suspended', async () => {
     signedIn(WS_SUSPENDED);
-    expect(await refusal(await scan({ text: TEXT }))).toMatchObject({
-      status: 403,
-      code: 'FORBIDDEN',
-    });
+    const res = await scan({ text: TEXT });
+    expect(res.status).toBe(200);
+    const body = await read(res);
+    expect(quickScanSummarySchema.parse(body.data)).toEqual(body.data);
+    expect(body.data).not.toHaveProperty('result');
     expect(touched).not.toContain('reviewCode');
   });
 
-  it('401 UNAUTHORIZED for an API key that is not valid, even with a good code', async () => {
+  it('401 UNAUTHORIZED for an API key that is not valid', async () => {
     expect(await refusal(await scan({ text: TEXT }, false, KEY_HEADERS))).toMatchObject({
       status: 401,
       code: 'UNAUTHORIZED',
     });
   });
 
-  it('500, not the code path, when the session lookup fails, even with a good code', async () => {
+  it('the signed-out answer when the session is gone by the time the guard looks', async () => {
+    const base = createMockAuthSession();
+    // `presentsAccount` sees a session; the guard's own lookup finds none.
+    mocks.getSession
+      .mockResolvedValueOnce({
+        session: { ...base.session, userId: ALICE, activeOrgId: WS_A },
+        user: { ...base.user, id: ALICE },
+      })
+      .mockResolvedValue(null);
+    const res = await scan({ text: TEXT });
+    expect(res.status).toBe(200);
+    expect((await read(res)).data).toHaveProperty('caveat');
+  });
+
+  it('500, not the signed-out answer, when the session lookup fails', async () => {
     mocks.getSession.mockRejectedValue(new Error('session store down'));
     const res = await scan({ text: TEXT });
     expect(res.status).toBe(500);
-    expect(touched).not.toContain('reviewCode');
-  });
-
-  it('401 ACCOUNT_REQUIRED with no session, no key and no code', async () => {
-    expect(await refusal(await scanAs({ text: TEXT }))).toMatchObject({
-      status: 401,
-      code: 'ACCOUNT_REQUIRED',
-    });
-    expect(mocks.getSession).toHaveBeenCalled();
-    expect(touched).toEqual([]);
-  });
-
-  it.each([
-    ['expired', EXPIRED],
-    ['revoked', REVOKED],
-    ['used-up', USED_UP],
-    ['unknown', UNKNOWN],
-    ['malformed', 'not a code'],
-    ['longer than any typed code', 'A'.repeat(65)],
-    ['not a string', 42],
-  ])('401 ACCOUNT_REQUIRED, said alike, for a code that is %s', async (_label, code) => {
-    const res = await scanAs({ text: TEXT, code });
-    const body = await read(res);
-    expect(res.status).toBe(401);
-    expect(body.error?.code).toBe('ACCOUNT_REQUIRED');
-    // The same words whichever it is: the scan is not a way to learn a code's state.
-    const none = await read(await scanAs({ text: TEXT }));
-    expect(body.error?.message).toBe(none.error?.message);
-  });
-
-  it('401 ACCOUNT_REQUIRED before the body is checked, for a caller with no code', async () => {
-    for (const body of [{}, { text: TEXT, wait: true }, { url: 'https://example.com' }]) {
-      expect((await refusal(await scanAs(body))).code).toBe('ACCOUNT_REQUIRED');
-    }
-  });
-
-  it('accepts a code however it is typed, and does not use one up', async () => {
-    for (const code of ['ABCDEFGHJKMN', ' abcd efgh jkmn ']) {
-      expect((await scanAs({ text: TEXT, code })).status).toBe(200);
-    }
-    // Only the code was read: no redemption counted or written.
-    expect(touched.every((model) => model === 'reviewCode')).toBe(true);
   });
 });
 
@@ -433,8 +443,7 @@ describe('POST /api/v1/scan refusals', () => {
     expect(
       await refusal(await scan({ text: TEXT, file: { name: 'a.txt', base64: 'aGk=' } }))
     ).toMatchObject({ status: 401, code: 'ACCOUNT_REQUIRED' });
-    // The code was checked first, and nothing else read.
-    expect(touched.every((model) => model === 'reviewCode')).toBe(true);
+    expect(touched).toEqual([]);
   });
 
   it('400 VALIDATION_ERROR for a body that is not JSON, has no text, or has an unknown key', async () => {

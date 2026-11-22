@@ -15,9 +15,8 @@
  *   cookie, or a bearer API key holding `apiKeyScope` where one is accepted;
  *   a session or a key with the `admin` scope for a platform admin. A 401
  *   and a 403 for every route that needs a caller: one that refuses API keys
- *   answers a key with 403. `orCode` adds the empty requirement `{}`, since
- *   a free review code in the body stands in for a credential, and its 401
- *   is `ACCOUNT_REQUIRED`.
+ *   answers a key with 403. `orSignedOut` adds the empty requirement `{}`:
+ *   a caller with no credential may call too, and gets less.
  * - `enabled` → a route whose switch is off is left out of the document.
  * - `params` / `query` / `body` → parameters and the request body, with a
  *   400 `VALIDATION_ERROR`; `invalidParamsStatus: 404` answers a bad path
@@ -159,8 +158,8 @@ function authNote(auth: RouteAuth): string | null {
       const who = auth.apiKeyScope
         ? `A session, or an API key with the \`${auth.apiKeyScope}\` scope.`
         : 'A browser session; API keys are refused.';
-      return auth.orCode
-        ? `${who} With neither, a free review code in \`code\` that has not expired, been withdrawn or run out. The code is checked, never used up.`
+      return auth.orSignedOut
+        ? `${who} With neither, anyone may call, and gets less: see the summary.`
         : who;
     }
     case 'platform-admin':
@@ -185,12 +184,12 @@ function security(auth: RouteAuth): JsonObject[] {
     case 'platform-admin':
       return [{ session: [] }, { apiKey: ['admin'] }];
     case 'signed-in':
-      // `{}`: no credential, which a free review code in the body stands in for.
+      // `{}`: no credential; a signed-out caller may call too, and gets less.
       return [
         ...(auth.apiKeyScope
           ? [{ session: [] }, { apiKey: [auth.apiKeyScope] }]
           : [{ session: [] }]),
-        ...(auth.orCode ? [{}] : []),
+        ...(auth.orSignedOut ? [{}] : []),
       ];
     case 'workspace-admin':
       return auth.apiKeyScope
@@ -279,8 +278,8 @@ function operation(route: RouteContract): JsonObject {
   if (validated) responses['400'] = errorRef('`VALIDATION_ERROR`: the request does not parse.');
   if (auth.who !== 'anyone') {
     responses['401'] = errorRef(
-      auth.who === 'signed-in' && auth.orCode
-        ? '`ACCOUNT_REQUIRED`: no session, no key, and no free review code that could still be redeemed. `UNAUTHORIZED`: an API key that is not valid.'
+      auth.who === 'signed-in' && auth.orSignedOut
+        ? '`UNAUTHORIZED`: an API key that is not valid. `ACCOUNT_REQUIRED`: the body asks for something only an account may (a page or a file, on the quick scan). A caller with no credential at all is answered, with less.'
         : '`UNAUTHORIZED`: no caller.'
     );
     responses['403'] = errorRef(forbiddenNote(auth));

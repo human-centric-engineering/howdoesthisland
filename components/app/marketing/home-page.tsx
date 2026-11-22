@@ -14,6 +14,10 @@ import { SampleMarkUp } from '@/components/app/marketing/sample-mark-up';
 import { SelfScorePanel } from '@/components/app/marketing/self-score-panel';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
 import { selfScore, selfScoreSettled } from '@/lib/app/quick-scan/self-score';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
+
+/** The free quick scan's page (t-68). */
+const QUICK_SCAN_PATH = '/quick-scan';
 
 /**
  * `/`: HowDoesThisLand's landing page (t-62). `app/(public)/page.tsx` is a
@@ -50,7 +54,7 @@ const APPEAL_COLOUR: Readonly<Record<string, string>> = {
   kairos: 'var(--hd-kairos)',
 };
 
-function WayIn({ id }: { id: string }) {
+function WayIn({ id, quickScan }: { id: string; quickScan: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
       <Button asChild size="lg" className="bg-(--hd-red) text-white hover:bg-(--hd-red)/90">
@@ -60,8 +64,20 @@ function WayIn({ id }: { id: string }) {
       </Button>
       <span className="text-sm text-(--hd-muted)">
         No code?{' '}
+        {quickScan && (
+          <>
+            <Link
+              href={QUICK_SCAN_PATH}
+              className="text-(--hd-ink) underline underline-offset-4"
+              data-testid={`${id}-quick-scan`}
+            >
+              Try the free quick scan
+            </Link>{' '}
+            or{' '}
+          </>
+        )}
         <Link href="/signup" className="text-(--hd-ink) underline underline-offset-4">
-          Create an account
+          {quickScan ? 'create an account' : 'Create an account'}
         </Link>
       </span>
     </div>
@@ -102,7 +118,7 @@ export default async function HomePage() {
             </h1>
             <p className="mt-6 max-w-[54ch] text-lg leading-relaxed text-(--hd-muted)">{C.sub}</p>
             <div className="mt-8">
-              <WayIn id="hero" />
+              <WayIn id="hero" quickScan={isQuickScanEnabled()} />
             </div>
             <div className="mt-8 max-w-xl border-t border-dashed border-(--hd-rule) pt-6">
               <CodeEntryForm />

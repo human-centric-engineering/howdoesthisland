@@ -51,6 +51,7 @@ import {
 } from '@/lib/app/assessments/api/validations';
 import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
+import { quickScanSummarySchema } from '@/lib/app/quick-scan/summary';
 import {
   appRetentionSchema,
   judgeReplyRetentionSchema,
@@ -96,9 +97,9 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
  * Who may call a route.
  *
  * - `anyone` — no sign-in; anonymous callers are rate-limited by IP.
- * - `signed-in` — any session. With `orCode`, a caller with neither a
- *   session nor a key may instead send a free review code in the body's
- *   `code`, one that could still be redeemed (the quick scan, t-61).
+ * - `signed-in` — any session. With `orSignedOut`, a caller with neither a
+ *   session nor a key may call too, and gets less: the route's docblock and
+ *   summary say what (the quick scan's scores and a caveat, t-68).
  * - `workspace-admin` — the workspace the path names, as its `OWNER` or
  *   `ADMIN` acting in it, or a platform admin (the authorization policy's
  *   answer for an org resource). `platformAdmin` says where that platform
@@ -114,7 +115,7 @@ export type HttpMethod = (typeof HTTP_METHODS)[number];
 export type RouteAuth =
   | { who: 'anyone' }
   | { who: 'platform-admin' }
-  | { who: 'signed-in'; apiKeyScope: string | null; orCode?: true }
+  | { who: 'signed-in'; apiKeyScope: string | null; orSignedOut?: true }
   | {
       who: 'workspace-admin';
       apiKeyScope: string | null;
@@ -458,6 +459,9 @@ export const ephemeralAssessmentSchema = z.object({
   judgeRuns: z.array(judgeRunViewSchema),
 });
 
+/** `QuickScanSummary`: what a signed-out caller gets from the quick scan (t-68). */
+export { quickScanSummarySchema };
+
 /** `QuickScanView`. */
 export const quickScanViewSchema = z.object({
   framework: frameworkRefSchema,
@@ -522,8 +526,8 @@ const kindParams = versionParams.extend({ kind: kindParam });
 
 /** A browser session, or an API key with the `assess` scope. */
 const ASSESS: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE };
-/** The quick scan's callers (t-61): as `ASSESS`, or anyone with a free review code. */
-const QUICK_SCAN: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE, orCode: true };
+/** The quick scan's callers (t-68): as `ASSESS` for the full result, or anyone for the scores. */
+const QUICK_SCAN: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE, orSignedOut: true };
 const assessmentParams = assessmentIdParamSchema;
 
 /** Browser-session routes: an API key is refused. */
@@ -618,10 +622,14 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'POST',
     path: '/api/v1/scan',
     summary:
-      'Run the quick scan on pasted text: deterministic, no AI, nothing stored. Needs an account, an API key, or a free review code. Limited per IP.',
+      'Run the quick scan on pasted text: deterministic, no AI, nothing stored. Open to anyone: signed out, the scores and a caveat; with an account or an `assess` key, the full result. Limited per IP.',
     auth: QUICK_SCAN,
     request: { body: scanRequestSchema },
-    response: { status: 200, data: quickScanViewSchema },
+    // Which one a caller gets follows the credential, not the body: with a
+    // session or a key, the full view; with neither, the summary, which alone
+    // has `caveat` and `appeals`. The summary comes first: the view's
+    // `unknown` fields would also accept a summary, and strip its caveat.
+    response: { status: 200, data: z.union([quickScanSummarySchema, quickScanViewSchema]) },
   },
   {
     method: 'POST',

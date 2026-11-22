@@ -29,8 +29,9 @@ const versionChoice = {
 const contextField = z.record(z.string(), z.unknown()).optional();
 
 /**
- * POST /api/v1/scan: pasted text only (D7, D14). `code` is a free review
- * code, as typed, for a caller with no account (t-61): checked, never used up.
+ * POST /api/v1/scan: pasted text only (D7, D14). `code` is accepted and
+ * ignored (t-68): the quick scan is open to anyone, and a free review code is
+ * for a full review. Kept so a caller built for t-61 is not refused.
  */
 export const scanRequestSchema = z.strictObject({
   text: textField,
