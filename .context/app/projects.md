@@ -59,6 +59,30 @@ Refusals for a review in a project: 404 `PROJECT_NOT_FOUND` (none in this
 workspace), 409 `PROJECT_ARCHIVED` (restore it first), 400
 `PROJECT_FRAMEWORK_MISMATCH` (the request names another framework).
 
+## The pages
+
+`/projects` and `/projects/[id]` (t-71), protected through `lib/app/protected-routes.ts`
+and in the signed-in nav. Code is `app/(protected)/projects/` and `components/app/projects/`.
+
+- **`/projects`** lists the workspace's projects, newest first, from one
+  `GET /api/v1/projects?limit=100` call; `?archived=true` lists archived ones too. More
+  than 100 says "the newest 100 of N". "New project" asks for a name, makes it and opens
+  its page.
+- **`/projects/[id]`** edits the name, the brief and the defaults with one `PATCH`, and
+  archives or restores. It reads the project, then the framework's latest version, then
+  that version's catalogue: the pickers offer the catalogue's ids, the same version the
+  API checks defaults against. Each picker starts on **No default**, which sends nothing.
+- **Culture**: the reader's and writer's culture pickers, and the culture reviewer set,
+  appear only when the catalogue lists countries, which it does only with the culture
+  switch on.
+- **The `archetype` audience setting is not offered.** The catalogue lists it, but the
+  engine leaves it out of a context (`MODS` in `engine/model.ts`) and refuses a default
+  naming it; the **Reader** picker sets the context's own `archetype`.
+- **AI reviewers** offers `quick`, the version's `judge_catalogue` groups and `full`. A
+  group also runs the four appeals, which the field's help says.
+- A stored default the version no longer has stays selected, marked "not in this
+  version", so saving is refused with `DEFAULTS_INVALID` rather than dropping it unseen.
+
 ## The demo seed
 
 `app-howdoesthisland/002-demo-usage` makes two projects in the demo workspace,
