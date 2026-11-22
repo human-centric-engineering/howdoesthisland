@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { connection } from 'next/server';
+import { after, connection } from 'next/server';
 import { Button } from '@/components/ui/button';
 import { CodeEntryForm } from '@/components/app/redeem/redeem-states';
 import {
@@ -13,7 +13,7 @@ import {
 import { SampleMarkUp } from '@/components/app/marketing/sample-mark-up';
 import { SelfScorePanel } from '@/components/app/marketing/self-score-panel';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
-import { selfScore } from '@/lib/app/quick-scan/self-score';
+import { selfScore, selfScoreSettled } from '@/lib/app/quick-scan/self-score';
 
 /**
  * `/`: HowDoesThisLand's landing page (t-62). `app/(public)/page.tsx` is a
@@ -79,6 +79,8 @@ function Band({ children, className = '' }: { children: React.ReactNode; classNa
 /** The hero's panel: the live self-score, or the sample without one. */
 async function HeroPanel() {
   const score = await selfScore(HOME_PAGE_TEXT, HOME_CONTEXT);
+  // A run started behind this view keeps going after the response is sent.
+  after(selfScoreSettled);
   return score ? <SelfScorePanel score={score} /> : <SampleMarkUp />;
 }
 

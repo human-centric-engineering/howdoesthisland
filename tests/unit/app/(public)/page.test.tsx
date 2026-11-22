@@ -16,6 +16,7 @@ import { render, screen } from '@testing-library/react';
 vi.mock('next/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/server')>()),
   connection: vi.fn(() => Promise.resolve()),
+  after: vi.fn(),
 }));
 const mockEnv = vi.hoisted(() => ({
   NODE_ENV: 'test',
@@ -125,6 +126,14 @@ describe('the landing page', () => {
     expect(container.querySelector('[data-testid="self-score"]')).toBeNull();
     expect(container.textContent).not.toMatch(/quick scan/i);
     expect(screen.getByTestId('sample-mark-up')).toHaveTextContent('What a review marks up');
+  });
+
+  it('keeps a run started behind the view going after the response', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = true;
+    const { after } = await import('next/server');
+    const { selfScoreSettled } = await import('@/lib/app/quick-scan/self-score');
+    await page();
+    expect(after).toHaveBeenCalledWith(selfScoreSettled);
   });
 
   it('streams the panel under its own boundary, with the sample standing in', async () => {

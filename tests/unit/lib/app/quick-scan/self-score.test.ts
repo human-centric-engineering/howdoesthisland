@@ -31,6 +31,7 @@ vi.mock('@/lib/logging', () => ({ logger }));
 
 type SelfScoreModule = typeof import('@/lib/app/quick-scan/self-score');
 let selfScore: SelfScoreModule['selfScore'];
+let selfScoreSettled: SelfScoreModule['selfScoreSettled'];
 let RETRY_FAILED_MS: number;
 let LOOKUP_TTL_MS: number;
 let TIMEOUT_MS: number;
@@ -65,7 +66,7 @@ beforeEach(async () => {
   findFramework.mockResolvedValue(served({ id: 'v51', version: '0.5.1', status: 'PUBLISHED' }));
   // The score is kept in module state: each test starts with none.
   vi.resetModules();
-  ({ selfScore, RETRY_FAILED_MS, LOOKUP_TTL_MS, TIMEOUT_MS, ABANDON_AFTER_MS } =
+  ({ selfScore, selfScoreSettled, RETRY_FAILED_MS, LOOKUP_TTL_MS, TIMEOUT_MS, ABANDON_AFTER_MS } =
     await import('@/lib/app/quick-scan/self-score'));
 });
 
@@ -442,6 +443,49 @@ describe('selfScore, kept per framework version', () => {
       overall: 80,
       scoredWith: 'howdoesthisland@0.5.2',
     });
+  });
+
+  it('drops a retired version’s score once no version is published', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    await selfScore('copy', CONTEXT);
+
+    findFramework.mockResolvedValue(served({ id: 'v51', version: '0.5.1', status: 'RETIRED' }));
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
+    await selfScore('copy', CONTEXT); // starts the lookup that finds none
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(selfScore('copy', CONTEXT)).resolves.toBeNull();
+  });
+
+  it('keeps the last good score through a lookup that throws, as a blip', async () => {
+    vi.useFakeTimers();
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    const good = await selfScore('copy', CONTEXT);
+
+    findFramework.mockRejectedValue(new Error('connection refused'));
+    vi.advanceTimersByTime(LOOKUP_TTL_MS);
+    await selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(selfScore('copy', CONTEXT)).resolves.toEqual(good);
+  });
+
+  it('settles only once the runs in flight have answered', async () => {
+    let settle: (v: unknown) => void = () => {};
+    runQuickScan.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+    await expect(selfScoreSettled()).resolves.toBeUndefined(); // nothing in flight
+    void selfScore('copy', CONTEXT);
+    // The lookup answers; the scan is now the run in flight.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+
+    let settled = false;
+    void selfScoreSettled().then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    settle(scanView(SOLID));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(true);
   });
 
   it('logs a repeat lookup failure after the lookup has recovered', async () => {

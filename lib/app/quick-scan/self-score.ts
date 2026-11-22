@@ -27,7 +27,8 @@
  * with the switch off), so the landing page never fails because the
  * framework has no published version or the scan refused its own copy.
  * Once a score has been kept, a failing stage answers with it instead, so a
- * short database blip does not hide it. Either stage is retried at most once
+ * short database blip does not hide it; but a lookup that finds no published
+ * version drops it, so a retired version's score does not stay up. Either stage is retried at most once
  * a {@link RETRY_FAILED_MS}; each distinct failure is logged once, and again
  * only after that stage has recovered. A stage that has not answered in
  * {@link TIMEOUT_MS} counts as failed, so a stalled run cannot hold every
@@ -198,10 +199,30 @@ export async function selfScore(
   return (await scan.answer) ?? lastGood;
 }
 
+/**
+ * Settles once the runs in flight have answered. A serverless host freezes
+ * an instance once its response is sent, so the page hands this to `after()`
+ * to keep a run started behind a view going until it lands.
+ */
+export async function selfScoreSettled(): Promise<void> {
+  await Promise.all([lookup?.answer, scan?.answer]);
+}
+
+/**
+ * Drop the kept version and score. Only for a lookup that answered that there
+ * is nothing to score: unlike a thrown or timed-out lookup, that is a lasting
+ * state, so a retired version's score must not stay on the page.
+ */
+function forgetKept(): void {
+  lastVersion = null;
+  lastGood = null;
+}
+
 async function findLatestVersion(): Promise<LatestVersion | null> {
   try {
     const framework = await prismaFrameworkCatalog.findFramework(DEFAULT_FRAMEWORK);
     if (!framework) {
+      forgetKept();
       return failed('lookup', 'Self-score could not run', {
         error: `${DEFAULT_FRAMEWORK} is not in the framework catalog.`,
       });
@@ -209,6 +230,7 @@ async function findLatestVersion(): Promise<LatestVersion | null> {
     // Newest first, so the first published is the latest.
     const version = framework.versions.find((v) => v.status === 'PUBLISHED');
     if (version) return version;
+    forgetKept();
     return failed('lookup', 'Self-score could not run', {
       error: `${DEFAULT_FRAMEWORK} has no published version.`,
     });

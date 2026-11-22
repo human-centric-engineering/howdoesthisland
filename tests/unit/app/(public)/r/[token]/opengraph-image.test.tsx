@@ -5,7 +5,7 @@
  *
  * @see app/(public)/r/[token]/opengraph-image.tsx
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Image, { alt, contentType, size } from '@/app/(public)/r/[token]/opengraph-image';
 import * as twitterImage from '@/app/(public)/r/[token]/twitter-image';
 import { alt as homeAlt } from '@/app/(public)/opengraph-image';
@@ -24,6 +24,30 @@ describe('the shared report’s card', () => {
     expect(res.headers.get('content-type')).toBe('image/png');
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect([...bytes.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  }, 20_000);
+
+  it('draws the card once, and serves its bytes after that', async () => {
+    // A fresh module, with the drawing counted, so this test sees its own draws.
+    vi.resetModules();
+    const actual = await vi.importActual<typeof import('@/components/app/brand/share-card')>(
+      '@/components/app/brand/share-card'
+    );
+    const shareCard = vi.fn(actual.shareCard);
+    vi.doMock('@/components/app/brand/share-card', () => ({ ...actual, shareCard }));
+    try {
+      const { default: Fresh } = await import('@/app/(public)/r/[token]/opengraph-image');
+      const first = await Fresh();
+      const second = await Fresh();
+
+      expect(shareCard).toHaveBeenCalledTimes(1);
+      expect(second.headers.get('content-type')).toBe('image/png');
+      expect(second.headers.get('cache-control')).toBe('public, max-age=86400');
+      expect(new Uint8Array(await second.arrayBuffer())).toEqual(
+        new Uint8Array(await first.arrayBuffer())
+      );
+    } finally {
+      vi.doUnmock('@/components/app/brand/share-card');
+    }
   }, 20_000);
 
   it('gives the Twitter card the same image', () => {
