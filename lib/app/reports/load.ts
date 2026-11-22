@@ -4,7 +4,7 @@
  * Two reads: the assessment, through the API (`requireServerData`), and the
  * model version it ran on, which names everything the result holds by id,
  * read in process (t-67: the whole model is for platform admins only over
- * HTTP). That is one page's worth of data in two calls, never one per row. A 404 on
+ * HTTP). That is one page's worth of data in two reads, never one per row. A 404 on
  * the assessment (another workspace's id included) renders the not-found
  * page. A 404 on the model version is an `unreadable` report, since retrying
  * cannot bring it back. Any other failure throws to the route's error boundary.
@@ -59,7 +59,12 @@ export interface ReportSource {
   model(slug: string, version: string): Promise<unknown>;
 }
 
-/** The web page's source: the API, as the signed-in caller. */
+/**
+ * The web page's source: the assessment through the API, as the signed-in
+ * caller (scoped to their workspace), and the model in process. The model is
+ * shared config, the same for every caller, so it needs no caller scope; it
+ * is read only for an assessment the caller could already read.
+ */
 export const apiReportSource: ReportSource = {
   async assessment(id) {
     const { data } = await requireServerData<unknown>(assessmentPath(id), { notFound: true });

@@ -361,7 +361,8 @@ describe('readSharedReport', () => {
 
   it('serves the report and nothing about the workspace, its people or the cost', async () => {
     const { token, expiresAt } = await made();
-    const read = await readSharedReport(token, NOW);
+    // The API's read: the catalogue as well as what the page shows.
+    const read = await readSharedReport(token, NOW, 'api');
     if (!read.ok) throw new Error('expected the link to open');
 
     expect(read.report).toEqual({
@@ -486,17 +487,28 @@ describe('readSharedReport', () => {
     expect(db.shares[0].viewCount).toBe(0);
   });
 
-  it('answers a null model and catalogue, uncounted, when the catalogue cannot be built', async () => {
+  it('answers the API a null model and catalogue, uncounted, when the catalogue cannot be built', async () => {
     // The report's schema defaults `groups`, so this parses for the report;
     // the catalogue needs it, so only the catalogue fails.
     const { groups: _dropped, ...noGroups } = modelDocument(false);
     expect(reportModelSchema.safeParse(noGroups).success).toBe(true);
     versionDocument.mockResolvedValue({ data: noGroups });
     const { token } = await made();
-    const read = await readSharedReport(token, NOW);
+    const read = await readSharedReport(token, NOW, 'api');
     expect(read.ok && read.report.model).toBeNull();
     expect(read.ok && read.report.catalogue).toBeNull();
     expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('still renders the page, counted, when only the catalogue cannot be built', async () => {
+    const { groups: _dropped, ...noGroups } = modelDocument(false);
+    versionDocument.mockResolvedValue({ data: noGroups });
+    const { token } = await made();
+    const read = await readSharedReport(token, NOW);
+    expect(read.ok && read.report.model).not.toBeNull();
+    // The page never builds the catalogue.
+    expect(read.ok && read.report.catalogue).toBeNull();
+    expect(db.shares[0].viewCount).toBe(1);
   });
 
   it('opens nothing, uncounted, when the assessment is not one the report can read', async () => {

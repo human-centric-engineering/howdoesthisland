@@ -19,11 +19,14 @@ const named = z.object({ id: z.string(), name: z.string() });
 
 /**
  * The parts of the model the catalogue reads. Every section but culture is
- * one the import refuses a version without (the definition's `sections`), so
- * a missing or malformed one is a server defect: the catalogue throws a plain
- * error, which the routes log and answer 500, rather than serving an empty
- * list callers would take as "no ids", or a 400 naming the model's fields.
- * Only culture is optional: its switch withholds it.
+ * one the import refuses a version without (the definition's `sections`);
+ * a few fields read here (a country's `region`, a red flag's `severity`, an
+ * audience option's `label`) are not import-checked. A version that lacks
+ * one is a model defect: the catalogue throws a plain error, which the
+ * routes log and answer 500, rather than serving an empty list callers would
+ * take as "no ids", or a 400 naming the model's fields. A share link's page
+ * never builds the catalogue, so it still renders. Only culture is optional:
+ * its switch withholds it.
  */
 const modelSchema = z.object({
   content_types: z.array(named),

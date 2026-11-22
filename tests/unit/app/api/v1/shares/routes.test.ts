@@ -288,7 +288,7 @@ describe('GET /api/v1/shared-reports/{token}', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('private, no-store');
-    expect(mocks.readSharedReport).toHaveBeenCalledWith('tok');
+    expect(mocks.readSharedReport).toHaveBeenCalledWith('tok', expect.any(Date), 'api');
     const body = await json(res);
     // The version's catalogue, never the model: a link is public, the model IP (t-67).
     expect(body.data).toEqual({
@@ -319,7 +319,7 @@ describe('GET /api/v1/shared-reports/{token}', () => {
     mocks.readSharedReport.mockResolvedValue({ ok: false, refused: 'malformed' });
     const res = await openToken('x'.repeat(200));
     expect(res.status).toBe(404);
-    expect(mocks.readSharedReport).toHaveBeenCalledWith('x'.repeat(200));
+    expect(mocks.readSharedReport).toHaveBeenCalledWith('x'.repeat(200), expect.any(Date), 'api');
   });
 
   it('answers 422 when the model it ran on no longer resolves', async () => {

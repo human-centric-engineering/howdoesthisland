@@ -37,7 +37,7 @@ export async function GET(
 ): Promise<Response> {
   try {
     const { token } = validateQueryParams(new URLSearchParams(await params), shareTokenParamSchema);
-    const read = await readSharedReport(token);
+    const read = await readSharedReport(token, new Date(), 'api');
     if (!read.ok) throw new NotFoundError('Shared report not found');
     const { model: _shownOnThePage, catalogue, ...rest } = read.report;
     if (catalogue === null) {
