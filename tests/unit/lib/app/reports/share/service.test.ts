@@ -154,6 +154,7 @@ vi.mock('@/lib/app/frameworks/api/service', async () => {
 import { FrameworkApiError } from '@/lib/app/frameworks/api/service';
 import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
 import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
+import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import {
   createShare,
   listShares,
@@ -381,6 +382,7 @@ describe('readSharedReport', () => {
       },
       // Only what the report shows of the model (t-67): a link is public, the model IP.
       model: reportModelSchema.parse(modelDocument(false)),
+      catalogue: howDoesThisLand.catalogue(modelDocument(false)),
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
@@ -481,6 +483,19 @@ describe('readSharedReport', () => {
     const { token } = await made();
     const read = await readSharedReport(token, NOW);
     expect(read.ok && read.report.model).toBeNull();
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('answers a null model and catalogue, uncounted, when the catalogue cannot be built', async () => {
+    // The report's schema defaults `groups`, so this parses for the report;
+    // the catalogue needs it, so only the catalogue fails.
+    const { groups: _dropped, ...noGroups } = modelDocument(false);
+    expect(reportModelSchema.safeParse(noGroups).success).toBe(true);
+    versionDocument.mockResolvedValue({ data: noGroups });
+    const { token } = await made();
+    const read = await readSharedReport(token, NOW);
+    expect(read.ok && read.report.model).toBeNull();
+    expect(read.ok && read.report.catalogue).toBeNull();
     expect(db.shares[0].viewCount).toBe(0);
   });
 

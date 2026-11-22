@@ -242,6 +242,8 @@ export const frameworkCatalogueSchema = z.object({
     moves: z.array(idNameSchema),
     perspectives: z.array(idNameSchema.extend({ levers: z.array(idNameSchema) })),
     cultureScales: z.array(idNameSchema).optional(),
+    profiles: z.array(idNameSchema),
+    reviewers: z.array(z.object({ id: z.string(), covers: z.string() })),
   }),
 });
 

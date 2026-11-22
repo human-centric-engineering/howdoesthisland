@@ -25,6 +25,7 @@ import {
   reportResultSchema,
 } from '@/lib/app/reports/input';
 import { hasReport } from '@/lib/app/reports/reportable';
+import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
 import { asOnTheWire, loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
@@ -69,8 +70,14 @@ export type SharedAssessment = Pick<
 /** What a share link opens. */
 export interface SharedReport {
   assessment: SharedAssessment;
-  /** The model version it ran on, or `null` if that version no longer resolves. */
+  /**
+   * What the report shows of the model version it ran on, for the
+   * `/r/{token}` page to render on the server; `null` when the report cannot
+   * be read. Never sent to a browser or over the API: the model is IP (t-67).
+   */
   model: Record<string, unknown> | null;
+  /** The version's catalogue, which the API answers with; `null` exactly when `model` is. */
+  catalogue: Record<string, unknown> | null;
   expiresAt: Date;
 }
 
@@ -261,8 +268,8 @@ export async function readSharedReport(
       return { ok: false as const, refused: 'no-report' as const };
     }
 
-    const model = await readableModel(share.id, assessment);
-    if (model !== null) {
+    const readable = await readableModel(share.id, assessment);
+    if (readable !== null) {
       const orgId = requireOrgId();
       const { count } = await prisma.reportShare.updateMany({
         where: { id: share.id, orgId, revokedAt: null, expiresAt: { gt: now } },
@@ -273,7 +280,8 @@ export async function readSharedReport(
 
     const report: SharedReport = {
       assessment: view,
-      model,
+      model: readable?.model ?? null,
+      catalogue: readable?.catalogue ?? null,
       expiresAt: share.expiresAt,
     };
     return { ok: true as const, shareId: share.id, report };
@@ -332,18 +340,26 @@ function sharedResult(result: unknown): Record<string, unknown> | null {
 }
 
 /**
- * What the report shows of the model version `a` ran on, and nothing else,
- * or `null` when the report cannot use it:
- * the version no longer resolves, or its document does not parse. Either
- * way the report is unreadable, so the open is not counted.
+ * What a share link needs of the model version `a` ran on, or `null` when the
+ * report cannot use it: the version no longer resolves, its document does not
+ * parse, or its catalogue cannot be built. Either way the report is
+ * unreadable, so the open is not counted.
+ *
+ * - `model`: only what the report shows (`reportModelSchema` strips the
+ *   rest), for the `/r/{token}` page, which renders it on the server.
+ * - `catalogue`: the names of what the result names by id, for
+ *   `GET /api/v1/shared-reports/{token}`. The model is IP (t-67), so the API
+ *   answers with this, never with `model`.
+ *
+ * One materialise per view: both come from the one document read here.
  */
 async function readableModel(
   shareId: string,
   a: AssessmentDetail
-): Promise<Record<string, unknown> | null> {
-  const model = await loadModelDocument(a.framework.slug, a.framework.version);
-  if (model === null) return null;
-  const parsed = reportModelSchema.safeParse(model);
+): Promise<{ model: Record<string, unknown>; catalogue: Record<string, unknown> } | null> {
+  const document = await loadModelDocument(a.framework.slug, a.framework.version);
+  if (document === null) return null;
+  const parsed = reportModelSchema.safeParse(document);
   if (!parsed.success) {
     logger.error('Share link: its model is not one the report can read', undefined, {
       shareId,
@@ -351,8 +367,15 @@ async function readableModel(
     });
     return null;
   }
-  // Only what the report shows: the schema strips every other field. A share
-  // link is public, and the model is IP (t-67), so the whole document must
-  // never leave through it.
-  return parsed.data;
+  const def = getFrameworkDefinition(a.framework.slug);
+  try {
+    if (!def) throw new Error(`No framework definition "${a.framework.slug}"`);
+    return { model: parsed.data, catalogue: def.catalogue(document) };
+  } catch (err) {
+    logger.error('Share link: its catalogue could not be built', err, {
+      shareId,
+      framework: a.framework,
+    });
+    return null;
+  }
 }

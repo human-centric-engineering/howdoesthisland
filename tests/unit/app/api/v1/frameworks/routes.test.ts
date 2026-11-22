@@ -221,6 +221,9 @@ describe('GET /api/v1/frameworks/{slug}/versions/{version}/catalogue', () => {
       MODEL.perspectives.flatMap((p) => (p.levers as { id: string }[]).map((l) => l.id))
     );
     expect(c.result.cultureScales?.length).toBeGreaterThan(0);
+    // A review's profile and reviewer slots, named; never the reviewers' instructions.
+    expect(c.result.profiles.map((x) => x.id)).toEqual(MODEL.judge_catalogue.map((x) => x.id));
+    expect(c.result.reviewers).toEqual(MODEL.judges.map((j) => ({ id: j.id, covers: j.appeal })));
     // An extra dimension carries the appeal id a result's row names, and its group.
     const extra = MODEL.extra_dimensions[0];
     expect(c.result.dimensions).toContainEqual({

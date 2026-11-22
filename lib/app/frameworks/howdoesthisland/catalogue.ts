@@ -18,10 +18,12 @@ import type { JsonObject } from '@/lib/app/frameworks/types';
 const named = z.object({ id: z.string(), name: z.string() });
 
 /**
- * The parts of the model the catalogue reads. A section the model must have
- * fails the parse when it is missing or a record in it is malformed, so the
- * route answers 500 and logs it rather than serving an empty list callers
- * would take as "no ids". Only culture is optional: its switch withholds it.
+ * The parts of the model the catalogue reads. Every section but culture is
+ * one the import refuses a version without (the definition's `sections`), so
+ * a missing or malformed one is a server defect: the catalogue throws a plain
+ * error, which the routes log and answer 500, rather than serving an empty
+ * list callers would take as "no ids", or a 400 naming the model's fields.
+ * Only culture is optional: its switch withholds it.
  */
 const modelSchema = z.object({
   content_types: z.array(named),
@@ -39,6 +41,8 @@ const modelSchema = z.object({
   duties: z.array(named),
   moves: z.array(named),
   perspectives: z.array(named.extend({ levers: z.array(named) })),
+  judge_catalogue: z.array(named),
+  judges: z.array(z.object({ id: z.string(), appeal: z.string() })),
   culture: z
     .object({
       countries: z.array(named.extend({ region: z.string() })),
@@ -56,7 +60,7 @@ type IdName = { id: string; name: string };
  * Bump when the catalogue's fields change, so a caller holding an old ETag
  * for a version does not keep the old catalogue (`versionETagSource`).
  */
-export const CATALOGUE_SHAPE = 1;
+export const CATALOGUE_SHAPE = 2;
 
 /** What `howDoesThisLandCatalogue` returns: `frameworkCatalogueSchema` in the registry. */
 export type HowDoesThisLandCatalogue = {
@@ -85,6 +89,13 @@ export type HowDoesThisLandCatalogue = {
     perspectives: Array<IdName & { levers: IdName[] }>;
     /** The cultural scales a result's culture positions use. Only with the culture switch on. */
     cultureScales?: IdName[];
+    /** The reviewer sets a review's `profile` names. */
+    profiles: IdName[];
+    /**
+     * The AI reviewers a review's `judges` and `judgeRuns` name, each with what
+     * it covers: an appeal's id, a group's id, or `lenses` or `influence`.
+     */
+    reviewers: Array<{ id: string; covers: string }>;
   };
 };
 
@@ -93,7 +104,13 @@ export function howDoesThisLandCatalogue(model: JsonObject): JsonObject {
 }
 
 function buildCatalogue(model: JsonObject): HowDoesThisLandCatalogue {
-  const m = modelSchema.parse(model);
+  const parsed = modelSchema.safeParse(model);
+  if (!parsed.success) {
+    // Paths only, for the log: never sent to a caller.
+    const where = parsed.error.issues.slice(0, 5).map((i) => i.path.join('.'));
+    throw new Error(`The model does not fit the catalogue at: ${where.join(', ')}`);
+  }
+  const m = parsed.data;
   return {
     request: {
       contentTypes: m.content_types.map(idName),
@@ -121,6 +138,8 @@ function buildCatalogue(model: JsonObject): HowDoesThisLandCatalogue {
       moves: m.moves.map(idName),
       perspectives: m.perspectives.map((p) => ({ ...idName(p), levers: p.levers.map(idName) })),
       ...(m.culture ? { cultureScales: m.culture.scales.map(idName) } : {}),
+      profiles: m.judge_catalogue.map(idName),
+      reviewers: m.judges.map(({ id, appeal }) => ({ id, covers: appeal })),
     },
   };
 }

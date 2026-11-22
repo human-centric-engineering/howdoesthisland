@@ -20,14 +20,14 @@
  * Errors:
  * - 404 `NOT_FOUND` — the link opens nothing.
  * - 422 `REPORT_UNREADABLE` — the model version the review ran on no longer
- *   resolves, so the report cannot be read.
+ *   resolves, or cannot be read, so the report cannot be shown. Not counted
+ *   as a view.
  * - 429 `RATE_LIMIT_EXCEEDED` — over the per-IP cap.
  */
 import type { NextRequest } from 'next/server';
 import { handleAPIError, NotFoundError } from '@/lib/api/errors';
 import { errorResponse, successResponse } from '@/lib/api/responses';
 import { validateQueryParams } from '@/lib/api/validation';
-import { resolveVersion, versionCatalogue } from '@/lib/app/frameworks/api/service';
 import { readSharedReport } from '@/lib/app/reports/share/service';
 import { shareTokenParamSchema } from '@/lib/app/reports/share/validations';
 
@@ -39,15 +39,13 @@ export async function GET(
     const { token } = validateQueryParams(new URLSearchParams(await params), shareTokenParamSchema);
     const read = await readSharedReport(token);
     if (!read.ok) throw new NotFoundError('Shared report not found');
-    const { model, ...rest } = read.report;
-    if (model === null) {
+    const { model: _shownOnThePage, catalogue, ...rest } = read.report;
+    if (catalogue === null) {
       return errorResponse("This review's report can't be shown.", {
         code: 'REPORT_UNREADABLE',
         status: 422,
       });
     }
-    const { slug, version } = rest.assessment.framework;
-    const { data: catalogue } = await versionCatalogue(await resolveVersion(slug, version));
     // A link is a credential: nothing between here and the reader keeps a copy.
     return successResponse({ ...rest, catalogue }, undefined, {
       headers: { 'Cache-Control': 'private, no-store' },
