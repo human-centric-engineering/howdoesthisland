@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ABOUT_COPY as C } from '@/components/app/marketing/about-copy';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
+import { BRAND } from '@/lib/brand';
 import { source } from '@/lib/app/explainer/sources';
 import { SourceChip } from '@/components/app/model/source-chip';
 
@@ -15,15 +16,14 @@ import { SourceChip } from '@/components/app/model/source-chip';
  * changes. The model's detail is on `/model`.
  */
 
-const description =
-  'Why HowDoesThisLand exists: you can never know for certain how a message will land, but you can cut down the guesswork.';
+const description = `Why ${BRAND.name} exists: you can never know for certain how a message will land, but you can cut down the guesswork.`;
 const title = 'About';
 
 export const metadata: Metadata = {
   title,
   description,
-  openGraph: { title: `About - HowDoesThisLand`, description },
-  twitter: { card: 'summary_large_image', title: `About - HowDoesThisLand`, description },
+  openGraph: { title: `About - ${BRAND.name}`, description },
+  twitter: { card: 'summary_large_image', title: `About - ${BRAND.name}`, description },
 };
 
 const APPEAL_COLOUR: Readonly<Record<string, string>> = {

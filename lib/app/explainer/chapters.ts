@@ -10,8 +10,8 @@
  *
  * - **A pointer** on an entry names the model concept it explains (a kind and
  *   an id, or `section` and a top-level part). It is never shown. A test
- *   fails when the latest model no longer has it, so the explainer cannot
- *   drift from the model unnoticed.
+ *   fails when the newest model file in the repo no longer has it, so a model
+ *   change that leaves the explainer wrong fails in the PR that brings it.
  * - **Sources** are ids in `./sources.ts`, which gives each one context for
  *   someone meeting it for the first time.
  * - **Nothing counts the model's parts**, so a new version does not leave a

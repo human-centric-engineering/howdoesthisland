@@ -5,6 +5,7 @@ import { CHAPTERS, MODEL_HUB, chapter, type Entry, type Group } from '@/lib/app/
 import { SOURCES, source } from '@/lib/app/explainer/sources';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
 import { Button } from '@/components/ui/button';
+import { BRAND } from '@/lib/brand';
 import { SourceChip } from '@/components/app/model/source-chip';
 
 /**
@@ -15,8 +16,9 @@ import { SourceChip } from '@/components/app/model/source-chip';
  * Guided reading rather than a web of cross-links: each chapter reads top to
  * bottom, its detail opens in place (an entry's explanation in a disclosure,
  * a source in a popover), and the only links lead on to the next chapter or
- * out to a source. All of it is server-rendered HTML, so every word is there
- * for a search engine, including what is folded away.
+ * out to a source. Entries are server-rendered HTML, folded detail included,
+ * so a search engine reads every word. A source's details mount only when
+ * its popover opens; they are all in the HTML of `/model/sources`.
  *
  * Reads the explainer (`lib/app/explainer/`), never the model: nothing here
  * can publish what makes the model work, and no page names a version.
@@ -84,8 +86,8 @@ function EntryItem({ entry }: { entry: Entry }) {
         </span>
       </summary>
       <div className="mt-4 max-w-[64ch] space-y-3 leading-relaxed">
-        {entry.body.map((p) => (
-          <p key={p}>{p}</p>
+        {entry.body.map((p, i) => (
+          <p key={i}>{p}</p>
         ))}
         {entry.example && (
           <dl className="grid gap-2 border-l-2 border-(--hd-rule) pl-4 text-sm sm:grid-cols-[5rem_1fr]">
@@ -107,8 +109,8 @@ function GroupSection({ group }: { group: Group }) {
       <h2 id={`${group.id}-title`} className="text-3xl leading-tight font-bold">
         {group.title}
       </h2>
-      {group.intro?.map((p) => (
-        <p key={p} className="mt-4 max-w-[64ch] leading-relaxed text-(--hd-muted)">
+      {group.intro?.map((p, i) => (
+        <p key={i} className="mt-4 max-w-[64ch] leading-relaxed text-(--hd-muted)">
           {p}
         </p>
       ))}
@@ -146,12 +148,14 @@ function WayIn() {
 }
 
 function meta(title: string, description: string, path: string): Metadata {
+  // The `%s - Brand` template reaches only <title>; a share card names the brand itself.
+  const card = `${title} - ${BRAND.name}`;
   return {
     title,
     description,
     alternates: { canonical: path },
-    openGraph: { title, description },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title: card, description },
+    twitter: { card: 'summary_large_image', title: card, description },
   };
 }
 
@@ -167,8 +171,8 @@ export function ModelHubPage() {
         <h1 className="mt-4 max-w-[16ch] text-4xl leading-[1.05] font-extrabold sm:text-6xl">
           {MODEL_HUB.title}
         </h1>
-        {MODEL_HUB.lead.map((p) => (
-          <p key={p} className="mt-6 max-w-[60ch] text-lg leading-relaxed text-(--hd-muted)">
+        {MODEL_HUB.lead.map((p, i) => (
+          <p key={i} className="mt-6 max-w-[60ch] text-lg leading-relaxed text-(--hd-muted)">
             {p}
           </p>
         ))}
@@ -223,8 +227,8 @@ export function ChapterPage({ slug }: { slug: string }) {
         <h1 className="mt-4 max-w-[20ch] text-4xl leading-[1.05] font-extrabold sm:text-5xl">
           {c.title}
         </h1>
-        {c.lead.map((p) => (
-          <p key={p} className="mt-5 max-w-[60ch] text-lg leading-relaxed text-(--hd-muted)">
+        {c.lead.map((p, i) => (
+          <p key={i} className="mt-5 max-w-[60ch] text-lg leading-relaxed text-(--hd-muted)">
             {p}
           </p>
         ))}

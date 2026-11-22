@@ -300,10 +300,10 @@ export const SOURCES: readonly Source[] = [
   },
   {
     id: 'godin',
-    cite: 'Godin (2008)',
-    title: 'Tribes',
+    cite: 'Godin (2018)',
+    title: 'This Is Marketing',
     who: 'Seth Godin, a marketer and author',
-    when: '2008',
+    when: '2018',
     context:
       'People join ideas that say something about who they are: “people like us do things like this.” Messages that offer belonging travel further than messages that only inform.',
     url: 'https://en.wikipedia.org/wiki/Seth_Godin',

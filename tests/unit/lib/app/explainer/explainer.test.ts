@@ -8,15 +8,29 @@
  *
  * @see lib/app/explainer/chapters.ts · lib/app/explainer/sources.ts
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CHAPTERS, MODEL_HUB, chapter } from '@/lib/app/explainer/chapters';
 import { SOURCES, source } from '@/lib/app/explainer/sources';
+import { ABOUT_COPY } from '@/components/app/marketing/about-copy';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 
-const MODEL = JSON.parse(
-  readFileSync('lib/app/frameworks/howdoesthisland/data/model-0.5.1.json', 'utf8')
-) as Record<string, unknown>;
+/**
+ * The newest model file in the repo, by version: a new model lands as a new
+ * file (frameworks.md), so a model that drops or renames something the
+ * explainer points at fails here in the PR that brings it.
+ */
+const DATA = 'lib/app/frameworks/howdoesthisland/data';
+const versionOf = (file: string) =>
+  (/^model-(\d+)\.(\d+)\.(\d+)\.json$/.exec(file) ?? []).slice(1).map(Number);
+const NEWEST = readdirSync(DATA)
+  .filter((f) => versionOf(f).length === 3)
+  .sort((a, b) => {
+    const [x, y] = [versionOf(a), versionOf(b)];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  })
+  .at(-1)!;
+const MODEL = JSON.parse(readFileSync(`${DATA}/${NEWEST}`, 'utf8')) as Record<string, unknown>;
 
 /** The ids of every record of `kind` in the model, read through the definition's paths. */
 function idsOf(kind: string): string[] {
@@ -52,7 +66,8 @@ function strings(value: unknown): string[] {
 }
 
 describe('the explainer’s pointers into the model', () => {
-  it('each names a record, or a top-level part, that model 0.5.1 has', () => {
+  it('each names a record, or a top-level part, that the newest model has', () => {
+    expect(NEWEST).toMatch(/^model-/);
     expect(allPointers.length).toBeGreaterThan(50);
     const missing = allPointers.filter((p) =>
       p.kind === 'section' ? !(p.id in MODEL) : !idsOf(p.kind).includes(p.id)
@@ -71,8 +86,20 @@ describe('the explainer’s pointers into the model', () => {
 
 describe('sources', () => {
   it('every citation names a source the list has, and every source is cited somewhere or on /about', () => {
-    expect(allCitations.filter((id) => !SOURCES.some((s) => s.id === id))).toEqual([]);
+    const cited = [...allCitations, ...ABOUT_COPY.sources];
+    expect(cited.filter((id) => !SOURCES.some((s) => s.id === id))).toEqual([]);
+    expect(SOURCES.filter((s) => !cited.includes(s.id)).map((s) => s.id)).toEqual([]);
     expect(() => source('nope')).toThrow();
+  });
+
+  it('no list cites the same source twice', () => {
+    const lists = [
+      ABOUT_COPY.sources,
+      ...CHAPTERS.flatMap((c) =>
+        c.groups.flatMap((g) => [g.sources ?? [], ...g.entries.map((e) => e.sources ?? [])])
+      ),
+    ];
+    for (const list of lists) expect(new Set(list).size).toBe(list.length);
   });
 
   it('every source says who, when and why, with an https link where it has one', () => {
