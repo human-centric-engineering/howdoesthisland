@@ -1,23 +1,17 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Suspense } from 'react';
-import { after, connection } from 'next/server';
+import { connection } from 'next/server';
 import { Button } from '@/components/ui/button';
 import { CodeEntryForm } from '@/components/app/redeem/redeem-states';
-import {
-  HOME_APPEALS,
-  HOME_CONTEXT,
-  HOME_COPY as C,
-  HOME_PAGE_TEXT,
-} from '@/components/app/marketing/home-copy';
+import { HOME_APPEALS, HOME_COPY as C } from '@/components/app/marketing/home-copy';
 import { SampleMarkUp } from '@/components/app/marketing/sample-mark-up';
-import { SelfScorePanel } from '@/components/app/marketing/self-score-panel';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
-import { selfScore, selfScoreSettled } from '@/lib/app/quick-scan/self-score';
 import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
 /** The free quick scan's page (t-68). */
 const QUICK_SCAN_PATH = '/quick-scan';
+/** The sample email, reviewed step by step (t-69). */
+const EXAMPLE_REVIEW_PATH = '/example-review';
 
 /**
  * `/`: HowDoesThisLand's landing page (t-62). `app/(public)/page.tsx` is a
@@ -26,13 +20,10 @@ const QUICK_SCAN_PATH = '/quick-scan';
  * The way in is a free review code: "Have a code?" goes to `/redeem`, and so
  * does the code box. Sign-up without a code is secondary.
  *
- * The hero's panel is the page's own copy scored live by the quick scan, with
- * the quick-scan switch on, or a static marked-up sample with it off
- * (`selfScore()` returns `null` off, before any engine call). Rendered per
- * request, so the switch is the running server's; the score is kept per
- * published framework version (`self-score.ts`), not rerun per view. The
- * panel streams under its own Suspense boundary, with the sample standing in,
- * so a slow first score never holds the rest of the page.
+ * The hero's panel is a sample cold email with a review's notes marked in
+ * place, whatever the quick-scan switch (t-69, the owner's ruling: scoring
+ * the page's own copy undersold it). The whole panel opens the same email
+ * reviewed step by step, on `/example-review`.
  */
 
 const description =
@@ -92,14 +83,6 @@ function Band({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
-/** The hero's panel: the live self-score, or the sample without one. */
-async function HeroPanel() {
-  const score = await selfScore(HOME_PAGE_TEXT, HOME_CONTEXT);
-  // A run started behind this view keeps going after the response is sent.
-  after(selfScoreSettled);
-  return score ? <SelfScorePanel score={score} /> : <SampleMarkUp />;
-}
-
 export default async function HomePage() {
   await connection();
 
@@ -124,9 +107,7 @@ export default async function HomePage() {
               <CodeEntryForm />
             </div>
           </div>
-          <Suspense fallback={<SampleMarkUp />}>
-            <HeroPanel />
-          </Suspense>
+          <SampleMarkUp href={EXAMPLE_REVIEW_PATH} />
         </div>
 
         {/* The problem */}

@@ -37,6 +37,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...(isQuickScanEnabled()
       ? [{ path: '/quick-scan', priority: 0.8, changeFrequency: 'monthly' as const }]
       : []),
+    // FORK (HowDoesThisLand, t-69): the worked example. Ledger row 25.
+    { path: '/example-review', priority: 0.8, changeFrequency: 'monthly' as const },
     { path: '/privacy', priority: 0.3, changeFrequency: 'yearly' as const },
     { path: '/terms', priority: 0.3, changeFrequency: 'yearly' as const },
   ];

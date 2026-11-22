@@ -10,7 +10,7 @@
  * @see components/app/marketing/home-page.tsx · app/(public)/page.tsx
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cloneElement, isValidElement, Suspense, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('next/server', async (importOriginal) => ({
@@ -32,8 +32,6 @@ vi.mock('@/lib/app/frameworks/api/catalog', () => ({
   prismaFrameworkCatalog: { findFramework },
 }));
 
-import { HOME_CONTEXT, HOME_PAGE_TEXT } from '@/components/app/marketing/home-copy';
-
 type PageModule = typeof import('@/app/(public)/page');
 let HomePage: PageModule['default'];
 let metadata: PageModule['metadata'];
@@ -47,7 +45,7 @@ function isAsyncComponent(type: unknown): type is (props: AnyProps) => Promise<R
 /**
  * The tree as the server sends it once every boundary has resolved: each
  * async component is awaited in place, as Next does on the server, and a
- * Suspense boundary is kept so its fallback can be checked. Testing Library
+ * boundary is kept as it is. Testing Library
  * renders on the client, which cannot await an async component itself.
  */
 async function resolved(node: ReactNode): Promise<ReactNode> {
@@ -64,17 +62,8 @@ async function page(): Promise<ReactElement> {
   return tree;
 }
 
-/** The Suspense boundaries in a tree, before anything inside them resolves. */
-function boundaries(node: ReactNode): ReactElement<AnyProps>[] {
-  if (Array.isArray(node)) return node.flatMap(boundaries);
-  if (!isValidElement<AnyProps>(node)) return [];
-  const inner = boundaries(node.props.children);
-  return node.type === Suspense ? [node, ...inner] : inner;
-}
-
 beforeEach(async () => {
   vi.clearAllMocks();
-  // The self-score is kept per framework version in module state: each test starts with none.
   vi.resetModules();
   ({ default: HomePage, metadata } = await import('@/app/(public)/page'));
   findFramework.mockResolvedValue({
@@ -86,7 +75,7 @@ beforeEach(async () => {
     wordCount: 500,
     overall: 63,
     band: 'Solid',
-    context: HOME_CONTEXT,
+    context: {},
     result: {
       scores: { overall: 63, band: 'Solid', ethos: 71, pathos: 50, logos: 73, kairos: 69 },
     },
@@ -101,58 +90,19 @@ describe('the landing page', () => {
     expect(connection).toHaveBeenCalled();
   });
 
-  it('with the switch on, shows its own copy’s quick-scan score, rendered on the server', async () => {
-    mockEnv.QUICK_SCAN_ENABLED = true;
-    const { container } = render(await page());
-
-    expect(runQuickScan).toHaveBeenCalledWith({
-      text: HOME_PAGE_TEXT,
-      context: HOME_CONTEXT,
-      version: '0.5.1',
-    });
-    const panel = screen.getByTestId('self-score');
-    expect(panel).toHaveTextContent('We ran this page through HowDoesThisLand');
-    expect(panel).toHaveTextContent('63');
-    expect(panel).toHaveTextContent('Weakest appeal: pathos.');
-    expect(container.querySelector('[data-testid="sample-mark-up"]')).toBeNull();
-  });
-
-  it('with the switch off, makes no quick-scan call and shows no quick-scan output', async () => {
-    mockEnv.QUICK_SCAN_ENABLED = false;
-    const { container } = render(await page());
-
-    expect(runQuickScan).not.toHaveBeenCalled();
-    expect(findFramework).not.toHaveBeenCalled();
-    expect(container.querySelector('[data-testid="self-score"]')).toBeNull();
-    expect(container.textContent).not.toMatch(/quick scan/i);
-    expect(screen.getByTestId('sample-mark-up')).toHaveTextContent('What a review marks up');
-  });
-
-  it('keeps a run started behind the view going after the response', async () => {
-    mockEnv.QUICK_SCAN_ENABLED = true;
-    const { after } = await import('next/server');
-    const { selfScoreSettled } = await import('@/lib/app/quick-scan/self-score');
-    await page();
-    expect(after).toHaveBeenCalledWith(selfScoreSettled);
-  });
-
-  it('streams the panel under its own boundary, with the sample standing in', async () => {
-    mockEnv.QUICK_SCAN_ENABLED = true;
-    // The shell renders without waiting on the score.
-    findFramework.mockReturnValue(new Promise(() => {}));
-    const [panel] = boundaries(await HomePage());
-
-    expect(panel).toBeDefined();
-    render(<>{panel.props.fallback}</>);
-    expect(screen.getByTestId('sample-mark-up')).toBeInTheDocument();
-  });
-
-  it('falls back to the sample when the self-score cannot run', async () => {
-    mockEnv.QUICK_SCAN_ENABLED = true;
-    runQuickScan.mockRejectedValue(new Error('no published version'));
-    render(await page());
-    expect(screen.getByTestId('sample-mark-up')).toBeInTheDocument();
-  });
+  it.each([true, false])(
+    'shows the sample email, opening the full example, with the quick-scan switch %s (t-69)',
+    async (on) => {
+      mockEnv.QUICK_SCAN_ENABLED = on;
+      render(await page());
+      expect(screen.getByTestId('sample-mark-up')).toHaveTextContent('What a review marks up');
+      expect(screen.getByTestId('sample-mark-up-link')).toHaveAttribute('href', '/example-review');
+      // The hero no longer scores the page's own copy.
+      expect(runQuickScan).not.toHaveBeenCalled();
+      expect(findFramework).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('self-score')).toBeNull();
+    }
+  );
 
   it('sends “Have a code?” and the code box to /redeem', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;

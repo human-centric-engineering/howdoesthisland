@@ -86,4 +86,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/quick-scan/',
   // The model explained in human terms for the public pages, and its sources (t-63).
   'lib/app/explainer/',
+  // The worked example: one email through a review, checked by the engine (t-69).
+  'lib/app/example/',
 ];
