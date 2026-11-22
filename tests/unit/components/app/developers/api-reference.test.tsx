@@ -77,8 +77,15 @@ describe('ApiReference', () => {
       expect(names).toContain(field);
     }
 
+    const openapi = container.querySelector('[data-operation="GET /api/v1/openapi.json"]');
+    expect(openapi?.textContent).toContain('No key needed');
+    // The model is IP (t-67): the frameworks routes need a key, and the model is admin only.
     const frameworks = container.querySelector('[data-operation="GET /api/v1/frameworks"]');
-    expect(frameworks?.textContent).toContain('No key needed');
+    expect(frameworks?.textContent).toContain('Key scope: assess');
+    const model = container.querySelector(
+      '[data-operation="GET /api/v1/frameworks/{slug}/versions/{version}"]'
+    );
+    expect(model?.textContent).not.toContain('No key needed');
     // The quick scan takes a key, or a free review code in place of one (t-61).
     const scan = container.querySelector('[data-operation="POST /api/v1/scan"]');
     expect(scan?.textContent).toContain('Key scope: assess');

@@ -269,10 +269,16 @@ describe('GET /api/v1/shared-reports/{token}', () => {
       params: Promise.resolve({ token }),
     });
   const REPORT = {
-    assessment: { status: 'completed', title: 'Spring' },
-    model: { meta: { name: 'HDTL' } },
+    assessment: {
+      status: 'completed',
+      title: 'Spring',
+      framework: { slug: 'howdoesthisland', version: '0.5.1' },
+    },
+    model: { meta: { name: 'HDTL' }, scoring: { integrity_caps: [{ cap: 40 }] } },
+    catalogue: { request: { contentTypes: [] }, result: { appeals: [] } },
     expiresAt: new Date('2026-12-16T09:00:00.000Z'),
   };
+  const CATALOGUE = REPORT.catalogue;
 
   it('answers the report to anyone with the token, and lets nothing keep a copy', async () => {
     mocks.getSession.mockResolvedValue(null);
@@ -282,9 +288,15 @@ describe('GET /api/v1/shared-reports/{token}', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('private, no-store');
-    expect(mocks.readSharedReport).toHaveBeenCalledWith('tok');
+    expect(mocks.readSharedReport).toHaveBeenCalledWith('tok', expect.any(Date), 'api');
     const body = await json(res);
-    expect(body.data).toEqual({ ...REPORT, expiresAt: '2026-12-16T09:00:00.000Z' });
+    // The version's catalogue, never the model: a link is public, the model IP (t-67).
+    expect(body.data).toEqual({
+      assessment: REPORT.assessment,
+      catalogue: CATALOGUE,
+      expiresAt: '2026-12-16T09:00:00.000Z',
+    });
+    expect(JSON.stringify(body)).not.toContain('integrity_caps');
     // The share's id is the service's, not the reader's.
     expect(JSON.stringify(body)).not.toContain('share-1');
   });
@@ -307,14 +319,14 @@ describe('GET /api/v1/shared-reports/{token}', () => {
     mocks.readSharedReport.mockResolvedValue({ ok: false, refused: 'malformed' });
     const res = await openToken('x'.repeat(200));
     expect(res.status).toBe(404);
-    expect(mocks.readSharedReport).toHaveBeenCalledWith('x'.repeat(200));
+    expect(mocks.readSharedReport).toHaveBeenCalledWith('x'.repeat(200), expect.any(Date), 'api');
   });
 
   it('answers 422 when the model it ran on no longer resolves', async () => {
     mocks.readSharedReport.mockResolvedValue({
       ok: true,
       shareId: 'share-1',
-      report: { ...REPORT, model: null },
+      report: { ...REPORT, model: null, catalogue: null },
     });
     const res = await openToken('tok');
     expect(res.status).toBe(422);

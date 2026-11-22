@@ -21,6 +21,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
+import type { HowDoesThisLandCatalogue } from '@/lib/app/frameworks/howdoesthisland/catalogue';
 import {
   APP_ROUTES,
   HTTP_METHODS,
@@ -33,6 +34,7 @@ import {
   createdWorkspaceSchema,
   ephemeralAssessmentSchema,
   frameworkDetailSchema,
+  frameworkCatalogueSchema,
   frameworkSummarySchema,
   invitationForInviteeSchema,
   judgeModelChoiceSchema,
@@ -318,6 +320,9 @@ describe('response schemas match what the services return', () => {
     expectTypeOf<z.infer<typeof versionSummarySchema>>().toEqualTypeOf<Wire<VersionSummary>>();
     expectTypeOf<z.infer<typeof frameworkSummarySchema>>().toEqualTypeOf<Wire<FrameworkSummary>>();
     expectTypeOf<z.infer<typeof frameworkDetailSchema>>().toEqualTypeOf<Wire<FrameworkDetail>>();
+    expectTypeOf<z.infer<typeof frameworkCatalogueSchema>>().toEqualTypeOf<
+      Wire<HowDoesThisLandCatalogue>
+    >();
     expectTypeOf<z.infer<typeof versionMetaSchema>>().toEqualTypeOf<Wire<VersionMeta>>();
     expectTypeOf<z.infer<typeof kindMetaSchema>>().toEqualTypeOf<Wire<KindMeta>>();
     expectTypeOf<z.infer<typeof createdWorkspaceSchema>>().toEqualTypeOf<Wire<CreatedWorkspace>>();
@@ -356,7 +361,7 @@ describe('response schemas match what the services return', () => {
     expectTypeOf<z.infer<typeof startedRunSchema>>().toEqualTypeOf<Wire<StartedRun>>();
     // The route answers 422 rather than send a `null` model.
     expectTypeOf<z.infer<typeof sharedReportSchema>>().toEqualTypeOf<
-      Wire<Omit<SharedReport, 'model'> & { model: NonNullable<SharedReport['model']> }>
+      Wire<Omit<SharedReport, 'model' | 'catalogue'> & { catalogue: HowDoesThisLandCatalogue }>
     >();
   });
 

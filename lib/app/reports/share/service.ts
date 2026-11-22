@@ -25,6 +25,7 @@ import {
   reportResultSchema,
 } from '@/lib/app/reports/input';
 import { hasReport } from '@/lib/app/reports/reportable';
+import { getFrameworkDefinition } from '@/lib/app/frameworks/registry';
 import { asOnTheWire, loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
@@ -69,8 +70,14 @@ export type SharedAssessment = Pick<
 /** What a share link opens. */
 export interface SharedReport {
   assessment: SharedAssessment;
-  /** The model version it ran on, or `null` if that version no longer resolves. */
+  /**
+   * What the report shows of the model version it ran on, for the
+   * `/r/{token}` page to render on the server; `null` when the report cannot
+   * be read. Never sent to a browser or over the API: the model is IP (t-67).
+   */
   model: Record<string, unknown> | null;
+  /** The version's catalogue, for the API reader only (`null` for the page, or when unreadable). */
+  catalogue: Record<string, unknown> | null;
   expiresAt: Date;
 }
 
@@ -215,9 +222,19 @@ export type SharedReportRead =
  * A view is a fetch of the link, not a person: a chat app's link preview
  * counts, as do a refresh and an API call.
  */
+/**
+ * Who is opening the link: the `/r/{token}` page, which renders the report
+ * from `model` on the server, or `GET /api/v1/shared-reports/{token}`, which
+ * answers with the version's `catalogue` and never the model (t-67). Only
+ * the API builds the catalogue, so a catalogue it cannot build never stops
+ * the page rendering.
+ */
+export type SharedReportReader = 'page' | 'api';
+
 export async function readSharedReport(
   token: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  reader: SharedReportReader = 'page'
 ): Promise<SharedReportRead> {
   const entered = await runAsShareOrg(token, async (share) => {
     const closed = { ok: false as const, refused: 'closed' as const };
@@ -261,8 +278,8 @@ export async function readSharedReport(
       return { ok: false as const, refused: 'no-report' as const };
     }
 
-    const model = await readableModel(share.id, assessment);
-    if (model !== null) {
+    const readable = await readableModel(share.id, assessment, reader);
+    if (readable !== null) {
       const orgId = requireOrgId();
       const { count } = await prisma.reportShare.updateMany({
         where: { id: share.id, orgId, revokedAt: null, expiresAt: { gt: now } },
@@ -273,7 +290,8 @@ export async function readSharedReport(
 
     const report: SharedReport = {
       assessment: view,
-      model,
+      model: readable?.model ?? null,
+      catalogue: readable?.catalogue ?? null,
       expiresAt: share.expiresAt,
     };
     return { ok: true as const, shareId: share.id, report };
@@ -332,22 +350,42 @@ function sharedResult(result: unknown): Record<string, unknown> | null {
 }
 
 /**
- * The model version `a` ran on, or `null` when the report cannot use it:
- * the version no longer resolves, or its document does not parse. Either
- * way the report is unreadable, so the open is not counted.
+ * What a share link needs of the model version `a` ran on, or `null` when the
+ * report cannot be shown to this reader, so the open is not counted: the
+ * version no longer resolves, its document does not parse, or (for the API)
+ * its catalogue cannot be built.
+ *
+ * - `model`: only what the report shows (`reportModelSchema` strips the
+ *   rest), for the `/r/{token}` page, which renders it on the server.
+ * - `catalogue`: for the API only, the names of what the result names by id.
+ *   The model is IP (t-67), so the API answers with this, never with `model`.
+ *   Built from the one document read here, so a view materialises once.
  */
 async function readableModel(
   shareId: string,
-  a: AssessmentDetail
-): Promise<Record<string, unknown> | null> {
-  const model = await loadModelDocument(a.framework.slug, a.framework.version);
-  if (model === null) return null;
-  if (!reportModelSchema.safeParse(model).success) {
+  a: AssessmentDetail,
+  reader: SharedReportReader
+): Promise<{ model: Record<string, unknown>; catalogue: Record<string, unknown> | null } | null> {
+  const document = await loadModelDocument(a.framework.slug, a.framework.version);
+  if (document === null) return null;
+  const parsed = reportModelSchema.safeParse(document);
+  if (!parsed.success) {
     logger.error('Share link: its model is not one the report can read', undefined, {
       shareId,
       framework: a.framework,
     });
     return null;
   }
-  return model;
+  if (reader === 'page') return { model: parsed.data, catalogue: null };
+  const def = getFrameworkDefinition(a.framework.slug);
+  try {
+    if (!def) throw new Error(`No framework definition "${a.framework.slug}"`);
+    return { model: parsed.data, catalogue: def.catalogue(document) };
+  } catch (err) {
+    logger.error('Share link: its catalogue could not be built', err, {
+      shareId,
+      framework: a.framework,
+    });
+    return null;
+  }
 }

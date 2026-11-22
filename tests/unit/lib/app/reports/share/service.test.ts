@@ -152,8 +152,9 @@ vi.mock('@/lib/app/frameworks/api/service', async () => {
 });
 
 import { FrameworkApiError } from '@/lib/app/frameworks/api/service';
-import { reportResultSchema } from '@/lib/app/reports/input';
+import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
 import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
+import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import {
   createShare,
   listShares,
@@ -360,7 +361,8 @@ describe('readSharedReport', () => {
 
   it('serves the report and nothing about the workspace, its people or the cost', async () => {
     const { token, expiresAt } = await made();
-    const read = await readSharedReport(token, NOW);
+    // The API's read: the catalogue as well as what the page shows.
+    const read = await readSharedReport(token, NOW, 'api');
     if (!read.ok) throw new Error('expected the link to open');
 
     expect(read.report).toEqual({
@@ -379,10 +381,15 @@ describe('readSharedReport', () => {
         result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
       },
-      model: modelDocument(false),
+      // Only what the report shows of the model (t-67): a link is public, the model IP.
+      model: reportModelSchema.parse(modelDocument(false)),
+      catalogue: howDoesThisLand.catalogue(modelDocument(false)),
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
+    for (const field of ['rubric', 'heuristic', 'pattern', 'instruction', 'persona', 'weights']) {
+      expect(wire).not.toContain(`"${field}"`);
+    }
     // `context` is the caller's own JSON, which the report never reads.
     expect(read.report.assessment).not.toHaveProperty('context');
     for (const leak of [
@@ -478,6 +485,30 @@ describe('readSharedReport', () => {
     const read = await readSharedReport(token, NOW);
     expect(read.ok && read.report.model).toBeNull();
     expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('answers the API a null model and catalogue, uncounted, when the catalogue cannot be built', async () => {
+    // The report's schema defaults `groups`, so this parses for the report;
+    // the catalogue needs it, so only the catalogue fails.
+    const { groups: _dropped, ...noGroups } = modelDocument(false);
+    expect(reportModelSchema.safeParse(noGroups).success).toBe(true);
+    versionDocument.mockResolvedValue({ data: noGroups });
+    const { token } = await made();
+    const read = await readSharedReport(token, NOW, 'api');
+    expect(read.ok && read.report.model).toBeNull();
+    expect(read.ok && read.report.catalogue).toBeNull();
+    expect(db.shares[0].viewCount).toBe(0);
+  });
+
+  it('still renders the page, counted, when only the catalogue cannot be built', async () => {
+    const { groups: _dropped, ...noGroups } = modelDocument(false);
+    versionDocument.mockResolvedValue({ data: noGroups });
+    const { token } = await made();
+    const read = await readSharedReport(token, NOW);
+    expect(read.ok && read.report.model).not.toBeNull();
+    // The page never builds the catalogue.
+    expect(read.ok && read.report.catalogue).toBeNull();
+    expect(db.shares[0].viewCount).toBe(1);
   });
 
   it('opens nothing, uncounted, when the assessment is not one the report can read', async () => {

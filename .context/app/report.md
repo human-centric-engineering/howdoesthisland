@@ -6,16 +6,18 @@ share links (x2) render the same component.
 
 ## Where the data comes from
 
-The page reads two API answers and nothing else (`lib/app/reports/load.ts`):
+The page reads two things and nothing else (`lib/app/reports/load.ts`):
 
 1. `GET /api/v1/assessments/{id}`: the assessment, with `text` (the copy, since
    notes are character offsets into it), `result` and `judgeRuns`.
-2. `GET /api/v1/frameworks/{slug}/versions/{version}`: the model version it ran
-   on, which names every id the result holds (dimensions, moves, duties, the type
-   of copy, the audience).
+2. The model version it ran on, which names every id the result holds (dimensions,
+   moves, duties, the type of copy, the audience). It is read **in process**
+   (`loadModelDocument()`), as the PDF and a share link read it: the model is IP, and
+   over HTTP it is for platform admins only (t-67). The report parses only the fields it
+   shows (`reportModelSchema`), so the rest never reaches the browser.
 
-Both go through `requireServerData`. A 404, including another workspace's id,
-renders the not-found page. Any other failure goes to the route's error boundary.
+The assessment goes through `requireServerData`. A 404, including another workspace's
+id, renders the not-found page. Any other failure goes to the route's error boundary.
 While both reads are in flight the route's `loading.tsx` shows a skeleton. A
 stale session cookie is cleared and the reader is sent back to this report after
 signing in, not to `/home`, because the report is the link people are sent.

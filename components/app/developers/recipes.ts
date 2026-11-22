@@ -94,7 +94,7 @@ export const RECIPES: readonly Recipe[] = [
     },
     then: [
       `Read \`overall\` and \`band\`, then the notes in \`result\`. To see how the same briefing lands with the CTO or the procurement lead, send it again with \`role\` set to \`${CFO_ALTERNATE_ROLES[0]}\` or \`${CFO_ALTERNATE_ROLES[1]}\`.`,
-      'The ids a `context` takes are the framework version’s own: `GET /api/v1/frameworks/howdoesthisland/versions/{version}/content_type` and `…/exec_role` list them. An id the version does not have is refused with `CONTEXT_INVALID`, before anything runs.',
+      'The ids a `context` takes are the framework version’s own: `GET /api/v1/frameworks/howdoesthisland/versions/{version}/catalogue` lists them, with the types of copy, readers, roles and audience settings a review takes, and the names of everything a result names by id: appeals, dimensions, moves, perspectives and their levers, red flags. An id the version does not have is refused with `CONTEXT_INVALID`, before anything runs.',
     ],
   },
   {

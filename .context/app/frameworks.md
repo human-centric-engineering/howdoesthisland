@@ -89,16 +89,31 @@ Four shared-config tables (no `orgId`), registered as `globalConfig`:
 
 ## Reading it through the API
 
-Public: no sign-in, in Sunrise's envelope. Rate limited by the `/api/v1` catch-all rule,
-which keys on the session user and, for an anonymous caller, falls back to the IP.
+**The model is HowDoesThisLand's IP** (owner ruling, 2026-11-22, t-67). What makes it work
+(rubrics, weights, formulas, caps, detection patterns, reviewer instructions) is never
+served to the public. The whole model and its kinds are for platform admins only; a
+caller building reviews reads the catalogue. In Sunrise's envelope, rate limited by the
+`/api/v1` catch-all rule. Who may call each route is `lib/app/frameworks/api/route-auth.ts`.
 
-| Route                                                     | Serves                                                                                                    |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/frameworks`                                  | Every framework with a published version, and those versions, most recently published first.              |
-| `GET /api/v1/frameworks/{slug}`                           | One framework, its versions, and `kinds`: what the route below serves.                                    |
-| `GET /api/v1/frameworks/{slug}/versions/{version}`        | The whole model, materialised from the records. `meta.sourceSha256` is the imported file's checksum.      |
-| `GET /api/v1/frameworks/{slug}/versions/{version}/{kind}` | One kind's records (`red_flag`, `lever`, …), in model order. A nested kind's `meta.parents` maps parents. |
+| Route                                                        | Who                       | Serves                                                                                                                                                      |
+| ------------------------------------------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/frameworks`                                     | a session or `assess` key | Every framework with a published version, and those versions, most recently published first.                                                                |
+| `GET /api/v1/frameworks/{slug}`                              | a session or `assess` key | One framework and its versions, with `latestVersion`.                                                                                                       |
+| `GET /api/v1/frameworks/{slug}/versions/{version}/catalogue` | a session or `assess` key | The ids and names a review's `context` takes and a result names, moves, perspectives and levers included (the definition's `catalogue()`). Never the model. |
+| `GET /api/v1/frameworks/{slug}/versions/{version}`           | platform admins           | The whole model, materialised from the records. `meta.sourceSha256` is the imported file's checksum.                                                        |
+| `GET /api/v1/frameworks/{slug}/versions/{version}/{kind}`    | platform admins           | One kind's records (`red_flag`, `lever`, …), in model order. A nested kind's `meta.parents` maps parents.                                                   |
 
+- **Reports read the model in process**, not over HTTP: the web report, a share link and
+  the PDF all go through `loadModelDocument()` (`lib/app/reports/pdf/print-source.ts`).
+  The report parses only the fields it shows, so the rest never reaches the browser.
+  `GET /api/v1/shared-reports/{token}`, which needs no sign-in, answers with the
+  version's catalogue, never the model.
+- **Bump `catalogueShape`** on the definition when the catalogue's fields change: it is
+  part of the catalogue's ETag.
+- **The catalogue is built field by field** (`lib/app/frameworks/howdoesthisland/catalogue.ts`),
+  so a field a later version adds is not served until someone adds it there on purpose.
+  A test checks it carries none of 0.5.1's rubrics, patterns, scoring text or reviewer
+  instructions.
 - **A draft is not found.** A retired version is still served, marked `retired`, since
   assessments made with it cite it. `latestVersion` is the most recently published
   version that is not retired (by publish time, not version number), or `null`.
@@ -122,7 +137,7 @@ is **on outside production and off in production**, until `l2` settles the data 
 it. Read it through `isCultureEnabled()` (`lib/app/frameworks/culture.ts`).
 
 With it off, the whole-model response leaves `culture` out and names it in
-`meta.omitted`, `kinds` drops the `culture_*` kinds, and those kinds are 404. Nothing
+`meta.omitted`, the catalogue leaves out the countries, and the `culture_*` kinds are 404. Nothing
 outside the section refers into it, so the rest of the model stays whole.
 The engine follows the same switch: with it off, it reads no culture input and produces
 no culture output ([`engine.md`](./engine.md#the-culture-switch-d11)).

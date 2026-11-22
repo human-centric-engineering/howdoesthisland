@@ -72,6 +72,16 @@ export interface FrameworkDefinition {
   /** Reads the version and schema version from the file's own metadata. */
   versionOf: (document: JsonObject) => { version: string; schemaVersion: string };
   /**
+   * What API callers may know about a version (t-67): the ids and names a
+   * review request takes and a result uses, from the model as served (less
+   * any section a switch withholds). The model itself is IP and is served
+   * whole to platform admins only, so this is built field by field and
+   * carries nothing that makes the model work.
+   */
+  catalogue: (model: JsonObject) => JsonObject;
+  /** Bumped when `catalogue`'s fields change; part of the catalogue's ETag. */
+  catalogueShape: number;
+  /**
    * The engine that scores a text against a version of this framework, given
    * that version's materialised model (`materialise()`). Throws when the model
    * lacks something the engine reads.

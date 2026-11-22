@@ -1,22 +1,26 @@
 /**
- * Tests: loading a report through the API (t-29).
+ * Tests: loading a report (t-29): the assessment through the API, the model
+ * in process (t-67), since the whole model is for platform admins only over HTTP.
  *
  * @see lib/app/reports/load.ts
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ require: vi.fn(), load: vi.fn(), error: vi.fn() }));
+const m = vi.hoisted(() => ({ require: vi.fn(), model: vi.fn(), error: vi.fn() }));
 
 vi.mock('@/lib/api/server-load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/server-load')>()),
   requireServerData: m.require,
-  loadServerData: m.load,
+}));
+vi.mock('@/lib/app/reports/pdf/print-source', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/app/reports/pdf/print-source')>()),
+  loadModelDocument: m.model,
 }));
 vi.mock('@/lib/logging', () => ({
   logger: { error: m.error, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-import { apiReportSource, assessmentPath, loadReport, modelPath } from '@/lib/app/reports/load';
+import { apiReportSource, assessmentPath, loadReport } from '@/lib/app/reports/load';
 import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
 
 function answer(assessment: unknown, model: unknown = modelDocument(true)) {
@@ -24,29 +28,26 @@ function answer(assessment: unknown, model: unknown = modelDocument(true)) {
     if (path === assessmentPath('asm_1')) return Promise.resolve({ data: assessment, meta: null });
     return Promise.reject(new Error(`unexpected path ${path}`));
   });
-  m.load.mockImplementation((path: string) => {
-    if (path === modelPath('howdoesthisland', '0.5.1'))
-      return Promise.resolve({ ok: true, data: model, meta: null });
-    return Promise.reject(new Error(`unexpected path ${path}`));
+  m.model.mockImplementation((slug: string, version: string) => {
+    if (slug === 'howdoesthisland' && version === '0.5.1') return Promise.resolve(model);
+    return Promise.reject(new Error(`unexpected version ${slug}@${version}`));
   });
 }
 
 beforeEach(() => {
   m.require.mockReset();
-  m.load.mockReset();
+  m.model.mockReset();
   m.error.mockReset();
 });
 
 describe('loadReport', () => {
-  it('reads the assessment with notFound, then its model version, and builds the report', async () => {
+  it('reads the assessment through the API, then its model version in process, and builds the report', async () => {
     answer(apiAssessment());
     const load = await loadReport('asm_1', apiReportSource);
     expect(load.kind).toBe('ready');
+    expect(m.require).toHaveBeenCalledTimes(1);
     expect(m.require).toHaveBeenNthCalledWith(1, '/api/v1/assessments/asm_1', { notFound: true });
-    // 404 is expected so the loader logs it once, with the assessment, rather than twice.
-    expect(m.load).toHaveBeenCalledWith('/api/v1/frameworks/howdoesthisland/versions/0.5.1', {
-      expected: [404],
-    });
+    expect(m.model).toHaveBeenCalledWith('howdoesthisland', '0.5.1');
     if (load.kind === 'ready') expect(load.view.cover.title).toBe('Q3 board briefing');
   });
 
@@ -56,7 +57,7 @@ describe('loadReport', () => {
       expect((await loadReport('asm_1', apiReportSource)).kind).toBe('pending');
     }
     expect(m.require).toHaveBeenCalledTimes(2);
-    expect(m.load).not.toHaveBeenCalled();
+    expect(m.model).not.toHaveBeenCalled();
   });
 
   it('has no result when a final run stored none', async () => {
@@ -96,7 +97,7 @@ describe('loadReport', () => {
 
   it('is unreadable, and logs it, when the model version it ran on is not found', async () => {
     answer(apiAssessment());
-    m.load.mockResolvedValue({ ok: false, failure: { kind: 'not_found' } });
+    m.model.mockResolvedValue(null);
     expect((await loadReport('asm_1', apiReportSource)).kind).toBe('unreadable');
     expect(m.error).toHaveBeenCalledWith(
       'Report: the model version it ran on was not found',
@@ -107,10 +108,8 @@ describe('loadReport', () => {
 
   it('throws to the error boundary when the model read fails otherwise, so a retry can help', async () => {
     answer(apiAssessment());
-    m.load.mockResolvedValue({ ok: false, failure: { kind: 'failed', status: 503, code: null } });
-    await expect(loadReport('asm_1', apiReportSource)).rejects.toThrow(
-      'Could not load /api/v1/frameworks/howdoesthisland/versions/0.5.1 (503)'
-    );
+    m.model.mockRejectedValue(new Error('database unavailable'));
+    await expect(loadReport('asm_1', apiReportSource)).rejects.toThrow('database unavailable');
   });
 
   it('encodes the id into the path', () => {
