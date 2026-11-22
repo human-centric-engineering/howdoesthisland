@@ -15,7 +15,7 @@
  *
  * @see app/api/v1/codes/check/route.ts · app/api/v1/codes/redeem/route.ts
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockEnv = vi.hoisted(() => ({
@@ -284,6 +284,9 @@ describe('POST /api/v1/codes/redeem', () => {
 });
 
 describe('the redeem proxy rule', () => {
+  // The dispatcher case turns the bypass off; put it back even if it fails.
+  afterEach(() => vi.unstubAllEnvs());
+
   it('covers the page and both code routes, and nothing else', () => {
     expect(REDEEM_TIER).toBe('redeem');
     for (const path of ['/redeem', '/redeem/', '/api/v1/codes/check', '/api/v1/codes/redeem']) {
@@ -366,6 +369,5 @@ describe('the redeem proxy rule', () => {
     }
     // And the bare page still loads for this address.
     expect(await applyRateLimit(make('/redeem', PREFETCH))).toBeNull();
-    vi.unstubAllEnvs();
   });
 });
