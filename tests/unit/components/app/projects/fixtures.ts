@@ -22,7 +22,19 @@ export function aProject(overrides: Partial<ProjectWire> = {}): ProjectWire {
   };
 }
 
-export function aCatalogue({ culture = false } = {}): DefaultsCatalogue {
+/** Bounds like the next version's (t-72): ethos and pathos may move, one priority each way. */
+export const BOUNDS: NonNullable<DefaultsCatalogue['request']['adjustment']> = {
+  weights: { ethos: 0.1, pathos: 0.05, logos: 0, kairos: 0 },
+  priorityDimensions: { add: 1, remove: 1 },
+};
+
+export function aCatalogue({
+  culture = false,
+  adjustment = null,
+}: {
+  culture?: boolean;
+  adjustment?: DefaultsCatalogue['request']['adjustment'];
+} = {}): DefaultsCatalogue {
   return {
     request: {
       contentTypes: [
@@ -57,8 +69,21 @@ export function aCatalogue({ culture = false } = {}): DefaultsCatalogue {
             ],
           }
         : {}),
+      adjustment,
     },
     result: {
+      appeals: [
+        { id: 'ethos', name: 'Ethos' },
+        { id: 'pathos', name: 'Pathos' },
+        { id: 'logos', name: 'Logos' },
+        { id: 'kairos', name: 'Kairos' },
+      ],
+      dimensions: [
+        { id: 'eth_integrity', name: 'Integrity', appeal: 'ethos', group: null },
+        { id: 'eth_goodwill', name: 'Goodwill', appeal: 'ethos', group: null },
+        { id: 'kai_call', name: 'Call to action', appeal: 'kairos', group: null },
+        { id: 'craft_rhythm', name: 'Rhythm', appeal: 'craft', group: 'craft' },
+      ],
       profiles: [
         { id: 'core', name: 'The four appeals' },
         { id: 'craft', name: 'Craft editor' },

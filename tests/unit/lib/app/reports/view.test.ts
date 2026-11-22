@@ -74,6 +74,32 @@ describe('buildReportView — a full review', () => {
     expect(v.cover.date).toBe('2026-11-15T09:01:00.000Z');
   });
 
+  it('names no weighting when the review used none', () => {
+    expect(v.cover.weighting).toBeNull();
+  });
+
+  it('names the project’s weighting by the model’s names, when one applied (t-72)', () => {
+    const adjusted = view(
+      apiAssessment({
+        overlay: {
+          weights: { ethos: 0.1, kairos: -0.05 },
+          priorityDimensions: { add: ['kai_call'], remove: ['eth_goodwill'] },
+        },
+      })
+    );
+    expect(adjusted.cover.weighting).toEqual([
+      'Ethos +10 points',
+      'Kairos −5 points',
+      expect.stringMatching(/ made a priority$/),
+      expect.stringMatching(/ no longer a priority$/),
+    ]);
+    expect(adjusted.cover.weighting?.join(' ')).not.toMatch(/kai_call|eth_goodwill/);
+    // Another framework's shape is still named as an adjustment, not hidden.
+    expect(view(apiAssessment({ overlay: { boost: 'x' } })).cover.weighting).toEqual([
+      'Adjusted for this project',
+    ]);
+  });
+
   it("carries the editor's verdict and links each change to its recommendation", () => {
     expect(v.verdict.editor?.verdict).toBe(WRITTEN_EDITOR.summary.verdict);
     expect(v.verdict.editor?.changes.map((c) => c.recommendation)).toEqual([2, null]);

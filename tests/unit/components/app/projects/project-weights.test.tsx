@@ -1,0 +1,151 @@
+// @vitest-environment happy-dom
+
+/**
+ * A project's weighting (t-72): shown only when the version declares bounds,
+ * offering only what they let move, and saving the overlay.
+ *
+ * @see components/app/projects/project-weights.tsx
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+const refresh = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('@/lib/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/client')>()),
+  apiClient: { patch: vi.fn() },
+}));
+
+import { ProjectWeights } from '@/components/app/projects/project-weights';
+import { apiClient, APIClientError } from '@/lib/api/client';
+import { BOUNDS, aCatalogue, aProject } from '@/tests/unit/components/app/projects/fixtures';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('ProjectWeights', () => {
+  it('shows nothing for a version without bounds and a project without an adjustment', () => {
+    const { container } = render(<ProjectWeights project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('Weighting')).toBeNull();
+  });
+
+  it('offers only the appeals the version lets move, with their limits, and core dimensions', () => {
+    render(<ProjectWeights project={aProject()} catalogue={aCatalogue({ adjustment: BOUNDS })} />);
+
+    expect(screen.getByRole('form', { name: 'Weighting' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: /^Ethos, in points/ })).toHaveAttribute(
+      'max',
+      '10'
+    );
+    expect(screen.getByRole('spinbutton', { name: /^Pathos, in points/ })).toHaveAttribute(
+      'max',
+      '5'
+    );
+    expect(screen.queryByRole('spinbutton', { name: /^Logos, in points/ })).toBeNull();
+    expect(screen.queryByRole('spinbutton', { name: /^Kairos, in points/ })).toBeNull();
+    // A reviewer group's dimension (no core appeal) is never offered.
+    expect(screen.getAllByRole('checkbox', { name: 'Integrity' })).toHaveLength(2);
+    expect(screen.queryByRole('checkbox', { name: 'Rhythm' })).toBeNull();
+  });
+
+  it('saves the adjustment as shares of the mix', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<ProjectWeights project={aProject()} catalogue={aCatalogue({ adjustment: BOUNDS })} />);
+
+    await user.clear(screen.getByRole('spinbutton', { name: /^Ethos, in points/ }));
+    await user.type(screen.getByRole('spinbutton', { name: /^Ethos, in points/ }), '8');
+    const [makePriority] = screen.getAllByRole('checkbox', { name: 'Call to action' });
+    await user.click(makePriority);
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/projects/proj-1', {
+      body: { overlay: { weights: { ethos: 0.08 }, priorityDimensions: { add: ['kai_call'] } } },
+    });
+  });
+
+  it('refuses a move past the limit before saving', async () => {
+    const user = userEvent.setup();
+    render(<ProjectWeights project={aProject()} catalogue={aCatalogue({ adjustment: BOUNDS })} />);
+
+    await user.clear(screen.getByRole('spinbutton', { name: /^Pathos, in points/ }));
+    await user.type(screen.getByRole('spinbutton', { name: /^Pathos, in points/ }), '-6');
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+
+    expect(await screen.findByText('At most 5 either way')).toBeInTheDocument();
+    expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+
+  it('lets no more priorities be chosen than the version allows', async () => {
+    const user = userEvent.setup();
+    render(<ProjectWeights project={aProject()} catalogue={aCatalogue({ adjustment: BOUNDS })} />);
+
+    const [integrity] = screen.getAllByRole('checkbox', { name: 'Integrity' });
+    await user.click(integrity);
+
+    const [goodwill] = screen.getAllByRole('checkbox', { name: 'Goodwill' });
+    expect(goodwill).toBeDisabled();
+  });
+
+  it('puts the API’s refusal under the field it names', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValue(
+      new APIClientError('No', 'OVERLAY_INVALID', 400, {
+        issues: [{ path: 'overlay.weights.ethos', message: 'Too far for this version' }],
+      })
+    );
+    const user = userEvent.setup();
+    render(<ProjectWeights project={aProject()} catalogue={aCatalogue({ adjustment: BOUNDS })} />);
+
+    await user.type(screen.getByRole('spinbutton', { name: /^Ethos, in points/ }), '5');
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+
+    expect(await screen.findByText('Too far for this version')).toBeInTheDocument();
+  });
+
+  it('starts from the stored adjustment, and clears it by setting everything back', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue({});
+    const user = userEvent.setup();
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { weights: { ethos: 0.05 } } })}
+        catalogue={aCatalogue({ adjustment: BOUNDS })}
+      />
+    );
+
+    expect(screen.getByRole('spinbutton', { name: /^Ethos, in points/ })).toHaveValue(5);
+    await user.clear(screen.getByRole('spinbutton', { name: /^Ethos, in points/ }));
+    await user.type(screen.getByRole('spinbutton', { name: /^Ethos, in points/ }), '0');
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/projects/proj-1', {
+        body: { overlay: null },
+      })
+    );
+  });
+
+  it('says why reviews are refused when the version allows none, and removes it', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue({});
+    const user = userEvent.setup();
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { weights: { ethos: 0.05 } } })}
+        catalogue={aCatalogue()}
+      />
+    );
+
+    expect(screen.getByText(/Ethos \+5 points/)).toBeInTheDocument();
+    expect(screen.getByText(/refused until it is removed/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remove the adjustment' }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/projects/proj-1', {
+      body: { overlay: null },
+    });
+  });
+});

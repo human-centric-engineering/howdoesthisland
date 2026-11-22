@@ -58,6 +58,7 @@ import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { cancelAssessment, runAssessment } from '@/lib/app/assessments/run';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
+import type { OverlayParse } from '@/lib/app/frameworks/engine';
 import { logger } from '@/lib/logging';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { runAsOrg } from '@/lib/tenancy/context';
@@ -78,7 +79,7 @@ const engine = {
   buildJudgeRequest: vi.fn(),
   outputSchema: vi.fn(),
   validateJudgeReply: vi.fn(),
-  parseOverlay: vi.fn((input: unknown) => ({ ok: true, overlay: input ?? null })),
+  parseOverlay: vi.fn((input: unknown): OverlayParse => ({ ok: true, overlay: input ?? null })),
   withOverlay: vi.fn((): unknown => engine),
 };
 

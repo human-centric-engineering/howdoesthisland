@@ -776,7 +776,9 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
       expect(data.overlay).toEqual({ weights: { ethos: 0.1 } });
       expect(fake.assessments[0]).toMatchObject({ overlay: { weights: { ethos: 0.1 } } });
       // The stored result is the adjusted engine's, not the plain one's.
-      const ctx = fake.assessments[0]?.context;
+      const parsed = bounded.parseContext(fake.assessments[0]?.context);
+      if (!parsed.ok) throw new Error('the stored context should parse');
+      const ctx = parsed.ctx;
       const plain = bounded.assemble(TEXT, ctx, bounded.quickScan(TEXT, ctx));
       const adjusted = bounded.withOverlay({ weights: { ethos: 0.1 } });
       const expected = adjusted.assemble(TEXT, ctx, adjusted.quickScan(TEXT, ctx));
