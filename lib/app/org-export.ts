@@ -164,6 +164,15 @@ export function initAppOrgSources(): void {
           prisma.calibrationRun.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
       {
+        model: 'Project',
+        section: 'projects',
+        disposition: 'export',
+        description:
+          'The workspace’s projects: each one’s name, brief, the defaults its reviews take, and whether it is archived.',
+        fetch: ({ orgId }) =>
+          prisma.project.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
+      {
         model: 'CreditEntry',
         section: 'creditEntries',
         disposition: 'export',

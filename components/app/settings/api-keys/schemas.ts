@@ -65,6 +65,11 @@ export const SCOPE_DESCRIPTIONS: Readonly<Record<string, { label: string; detail
     label: 'Download and list reports',
     detail: "Download a review's report as a PDF, and list a review's share links.",
   },
+  projects: {
+    label: 'Manage projects',
+    detail:
+      "List, make and change the workspace's projects: their briefs and the defaults their reviews take. Running a review in a project needs Run reviews.",
+  },
 };
 
 export function scopeLabel(scope: string): string {

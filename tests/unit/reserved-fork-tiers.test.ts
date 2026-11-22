@@ -254,6 +254,8 @@ describe('reserved fork tiers', () => {
       'model ReviewCode {',
       // FORK (HowDoesThisLand): a code's redemptions (t-60).
       'model ReviewCodeRedemption {',
+      // FORK (HowDoesThisLand): a workspace's projects (t-70).
+      'model Project {',
     ]);
   });
 

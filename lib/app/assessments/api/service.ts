@@ -58,6 +58,7 @@ import { CANCEL_GRACE_MS, POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/l
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
 import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
+import { mergeContext, projectForReview, type ReviewProject } from '@/lib/app/projects/service';
 import {
   isFinal,
   readAssessment,
@@ -74,6 +75,7 @@ const INPUT_ERRORS: Record<AssessmentInputErrorCode, { code: string; status: num
   content_too_long: { code: 'TEXT_TOO_LONG', status: 422 },
   version_not_found: { code: 'FRAMEWORK_VERSION_NOT_FOUND', status: 404 },
   profile_unknown: { code: 'PROFILE_UNKNOWN', status: 400 },
+  project_archived: { code: 'PROJECT_ARCHIVED', status: 409 },
 };
 
 /** An `AssessmentInputError` as the `APIError` a route answers with; anything else as it is. */
@@ -166,6 +168,8 @@ export type CreatedAssessment =
 /** A request checked as far as it can be without fetching or reading anything. */
 export interface PreparedAssessment {
   resolved: VersionToScore;
+  /** The project it is reviewed in (t-70), or `null`. */
+  projectId: string | null;
   ctx: unknown;
   profile: JudgeProfile;
   judges: readonly string[];
@@ -191,10 +195,20 @@ export interface PreparedAssessment {
  * held budget another request was refused for.
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
-  const resolved = await versionToScore(body);
-  const ctx = contextFor(resolved, body.context);
-  const profile: JudgeProfile = body.judges ?? body.profile ?? 'full';
-  const judges = judgesFor(resolved, profile);
+  const project = body.projectId ? await projectForReview(body.projectId) : null;
+  const resolved = await versionToScore(frameworkChoice(body, project));
+  // The project's defaults under the request's own fields (t-70), checked
+  // against this version as any context is.
+  const ctx = fromProjectDefaults(
+    (err) => issuesFromDefaults(err, project?.defaults.context, body.context),
+    () => contextFor(resolved, mergeContext(project?.defaults.context, body.context))
+  );
+  const ownProfile = body.judges ?? body.profile;
+  const profile: JudgeProfile = ownProfile ?? project?.defaults.profile ?? 'full';
+  const judges = fromProjectDefaults(
+    () => ownProfile === undefined && project?.defaults.profile !== undefined,
+    () => judgesFor(resolved, profile)
+  );
   // Pasted text can be refused now; a page or a file only once it is read.
   if ('text' in body.source) {
     const { text } = body.source;
@@ -207,7 +221,77 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     judges.length,
     body.store !== false
   );
-  return { resolved, ctx, profile, judges, hold: null, rate };
+  return { resolved, projectId: project?.id ?? null, ctx, profile, judges, hold: null, rate };
+}
+
+/**
+ * Run `check`; when it refuses for something the project's defaults supplied,
+ * say so, since the caller may be refused for ids they never sent: defaults are
+ * checked against the framework's latest version when saved, not every
+ * version (t-70).
+ */
+function fromProjectDefaults<T>(fromDefaults: (err: APIError) => boolean, check: () => T): T {
+  try {
+    return check();
+  } catch (err) {
+    if (!(err instanceof APIError) || !fromDefaults(err)) throw err;
+    throw new APIError(
+      `${err.message} The project's defaults are part of this request: check them against this version.`,
+      err.code,
+      err.status,
+      { ...err.details, fromProjectDefaults: true }
+    );
+  }
+}
+
+/** The value at a dotted context path (`audience.awareness`), or undefined. */
+function atPath(ctx: Record<string, unknown> | undefined, path: string): unknown {
+  let value: unknown = ctx;
+  for (const part of path.split('.')) {
+    const record = z.record(z.string(), z.unknown()).safeParse(value);
+    if (!record.success) return undefined;
+    value = record.data[part];
+  }
+  return value;
+}
+
+/**
+ * Whether a `CONTEXT_INVALID` names a path the project's defaults gave and the
+ * request did not: only then is the project's to blame.
+ */
+function issuesFromDefaults(
+  err: APIError,
+  project: Record<string, unknown> | undefined,
+  request: Record<string, unknown> | undefined
+): boolean {
+  const issues = z
+    .object({ issues: z.array(z.object({ path: z.string() })) })
+    .safeParse(err.details);
+  if (!issues.success || project === undefined) return false;
+  return issues.data.issues.some(
+    ({ path }) =>
+      path !== '' && atPath(project, path) !== undefined && atPath(request, path) === undefined
+  );
+}
+
+/**
+ * The framework a review is scored with: a project's, when it is in one. A
+ * request naming another framework is refused, since the project's defaults
+ * are that framework's ids.
+ */
+function frameworkChoice(
+  body: CreateAssessmentBody,
+  project: ReviewProject | null
+): { framework?: string; version?: string } {
+  if (!project) return body;
+  if (body.framework !== undefined && body.framework !== project.framework) {
+    throw new APIError(
+      `This project's reviews are scored with ${project.framework}, not ${body.framework}.`,
+      'PROJECT_FRAMEWORK_MISMATCH',
+      400
+    );
+  }
+  return { framework: project.framework, version: body.version };
 }
 
 /**
@@ -256,6 +340,7 @@ export async function createAssessment(
           sourceKind: source.sourceKind,
           sourceUrl: source.sourceUrl,
           fileName: source.fileName,
+          projectId: prepared.projectId,
         },
         frameworkVersionId: resolved.version.id,
         profile,

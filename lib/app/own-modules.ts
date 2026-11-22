@@ -88,4 +88,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/explainer/',
   // The worked example: one email through a review, checked by the engine (t-69).
   'lib/app/example/',
+  // A workspace's projects: the brief, the defaults its reviews take (t-70).
+  'lib/app/projects/',
 ];

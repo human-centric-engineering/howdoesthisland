@@ -5,9 +5,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // The seam is mocked, so this measures the filter and not whatever the app
-// declares today: a third scope with no words yet shows how one is offered.
+// declares today: a fourth scope with no words yet shows how one is offered.
 vi.mock('@/lib/app/api-key-scopes', () => ({
-  APP_API_KEY_SCOPES: ['assess', 'reports', 'projects'],
+  APP_API_KEY_SCOPES: ['assess', 'reports', 'projects', 'capture'],
 }));
 
 import {
@@ -30,10 +30,11 @@ describe('offeredScopes', () => {
   });
 
   it("offers every scope the app declares, in the app's order, and nothing else", () => {
-    expect(offeredScopes(['chat', 'projects', 'reports', 'assess', 'admin'])).toEqual([
+    expect(offeredScopes(['chat', 'capture', 'projects', 'reports', 'assess', 'admin'])).toEqual([
       'assess',
       'reports',
       'projects',
+      'capture',
     ]);
   });
 });
@@ -42,10 +43,11 @@ describe('scopeLabel', () => {
   it("names the app's scopes in the product's words", () => {
     expect(scopeLabel('assess')).toBe('Run reviews');
     expect(scopeLabel('reports')).toBe('Download and list reports');
+    expect(scopeLabel('projects')).toBe('Manage projects');
   });
 
   it('falls back to the raw name for a scope it has no words for', () => {
-    expect(scopeLabel('projects')).toBe('projects');
+    expect(scopeLabel('capture')).toBe('capture');
   });
 });
 

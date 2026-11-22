@@ -93,7 +93,7 @@ core's self-service routes (`GET`/`POST /api/v1/user/api-keys`,
 `DELETE /api/v1/user/api-keys/{keyId}`), which refuse an API key and want a browser
 session; their rules are core's (`.context/orchestration/api-keys.md`).
 
-- **Scopes offered:** the app's own (`APP_API_KEY_SCOPES`: `assess`, `reports`) that the
+- **Scopes offered:** the app's own (`APP_API_KEY_SCOPES`: `assess`, `reports`, `projects`) that the
   install can mint, nothing else. Core's `chat`, `analytics`, `knowledge` and `webhook`
   reach nothing this product serves, and `admin` is a platform credential. Each scope's
   words are in `SCOPE_DESCRIPTIONS` (`components/app/settings/api-keys/schemas.ts`); a

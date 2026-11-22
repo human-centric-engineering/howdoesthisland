@@ -148,6 +148,13 @@ export function initAppSubjectSources(): void {
           'Changes you made to a workspace’s CopyCredits: credits you granted or adjusted as an admin, and codes you redeemed.',
       },
       {
+        model: 'Project',
+        section: 'projects',
+        disposition: 'export',
+        description:
+          'Projects you made in a workspace: their name, brief and the defaults their reviews take.',
+      },
+      {
         model: 'ReviewCode',
         section: 'reviewCodes',
         disposition: 'export',
@@ -210,6 +217,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     reportShares,
     calibrationRuns,
     creditEntries,
+    projects,
     reviewCodes,
     codeRedemptions,
   ] = await Promise.all([
@@ -259,6 +267,12 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       where: { actorUserId: userId },
       orderBy: { createdAt: 'asc' },
     }),
+    // The projects they made (t-70). The workspace keeps them after they
+    // leave; this is their copy of what they wrote in the brief.
+    prisma.project.findMany({
+      where: { createdByUserId: userId },
+      orderBy: { createdAt: 'asc' },
+    }),
     // The codes they made as an admin (t-59), without the code, a bearer
     // credential for the install's credits, or the idempotency key, a
     // caller's bookkeeping that may carry someone else's id (a lead's).
@@ -284,6 +298,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     reportShares,
     calibrationRuns,
     creditEntries,
+    projects,
     reviewCodes,
     codeRedemptions,
   };

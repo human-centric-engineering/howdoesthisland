@@ -64,6 +64,7 @@ model Framework {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   versions  FrameworkVersion[]
+  projects  Project[]
 
   @@map("app_framework")
 }
@@ -160,8 +161,10 @@ model Content {
   id              String            @id @default(cuid())
   orgId           String?
   org             Org?              @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  /// The project it belongs to (f-projects). No FK until that model exists.
+  /// The project it belongs to (t-70). SET NULL: archiving or erasing a
+  /// project never removes the workspace's copy.
   projectId       String?
+  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
   title           String?
   sourceKind      ContentSourceKind
   sourceUrl       String?
@@ -194,7 +197,9 @@ model Assessment {
   org                Org?             @relation(fields: [orgId], references: [id], onDelete: Cascade)
   contentId          String
   content            Content          @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  /// The project it ran in (t-70), whose defaults it took. SET NULL, as on `Content`.
   projectId          String?
+  project            Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   frameworkVersionId String
   frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
   /// The profile asked for (`quick`, `full`, a catalogue group), or `custom`
@@ -241,6 +246,7 @@ model Assessment {
   @@index([orgId, createdAt])
   @@index([status, leaseExpiresAt])
   @@index([contentId])
+  @@index([projectId, createdAt])
   @@map("app_assessment")
 }
 
@@ -564,4 +570,40 @@ model ReviewCodeRedemption {
   @@unique([codeId, userId])
   @@index([orgId, createdAt])
   @@map("app_review_code_redemption")
+}
+
+/// A workspace's project (t-70, f-projects): one client, product or campaign,
+/// holding the brief the AI reviewers read and the defaults a review in it
+/// takes (type of copy, audience, culture, profile). Any member may read and
+/// change one; it is the workspace's, not its maker's.
+///
+/// `defaults` is stored as the caller gave it, so what it leaves out stays
+/// left out and the version's own defaults still apply. It is checked against
+/// the framework's latest published version when written, and again, with the
+/// request's own fields over it, against the version a review runs with.
+///
+/// Archived rather than deleted (`archivedAt`), so its reviews keep their
+/// link. `createdByUserId` has a hand-written FK to "user" (SET NULL).
+/// Tenant-owned (`orgId`, cascade, `org_isolation`).
+model Project {
+  id              String       @id @default(cuid())
+  orgId           String?
+  org             Org?         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name            String
+  /// What the copy is for, in the author's words: `{ offer, audience, voice, markets, goals }`.
+  brief           Json
+  /// `{ context?, profile? }`, as given (lib/app/projects/validations.ts).
+  defaults        Json
+  frameworkId     String
+  framework       Framework    @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
+  archivedAt      DateTime?
+  /// Who made it. FK → user, ON DELETE SET NULL (the workspace keeps it).
+  createdByUserId String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  contents        Content[]
+  assessments     Assessment[]
+
+  @@index([orgId, archivedAt, createdAt])
+  @@map("app_project")
 }

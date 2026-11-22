@@ -129,6 +129,30 @@ describe('enqueueAssessment', () => {
     expect(fake.assessments[0]).toMatchObject({ profile: 'custom', judges: ['judge_logos'] });
   });
 
+  it('records the project it is in on both rows', async () => {
+    fake.projects.push({ id: 'project-1', orgId: ORG, archivedAt: null });
+    await enqueue({ content: { ...input().content, projectId: 'project-1' } });
+    expect(fake.contents[0]).toMatchObject({ projectId: 'project-1' });
+    expect(fake.assessments[0]).toMatchObject({ projectId: 'project-1' });
+  });
+
+  it('refuses a review whose project was archived after it was checked, storing nothing', async () => {
+    // `projectForReview` passed it; a page fetch later, someone archived it.
+    fake.projects.push({ id: 'project-1', orgId: ORG, archivedAt: new Date() });
+    const err = await refusal(enqueue({ content: { ...input().content, projectId: 'project-1' } }));
+    expect(err.code).toBe('project_archived');
+    expect(fake.contents).toHaveLength(0);
+    expect(fake.assessments).toHaveLength(0);
+    expect(mocks.noteMaintenanceWork).not.toHaveBeenCalled();
+  });
+
+  it('refuses a project of another workspace the same way', async () => {
+    fake.projects.push({ id: 'project-1', orgId: 'org-b', archivedAt: null });
+    const err = await refusal(enqueue({ content: { ...input().content, projectId: 'project-1' } }));
+    expect(err.code).toBe('project_archived');
+    expect(fake.assessments).toHaveLength(0);
+  });
+
   it(`refuses a text longer than ${MAX_CONTENT_CHARS} characters, storing nothing`, async () => {
     const err = await refusal(
       enqueue({ content: { text: 'a'.repeat(MAX_CONTENT_CHARS + 1), sourceKind: 'TEXT' } })

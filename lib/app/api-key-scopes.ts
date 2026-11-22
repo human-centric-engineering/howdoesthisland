@@ -47,8 +47,8 @@
  *
  * HowDoesThisLand: `assess` (t-24), enforced by every `assessments` route,
  * and `reports` (t-31), enforced by `GET /api/v1/assessments/{id}/report.pdf`
- * and the share-link list; making or revoking a link needs `assess` (both in `lib/app/assessments/api/route-auth.ts`). `projects` arrives with
- * the routes that enforce it (f-projects), so no key can be minted with a
- * scope nothing checks.
+ * and the share-link list; making or revoking a link needs `assess` (both in `lib/app/assessments/api/route-auth.ts`). `projects` (t-70),
+ * enforced by every `projects` route (`lib/app/projects/route-auth.ts`). A
+ * review in a project needs only `assess`.
  */
-export const APP_API_KEY_SCOPES: readonly string[] = ['assess', 'reports'];
+export const APP_API_KEY_SCOPES: readonly string[] = ['assess', 'reports', 'projects'];

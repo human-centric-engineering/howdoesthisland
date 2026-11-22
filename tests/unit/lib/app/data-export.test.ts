@@ -23,6 +23,7 @@ vi.mock('@/lib/db/client', () => ({
     reportShare: { findMany: vi.fn() },
     calibrationRun: { findMany: vi.fn() },
     creditEntry: { findMany: vi.fn() },
+    project: { findMany: vi.fn() },
     reviewCode: { findMany: vi.fn() },
     reviewCodeRedemption: { findMany: vi.fn() },
   },
@@ -41,6 +42,7 @@ describe('collectAppSubjectData', () => {
     vi.mocked(prisma.reportShare.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.calibrationRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.creditEntry.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.project.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCode.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCodeRedemption.findMany).mockResolvedValue([] as never);
   });
@@ -82,6 +84,7 @@ describe('collectAppSubjectData', () => {
       reportShares: [],
       calibrationRuns: [],
       creditEntries: [],
+      projects: [],
       reviewCodes: [],
       codeRedemptions: [],
     });
@@ -117,6 +120,7 @@ describe('collectAppSubjectData', () => {
       reportShares: [],
       calibrationRuns: [],
       creditEntries: [],
+      projects: [],
       reviewCodes: [],
       codeRedemptions: [],
     });
@@ -161,6 +165,19 @@ describe('collectAppSubjectData', () => {
       orderBy: { createdAt: 'asc' },
     });
     expect(data.creditEntries).toEqual([{ id: 'entry-1' }]);
+  });
+
+  it('reads the projects they made, by who made them', async () => {
+    vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.project.findMany).mockResolvedValue([{ id: 'project-1' }] as never);
+
+    const data = await collectAppSubjectData(SUBJECT);
+
+    expect(vi.mocked(prisma.project.findMany)).toHaveBeenCalledWith({
+      where: { createdByUserId: 'user-1' },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(data.projects).toEqual([{ id: 'project-1' }]);
   });
 
   it('reads the review codes they made, without the codes or their idempotency keys', async () => {

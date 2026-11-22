@@ -112,6 +112,7 @@ export function createFakeDb() {
   const holds: Row[] = [];
   const costRows: Row[] = [];
   const credits: Row[] = [];
+  const projects: Row[] = [];
   let seq = 0;
   /** The tail of the transaction queue: each waits for the one before. */
   let txQueue: Promise<unknown> = Promise.resolve();
@@ -399,6 +400,11 @@ export function createFakeDb() {
         }
       ),
     },
+    project: {
+      findFirst: vi.fn(
+        async ({ where }: { where?: Row }) => projects.find((r) => matches(r, where)) ?? null
+      ),
+    },
     $executeRaw: vi.fn(async () => 0),
     $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => {
       const run = txQueue.then(() => fn(db));
@@ -509,6 +515,7 @@ export function createFakeDb() {
     holds,
     costRows,
     credits,
+    projects,
     withReply,
     seed,
     addCost,

@@ -10,7 +10,9 @@
  * **POST** body (`createAssessmentSchema`): `source` is one of `{ text }`,
  * `{ url }` (fetched safely, D14) or `{ file: { name, base64 } }`. A
  * `profile` (`quick`, `full` — the default — or a catalogue group) or a
- * `judges` list, `framework`, `version`, `context`, `title`, `wait`, `store`.
+ * `judges` list, `framework`, `version`, `context`, `title`, `wait`, `store`,
+ * and `projectId` (t-70): the workspace's project, whose defaults fill what
+ * `context` and the profile leave out, and which the review records.
  *
  * - Default: stored and queued; 202 with the assessment. Follow it with
  *   `GET …/{id}` or `GET …/{id}/events`.
@@ -26,6 +28,8 @@
  * - 400 `CONTENT_EMPTY` — no text once trimmed.
  * - 400 `CONTEXT_INVALID` — the context names an id the version lacks.
  * - 400 `PROFILE_UNKNOWN` — no such profile or judge, or one switched off.
+ * - 400 `PROJECT_FRAMEWORK_MISMATCH` — `framework` names another framework
+ *   than the project's.
  * - 401 `UNAUTHORIZED` — no session or key.
  * - 402 `INSUFFICIENT_CREDITS` — the workspace's CopyCredits, less what its
  *   reviews in flight have spent and are yet to spend, do not cover the
@@ -42,6 +46,8 @@
  *   never refused this way.
  * - 403 `FORBIDDEN` — an API key without the `assess` scope.
  * - 404 `FRAMEWORK_NOT_FOUND` / `FRAMEWORK_VERSION_NOT_FOUND`.
+ * - 404 `PROJECT_NOT_FOUND` — no such project in this workspace.
+ * - 409 `PROJECT_ARCHIVED` — the project is archived; restore it first.
  * - 413 `FILE_TOO_LARGE`, 415 `INVALID_FILE_TYPE` — the file (intake).
  * - 422 `TEXT_TOO_LONG` — over 40,000 characters.
  * - 422 `TOO_MANY_PAGES`, `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE` — the file.
@@ -59,7 +65,7 @@
  *   when the workspace is full on arrival. A quick-profile request is never
  *   refused this way.
  *
- * GET query: `page`, `limit` (≤ 100), `status`. GET errors: 400
+ * GET query: `page`, `limit` (≤ 100), `status`, `projectId`. GET errors: 400
  * `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (scope).
  */
 import type { NextRequest } from 'next/server';

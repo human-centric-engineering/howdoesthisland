@@ -22,5 +22,6 @@ domain folders beside this one: start at [`../substrate.md`](../substrate.md).
 | [`api.md`](./api.md)                                   | The API contract: the route registry every app route is declared in, what an entry says, adding a route, and the test that keeps it in step.                                                 |
 | [`report.md`](./report.md)                             | The report: where its data comes from, what decides each section, the web, print and shared variants, and the print styles.                                                                  |
 | [`usage.md`](./usage.md)                               | Usage: what `/usage` and `GET /api/v1/usage` show, where each figure comes from, and the demo-usage seed.                                                                                    |
+| [`projects.md`](./projects.md)                         | Projects: the brief and defaults, the routes, how a review takes a project's defaults, and the demo seed's projects.                                                                         |
 
 Features add their own page here as they land, and a row to this table.
