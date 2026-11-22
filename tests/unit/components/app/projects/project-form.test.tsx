@@ -97,6 +97,45 @@ describe('ProjectForm pickers', () => {
   });
 });
 
+describe('ProjectForm stored defaults the version cannot take', () => {
+  it('shows a stored culture with the switch off, and sends it back rather than dropping it', async () => {
+    const project = aProject({ defaults: { context: { culture: { reader: 'fr' } } } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: false })} />);
+
+    expect(field<HTMLSelectElement>(/^Reader’s culture/).value).toBe('fr');
+    await user.type(field(/^Goals/), 'Book a call');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]?.[1]).toMatchObject({
+      body: { defaults: { context: { culture: { reader: 'fr' } } } },
+    });
+  });
+
+  it('gives a stored audience setting the version lacks a picker that can clear it', () => {
+    const project = aProject({ defaults: { context: { audience: { legacy: 'x' } } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    expect(optionValues(/^legacy \(not in this version\)/)).toEqual(['__none__', 'x']);
+  });
+
+  it('says so when the stored defaults cannot be shown', () => {
+    const project = aProject({ defaults: { context: { audience: 'all' } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    expect(screen.getByRole('note')).toHaveTextContent('Saving replaces them');
+  });
+
+  it('opens a project whose role and culture are the engine’s empty "none"', () => {
+    const project = aProject({ defaults: { context: { role: '', culture: { writer: '' } } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: true })} />);
+
+    expect(field<HTMLSelectElement>(/^Reader’s role/).value).toBe('__none__');
+    expect(field<HTMLSelectElement>(/^Writer’s culture/).value).toBe('__none__');
+  });
+});
+
 describe('ProjectForm help', () => {
   it('gives every field a help popover', () => {
     render(<ProjectForm project={aProject()} catalogue={aCatalogue({ culture: true })} />);

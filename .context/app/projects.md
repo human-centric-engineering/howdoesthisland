@@ -74,14 +74,19 @@ and in the signed-in nav. Code is `app/(protected)/projects/` and `components/ap
   API checks defaults against. Each picker starts on **No default**, which sends nothing.
 - **Culture**: the reader's and writer's culture pickers, and the culture reviewer set,
   appear only when the catalogue lists countries, which it does only with the culture
-  switch on.
+  switch on, or while the project has a culture stored, so one the switch now refuses is
+  seen rather than dropped.
 - **The `archetype` audience setting is not offered.** The catalogue lists it, but the
   engine leaves it out of a context (`MODS` in `engine/model.ts`) and refuses a default
   naming it; the **Reader** picker sets the context's own `archetype`.
 - **AI reviewers** offers `quick`, the version's `judge_catalogue` groups and `full`. A
   group also runs the four appeals, which the field's help says.
-- A stored default the version no longer has stays selected, marked "not in this
-  version", so saving is refused with `DEFAULTS_INVALID` rather than dropping it unseen.
+- **Nothing stored is dropped unseen.** A stored default the version no longer has stays
+  selected, marked "not in this version", and an audience setting the version lacks keeps
+  a picker of its own, so saving sends it and is refused with `DEFAULTS_INVALID` until it
+  is changed. An empty role or culture (the engine's "none") reads as No default. A stored
+  context in a shape the pickers cannot read starts them all on No default, and the page
+  says saving replaces it.
 
 ## The demo seed
 

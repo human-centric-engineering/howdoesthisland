@@ -27,7 +27,10 @@ import { aCatalogue, aProject } from '@/tests/unit/components/app/projects/fixtu
 
 const page = (id = 'proj-1') => ProjectPage({ params: Promise.resolve({ id }) });
 
-function answer({ latestVersion = '0.5.1', archived = false } = {}) {
+function answer({
+  latestVersion = '0.5.1',
+  archived = false,
+}: { latestVersion?: string | null; archived?: boolean } = {}) {
   requireServerData.mockImplementation(async (path: string) => {
     if (path === '/api/v1/projects/proj-1') return { data: aProject({ archived }), meta: null };
     if (path === '/api/v1/frameworks/howdoesthisland')

@@ -10,7 +10,9 @@
  * catalogue), with "No default" first: left there, a review takes the
  * version's own default. The culture pickers, and the culture reviewer set,
  * appear only when the version serves countries, which it does only with the
- * culture switch on.
+ * culture switch on. A stored default the version cannot take is shown,
+ * marked "not in this version", rather than dropped: saving sends it, and the
+ * API's refusal says which to change.
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -42,11 +44,12 @@ import {
 } from '@/components/app/projects/schemas';
 import {
   NO_DEFAULT,
-  audienceSettings,
+  audiencePickers,
   formValuesOf,
   patchBodyOf,
   profileOptions,
   projectFormSchema,
+  storedContextReadable,
   withStored,
   type PickerOption,
   type ProjectFormValues,
@@ -162,7 +165,15 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
-  const cultureOn = catalogue.request.countries !== undefined;
+  const [initial] = useState(() => formValuesOf(project, catalogue));
+  // The culture pickers follow the switch, and also appear while a culture is
+  // stored, so one the switch now refuses is seen rather than dropped.
+  const showCulture =
+    catalogue.request.countries !== undefined ||
+    initial.cultureReader !== NO_DEFAULT ||
+    initial.cultureWriter !== NO_DEFAULT;
+  const audience = audiencePickers(catalogue, initial.modifiers);
+  const contextReadable = storedContextReadable(project);
   const {
     register,
     control,
@@ -173,7 +184,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
   } = useForm<ProjectFormValues>({
     resolver: zodResolver(projectFormSchema),
     mode: 'onTouched',
-    defaultValues: formValuesOf(project, catalogue),
+    defaultValues: initial,
   });
   const save = useSaveFailure({
     fallback: 'The project could not be saved. Try again in a moment.',
@@ -187,7 +198,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
     setSaved(false);
     try {
       await apiClient.patch<unknown>(projectEndpoint(project.id), {
-        body: patchBodyOf(values, cultureOn),
+        body: patchBodyOf(values),
       });
       reset(values);
       setSaved(true);
@@ -264,6 +275,12 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {contextReadable ? null : (
+            <p className="text-muted-foreground text-sm" role="note">
+              This project&rsquo;s stored defaults are not in a shape this page can show. Saving
+              replaces them with what is chosen here.
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <Picker
               control={control}
@@ -306,22 +323,26 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
                 options={catalogue.request.roles.map((r) => ({ value: r.id, label: r.name }))}
                 disabled={isLoading}
               />
-              {audienceSettings(catalogue).map((m) => (
+              {audience.map((m) => (
                 <Picker
                   key={m.id}
                   control={control}
                   name={`modifiers.${m.id}`}
                   id={`default-audience-${m.id}`}
                   label={m.name}
-                  help={`${m.name}, for every review in this project. It changes what the AI reviewers expect of the copy.`}
-                  options={m.options.map((o) => ({ value: o.id, label: o.label }))}
+                  help={
+                    m.options.length
+                      ? `${m.name}, for every review in this project. It changes what the AI reviewers expect of the copy.`
+                      : 'A default this project holds for a setting the model no longer has. Set it to No default to remove it.'
+                  }
+                  options={m.options}
                   disabled={isLoading}
                 />
               ))}
             </div>
           </fieldset>
 
-          {cultureOn ? (
+          {showCulture ? (
             <fieldset className="space-y-4">
               <legend className="text-sm font-medium">Culture</legend>
               <div className="grid gap-4 md:grid-cols-2">

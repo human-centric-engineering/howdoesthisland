@@ -82,12 +82,24 @@ const storedContext = z.object({
   culture: z.object({ reader: z.string().optional(), writer: z.string().optional() }).optional(),
 });
 
-const orNone = (value: string | undefined): string => value ?? NO_DEFAULT;
+/** A stored id, or No default. `''` is the engine's own "none" for a role or a culture. */
+const orNone = (value: string | undefined): string => (value ? value : NO_DEFAULT);
 
 /**
- * The form's starting values. A stored context the pickers cannot read (it was
- * written through the API in another shape) starts every picker on "No
- * default"; saving then replaces it.
+ * Whether the pickers can read the project's stored context. When they cannot
+ * (it was written through the API in another shape), every picker starts on
+ * No default and the page says that saving replaces what is stored.
+ */
+export function storedContextReadable(project: ProjectWire): boolean {
+  return storedContext.safeParse(project.defaults.context ?? {}).success;
+}
+
+/**
+ * The form's starting values. Nothing stored is dropped unseen: an audience
+ * setting the version no longer has keeps a picker of its own (the form shows
+ * it, marked), so saving sends it back and the API says what it refuses. A
+ * stored context the pickers cannot read starts every picker on No default
+ * (see {@link storedContextReadable}).
  */
 export function formValuesOf(
   project: ProjectWire,
@@ -105,9 +117,14 @@ export function formValuesOf(
     contentType: orNone(context.contentType),
     archetype: orNone(context.archetype),
     role: orNone(context.role),
-    modifiers: Object.fromEntries(
-      audienceSettings(catalogue).map((m) => [m.id, orNone(context.audience?.[m.id])])
-    ),
+    modifiers: {
+      ...Object.fromEntries(
+        Object.entries(context.audience ?? {}).map(([id, option]) => [id, orNone(option)])
+      ),
+      ...Object.fromEntries(
+        audienceSettings(catalogue).map((m) => [m.id, orNone(context.audience?.[m.id])])
+      ),
+    },
     cultureReader: orNone(context.culture?.reader),
     cultureWriter: orNone(context.culture?.writer),
     profile: orNone(project.defaults.profile),
@@ -116,10 +133,14 @@ export function formValuesOf(
 
 const picked = (value: string): string | undefined => (value === NO_DEFAULT ? undefined : value);
 
-/** What `PATCH /api/v1/projects/{id}` is sent: the brief and defaults, each whole. */
+/**
+ * What `PATCH /api/v1/projects/{id}` is sent: the brief and defaults, each
+ * whole. Culture is sent as the form holds it, switch or no: with the switch
+ * off the form shows the culture pickers only when culture is stored, and the
+ * API refuses it rather than this dropping it unseen.
+ */
 export function patchBodyOf(
-  values: ProjectFormValues,
-  cultureOn: boolean
+  values: ProjectFormValues
 ): Required<Pick<UpdateProjectBody, 'name' | 'brief' | 'defaults'>> {
   const brief = Object.fromEntries(
     BRIEF_KEYS.flatMap((key) => {
@@ -134,8 +155,8 @@ export function patchBodyOf(
       return chosen ? [[id, chosen]] : [];
     })
   );
-  const reader = cultureOn ? picked(values.cultureReader) : undefined;
-  const writer = cultureOn ? picked(values.cultureWriter) : undefined;
+  const reader = picked(values.cultureReader);
+  const writer = picked(values.cultureWriter);
   const contentType = picked(values.contentType);
   const archetype = picked(values.archetype);
   const role = picked(values.role);
@@ -190,4 +211,27 @@ export function profileOptions(catalogue: DefaultsCatalogue): PickerOption[] {
 export function withStored(options: PickerOption[], stored: string): PickerOption[] {
   if (stored === NO_DEFAULT || options.some((o) => o.value === stored)) return options;
   return [...options, { value: stored, label: `${stored} (not in this version)` }];
+}
+
+/**
+ * The audience settings the form shows: the version's, then any stored one the
+ * version no longer has, named by its id with only its stored option, so it
+ * can be seen and set back to No default.
+ */
+export function audiencePickers(
+  catalogue: DefaultsCatalogue,
+  stored: Record<string, string>
+): Array<{ id: string; name: string; options: PickerOption[] }> {
+  const offered = audienceSettings(catalogue);
+  const known = new Set(offered.map((m) => m.id));
+  return [
+    ...offered.map((m) => ({
+      id: m.id,
+      name: m.name,
+      options: m.options.map((o) => ({ value: o.id, label: o.label })),
+    })),
+    ...Object.keys(stored)
+      .filter((id) => !known.has(id))
+      .map((id) => ({ id, name: `${id} (not in this version)`, options: [] })),
+  ];
 }

@@ -80,7 +80,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         <ProjectArchive projectId={project.id} archived={project.archived} />
       </div>
 
-      <ProjectForm key={project.updatedAt} project={project} catalogue={catalogue} />
+      <ProjectForm key={project.id} project={project} catalogue={catalogue} />
     </div>
   );
 }
