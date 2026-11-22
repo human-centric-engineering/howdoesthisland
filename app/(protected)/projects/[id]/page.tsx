@@ -73,7 +73,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           {project.archived ? (
             <p className="text-muted-foreground max-w-prose text-sm">
               Archived: no new {WORDS.review}s can be made in it, and its {WORDS.review}s keep their
-              link to it. Restore it to use it again.
+              link to it. You can still change its brief and defaults; restore it to review in it
+              again.
             </p>
           ) : null}
         </div>

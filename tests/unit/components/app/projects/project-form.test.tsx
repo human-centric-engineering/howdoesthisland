@@ -120,11 +120,34 @@ describe('ProjectForm stored defaults the version cannot take', () => {
     expect(optionValues(/^legacy \(not in this version\)/)).toEqual(['__none__', 'x']);
   });
 
-  it('says so when the stored defaults cannot be shown', () => {
+  it('says so when the stored defaults cannot be shown, and lets Save replace them as they are', async () => {
     const project = aProject({ defaults: { context: { audience: 'all' } } });
+    const user = userEvent.setup();
     render(<ProjectForm project={project} catalogue={aCatalogue()} />);
 
     expect(screen.getByRole('note')).toHaveTextContent('Saving replaces them');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]?.[1]).toMatchObject({
+      body: { defaults: {} },
+    });
+  });
+
+  it('keeps Save off until something changes when the stored defaults are readable', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(screen.getByRole('button', { name: 'Save project' })).toBeDisabled();
+  });
+
+  it('drops the picker for a stored setting once a refresh shows the save cleared it', () => {
+    const before = aProject({ defaults: { context: { audience: { legacy: 'x' } } } });
+    const { rerender } = render(<ProjectForm project={before} catalogue={aCatalogue()} />);
+    expect(screen.getByLabelText(/^legacy/, { selector: 'select' })).toBeInTheDocument();
+
+    rerender(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(screen.queryByLabelText(/^legacy/, { selector: 'select' })).not.toBeInTheDocument();
   });
 
   it('opens a project whose role and culture are the engine’s empty "none"', () => {

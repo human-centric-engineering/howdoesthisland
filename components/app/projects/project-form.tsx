@@ -74,7 +74,7 @@ const BRIEF_FIELDS: Array<{
   {
     key: 'offer',
     label: 'What you offer',
-    help: 'The product, service or idea the copy sells, in your own words. The AI reviewers read it as your description, never as instructions.',
+    help: 'The product, service or idea the copy sells, in your own words.',
     placeholder: 'For example: a bookkeeping service for sole traders, from £20 a month',
   },
   {
@@ -86,7 +86,7 @@ const BRIEF_FIELDS: Array<{
   {
     key: 'voice',
     label: 'Tone of voice',
-    help: 'How the brand or author sounds. The AI reviewers check the copy against it.',
+    help: 'How the brand or author sounds: the words you would use to brief a writer.',
     placeholder: 'For example: plain, warm and a little dry. Never salesy.',
   },
   {
@@ -165,14 +165,17 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [initial] = useState(() => formValuesOf(project, catalogue));
+  // From the project as last loaded, so a refresh after a save drops a
+  // picker for a stored value the save cleared.
+  const stored = formValuesOf(project, catalogue);
+  const [initial] = useState(stored);
   // The culture pickers follow the switch, and also appear while a culture is
   // stored, so one the switch now refuses is seen rather than dropped.
   const showCulture =
     catalogue.request.countries !== undefined ||
-    initial.cultureReader !== NO_DEFAULT ||
-    initial.cultureWriter !== NO_DEFAULT;
-  const audience = audiencePickers(catalogue, initial.modifiers);
+    stored.cultureReader !== NO_DEFAULT ||
+    stored.cultureWriter !== NO_DEFAULT;
+  const audience = audiencePickers(catalogue, stored.modifiers);
   const contextReadable = storedContextReadable(project);
   const {
     register,
@@ -226,8 +229,8 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
         <CardHeader>
           <CardTitle className="text-lg">The brief</CardTitle>
           <CardDescription>
-            What the copy must do, for whom, in what voice. Every {WORDS.review} in this project
-            gives it to the {WORDS.aiReviewers}. Every part of it is optional.
+            What the copy must do, for whom, in what voice, written down once for the project. Every
+            part of it is optional.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -372,7 +375,8 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
 
       <div className="space-y-3">
         <div className="flex items-center gap-4">
-          <Button type="submit" disabled={isLoading || !isDirty}>
+          {/* Unreadable stored defaults can be replaced without changing a field. */}
+          <Button type="submit" disabled={isLoading || (!isDirty && contextReadable)}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
