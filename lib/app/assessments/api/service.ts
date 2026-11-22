@@ -199,13 +199,15 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
   const resolved = await versionToScore(frameworkChoice(body, project));
   // The project's defaults under the request's own fields (t-70), checked
   // against this version as any context is.
-  const ctx = fromProjectDefaults(project?.defaults.context !== undefined, () =>
-    contextFor(resolved, mergeContext(project?.defaults.context, body.context))
+  const ctx = fromProjectDefaults(
+    (err) => issuesFromDefaults(err, project?.defaults.context, body.context),
+    () => contextFor(resolved, mergeContext(project?.defaults.context, body.context))
   );
   const ownProfile = body.judges ?? body.profile;
   const profile: JudgeProfile = ownProfile ?? project?.defaults.profile ?? 'full';
-  const judges = fromProjectDefaults(ownProfile === undefined && project !== null, () =>
-    judgesFor(resolved, profile)
+  const judges = fromProjectDefaults(
+    () => ownProfile === undefined && project?.defaults.profile !== undefined,
+    () => judgesFor(resolved, profile)
   );
   // Pasted text can be refused now; a page or a file only once it is read.
   if ('text' in body.source) {
@@ -223,15 +225,16 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
 }
 
 /**
- * Run `check`; when it refuses and the project's defaults took part, say so,
- * since the caller may be refused for ids they never sent: defaults are checked
- * against the framework's latest version when saved, not every version (t-70).
+ * Run `check`; when it refuses for something the project's defaults supplied,
+ * say so, since the caller may be refused for ids they never sent: defaults are
+ * checked against the framework's latest version when saved, not every
+ * version (t-70).
  */
-function fromProjectDefaults<T>(involved: boolean, check: () => T): T {
+function fromProjectDefaults<T>(fromDefaults: (err: APIError) => boolean, check: () => T): T {
   try {
     return check();
   } catch (err) {
-    if (!involved || !(err instanceof APIError)) throw err;
+    if (!(err instanceof APIError) || !fromDefaults(err)) throw err;
     throw new APIError(
       `${err.message} The project's defaults are part of this request: check them against this version.`,
       err.code,
@@ -239,6 +242,36 @@ function fromProjectDefaults<T>(involved: boolean, check: () => T): T {
       { ...err.details, fromProjectDefaults: true }
     );
   }
+}
+
+/** The value at a dotted context path (`audience.awareness`), or undefined. */
+function atPath(ctx: Record<string, unknown> | undefined, path: string): unknown {
+  let value: unknown = ctx;
+  for (const part of path.split('.')) {
+    const record = z.record(z.string(), z.unknown()).safeParse(value);
+    if (!record.success) return undefined;
+    value = record.data[part];
+  }
+  return value;
+}
+
+/**
+ * Whether a `CONTEXT_INVALID` names a path the project's defaults gave and the
+ * request did not: only then is the project's to blame.
+ */
+function issuesFromDefaults(
+  err: APIError,
+  project: Record<string, unknown> | undefined,
+  request: Record<string, unknown> | undefined
+): boolean {
+  const issues = z
+    .object({ issues: z.array(z.object({ path: z.string() })) })
+    .safeParse(err.details);
+  if (!issues.success || project === undefined) return false;
+  return issues.data.issues.some(
+    ({ path }) =>
+      path !== '' && atPath(project, path) !== undefined && atPath(request, path) === undefined
+  );
 }
 
 /**

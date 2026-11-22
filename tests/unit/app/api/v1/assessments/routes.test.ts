@@ -793,6 +793,28 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
     expect(fake.contents).toHaveLength(0);
   });
 
+  it('does not blame the project for a context id the request sent itself', async () => {
+    project();
+    const res = await json(
+      await post({
+        source: { text: TEXT },
+        projectId: 'project-1',
+        context: { contentType: 'haiku' },
+      })
+    );
+    expect(res.error?.code).toBe('CONTEXT_INVALID');
+    expect(res.error?.details?.fromProjectDefaults).toBeUndefined();
+  });
+
+  it('does not blame a project with no default profile for judges the request named', async () => {
+    project({ defaults: {} });
+    const res = await json(
+      await post({ source: { text: TEXT }, projectId: 'project-1', judges: ['judge_x'] })
+    );
+    expect(res.error?.code).toBe('PROFILE_UNKNOWN');
+    expect(res.error?.details?.fromProjectDefaults).toBeUndefined();
+  });
+
   it('does not blame the project for a profile the request named itself', async () => {
     project();
     const res = await json(

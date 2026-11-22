@@ -86,6 +86,8 @@ export async function enqueueAssessment(
   const assessment = await prisma.$transaction(async (tx) => {
     // Checked again here: a page fetch or file read can take long enough for
     // the project to be archived since `projectForReview` passed it (t-70).
+    // Not a lock: an archive committing between this read and the inserts
+    // still lands, as if the review had come just before it.
     if (projectId !== null) {
       const live = await tx.project.findFirst({
         where: { id: projectId, orgId, archivedAt: null },
