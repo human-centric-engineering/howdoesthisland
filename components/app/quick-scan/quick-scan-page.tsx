@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { z } from 'zod';
 import { FrameworkApiError, getFramework } from '@/lib/app/frameworks/api/service';
 import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
@@ -64,6 +65,8 @@ async function namesForTheForm(): Promise<{ contentTypes: NamedOption[]; appeals
 }
 
 export default async function QuickScanPage() {
+  // Per request: the switch and the latest version are the running server's.
+  await connection();
   if (!isQuickScanEnabled()) notFound();
   const { contentTypes, appeals } = await namesForTheForm();
 

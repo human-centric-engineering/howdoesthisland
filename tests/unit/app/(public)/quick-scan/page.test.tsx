@@ -20,6 +20,10 @@ vi.mock('next/navigation', async (importOriginal) => ({
     throw new Error('NOT_FOUND');
   }),
 }));
+vi.mock('next/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/server')>()),
+  connection: vi.fn(() => Promise.resolve()),
+}));
 const mockEnv = vi.hoisted((): { NODE_ENV: string; QUICK_SCAN_ENABLED: boolean | undefined } => ({
   NODE_ENV: 'test',
   QUICK_SCAN_ENABLED: true,
@@ -119,6 +123,26 @@ describe('/quick-scan', () => {
     expect(screen.getByTestId('quick-scan-redeem')).toHaveAttribute('href', '/redeem');
     // No version number on a public page.
     expect(result).not.toHaveTextContent('0.5.1');
+  });
+
+  it('shows a signed-in visitor’s full result as the same scores and caveat', async () => {
+    const { appeals: _a, caveat: _c, ...rest } = SUMMARY;
+    mocks.post.mockResolvedValue({
+      ...rest,
+      context: { contentType: 'general' },
+      result: {
+        effective_weights: { ethos: 0.25, pathos: 0.25, logos: 0.25, kairos: 0.25 },
+        scores: { overall: 58, band: 'Developing', ethos: 61, pathos: 44, logos: 70, kairos: 52 },
+        highlights: [{ quote: 'x' }],
+      },
+    });
+    const user = userEvent.setup();
+    render(await QuickScanRoute());
+    await user.type(screen.getByLabelText('Your copy'), 'Some copy.');
+    await user.click(screen.getByRole('button', { name: 'Run the quick scan' }));
+    await waitFor(() => expect(screen.getByTestId('quick-scan-result')).toHaveTextContent('Logos'));
+    expect(screen.getByTestId('quick-scan-result')).toHaveTextContent('70');
+    expect(screen.getByTestId('quick-scan-caveat')).toHaveTextContent(QUICK_SCAN_CAVEAT);
   });
 
   it('asks for copy, and sends nothing, when the box is empty', async () => {

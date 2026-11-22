@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  asQuickScanSummary,
   QUICK_SCAN_CAVEAT,
   quickScanSummarySchema,
   summariseQuickScan,
@@ -50,5 +51,19 @@ describe('summariseQuickScan', () => {
     ).toEqual([]);
     expect(summariseQuickScan(view(null)).appeals).toEqual([]);
     expect(summariseQuickScan(view({ scores: {} })).caveat).toBe(QUICK_SCAN_CAVEAT);
+  });
+});
+
+describe('asQuickScanSummary', () => {
+  const full = view({ effective_weights: { ethos: 1 }, scores: { ethos: 70 } });
+
+  it('takes a summary as it is, and makes one from a full result', () => {
+    const summary = summariseQuickScan(full);
+    expect(asQuickScanSummary(summary)).toEqual(summary);
+    expect(asQuickScanSummary(JSON.parse(JSON.stringify(full)))).toEqual(summary);
+  });
+
+  it('throws on an answer that is neither', () => {
+    expect(() => asQuickScanSummary({ nope: true })).toThrow();
   });
 });

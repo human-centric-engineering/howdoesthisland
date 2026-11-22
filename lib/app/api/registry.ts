@@ -625,6 +625,9 @@ export const APP_ROUTES: readonly RouteContract[] = [
       'Run the quick scan on pasted text: deterministic, no AI, nothing stored. Open to anyone: signed out, the scores and a caveat; with an account or an `assess` key, the full result. Limited per IP.',
     auth: QUICK_SCAN,
     request: { body: scanRequestSchema },
+    // Which one a caller gets follows the credential, not the body: with a
+    // session or a key, the full view; with neither, the summary, which alone
+    // has `caveat` (`asQuickScanSummary` tells them apart so).
     response: { status: 200, data: z.union([quickScanViewSchema, quickScanSummarySchema]) },
   },
   {

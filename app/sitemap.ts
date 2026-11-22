@@ -33,6 +33,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
     { path: '/model/sources', priority: 0.5, changeFrequency: 'monthly' as const },
     // FORK (HowDoesThisLand, t-68): the free quick scan, while its switch is on. Ledger row 25.
+    // The sitemap is generated at build, so it follows the switch as deployed.
     ...(isQuickScanEnabled()
       ? [{ path: '/quick-scan', priority: 0.8, changeFrequency: 'monthly' as const }]
       : []),

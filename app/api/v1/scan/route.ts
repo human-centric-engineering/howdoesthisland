@@ -104,7 +104,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     if (!isQuickScanEnabled()) throw new NotFoundError();
     if (await presentsAccount(request)) return await scanAsMember(request);
-    return await scanBody(await readJson(request), false);
+    return await scanBody(withoutCode(await readJson(request)), false);
   } catch (error) {
     return handleAPIError(error);
   }

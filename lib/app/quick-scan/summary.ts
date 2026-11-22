@@ -36,6 +36,28 @@ export const quickScanSummarySchema = z.object({
 
 export type QuickScanSummary = z.infer<typeof quickScanSummarySchema>;
 
+/** The full result's fields the summary is made from, as a signed-in caller gets it. */
+const fullViewWire = z.object({
+  framework: z.object({ slug: z.string(), version: z.string() }),
+  wordCount: z.number().int(),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+  context: z.unknown(),
+  result: z.unknown(),
+});
+
+/**
+ * The summary from either answer `POST /api/v1/scan` gives: the summary as a
+ * signed-out caller gets it, or the full result a signed-in one gets, made
+ * into the summary here. The two are told apart by shape: only the summary
+ * has `caveat`. Throws when the answer is neither.
+ */
+export function asQuickScanSummary(data: unknown): QuickScanSummary {
+  const summary = quickScanSummarySchema.safeParse(data);
+  if (summary.success) return summary.data;
+  return summariseQuickScan(fullViewWire.parse(data));
+}
+
 /**
  * The appeals are the keys of the result's `effective_weights`, in order, so
  * this names no appeal itself and follows whatever the version has.

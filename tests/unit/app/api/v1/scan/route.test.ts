@@ -284,6 +284,12 @@ describe('POST /api/v1/scan signed out, at multi (t-68)', () => {
     expect(res.status).toBe(200);
   });
 
+  it('ignores a code it could not even parse as one, rather than refusing the scan', async () => {
+    for (const code of ['A'.repeat(65), 42]) {
+      expect((await scanAs({ text: TEXT, code })).status).toBe(200);
+    }
+  });
+
   it.each([
     ['active', ACTIVE],
     ['expired', EXPIRED],

@@ -16,13 +16,14 @@ import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
-import { quickScanSummarySchema, type QuickScanSummary } from '@/lib/app/quick-scan/summary';
+import { asQuickScanSummary, type QuickScanSummary } from '@/lib/app/quick-scan/summary';
 import { QUICK_SCAN_COPY as C } from '@/components/app/quick-scan/quick-scan-copy';
 
 /**
  * The free quick scan's form and its answer (t-68). Posts to
- * `POST /api/v1/scan` signed out, which answers the scores and a caveat, and
- * checks the answer with the same schema the route declares.
+ * `POST /api/v1/scan`, which answers a signed-out visitor the scores and a
+ * caveat, and a signed-in one the full result; either is checked and shown
+ * as the scores (`asQuickScanSummary`).
  *
  * The caveat is shown beside the score, never only before it, so nobody
  * reads a quick-scan score as the AI reviewers' verdict.
@@ -80,7 +81,8 @@ export function QuickScanForm({ contentTypes, appeals, caveat }: Props) {
       const data = await apiClient.post<unknown>(SCAN_PATH, {
         body: { text, ...(contentType ? { context: { contentType } } : {}) },
       });
-      setResult(quickScanSummarySchema.parse(data));
+      // A signed-in visitor gets the full result; the page shows its scores alike.
+      setResult(asQuickScanSummary(data));
     } catch (err) {
       setResult(null);
       save.report(err);
@@ -150,68 +152,70 @@ export function QuickScanForm({ contentTypes, appeals, caveat }: Props) {
         </Button>
       </form>
 
-      {result && (
-        <section
-          aria-labelledby="quick-scan-result"
-          aria-live="polite"
-          className="space-y-6 border-t border-(--hd-rule) pt-8"
-          data-testid="quick-scan-result"
-        >
-          <h2 id="quick-scan-result" className="text-3xl font-bold">
-            {C.resultH}
-          </h2>
-          {result.overall !== null && (
-            <p className="flex items-baseline gap-3">
-              <span className="text-6xl font-extrabold tabular-nums">{result.overall}</span>
-              <span className="text-(--hd-muted)">{C.outOf}</span>
-              {result.band && <span className="text-xl font-semibold">{result.band}</span>}
-            </p>
-          )}
-          {result.appeals.length > 0 && (
-            <ul className="grid max-w-xl gap-3">
-              {result.appeals.map((a) => (
-                <li key={a.id} className="grid grid-cols-[7rem_1fr_3rem] items-center gap-3">
-                  <span className="font-semibold">{nameOf(a.id)}</span>
-                  <span
-                    className="h-2 overflow-hidden rounded-full bg-(--hd-rule)"
-                    aria-hidden="true"
-                  >
-                    <span
-                      className="block h-full rounded-full bg-(--hd-ink)"
-                      style={{ width: `${Math.max(0, Math.min(100, a.score))}%` }}
-                    />
-                  </span>
-                  <span className="text-right tabular-nums">{a.score}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p
-            className="max-w-[64ch] border-l-4 border-(--hd-red) pl-4 leading-relaxed"
-            data-testid="quick-scan-caveat"
+      {/* Always mounted, so a screen reader announces the result when it arrives. */}
+      <div aria-live="polite">
+        {result && (
+          <section
+            aria-labelledby="quick-scan-result"
+            className="space-y-6 border-t border-(--hd-rule) pt-8"
+            data-testid="quick-scan-result"
           >
-            {caveat}
-          </p>
-          <div className="space-y-4 bg-(--hd-ink) p-6 text-(--hd-paper) sm:p-8">
-            <h3 className="text-2xl font-bold">{C.fullH}</h3>
-            <p className="max-w-[60ch] leading-relaxed opacity-80">{C.full}</p>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-              <Button
-                asChild
-                size="lg"
-                className="bg-(--hd-paper) text-(--hd-ink) hover:bg-(--hd-paper)/90"
-              >
-                <Link href={REDEEM_PATH} data-testid="quick-scan-redeem">
-                  {C.redeem}
+            <h2 id="quick-scan-result" className="text-3xl font-bold">
+              {C.resultH}
+            </h2>
+            {result.overall !== null && (
+              <p className="flex items-baseline gap-3">
+                <span className="text-6xl font-extrabold tabular-nums">{result.overall}</span>
+                <span className="text-(--hd-muted)">{C.outOf}</span>
+                {result.band && <span className="text-xl font-semibold">{result.band}</span>}
+              </p>
+            )}
+            {result.appeals.length > 0 && (
+              <ul className="grid max-w-xl gap-3">
+                {result.appeals.map((a) => (
+                  <li key={a.id} className="grid grid-cols-[7rem_1fr_3rem] items-center gap-3">
+                    <span className="font-semibold">{nameOf(a.id)}</span>
+                    <span
+                      className="h-2 overflow-hidden rounded-full bg-(--hd-rule)"
+                      aria-hidden="true"
+                    >
+                      <span
+                        className="block h-full rounded-full bg-(--hd-ink)"
+                        style={{ width: `${Math.max(0, Math.min(100, a.score))}%` }}
+                      />
+                    </span>
+                    <span className="text-right tabular-nums">{a.score}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p
+              className="max-w-[64ch] border-l-4 border-(--hd-red) pl-4 leading-relaxed"
+              data-testid="quick-scan-caveat"
+            >
+              {caveat}
+            </p>
+            <div className="space-y-4 bg-(--hd-ink) p-6 text-(--hd-paper) sm:p-8">
+              <h3 className="text-2xl font-bold">{C.fullH}</h3>
+              <p className="max-w-[60ch] leading-relaxed opacity-80">{C.full}</p>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-(--hd-paper) text-(--hd-ink) hover:bg-(--hd-paper)/90"
+                >
+                  <Link href={REDEEM_PATH} data-testid="quick-scan-redeem">
+                    {C.redeem}
+                  </Link>
+                </Button>
+                <Link href="/signup" className="underline underline-offset-4">
+                  {C.signup}
                 </Link>
-              </Button>
-              <Link href="/signup" className="underline underline-offset-4">
-                {C.signup}
-              </Link>
+              </div>
             </div>
-          </div>
-        </section>
-      )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
