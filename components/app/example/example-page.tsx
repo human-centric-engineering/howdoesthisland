@@ -57,6 +57,15 @@ const COPY = {
     description:
       'Watch HowDoesThisLand review a cold sales email step by step: the quick scan, the AI reviewers’ mark-up and rewrites, the scores, and the final draft.',
   },
+  again: {
+    scanH: 'Scanned again',
+    scan: 'The same free quick scan on the final draft. It still sees only word patterns, so it moves less than the full review: the biggest changes are ones only a reader can judge.',
+    reviewH: 'Reviewed again',
+    review:
+      'The same AI reviewers, the same reader, the final draft. Each appeal is scored from its dimensions and weighed against the mix a cold sales email needs.',
+    movedH: 'What moved',
+    moved: 'Appeal by appeal, from the first draft’s review to the final one.',
+  },
   ctaH: 'Your turn.',
   cta: 'Have a free review code? Put the message that matters most this week through the same review.',
 } as const;
@@ -151,6 +160,62 @@ function Email({ text }: { text: string }) {
   );
 }
 
+/** Each appeal's score before and after, and the overall, as a small table. */
+function ScoreMoves({ before, after }: { before: ReportView; after: ReportView }) {
+  const rows = [
+    ...after.lands.appeals.map((a) => ({
+      id: a.id,
+      name: a.name,
+      before: before.lands.appeals.find((b) => b.id === a.id)?.score ?? null,
+      after: a.score,
+    })),
+    {
+      id: 'overall',
+      name: 'Overall',
+      before: before.verdict.overall,
+      after: after.verdict.overall,
+    },
+  ];
+  return (
+    <table className="w-full max-w-2xl text-left" data-testid="example-moves">
+      <thead>
+        <tr className="border-b border-(--hd-rule) font-mono text-xs text-(--hd-muted) uppercase">
+          <th scope="col" className="py-2 font-normal">
+            Appeal
+          </th>
+          <th scope="col" className="py-2 text-right font-normal">
+            First draft
+          </th>
+          <th scope="col" className="py-2 text-right font-normal">
+            Final draft
+          </th>
+          <th scope="col" className="py-2 text-right font-normal">
+            Change
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => {
+          const change = r.before === null ? null : r.after - r.before;
+          const overall = r.id === 'overall';
+          return (
+            <tr key={r.id} className={`border-b border-(--hd-rule) ${overall ? 'font-bold' : ''}`}>
+              <th scope="row" className="py-3 font-semibold" style={{ color: APPEAL_COLOUR[r.id] }}>
+                {r.name}
+              </th>
+              <td className="py-3 text-right tabular-nums">{r.before ?? '–'}</td>
+              <td className="py-3 text-right tabular-nums">{r.after}</td>
+              <td className="py-3 text-right font-mono tabular-nums">
+                {change === null ? '–' : `${change > 0 ? '+' : ''}${change}`}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function Score({ view, label }: { view: ReportView; label: string }) {
   return (
     <div>
@@ -174,6 +239,7 @@ export default async function ExampleReviewPage() {
   const draftReviewed = forStep(views.draft, picks);
   const draftReport = forStep(views.draft);
   const final = forStep(views.final);
+  const finalQuick = forStep(views.finalQuick);
   const S = COPY.steps;
   // The quick scan is shown only while it is offered (its switch), as on every page.
   const quickScan = isQuickScanEnabled();
@@ -271,9 +337,42 @@ export default async function ExampleReviewPage() {
                     band: final.verdict.band,
                   }}
                 />
+                {quickScan && (
+                  <div className="mt-12 border-t border-(--hd-rule) pt-8">
+                    <h3 className="text-2xl font-bold">{COPY.again.scanH}</h3>
+                    <p className="mt-2 mb-8 max-w-[60ch] text-(--hd-muted)">{COPY.again.scan}</p>
+                    <div className="grid gap-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
+                      <div className="grid content-start gap-6">
+                        <Score view={draftQuick} label="First draft · quick scan" />
+                        <Score view={finalQuick} label="Final draft · quick scan" />
+                      </div>
+                      <ScoreBars
+                        title="Appeal scores, final draft"
+                        description="From word patterns alone."
+                        max={100}
+                        testId="example-final-quick-appeals"
+                        rows={finalQuick.lands.appeals.map((a) => ({
+                          id: a.id,
+                          label: a.name,
+                          score: a.score,
+                          colour: APPEAL_COLOUR[a.id],
+                        }))}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="mt-12 border-t border-(--hd-rule) pt-8">
-                  <h3 className="mb-6 text-2xl font-bold">The review of the final draft</h3>
+                  <h3 className="text-2xl font-bold">{COPY.again.reviewH}</h3>
+                  <p className="mt-2 mb-8 max-w-[60ch] text-(--hd-muted)">{COPY.again.review}</p>
                   <Verdict view={final} idPrefix="final-" />
+                  <div className="mt-10">
+                    <HowItLands view={final} />
+                  </div>
+                </div>
+                <div className="mt-12 border-t border-(--hd-rule) pt-8">
+                  <h3 className="text-2xl font-bold">{COPY.again.movedH}</h3>
+                  <p className="mt-2 mb-6 max-w-[60ch] text-(--hd-muted)">{COPY.again.moved}</p>
+                  <ScoreMoves before={draftReport} after={final} />
                 </div>
                 <div className="mt-12 border-t border-(--hd-rule) pt-8">
                   <h3 className="mb-6 text-2xl font-bold">What works now</h3>

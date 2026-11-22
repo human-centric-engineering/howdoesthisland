@@ -38,6 +38,8 @@ export interface ExampleViews {
   draft: ReportView;
   /** The final draft, fully reviewed. */
   final: ReportView;
+  /** The final draft through the quick scan alone. */
+  finalQuick: ReportView;
 }
 
 /** How long the latest published version is taken as known. */
@@ -102,6 +104,7 @@ async function build(version: string): Promise<ExampleViews | null | typeof MISS
       draftQuick: viewOf(reviews.draft, reviews.draft.quick, 'quick', framework, model),
       draft: viewOf(reviews.draft, reviews.draft.full, 'full', framework, model),
       final: viewOf(reviews.final, reviews.final.full, 'full', framework, model),
+      finalQuick: viewOf(reviews.final, reviews.final.quick, 'quick', framework, model),
     };
   } catch (err) {
     logger.error('Worked example: it does not fit this model version', err, { version });

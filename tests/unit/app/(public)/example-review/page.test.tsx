@@ -167,10 +167,32 @@ describe('/example-review', () => {
     await expect(ExampleRoute()).rejects.toThrow('NOT_FOUND');
   });
 
+  it('scans and reviews the final draft again, and shows what moved, appeal by appeal', async () => {
+    const { container } = render(await ExampleRoute());
+    const rewrite = screen.getByTestId('step-rewrite');
+    expect(rewrite).toHaveTextContent('Scanned again');
+    expect(rewrite).toHaveTextContent('Reviewed again');
+    expect(rewrite.querySelector('[data-testid="example-final-quick-appeals"]')).not.toBeNull();
+    const views = await loadExampleViews();
+    const rows = [...container.querySelectorAll('[data-testid="example-moves"] tbody tr')].map(
+      (tr) => [...tr.querySelectorAll('th, td')].map((c) => c.textContent)
+    );
+    const overall = rows.at(-1)!;
+    expect(overall).toEqual([
+      'Overall',
+      String(views!.draft.verdict.overall),
+      String(views!.final.verdict.overall),
+      `+${views!.final.verdict.overall - views!.draft.verdict.overall}`,
+    ]);
+    expect(rows).toHaveLength(views!.final.lands.appeals.length + 1);
+  });
+
   it('leaves the quick-scan step out while the quick scan is switched off', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
     const { container } = render(await ExampleRoute());
     expect(container.querySelector('[data-testid="step-quick"]')).toBeNull();
+    // Nor is the final draft scanned again.
+    expect(screen.getByTestId('step-rewrite')).not.toHaveTextContent('Scanned again');
     expect(within(screen.getByRole('tablist')).getAllByRole('tab')).toHaveLength(4);
   });
 
