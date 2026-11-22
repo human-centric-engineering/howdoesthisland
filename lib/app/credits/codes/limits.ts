@@ -12,7 +12,10 @@
  * address get through in a minute.
  */
 
-/** Checks and redemptions per IP a minute: the `/redeem` page and both code routes, together. */
+/**
+ * Checks and redemptions per IP a minute: the `/redeem` page given a code and
+ * both code routes, together. A page load with no code is not counted (t-66).
+ */
 export const CODE_ATTEMPTS_PER_MINUTE_PER_IP = 120;
 
 /** Redemptions per person a minute, across their sessions and keys. */
