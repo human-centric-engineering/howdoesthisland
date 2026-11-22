@@ -17,6 +17,8 @@
  * New here (t-18): each judge's strict reply schema (`judge-schemas.ts`), and
  * which judges a profile runs and the call each makes (`judges.ts`). And
  * (t-25) the editor's summary request and its validation (`editor.ts`).
+ * And (t-72) a project's adjustment to the weights within the version's
+ * bounds (`overlay.ts`), which `withOverlay()` scores with.
  *
  * Not here: the rewrite prompt (f-rewrite), `calibrate` (f-calibration) and
  * `toApi` (f-assessments).
@@ -53,8 +55,13 @@ import type {
 } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 import { validateJudgeReply } from '@/lib/app/frameworks/howdoesthisland/engine/validate-reply';
 import { parseContext } from '@/lib/app/frameworks/howdoesthisland/engine/context';
+import {
+  parseOverlay,
+  type WeightOverlay,
+} from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
 
 export type { EngineOptions } from '@/lib/app/frameworks/howdoesthisland/engine/quick-scan';
+export type { WeightOverlay } from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
 export type * from '@/lib/app/frameworks/howdoesthisland/engine/types';
 export type {
   JudgeDrop,
@@ -67,10 +74,14 @@ export interface HowDoesThisLandEngine extends FrameworkEngine<
   QuickScan,
   JudgeOutputs,
   Assessment,
-  JudgeOutput
+  JudgeOutput,
+  WeightOverlay
 > {
   /** Whether this engine was built with the culture switch on. */
   readonly culture: boolean;
+  /** The project's adjustment this engine scores with (t-72), or null. */
+  readonly overlay: WeightOverlay | null;
+  withOverlay(overlay: WeightOverlay | null): HowDoesThisLandEngine;
   /** The duty this reader most needs the text to do (BRIEF §5 fix), or null. */
   primaryDuty(ctx: EngineContext): string | null;
 }
@@ -105,15 +116,20 @@ function byAppeal(m: EngineModel, outputs: JudgeOutputs): JudgeOutputs {
  * An engine over a materialised model. Throws (a `ZodError` naming the field)
  * when the model lacks something the engine reads, or gives two judges one
  * appeal. The model is never written.
+ *
+ * `opts.overlay` is a project's adjustment (t-72), trusted as
+ * `parseOverlay()` returned it; a caller holding an engine adds one with
+ * `withOverlay()`.
  */
 export function createHowDoesThisLandEngine(
   model: object,
   opts: EngineOptions
 ): HowDoesThisLandEngine {
   const m: EngineModel = indexModel(model);
-  const options: EngineOptions = { culture: opts.culture };
+  const options: EngineOptions = { culture: opts.culture, overlay: opts.overlay ?? null };
   return {
     culture: options.culture,
+    overlay: options.overlay ?? null,
     parseContext: (input) => parseContext(m, input, options.culture),
     quickScan: (text, ctx) => quickScan(m, text, ctx, options),
     assemble: (text, ctx, quick, outputs = {}, source = null) =>
@@ -127,5 +143,7 @@ export function createHowDoesThisLandEngine(
     buildEditorRequest: (text, ctx, result, projectContext = null) =>
       buildEditorRequest(m, text, ctx, result, { ...options, projectContext }),
     validateEditorReply: (reply, result) => validateEditorReply(reply, result),
+    parseOverlay: (input) => parseOverlay(m, input),
+    withOverlay: (overlay) => createHowDoesThisLandEngine(model, { ...options, overlay }),
   };
 }

@@ -12,6 +12,10 @@ import {
   type EngineModel,
   type PartialAppealWeights,
 } from '@/lib/app/frameworks/howdoesthisland/engine/model';
+import {
+  priorityWith,
+  type WeightOverlay,
+} from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
 import type { Sentence } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 import type { EngineContext, Highlight } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 
@@ -34,18 +38,24 @@ const LEWIS_SHIFT = {
 
 /**
  * The appeal mix this reader needs: the content type's weights, moved by the
- * audience, the archetype and (with culture on) the reader's culture, floored
- * and normalised to 1.
+ * project's overlay (t-72), the audience, the archetype and (with culture on)
+ * the reader's culture, floored and normalised to 1.
+ *
+ * The overlay is one more delta, added before the floor and the normalising
+ * like every other, so it moves the mix by about what it says rather than
+ * exactly: the other appeals give way in proportion. With none, the mix is
+ * the prototype's, to the digit.
  */
 export function effectiveWeights(
   m: EngineModel,
   ctx: EngineContext,
-  opts: { culture: boolean }
+  opts: { culture: boolean; overlay?: WeightOverlay | null }
 ): AppealWeights {
   const w: AppealWeights = { ...must(m.CT, ctx.contentType, 'content type').weights };
   const add = (d: PartialAppealWeights | null | undefined) => {
     for (const a of APPEALS) w[a] += (d && d[a]) || 0;
   };
+  add(opts.overlay?.weights);
   for (const mod of m.MODS) {
     add(mod.options.find((o) => o.id === ctx.audience[mod.id])?.weight_delta);
   }
@@ -112,17 +122,29 @@ export const primaryDuty = (m: EngineModel, ctx: EngineContext): string | null =
   primaryDutyOf(m, fnTarget(m, ctx));
 
 /**
+ * The content type's priority dimensions, as the project's overlay adjusts
+ * them (t-72): its own list without the removed ones, then the added ones.
+ */
+export const priorityDimensions = (
+  m: EngineModel,
+  ctx: EngineContext,
+  overlay?: WeightOverlay | null
+): readonly string[] =>
+  priorityWith(must(m.CT, ctx.contentType, 'content type').priority_dimensions, overlay);
+
+/**
  * An appeal's 0–100 score: its dimensions' weighted mean, priority dimensions
- * for the content type counting half again, then capped by any integrity cap
- * whose dimension scored too low.
+ * for the content type (as the overlay adjusts them) counting half again,
+ * then capped by any integrity cap whose dimension scored too low.
  */
 export function appealScore(
   m: EngineModel,
   ap: Appeal,
   sc: Readonly<Record<string, number>>,
-  ctx: EngineContext
+  ctx: EngineContext,
+  overlay?: WeightOverlay | null
 ): number {
-  const prio = must(m.CT, ctx.contentType, 'content type').priority_dimensions;
+  const prio = priorityDimensions(m, ctx, overlay);
   let n = 0;
   let d = 0;
   for (const dim of m.DIMS.filter((x) => x.appeal === ap)) {

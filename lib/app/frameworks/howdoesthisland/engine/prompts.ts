@@ -24,7 +24,11 @@ import {
   type EngineModel,
   type JudgeDef,
 } from '@/lib/app/frameworks/howdoesthisland/engine/model';
-import { effectiveWeights } from '@/lib/app/frameworks/howdoesthisland/engine/scoring';
+import type { WeightOverlay } from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
+import {
+  effectiveWeights,
+  priorityDimensions,
+} from '@/lib/app/frameworks/howdoesthisland/engine/scoring';
 import type { EngineContext } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 
 /** The longest text a judge sees, in UTF-16 code units, as in the prototype. */
@@ -119,6 +123,8 @@ export interface JudgePromptOptions {
   culture: boolean;
   /** The project's context block (f-projects), or none. */
   projectContext?: string | null;
+  /** The project's adjustment to the weights (t-72), or none: the judge is told the adjusted mix. */
+  overlay?: WeightOverlay | null;
 }
 
 /**
@@ -139,7 +145,7 @@ export function judgePrompt(
     throw new Error(`The ${slot} judge does not run with the culture switch off`);
   }
   const ct = must(m.CT, ctx.contentType, 'content type');
-  const w = effectiveWeights(m, ctx, { culture: opts.culture });
+  const w = effectiveWeights(m, ctx, { culture: opts.culture, overlay: opts.overlay });
   const name =
     g === 'lenses'
       ? 'lenses and rhetorical duties'
@@ -160,7 +166,7 @@ ${j.max_recommendations ? `- Return at most ${j.max_highlights} highlights and $
 
 Context
 - Content type: ${ct.name}. Target appeal mix for this audience: ${APPEALS.map((a) => `${a} ${Math.round(w[a] * 100)}%`).join(', ')}.
-- Priority dimensions: ${ct.priority_dimensions.join(', ')}. Watch-outs: ${ct.watch_outs.join('; ') || 'none'}.
+- Priority dimensions: ${priorityDimensions(m, ctx, opts.overlay).join(', ')}. Watch-outs: ${ct.watch_outs.join('; ') || 'none'}.
 Audience:
 ${audienceText(m, ctx, opts.culture)}
 ` + projectBlock(opts.projectContext);
