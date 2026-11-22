@@ -1,4 +1,6 @@
 import type { MetadataRoute } from 'next';
+// FORK (HowDoesThisLand, t-63): the model explainer's chapters. Ledger row 25.
+import { CHAPTERS } from '@/lib/app/explainer/chapters';
 
 /**
  * Sitemap Configuration
@@ -20,6 +22,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: '/contact', priority: 0.8, changeFrequency: 'monthly' as const },
     // FORK (HowDoesThisLand, t-62): the developer docs. Ledger: .context/app/platform-divergences.md row 25.
     { path: '/developers', priority: 0.7, changeFrequency: 'weekly' as const },
+    // FORK (HowDoesThisLand, t-63): how a review works, its chapters and its sources. Ledger row 25.
+    { path: '/model', priority: 0.8, changeFrequency: 'monthly' as const },
+    ...CHAPTERS.map((c) => ({
+      path: `/model/${c.slug}`,
+      priority: 0.7,
+      changeFrequency: 'monthly' as const,
+    })),
+    { path: '/model/sources', priority: 0.5, changeFrequency: 'monthly' as const },
     { path: '/privacy', priority: 0.3, changeFrequency: 'yearly' as const },
     { path: '/terms', priority: 0.3, changeFrequency: 'yearly' as const },
   ];

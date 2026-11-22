@@ -286,6 +286,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       expect(publicNavItems?.map((i) => i.href)).toEqual([
         '/redeem',
+        '/model',
         '/developers',
         '/about',
         '/contact',

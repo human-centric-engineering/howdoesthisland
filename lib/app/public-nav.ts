@@ -29,10 +29,12 @@ import type { PublicNavItem } from '@/lib/public-nav/types';
 /** Header nav. `null` = platform default; a non-null array replaces it. */
 export const publicNavItems: PublicNavItem[] | null = [
   // HowDoesThisLand: only routes that exist. The wordmark links home, so Home
-  // is not repeated; each later public page (/model) adds its own item when it
-  // lands. Text only: the Galley Proof nav has no icons. "Redeem a code" is
-  // the way in for someone handed a free review code (t-62).
+  // is not repeated; each later public page adds its own item when it lands.
+  // Text only: the Galley Proof nav has no icons. "Redeem a code" is the way
+  // in for someone handed a free review code (t-62). "The model" is the model
+  // behind every review (t-63).
   { href: '/redeem', label: 'Redeem a code' },
+  { href: '/model', label: 'The model' },
   { href: '/developers', label: 'Developers' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },

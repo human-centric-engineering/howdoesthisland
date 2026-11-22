@@ -136,3 +136,28 @@ npx tsx --env-file=.env.local scripts/app/smoke-framework-store.ts
 Imports and publishes 0.5.1 against the dev database at `multi` (a no-op when already
 done), checks a changed file is refused, and reads the model back from inside a
 workspace that is not the install org.
+
+## The model on the public site (`/model`)
+
+The model is HowDoesThisLand's IP (owner ruling, 2026-11-22): the site explains it, and
+never publishes it. `/model` ("How a review works"), a page per chapter and
+`/model/sources` render **the explainer** (`lib/app/explainer/`), a companion written by
+hand as copy. They never read the model.
+
+- **`chapters.ts`**: chapters of groups of entries, each in plain words with a summary,
+  an explanation, sometimes an example, and its sources. No rubric, weight, formula,
+  threshold, detection pattern or reviewer instruction, no counts of the model's parts,
+  and no version number. A test checks the first and last against 0.5.1.
+- **A pointer** on an entry names the model concept it explains (`{ kind, id }`, or
+  `section` for a top-level part). It is never shown; a test fails when the model loses
+  it, so a model change that leaves the explainer wrong is caught.
+- **`sources.ts`**: who, what, when and why each source matters, for a reader meeting it
+  for the first time, with a stable link (an encyclopedia entry or a DOI). Cited from the
+  explainer and from `/about`; a test checks every citation resolves.
+- **The pages** (`components/app/model/explainer-pages.tsx`) are guided reading: each
+  chapter top to bottom, entries opening in place, sources in a popover. All of it is
+  server-rendered, folded detail included, with a title, description and canonical URL
+  per page, and every page in the sitemap (ledger row 25).
+- The culture review is left out while its switch is off in production.
+- `/about` is the product's rationale and the lineage of the idea, in
+  `components/app/marketing/about-page.tsx` (ledger row 27).
