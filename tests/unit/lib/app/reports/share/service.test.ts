@@ -152,7 +152,7 @@ vi.mock('@/lib/app/frameworks/api/service', async () => {
 });
 
 import { FrameworkApiError } from '@/lib/app/frameworks/api/service';
-import { reportResultSchema } from '@/lib/app/reports/input';
+import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
 import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
 import {
   createShare,
@@ -379,10 +379,14 @@ describe('readSharedReport', () => {
         result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
       },
-      model: modelDocument(false),
+      // Only what the report shows of the model (t-67): a link is public, the model IP.
+      model: reportModelSchema.parse(modelDocument(false)),
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
+    for (const field of ['rubric', 'heuristic', 'pattern', 'instruction', 'persona', 'weights']) {
+      expect(wire).not.toContain(`"${field}"`);
+    }
     // `context` is the caller's own JSON, which the report never reads.
     expect(read.report.assessment).not.toHaveProperty('context');
     for (const leak of [

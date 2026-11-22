@@ -332,7 +332,8 @@ function sharedResult(result: unknown): Record<string, unknown> | null {
 }
 
 /**
- * The model version `a` ran on, or `null` when the report cannot use it:
+ * What the report shows of the model version `a` ran on, and nothing else,
+ * or `null` when the report cannot use it:
  * the version no longer resolves, or its document does not parse. Either
  * way the report is unreadable, so the open is not counted.
  */
@@ -342,12 +343,16 @@ async function readableModel(
 ): Promise<Record<string, unknown> | null> {
   const model = await loadModelDocument(a.framework.slug, a.framework.version);
   if (model === null) return null;
-  if (!reportModelSchema.safeParse(model).success) {
+  const parsed = reportModelSchema.safeParse(model);
+  if (!parsed.success) {
     logger.error('Share link: its model is not one the report can read', undefined, {
       shareId,
       framework: a.framework,
     });
     return null;
   }
-  return model;
+  // Only what the report shows: the schema strips every other field. A share
+  // link is public, and the model is IP (t-67), so the whole document must
+  // never leave through it.
+  return parsed.data;
 }

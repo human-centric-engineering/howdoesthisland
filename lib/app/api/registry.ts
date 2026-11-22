@@ -429,11 +429,12 @@ export { createdReportShareSchema, reportShareSchema };
 
 /**
  * `SharedReport`: what `GET shared-reports/{token}` answers with, the
- * assessment and the model version it ran on, so a reader needs no second
+ * assessment and what the report shows of the model version it ran on, so a reader needs no second
  * call (and has nothing to make one with). `expiresAt` is when the link stops.
  */
 export const sharedReportSchema = z.object({
   assessment: sharedAssessmentSchema,
+  /** Only the fields the report shows (`reportModelSchema`), never the whole model (t-67). */
   model: jsonObjectSchema,
   expiresAt: isoDateTime,
 });
