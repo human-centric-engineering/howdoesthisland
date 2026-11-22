@@ -52,11 +52,9 @@ interface Props {
   contentTypes: NamedOption[];
   /** Appeals by id and name, to name the scores. */
   appeals: NamedOption[];
-  /** The caveat, shown beside the score. */
-  caveat: string;
 }
 
-export function QuickScanForm({ contentTypes, appeals, caveat }: Props) {
+export function QuickScanForm({ contentTypes, appeals }: Props) {
   const [result, setResult] = useState<QuickScanSummary | null>(null);
   const [running, setRunning] = useState(false);
   const {
@@ -193,7 +191,8 @@ export function QuickScanForm({ contentTypes, appeals, caveat }: Props) {
               className="max-w-[64ch] border-l-4 border-(--hd-red) pl-4 leading-relaxed"
               data-testid="quick-scan-caveat"
             >
-              {caveat}
+              {/* The server's own words, beside the score it gave. */}
+              {result.caveat}
             </p>
             <div className="space-y-4 bg-(--hd-ink) p-6 text-(--hd-paper) sm:p-8">
               <h3 className="text-2xl font-bold">{C.fullH}</h3>

@@ -33,8 +33,9 @@
  * - 400 `CONTEXT_INVALID` — the context names an id the version lacks; `details.issues` says which.
  * - 401 `ACCOUNT_REQUIRED` — the body asks for a page (`url`) or a file.
  * - 401 `UNAUTHORIZED` — an API key that is not valid.
- * - 403 `FORBIDDEN` — an API key without the `assess` scope, or a key or session
- *   whose workspace cannot be entered.
+ * - 403 `FORBIDDEN` — an API key without the `assess` scope, or whose workspace
+ *   cannot be entered. A browser session whose workspace is refused gets the
+ *   signed-out answer instead.
  * - 404 `NOT_FOUND` — the quick scan is switched off.
  * - 404 `FRAMEWORK_NOT_FOUND` — no such framework.
  * - 404 `FRAMEWORK_VERSION_NOT_FOUND` — no such published version.
@@ -50,11 +51,11 @@ import { withAuth } from '@/lib/auth/guards';
 import { ASSESS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import { refuseAccountOnlyInput, runQuickScan } from '@/lib/app/assessments/api/scan';
 import { scanRequestSchema } from '@/lib/app/assessments/api/validations';
-import { presentsAccount } from '@/lib/app/quick-scan/access';
+import { presentsAccount, presentsApiKey } from '@/lib/app/quick-scan/access';
 import { summariseQuickScan } from '@/lib/app/quick-scan/summary';
 import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
-async function readJson(request: NextRequest): Promise<unknown> {
+async function readJson(request: Request): Promise<unknown> {
   return request.json().catch(() => {
     throw new ValidationError('Invalid JSON in request body');
   });
@@ -103,7 +104,18 @@ const scanAsMember = withAuth(
 export async function POST(request: NextRequest): Promise<Response> {
   try {
     if (!isQuickScanEnabled()) throw new NotFoundError();
-    if (await presentsAccount(request)) return await scanAsMember(request);
+    if (await presentsAccount(request)) {
+      const asAnyone = request.clone();
+      const answer = await scanAsMember(request);
+      // A browser session whose workspace the guard refuses (suspended, or no
+      // longer theirs) gets what anyone signed out gets, not a refusal a
+      // stranger would not meet. An API key is refused: its caller asked for
+      // the full result and should learn why not.
+      if (answer.status === 403 && !presentsApiKey(asAnyone)) {
+        return await scanBody(withoutCode(await readJson(asAnyone)), false);
+      }
+      return answer;
+    }
     return await scanBody(withoutCode(await readJson(request)), false);
   } catch (error) {
     return handleAPIError(error);

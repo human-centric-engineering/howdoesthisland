@@ -24,7 +24,11 @@ import { auth } from '@/lib/auth/config';
  * without the database, and `withAuth` takes no session from outside.
  */
 export async function presentsAccount(request: NextRequest): Promise<boolean> {
-  const authorization = request.headers.get('authorization');
-  if (authorization?.startsWith(`Bearer ${API_KEY_PREFIX}`)) return true;
+  if (presentsApiKey(request)) return true;
   return (await auth.api.getSession({ headers: request.headers })) !== null;
+}
+
+/** Whether the caller sends an API key, by its header alone. */
+export function presentsApiKey(request: Request): boolean {
+  return request.headers.get('authorization')?.startsWith(`Bearer ${API_KEY_PREFIX}`) ?? false;
 }

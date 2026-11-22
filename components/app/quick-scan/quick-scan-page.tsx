@@ -87,7 +87,7 @@ export default async function QuickScanPage() {
           </aside>
         </div>
         <div className="border-t border-(--hd-rule) px-4 py-10 sm:px-6 md:px-12 md:py-14">
-          <QuickScanForm contentTypes={contentTypes} appeals={appeals} caveat={QUICK_SCAN_CAVEAT} />
+          <QuickScanForm contentTypes={contentTypes} appeals={appeals} />
         </div>
       </article>
     </div>

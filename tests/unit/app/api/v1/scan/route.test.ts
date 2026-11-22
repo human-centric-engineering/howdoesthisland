@@ -388,22 +388,25 @@ describe('who gets the full result (t-61, t-68)', () => {
     });
   });
 
-  it('403 FORBIDDEN for a key or a session whose workspace is suspended, ', async () => {
+  it('403 FORBIDDEN for a key whose workspace is suspended', async () => {
     withKey(['assess'], WS_SUSPENDED);
     expect(await refusal(await scan({ text: TEXT }, false, KEY_HEADERS))).toMatchObject({
       status: 403,
       code: 'FORBIDDEN',
     });
-    mocks.apiKey.mockResolvedValue(null);
+  });
+
+  it('the signed-out answer, not a refusal, for a session whose workspace is suspended', async () => {
     signedIn(WS_SUSPENDED);
-    expect(await refusal(await scan({ text: TEXT }))).toMatchObject({
-      status: 403,
-      code: 'FORBIDDEN',
-    });
+    const res = await scan({ text: TEXT });
+    expect(res.status).toBe(200);
+    const body = await read(res);
+    expect(quickScanSummarySchema.parse(body.data)).toEqual(body.data);
+    expect(body.data).not.toHaveProperty('result');
     expect(touched).not.toContain('reviewCode');
   });
 
-  it('401 UNAUTHORIZED for an API key that is not valid, ', async () => {
+  it('401 UNAUTHORIZED for an API key that is not valid', async () => {
     expect(await refusal(await scan({ text: TEXT }, false, KEY_HEADERS))).toMatchObject({
       status: 401,
       code: 'UNAUTHORIZED',

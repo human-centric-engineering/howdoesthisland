@@ -279,7 +279,7 @@ function operation(route: RouteContract): JsonObject {
   if (auth.who !== 'anyone') {
     responses['401'] = errorRef(
       auth.who === 'signed-in' && auth.orSignedOut
-        ? '`UNAUTHORIZED`: an API key that is not valid. A caller with no credential at all is answered, with less.'
+        ? '`UNAUTHORIZED`: an API key that is not valid. `ACCOUNT_REQUIRED`: the body asks for something only an account may (a page or a file, on the quick scan). A caller with no credential at all is answered, with less.'
         : '`UNAUTHORIZED`: no caller.'
     );
     responses['403'] = errorRef(forbiddenNote(auth));

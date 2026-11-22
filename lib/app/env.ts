@@ -56,16 +56,17 @@ export const appEnvSchema = z.object({
     .transform((val) => (val === undefined ? undefined : val === 'true'))
     .describe('Serve the culture module (defaults to on outside production, off in production)'),
   /**
-   * The quick scan (t-61): `POST /api/v1/scan`, its OpenAPI entry and its
-   * place on `/developers`. `true` or `false`; unset means on outside production and
-   * off in production, since the owner may launch without it. Read through
-   * `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), never directly.
+   * The quick scan (t-61, t-68): `POST /api/v1/scan`, the `/quick-scan` page,
+   * its OpenAPI entry and its place on `/developers`. `true` or `false`; unset
+   * means on, production included, since it is offered free (t-68). Set
+   * `false` to withdraw it. Read through `isQuickScanEnabled()`
+   * (`lib/app/quick-scan/switch.ts`), never directly.
    */
   QUICK_SCAN_ENABLED: z
     .enum(['true', 'false'])
     .optional()
     .transform((val) => (val === undefined ? undefined : val === 'true'))
-    .describe('Offer the quick scan (defaults to on outside production, off in production)'),
+    .describe('Offer the quick scan (on by default; false withdraws it)'),
   PDF_CHROMIUM_PATH: z
     .string()
     .min(1)
