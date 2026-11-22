@@ -73,6 +73,12 @@ export type AssessmentDetail = AssessmentSummary & {
   text: string;
   /** Who the text is for, defaults applied. */
   context: unknown;
+  /**
+   * The project's adjustment to the weights it was scored with (t-72), as
+   * checked against its version, or `null` for none. Its shape is the
+   * framework's.
+   */
+  overlay: unknown;
   /** The framework's assembled result, once final; `null` before. */
   result: unknown;
   judgeRuns: JudgeRunView[];
@@ -90,6 +96,8 @@ export type EphemeralAssessment = {
   band: string | null;
   costUsd: number;
   context: unknown;
+  /** The project's adjustment to the weights it was scored with (t-72), or `null`. */
+  overlay: unknown;
   result: unknown;
   judgeRuns: JudgeRunView[];
 };
@@ -157,6 +165,7 @@ const detailSelect = {
   ...summarySelect,
   content: { select: { ...summarySelect.content.select, text: true } },
   context: true,
+  overlay: true,
   result: true,
   judgeRuns: {
     select: {
@@ -233,6 +242,7 @@ function detailView(row: DetailRow): AssessmentDetail {
     ...summaryView(row),
     text: row.content.text,
     context: row.context,
+    overlay: row.overlay ?? null,
     result: row.result,
     judgeRuns: inJudgeOrder(row.judges, row.judgeRuns).map(judgeRunView),
   };

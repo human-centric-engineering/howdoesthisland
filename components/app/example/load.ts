@@ -69,6 +69,7 @@ function viewOf(
       createdAt: DAY,
       completedAt: DAY,
       text: review.text,
+      overlay: null,
       result: parsed,
       // Only the reviewers whose replies the engine accepted ran, as a report says.
       judgeRuns: slots.map((judge) => ({ judge, status: 'succeeded', model: 'example' })),

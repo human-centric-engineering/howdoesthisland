@@ -149,6 +149,12 @@ function Cover({ view }: { view: ReportView }) {
           <dt className="text-(--hd-muted) uppercase">Word count</dt>
           <dd>{cover.wordCount}</dd>
         </div>
+        {cover.weighting ? (
+          <div className="sm:col-span-2">
+            <dt className="text-(--hd-muted) uppercase">Weighting, adjusted for its project</dt>
+            <dd>{cover.weighting.join(' · ')}</dd>
+          </div>
+        ) : null}
       </dl>
     </header>
   );

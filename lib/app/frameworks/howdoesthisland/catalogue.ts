@@ -14,6 +14,7 @@
  */
 import { z } from 'zod';
 import type { JsonObject } from '@/lib/app/frameworks/types';
+import { adjustmentBoundsSchema } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 
 const named = z.object({ id: z.string(), name: z.string() });
 
@@ -46,6 +47,7 @@ const modelSchema = z.object({
   perspectives: z.array(named.extend({ levers: z.array(named) })),
   judge_catalogue: z.array(named),
   judges: z.array(z.object({ id: z.string(), appeal: z.string() })),
+  scoring: z.object({ adjustment_bounds: adjustmentBoundsSchema.optional() }),
   culture: z
     .object({
       countries: z.array(named.extend({ region: z.string() })),
@@ -63,7 +65,20 @@ type IdName = { id: string; name: string };
  * Bump when the catalogue's fields change, so a caller holding an old ETag
  * for a version does not keep the old catalogue (`versionETagSource`).
  */
-export const CATALOGUE_SHAPE = 2;
+export const CATALOGUE_SHAPE = 3;
+
+/**
+ * How far a project may adjust this version's weights (t-72), or `null`: no
+ * adjustment allowed. The bounds, never the weights they apply to: a weight
+ * is the model's IP; how far a customer may move one is the product's
+ * offer, and a project page cannot offer the choice without it.
+ */
+export type CatalogueAdjustment = {
+  /** Per appeal, how far either way, as a share of the mix (`0.1` is ten points); 0 is fixed. */
+  weights: { ethos: number; pathos: number; logos: number; kairos: number };
+  /** How many core dimensions (`result.dimensions` with no group) may be added or removed. */
+  priorityDimensions: { add: number; remove: number };
+};
 
 /** What `howDoesThisLandCatalogue` returns: `frameworkCatalogueSchema` in the registry. */
 export type HowDoesThisLandCatalogue = {
@@ -74,6 +89,8 @@ export type HowDoesThisLandCatalogue = {
     audience: Array<IdName & { options: Array<{ id: string; label: string }> }>;
     /** Only with the culture switch on. */
     countries?: Array<IdName & { region: string }>;
+    /** A project's adjustment to the weights (t-72), or `null` for a version that allows none. */
+    adjustment: CatalogueAdjustment | null;
   };
   result: {
     appeals: IdName[];
@@ -102,6 +119,23 @@ export type HowDoesThisLandCatalogue = {
   };
 };
 
+function adjustmentOf(
+  bounds: z.infer<typeof adjustmentBoundsSchema> | undefined
+): CatalogueAdjustment | null {
+  if (!bounds) return null;
+  const w = bounds.weights ?? {};
+  const pd = bounds.priority_dimensions ?? {};
+  return {
+    weights: {
+      ethos: w.ethos ?? 0,
+      pathos: w.pathos ?? 0,
+      logos: w.logos ?? 0,
+      kairos: w.kairos ?? 0,
+    },
+    priorityDimensions: { add: pd.add ?? 0, remove: pd.remove ?? 0 },
+  };
+}
+
 export function howDoesThisLandCatalogue(model: JsonObject): JsonObject {
   return buildCatalogue(model);
 }
@@ -127,6 +161,7 @@ function buildCatalogue(model: JsonObject): HowDoesThisLandCatalogue {
       ...(m.culture
         ? { countries: m.culture.countries.map(({ id, name, region }) => ({ id, name, region })) }
         : {}),
+      adjustment: adjustmentOf(m.scoring.adjustment_bounds),
     },
     result: {
       appeals: m.appeals.map(idName),

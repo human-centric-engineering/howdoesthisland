@@ -14,6 +14,10 @@
  * defaults, and checked again, under the request's own fields, against the
  * version each review runs with (`reviewDefaults`).
  *
+ * **The overlay** (t-72), a project's adjustment to the weights, is checked
+ * the same way: when written, against the latest version's bounds, and for
+ * each review against its version's (`lib/app/projects/overlay.ts`).
+ *
  * **Archived, not deleted.** `DELETE` sets `archivedAt`; the project's
  * reviews keep their link, and `PATCH { archived: false }` restores it. Rows
  * go only with their workspace (org erasure, cascade).
@@ -27,18 +31,21 @@ import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { DEFAULT_FRAMEWORK, versionToScore } from '@/lib/app/assessments/api/version';
 import {
   briefSchema,
+  overlayInputSchema,
   projectDefaultsSchema,
   type CreateProjectBody,
   type ProjectDefaults,
   type UpdateProjectBody,
 } from '@/lib/app/projects/validations';
 import type { ProjectView } from '@/lib/app/projects/wire';
+import { overlayToStore, type StoredOverlay } from '@/lib/app/projects/overlay';
 
 const projectSelect = {
   id: true,
   name: true,
   brief: true,
   defaults: true,
+  overlay: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -54,6 +61,12 @@ function asJson(value: unknown): z.infer<typeof jsonObject> {
   return jsonObject.parse(JSON.parse(JSON.stringify(value ?? {})));
 }
 
+/** The stored overlay as the API answers it: `{}`, the column's "none", is null. */
+function overlayOf(stored: unknown): Record<string, unknown> | null {
+  const overlay = overlayInputSchema.parse(stored);
+  return overlay && Object.keys(overlay).length > 0 ? overlay : null;
+}
+
 function projectView(row: ProjectRow): ProjectView {
   return {
     id: row.id,
@@ -62,6 +75,7 @@ function projectView(row: ProjectRow): ProjectView {
     brief: briefSchema.parse(row.brief),
     defaults: projectDefaultsSchema.parse(row.defaults),
     framework: row.framework.slug,
+    overlay: overlayOf(row.overlay),
     archived: row.archivedAt !== null,
     archivedAt: row.archivedAt,
     reviewCount: row._count.assessments,
@@ -86,12 +100,15 @@ function defaultsInvalid(issues: DefaultsIssue[]): APIError {
 }
 
 /**
- * Check `defaults` against `framework`'s latest published version: every id
- * in the context, and the profile. Throws 400 `DEFAULTS_INVALID` naming each
- * problem's path, or 404 when the framework has no published version.
+ * Check `defaults` against the framework's latest published version (as
+ * `versionToScore` resolved it, which is 404 when there is none): every id in
+ * the context, and the profile. Throws 400 `DEFAULTS_INVALID` naming each
+ * problem's path.
  */
-async function checkDefaults(framework: string, defaults: ProjectDefaults): Promise<void> {
-  const resolved = await versionToScore({ framework });
+function checkDefaultsWith(
+  resolved: Awaited<ReturnType<typeof versionToScore>>,
+  defaults: ProjectDefaults
+): void {
   const issues: DefaultsIssue[] = [];
   if (defaults.context !== undefined) {
     const parsed = resolved.engine.parseContext(defaults.context);
@@ -150,7 +167,9 @@ export async function createProject(body: CreateProjectBody, userId: string): Pr
   const framework = body.framework ?? DEFAULT_FRAMEWORK;
   const defaults = body.defaults ?? {};
   // First, so a framework with no published version is refused as such.
-  await checkDefaults(framework, defaults);
+  const resolved = await versionToScore({ framework });
+  checkDefaultsWith(resolved, defaults);
+  const overlay = overlayToStore(resolved.engine, body.overlay);
   const row = await prisma.framework.findUnique({
     where: { slug: framework },
     select: { id: true },
@@ -163,6 +182,7 @@ export async function createProject(body: CreateProjectBody, userId: string): Pr
       name: body.name,
       brief: asJson(body.brief),
       defaults: asJson(defaults),
+      ...(overlay ? { overlay } : {}),
       frameworkId: row.id,
       createdByUserId: userId,
     },
@@ -178,12 +198,23 @@ export async function updateProject(id: string, body: UpdateProjectBody): Promis
     select: { archivedAt: true, framework: { select: { slug: true } } },
   });
   if (!existing) throw new NotFoundError('Project not found');
-  if (body.defaults !== undefined) await checkDefaults(existing.framework.slug, body.defaults);
+  // An overlay of null clears it, which needs no version; anything else is
+  // checked against the latest, as the defaults are.
+  const checksOverlay = body.overlay !== undefined && body.overlay !== null;
+  const resolved =
+    body.defaults !== undefined || checksOverlay
+      ? await versionToScore({ framework: existing.framework.slug })
+      : null;
+  if (resolved && body.defaults !== undefined) checkDefaultsWith(resolved, body.defaults);
+  let overlay: StoredOverlay | null | undefined = body.overlay === null ? null : undefined;
+  if (resolved && checksOverlay) overlay = overlayToStore(resolved.engine, body.overlay);
 
   const data: Prisma.ProjectUpdateManyMutationInput = {
     ...(body.name !== undefined ? { name: body.name } : {}),
     ...(body.brief !== undefined ? { brief: asJson(body.brief) } : {}),
     ...(body.defaults !== undefined ? { defaults: asJson(body.defaults) } : {}),
+    // None is `{}`: the column is not nullable (`app.prisma`).
+    ...(overlay !== undefined ? { overlay: overlay ?? {} } : {}),
     // An archived one keeps when it was archived until it is restored.
     ...(body.archived === true && existing.archivedAt === null ? { archivedAt: new Date() } : {}),
     ...(body.archived === false ? { archivedAt: null } : {}),
@@ -208,6 +239,8 @@ export interface ReviewProject {
   /** The framework its reviews are scored with. */
   framework: string;
   defaults: ProjectDefaults;
+  /** Its adjustment to the weights (t-72), as stored, or null; checked against each review's version. */
+  overlay: Record<string, unknown> | null;
 }
 
 /**
@@ -219,7 +252,13 @@ export interface ReviewProject {
 export async function projectForReview(id: string): Promise<ReviewProject> {
   const row = await prisma.project.findFirst({
     where: { id, orgId: requireOrgId() },
-    select: { id: true, defaults: true, archivedAt: true, framework: { select: { slug: true } } },
+    select: {
+      id: true,
+      defaults: true,
+      overlay: true,
+      archivedAt: true,
+      framework: { select: { slug: true } },
+    },
   });
   if (!row)
     throw new APIError('There is no such project in this workspace.', 'PROJECT_NOT_FOUND', 404);
@@ -234,6 +273,7 @@ export async function projectForReview(id: string): Promise<ReviewProject> {
     id: row.id,
     framework: row.framework.slug,
     defaults: projectDefaultsSchema.parse(row.defaults),
+    overlay: overlayOf(row.overlay),
   };
 }
 

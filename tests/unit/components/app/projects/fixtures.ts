@@ -12,6 +12,7 @@ export function aProject(overrides: Partial<ProjectWire> = {}): ProjectWire {
     brief: { offer: 'Bookkeeping for sole traders', voice: 'Plain and warm' },
     defaults: {},
     framework: 'howdoesthisland',
+    overlay: null,
     archived: false,
     archivedAt: null,
     reviewCount: 3,

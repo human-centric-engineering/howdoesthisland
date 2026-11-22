@@ -78,6 +78,8 @@ const engine = {
   buildJudgeRequest: vi.fn(),
   outputSchema: vi.fn(),
   validateJudgeReply: vi.fn(),
+  parseOverlay: vi.fn((input: unknown) => ({ ok: true, overlay: input ?? null })),
+  withOverlay: vi.fn((): unknown => engine),
 };
 
 function reply(slot: string) {
@@ -500,6 +502,42 @@ describe('a judge that fails', () => {
     });
     expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
     expect(a.status).toBe('FAILED');
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
+});
+
+describe('a project’s weight adjustment (t-72)', () => {
+  it('scores with the overlay the assessment recorded', async () => {
+    const overlay = { weights: { ethos: 0.1 } };
+    const a = fake.seed({ overlay });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(engine.parseOverlay).toHaveBeenCalledWith(overlay);
+    expect(engine.withOverlay).toHaveBeenCalledWith(overlay);
+  });
+
+  it('builds no second engine for an assessment without one', async () => {
+    const a = fake.seed();
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(engine.withOverlay).not.toHaveBeenCalled();
+  });
+
+  it('fails, calling no judge, when the recorded overlay does not fit its version', async () => {
+    const a = fake.seed({ overlay: { weights: { ethos: 9 } } });
+    engine.parseOverlay.mockReturnValueOnce({
+      ok: false,
+      issues: [{ path: 'weights.ethos', message: 'too far' }],
+    });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+
+    expect(a).toMatchObject({
+      status: 'FAILED',
+      error: 'Its weight adjustment does not fit its framework version.',
+    });
     expect(mocks.runJudge).not.toHaveBeenCalled();
   });
 });

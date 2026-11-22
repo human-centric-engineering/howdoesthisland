@@ -209,6 +209,9 @@ model Assessment {
   judges             String[]
   /// Who the text is for (the engine's context), as validated at intake.
   context            Json
+  /// The project's adjustment to the weights it was scored with (t-72), as
+  /// checked against this version. Null for none.
+  overlay            Json?
   status             AssessmentStatus @default(QUEUED)
   /// The engine's `assemble()` output, once the run is final.
   result             Json?
@@ -594,6 +597,12 @@ model Project {
   brief           Json
   /// `{ context?, profile? }`, as given (lib/app/projects/validations.ts).
   defaults        Json
+  /// Its adjustment to the framework's weights (D5, t-72):
+  /// `{ weights?, priorityDimensions? }`, checked against the bounds the
+  /// version declares (lib/app/projects/overlay.ts). `{}` for none, which the
+  /// API answers as null: SQL NULL would need `Prisma.DbNull`, a runtime
+  /// Prisma import `lib/app/**` may not make (as `writeAppSettings`).
+  overlay         Json         @default("{}")
   frameworkId     String
   framework       Framework    @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
   archivedAt      DateTime?

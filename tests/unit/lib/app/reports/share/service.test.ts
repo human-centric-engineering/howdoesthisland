@@ -205,6 +205,7 @@ const detail = {
   completedAt: new Date('2026-11-10T10:01:00.000Z'),
   text: 'The copy.',
   context: { audience: 'exec', brief: 'internal pricing notes' },
+  overlay: null,
   result: storedResult(),
   judgeRuns: [
     {
@@ -378,6 +379,7 @@ describe('readSharedReport', () => {
         createdAt: detail.createdAt,
         completedAt: detail.completedAt,
         text: 'The copy.',
+        overlay: null,
         result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
       },

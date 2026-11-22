@@ -22,6 +22,8 @@ import type {
   ReportResult,
 } from '@/lib/app/reports/input';
 import { sharesOf } from '@/lib/app/reports/shares';
+import { overlayShapeSchema } from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
+import { APPEALS } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 
 export const APPEAL_IDS = ['ethos', 'pathos', 'logos', 'kairos'] as const;
 
@@ -102,6 +104,12 @@ export interface ReportView {
     date: string;
     framework: string;
     wordCount: number;
+    /**
+     * The project's adjustment to the weights it was scored with (t-72), one
+     * phrase per change ("Ethos +10 points", "Integrity added as a
+     * priority"), or `null` when none applied.
+     */
+    weighting: string[] | null;
   };
   verdict: {
     overall: number;
@@ -242,6 +250,33 @@ function formatSeconds(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Points of the mix, signed: `+10 points`, `−5 points`. */
+function signedPoints(share: number): string {
+  const p = +(share * 100).toFixed(1);
+  return `${p > 0 ? '+' : '−'}${Math.abs(p)} point${Math.abs(p) === 1 ? '' : 's'}`;
+}
+
+/**
+ * The overlay as the cover names it, or `null` for none. An overlay this
+ * report cannot read (another framework's shape) is named as an adjustment
+ * without its detail, rather than hidden: the scores were still weighted by it.
+ */
+function weightingOf(overlay: unknown, appeals: Names, dims: Names): string[] | null {
+  if (overlay === null || overlay === undefined) return null;
+  const parsed = overlayShapeSchema.safeParse(overlay);
+  if (!parsed.success) return ['Adjusted for this project'];
+  const { weights, priorityDimensions } = parsed.data;
+  const out: string[] = [];
+  for (const a of APPEALS) {
+    const d = weights?.[a];
+    if (d) out.push(`${nameIn(appeals, a)} ${signedPoints(d)}`);
+  }
+  for (const id of priorityDimensions?.add ?? []) out.push(`${nameIn(dims, id)} made a priority`);
+  for (const id of priorityDimensions?.remove ?? [])
+    out.push(`${nameIn(dims, id)} no longer a priority`);
+  return out.length > 0 ? out : null;
 }
 
 export interface BuildReportInput {
@@ -496,6 +531,7 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
       date: assessment.completedAt ?? assessment.createdAt,
       framework: `${model.meta.name} ${model.meta.version}`,
       wordCount: assessment.wordCount,
+      weighting: weightingOf(assessment.overlay, appeals, dims),
     },
     verdict: { overall: result.scores.overall, band: result.scores.band, editor },
     lands: {
