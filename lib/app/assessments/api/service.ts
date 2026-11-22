@@ -75,6 +75,7 @@ const INPUT_ERRORS: Record<AssessmentInputErrorCode, { code: string; status: num
   content_too_long: { code: 'TEXT_TOO_LONG', status: 422 },
   version_not_found: { code: 'FRAMEWORK_VERSION_NOT_FOUND', status: 404 },
   profile_unknown: { code: 'PROFILE_UNKNOWN', status: 400 },
+  project_archived: { code: 'PROJECT_ARCHIVED', status: 409 },
 };
 
 /** An `AssessmentInputError` as the `APIError` a route answers with; anything else as it is. */
@@ -198,9 +199,14 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
   const resolved = await versionToScore(frameworkChoice(body, project));
   // The project's defaults under the request's own fields (t-70), checked
   // against this version as any context is.
-  const ctx = contextFor(resolved, mergeContext(project?.defaults.context, body.context));
-  const profile: JudgeProfile = body.judges ?? body.profile ?? project?.defaults.profile ?? 'full';
-  const judges = judgesFor(resolved, profile);
+  const ctx = fromProjectDefaults(project?.defaults.context !== undefined, () =>
+    contextFor(resolved, mergeContext(project?.defaults.context, body.context))
+  );
+  const ownProfile = body.judges ?? body.profile;
+  const profile: JudgeProfile = ownProfile ?? project?.defaults.profile ?? 'full';
+  const judges = fromProjectDefaults(ownProfile === undefined && project !== null, () =>
+    judgesFor(resolved, profile)
+  );
   // Pasted text can be refused now; a page or a file only once it is read.
   if ('text' in body.source) {
     const { text } = body.source;
@@ -214,6 +220,25 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     body.store !== false
   );
   return { resolved, projectId: project?.id ?? null, ctx, profile, judges, hold: null, rate };
+}
+
+/**
+ * Run `check`; when it refuses and the project's defaults took part, say so,
+ * since the caller may be refused for ids they never sent: defaults are checked
+ * against the framework's latest version when saved, not every version (t-70).
+ */
+function fromProjectDefaults<T>(involved: boolean, check: () => T): T {
+  try {
+    return check();
+  } catch (err) {
+    if (!involved || !(err instanceof APIError)) throw err;
+    throw new APIError(
+      `${err.message} The project's defaults are part of this request: check them against this version.`,
+      err.code,
+      err.status,
+      { ...err.details, fromProjectDefaults: true }
+    );
+  }
 }
 
 /**

@@ -11,7 +11,9 @@ export type AssessmentInputErrorCode =
   /** No published framework version has that id. */
   | 'version_not_found'
   /** The profile, or a judge in an explicit list, is unknown or switched off. */
-  | 'profile_unknown';
+  | 'profile_unknown'
+  /** The project it is in was archived after the request was checked (t-70). */
+  | 'project_archived';
 
 export class AssessmentInputError extends Error {
   readonly code: AssessmentInputErrorCode;

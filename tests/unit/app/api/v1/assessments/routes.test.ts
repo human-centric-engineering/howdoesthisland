@@ -69,8 +69,13 @@ vi.mock('@/lib/db/client', () => ({
       judgeRun: { ...fake.db.judgeRun, findMany: vi.fn(async () => []) },
       project: {
         findFirst: vi.fn(
-          async ({ where }: { where: { id: string; orgId: string } }) =>
-            mocks.projects.find((p) => p.id === where.id && p.orgId === where.orgId) ?? null
+          async ({ where }: { where: { id: string; orgId: string; archivedAt?: null } }) =>
+            mocks.projects.find(
+              (p) =>
+                p.id === where.id &&
+                p.orgId === where.orgId &&
+                (where.archivedAt === undefined || p.archivedAt === null)
+            ) ?? null
         ),
       },
     };
@@ -683,6 +688,8 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
       ...over,
     };
     mocks.projects.push(row);
+    // The enqueue transaction runs on the fake, and checks the project again.
+    fake.projects.push(row);
     return row;
   }
 
@@ -752,6 +759,47 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
     expect(await code(res)).toEqual({ status, code: expected });
     expect(fake.assessments).toHaveLength(0);
     expect(fake.contents).toHaveLength(0);
+  });
+
+  it('says when the project’s defaults, not the request, are what the version refuses', async () => {
+    project({ defaults: { context: { contentType: 'retired_type' } } });
+    const fromContext = await json(await post({ source: { text: TEXT }, projectId: 'project-1' }));
+    expect(fromContext.error).toMatchObject({
+      code: 'CONTEXT_INVALID',
+      message: expect.stringContaining("project's defaults"),
+      details: expect.objectContaining({ fromProjectDefaults: true, issues: expect.any(Array) }),
+    });
+
+    mocks.projects.length = 0;
+    fake.projects.length = 0;
+    project({ defaults: { profile: 'everything' } });
+    const fromProfile = await json(await post({ source: { text: TEXT }, projectId: 'project-1' }));
+    expect(fromProfile.error).toMatchObject({
+      code: 'PROFILE_UNKNOWN',
+      details: { fromProjectDefaults: true },
+    });
+  });
+
+  it('answers 409 PROJECT_ARCHIVED for a project archived after the first check', async () => {
+    project();
+    // The write's own check sees it archived, as after a slow page fetch.
+    const at = fake.projects.findIndex((p) => p.id === 'project-1');
+    fake.projects[at] = { ...fake.projects[at], archivedAt: new Date() };
+
+    const res = await post({ source: { text: TEXT }, projectId: 'project-1' });
+
+    expect(await code(res)).toEqual({ status: 409, code: 'PROJECT_ARCHIVED' });
+    expect(fake.assessments).toHaveLength(0);
+    expect(fake.contents).toHaveLength(0);
+  });
+
+  it('does not blame the project for a profile the request named itself', async () => {
+    project();
+    const res = await json(
+      await post({ source: { text: TEXT }, projectId: 'project-1', profile: 'everything' })
+    );
+    expect(res.error?.code).toBe('PROFILE_UNKNOWN');
+    expect(res.error?.details?.fromProjectDefaults).toBeUndefined();
   });
 
   it('lists only a project’s reviews when asked', async () => {
