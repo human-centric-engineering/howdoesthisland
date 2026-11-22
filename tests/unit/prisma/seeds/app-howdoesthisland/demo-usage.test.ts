@@ -46,7 +46,9 @@ function makeDb(
   const db = {
     frameworkVersion: {
       findFirst: vi.fn(async () =>
-        opts.version === false ? null : { id: 'fv1', version: '1.0.0', framework: { slug: 'hdtl' } }
+        opts.version === false
+          ? null
+          : { id: 'fv1', version: '1.0.0', framework: { id: 'fw1', slug: 'hdtl' } }
       ),
     },
     org: {
@@ -65,13 +67,20 @@ function makeDb(
       ),
     },
     orgMembership: { upsert: vi.fn(async () => ({})) },
+    project: {
+      upsert: vi.fn(
+        async (_args: { create: Record<string, unknown>; update: Record<string, unknown> }) => ({})
+      ),
+    },
     assessment: {
       deleteMany: vi.fn(async () => ({ count: 0 })),
       create: vi.fn(async () => ({ id: `a${++assessments}` })),
     },
     content: {
       deleteMany: vi.fn(async () => ({ count: 0 })),
-      create: vi.fn(async () => ({ id: `c${assessments + 1}` })),
+      create: vi.fn(async (_args: { data: { projectId: string | null } }) => ({
+        id: `c${assessments + 1}`,
+      })),
     },
     aiCostLog: {
       deleteMany: vi.fn(async () => ({ count: 0 })),
@@ -200,6 +209,27 @@ describe('002-demo-usage', () => {
     expect(
       costs.filter((r) => r.metadata.assessmentId === undefined && !r.metadata.ephemeral)
     ).toHaveLength(1);
+  });
+
+  it('makes, in the demo workspace, every project its reviews are in (t-70)', async () => {
+    const { ctx, db } = makeDb();
+
+    await unit.run(ctx);
+
+    const made = db.project.upsert.mock.calls.map(([args]) => args);
+    expect(made.map((args) => args.create)).toEqual([
+      expect.objectContaining({ id: 'demo-launch', orgId: ORG, frameworkId: 'fw1' }),
+      expect.objectContaining({ id: 'demo-help-centre', orgId: ORG, frameworkId: 'fw1' }),
+    ]);
+    // An edit someone made to a demo project since is kept.
+    expect(made.every((args) => Object.keys(args.update).length === 0)).toBe(true);
+    // Every project a review names is one it made, so the foreign key holds.
+    const named = new Set(
+      db.content.create.mock.calls.flatMap(([args]) =>
+        args.data.projectId ? [args.data.projectId] : []
+      )
+    );
+    expect(named).toEqual(new Set(['demo-launch', 'demo-help-centre']));
   });
 
   it('warns that the workspace has no members when no human platform admin exists yet', async () => {

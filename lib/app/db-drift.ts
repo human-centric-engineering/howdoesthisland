@@ -125,4 +125,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_review_code_redemption',
     probe: constraintExists('app_review_code_redemption_userId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-70: the hand-written FK from a project to its maker. SET NULL: the
+  // project is the workspace's and outlives its maker's erasure.
+  registerAppDriftProbe({
+    name: 'app_project_createdByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_project',
+    probe: constraintExists('app_project_createdByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

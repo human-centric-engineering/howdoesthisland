@@ -20,8 +20,8 @@ import { readAppSettings, writeAppSettings } from '@/lib/app/workspaces/app-sett
  * (`app-howdoesthisland/002-demo-usage`) and seed again.
  *
  * **What it writes**, in its own workspace (`usage-demo`, "Usage demo") with
- * the default $10 budget when it is made, every human platform admin its `OWNER`: stored
- * reviews in two projects and in none, each with its judges' and the
+ * the default $10 budget when it is made, every human platform admin its `OWNER`: two
+ * projects, stored reviews in them and in none, each with its judges' and the
  * editor's cost rows; two reviews kept nowhere (`ephemeral` rows only); and
  * one row that is no review. All dated between the first of this month (UTC)
  * and now, about $5.80 in all.
@@ -61,6 +61,20 @@ const REVIEWS: ReadonlyArray<{ projectId: string | null; retried: boolean }> = [
   { projectId: null, retried: false },
 ];
 
+/** The demo's projects, which {@link REVIEWS} name by id. */
+const PROJECTS = [
+  {
+    id: 'demo-launch',
+    name: 'Product launch',
+    brief: { offer: 'A budgeting app for freelancers', audience: 'Freelancers paid by invoice' },
+  },
+  {
+    id: 'demo-help-centre',
+    name: 'Help centre',
+    brief: { offer: 'Help articles for the budgeting app', audience: 'People using the app' },
+  },
+] as const;
+
 const EPHEMERAL_RUNS = 2;
 
 function shouldRun(): boolean {
@@ -78,7 +92,7 @@ const unit: SeedUnit = {
     const version = await prisma.frameworkVersion.findFirst({
       where: { status: 'PUBLISHED' },
       orderBy: { publishedAt: 'desc' },
-      select: { id: true, version: true, framework: { select: { slug: true } } },
+      select: { id: true, version: true, framework: { select: { id: true, slug: true } } },
     });
     if (!version) {
       logger.warn('Demo usage skipped: no published framework version to review against');
@@ -138,6 +152,23 @@ const unit: SeedUnit = {
       await prisma.assessment.deleteMany({ where: { orgId } });
       await prisma.content.deleteMany({ where: { orgId } });
       await prisma.aiCostLog.deleteMany({ where: { orgId } });
+
+      // The projects the reviews are in (t-70). Fixed ids, so a second run
+      // finds them; one someone has edited since is left as it is.
+      for (const project of PROJECTS) {
+        await prisma.project.upsert({
+          where: { id: project.id },
+          update: {},
+          create: {
+            id: project.id,
+            orgId,
+            name: project.name,
+            brief: project.brief,
+            defaults: {},
+            frameworkId: version.framework.id,
+          },
+        });
+      }
 
       const costRow = (
         createdAt: Date,
