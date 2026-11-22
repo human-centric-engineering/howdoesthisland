@@ -288,7 +288,9 @@ Each route's docblock lists its error codes. A few rules hold across them:
 - **`store: false`** is synchronous only (`wait: false` with it is a 400). It
   runs the quick scan and `runJudges` with no rows, so no `Content`,
   `Assessment` or `JudgeRun` is written; only the judges' cost rows, marked
-  `ephemeral`. The answer has `stored: false` and no id. A text the
+  `ephemeral`. The answer has `stored: false` and no id. In a project it
+  takes the project's defaults but is not recorded against it: it is not in
+  the project's `reviewCount` or its list, and its cost is not on the project. A text the
   framework cannot score (its quick scan or `assemble()` throwing) is 422
   `NOT_SCORABLE`, with what the judges had spent in `details.costUsd`: the
   stored run's `failed`, with no row to record it on.

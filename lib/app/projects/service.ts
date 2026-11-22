@@ -188,6 +188,9 @@ export async function updateProject(id: string, body: UpdateProjectBody): Promis
     ...(body.archived === true && existing.archivedAt === null ? { archivedAt: new Date() } : {}),
     ...(body.archived === false ? { archivedAt: null } : {}),
   };
+  // Nothing to write (archiving an archived project): skip the write, since
+  // an `updateMany` with empty data can report `count: 0` for a row that exists.
+  if (Object.keys(data).length === 0) return getProject(id);
   // `updateMany` so the org is in the write's own filter, not only the read's.
   const { count } = await prisma.project.updateMany({ where: { id, orgId }, data });
   if (count === 0) throw new NotFoundError('Project not found');

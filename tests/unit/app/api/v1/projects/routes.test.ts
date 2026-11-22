@@ -438,8 +438,13 @@ describe('GET, PATCH and DELETE /api/v1/projects/{id}', () => {
     const when = projects.rows[0]?.archivedAt;
     expect(when).toBeInstanceOf(Date);
 
-    // Archiving again changes nothing.
-    await archive(id);
+    // Archiving again changes nothing, and writes nothing: an empty
+    // `updateMany` can report `count: 0`, which would turn this into a 404.
+    projects.updateMany.mockClear();
+    const again = await archive(id);
+    expect(again.status).toBe(200);
+    expect((await json(again)).data).toMatchObject({ archived: true });
+    expect(projects.updateMany).not.toHaveBeenCalled();
     expect(projects.rows[0]?.archivedAt).toBe(when);
 
     const restored = await json(await change(id, { archived: false }));
