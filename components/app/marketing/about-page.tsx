@@ -43,13 +43,36 @@ function Band({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
-function Split({ heading, children }: { heading: string; children: React.ReactNode }) {
+/**
+ * A heading beside its text, on one grid for every such band on the page, so
+ * the text column starts in the same place each time. Aligned on the first
+ * line's baseline, so the heading and the first line of text sit level.
+ */
+const SPLIT_GRID =
+  'grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-baseline lg:gap-8';
+
+function Split({
+  heading,
+  italic = false,
+  children,
+}: {
+  heading: string;
+  /** The story's heading is set as a line of italic prose, not a bold head. */
+  italic?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <Band className="grid items-start gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-      <h2 className="max-w-[16ch] text-3xl leading-[1.05] font-bold sm:text-4xl">{heading}</h2>
-      <div className="max-w-[60ch] space-y-4 leading-relaxed text-(--hd-muted) lg:pt-1">
-        {children}
-      </div>
+    <Band className={SPLIT_GRID}>
+      <h2
+        className={
+          italic
+            ? 'max-w-[18ch] font-sans text-3xl leading-[1.12] italic sm:text-4xl'
+            : 'max-w-[16ch] text-3xl leading-[1.05] font-bold sm:text-4xl'
+        }
+      >
+        {heading}
+      </h2>
+      <div className="max-w-[60ch] space-y-4 leading-relaxed text-(--hd-muted)">{children}</div>
     </Band>
   );
 }
@@ -64,15 +87,10 @@ export default function AboutPage() {
           <p className="mt-6 max-w-[54ch] text-lg leading-relaxed text-(--hd-muted)">{C.sub}</p>
         </Band>
 
-        <Band className="grid items-start gap-8 lg:grid-cols-2">
-          <h2 className="max-w-[18ch] font-sans text-3xl leading-[1.12] italic sm:text-4xl">
-            {C.storyH}
-          </h2>
-          <div className="max-w-[56ch] space-y-4 leading-relaxed text-(--hd-muted) lg:pt-2">
-            <p>{C.story}</p>
-            <p className="text-(--hd-ink)">{C.story2}</p>
-          </div>
-        </Band>
+        <Split heading={C.storyH} italic>
+          <p>{C.story}</p>
+          <p className="text-(--hd-ink)">{C.story2}</p>
+        </Split>
 
         <Split heading={C.perceiveH}>
           <p>{C.perceive}</p>
@@ -99,8 +117,8 @@ export default function AboutPage() {
         </Band>
 
         <Band>
-          <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-            <h2 className="max-w-[14ch] text-3xl leading-[1.05] font-bold sm:text-4xl">
+          <div className={SPLIT_GRID}>
+            <h2 className="max-w-[16ch] text-3xl leading-[1.05] font-bold sm:text-4xl">
               {C.layerH}
             </h2>
             <p className="max-w-[60ch] leading-relaxed text-(--hd-muted)">{C.layer}</p>
