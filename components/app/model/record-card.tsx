@@ -52,7 +52,7 @@ export function shortTitle(record: BrowseRecord): string {
 
 function isEmpty(value: unknown): boolean {
   if (value === null || value === undefined || value === '') return true;
-  if (Array.isArray(value)) return value.length === 0;
+  if (Array.isArray(value)) return value.every(isEmpty);
   if (isJsonObject(value)) return Object.values(value).every(isEmpty);
   return false;
 }

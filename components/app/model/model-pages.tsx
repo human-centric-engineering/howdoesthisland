@@ -27,6 +27,7 @@ export const MODEL_COPY = {
   start:
     'Start with the appeals for the shape of it, or with the limitations to see what not to rely on.',
   empty: 'The model has not been published here yet.',
+  sections: 'Its sections',
   also: 'Also in the model',
 } as const;
 
@@ -145,13 +146,24 @@ function ApiLine({ loaded }: { loaded: LoadedModel }) {
 // The index
 // ---------------------------------------------------------------------------
 
+/**
+ * The one URL search engines should index for a version's page: `/model/…`
+ * for the latest, which is also served at `/model/v/{latest}/…`, and the
+ * pinned URL for any other version.
+ */
+function canonical(loaded: LoadedModel, path = ''): string {
+  const { version, latestVersion } = loaded;
+  return `${version.version === latestVersion ? MODEL_BASE : versionBase(version.version)}${path}`;
+}
+
 export async function modelIndexMetadata(version?: string): Promise<Metadata> {
   // A version is named only once it is known to exist, so a 404 never echoes the URL.
-  const known = version !== undefined && (await loadModel(version)) !== null;
-  const title = known ? `The model, version ${version}` : 'The model';
+  const loaded = await loadModel(version);
+  const title = version !== undefined && loaded ? `The model, version ${version}` : 'The model';
   return {
     title,
     description,
+    ...(loaded ? { alternates: { canonical: canonical(loaded) } } : {}),
     openGraph: { title, description },
     twitter: { card: 'summary_large_image', title, description },
   };
@@ -192,6 +204,7 @@ export async function ModelIndexPage({ version }: { version?: string }) {
       </Band>
 
       <Band>
+        <h2 className="sr-only">{MODEL_COPY.sections}</h2>
         <p className="max-w-[60ch] leading-relaxed">{MODEL_COPY.start}</p>
         <ul className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-3" data-testid="model-featured">
           {featured.map((s) => (
@@ -220,7 +233,7 @@ export async function ModelIndexPage({ version }: { version?: string }) {
               <Link
                 href={versionBase(v.version)}
                 className="underline underline-offset-4"
-                aria-current={v.version === loaded.version.version ? 'page' : undefined}
+                aria-current={versionBase(v.version) === base ? 'page' : undefined}
               >
                 Version {v.version}
               </Link>
@@ -254,7 +267,7 @@ async function loadSection(segment: string, version?: string) {
 export async function modelSectionMetadata(segment: string, version?: string): Promise<Metadata> {
   const loaded = await loadModel(version);
   const section = loaded?.browse.section(segment);
-  if (!section) return { title: 'The model' };
+  if (!loaded || !section) return { title: 'The model' };
   const copy = sectionCopy(section.key);
   const title = version
     ? `${copy.title}: the model, version ${version}`
@@ -263,6 +276,7 @@ export async function modelSectionMetadata(segment: string, version?: string): P
   return {
     title,
     description: desc,
+    alternates: { canonical: canonical(loaded, `/${section.segment}`) },
     openGraph: { title, description: desc },
     twitter: { card: 'summary_large_image', title, description: desc },
   };

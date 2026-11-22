@@ -228,6 +228,40 @@ describe('versions', () => {
     expect((await sectionMetadata(params({ section: 'nope' }))).title).toBe('The model');
   });
 
+  it('points search engines at /model for the latest, wherever it is served, and at the pin for an older one', async () => {
+    serve(
+      version('0.6.0', 'PUBLISHED', '2026-12-01T10:00:00Z'),
+      version('0.5.1', 'PUBLISHED', '2026-11-12T21:50:46Z')
+    );
+    expect((await indexMetadata()).alternates?.canonical).toBe('/model');
+    expect((await versionIndexMetadata(params({ version: '0.6.0' }))).alternates?.canonical).toBe(
+      '/model'
+    );
+    expect(
+      (await versionSectionMetadata(params({ version: '0.6.0', section: 'moves' }))).alternates
+        ?.canonical
+    ).toBe('/model/moves');
+    expect(
+      (await versionSectionMetadata(params({ version: '0.5.1', section: 'moves' }))).alternates
+        ?.canonical
+    ).toBe('/model/v/0.5.1/moves');
+  });
+
+  it('marks the version list’s current page only on the URL being shown', async () => {
+    const latest = await html(ModelIndex());
+    expect(latest.querySelector('[aria-current="page"]')).toBeNull();
+    const pinned = await html(VersionIndex(params({ version: '0.5.1' })));
+    expect(pinned.querySelector('[aria-current="page"]')?.getAttribute('href')).toBe(
+      '/model/v/0.5.1'
+    );
+  });
+
+  it('has an h2 between the h1 and the section titles', async () => {
+    const index = await html(ModelIndex());
+    const levels = [...index.querySelectorAll('h1, h2, h3')].map((h) => h.tagName);
+    expect(levels.indexOf('H2')).toBeLessThan(levels.indexOf('H3'));
+  });
+
   it('names no version in the title of a version that does not exist', async () => {
     expect((await versionIndexMetadata(params({ version: 'anything-you-like' }))).title).toBe(
       'The model'
