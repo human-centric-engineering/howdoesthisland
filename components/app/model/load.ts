@@ -66,7 +66,9 @@ const framework = cache(async (): Promise<FrameworkDetail | null> => {
  */
 export const loadModel = cache(async (version?: string): Promise<LoadedModel | null> => {
   const fw = await framework();
-  const wanted = version ?? fw?.latestVersion ?? null;
+  // With every version retired there is no latest, but the newest retired one
+  // is still the model reviews cite, so `/model` shows it, marked retired.
+  const wanted = version ?? fw?.latestVersion ?? fw?.versions[0]?.version ?? null;
   if (!fw || !wanted) return null;
 
   let resolved;

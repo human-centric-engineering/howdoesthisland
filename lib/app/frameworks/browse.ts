@@ -10,20 +10,28 @@
  * `components/app/model/presentation.ts`, and every one of them has a fallback.
  *
  * - **A section is a top-level part of the model file** (`dimensions`,
- *   `knowledge_refs`), holding the collections whose path starts there. Its
- *   URL segment is its name with hyphens. A nested kind (a perspective's
- *   levers) is shown inside its parents, on its parents' section.
+ *   `knowledge_refs`, `scoring`), holding the collections whose path starts
+ *   there, and its other fields as one record of kind `section:<name>`, so
+ *   nothing in the model is left off the pages. Its URL segment is its name
+ *   with hyphens. A nested kind (a perspective's levers) is shown inside its
+ *   parents, on its parents' section.
  * - **A link is a declared reference** (`definition.references`) that
  *   resolves, or a field named after a kind (`appeal`, `group`) whose value is
- *   the id of a record of that kind. Only ids that resolve become links, so a
- *   link always lands on a record that is on the page it points to.
+ *   the id of a record of that kind. Links are kept per top-level field, so an
+ *   id is a link only in the field that refers to it. Only ids that resolve
+ *   become links, so a link always lands on a record on the page it names.
  * - **An anchor is the record's id**, unless two records on one section's page
  *   share an id, when both take their kind as a prefix.
  *
  * Pure: it reads only the materialised model it is given.
  */
 import { isJsonObject } from '@/lib/app/frameworks/codec';
-import type { CollectionSpec, FrameworkDefinition, JsonObject } from '@/lib/app/frameworks/types';
+import {
+  SECTION_KIND,
+  type CollectionSpec,
+  type FrameworkDefinition,
+  type JsonObject,
+} from '@/lib/app/frameworks/types';
 
 export interface BrowseRecord {
   kind: string;
@@ -58,8 +66,11 @@ export interface BrowseSection {
 export interface BrowseModel {
   sections: BrowseSection[];
   section(segment: string): BrowseSection | null;
-  /** The records a record links to, by the id each one was named with. */
-  links(record: BrowseRecord): ReadonlyMap<string, BrowseRecord>;
+  /**
+   * The records a record links to: by the top-level field that names them,
+   * then by the id it names each one with.
+   */
+  links(record: BrowseRecord): ReadonlyMap<string, ReadonlyMap<string, BrowseRecord>>;
   /** The records that link to this one, in model order. */
   referencedBy(record: BrowseRecord): readonly BrowseRecord[];
   /** Every record, nested ones included, in model order. */
@@ -144,15 +155,38 @@ export function buildBrowseModel(
     section.kinds.push({ kind: spec.kind, records, nestedKind: nested?.kind ?? null });
   };
 
-  for (const spec of def.collections) {
-    const key = spec.path[0];
+  // Sections in the definition's order, which is the file's. A section's
+  // fields that are not collections (all of `scoring`; `culture`'s note) are
+  // one record of their own, shown first, so the pages hold the whole model.
+  const keys = [
+    ...new Set([...Object.keys(def.sections), ...def.collections.map((c) => c.path[0])]),
+  ];
+  for (const key of keys) {
     if (withheld.has(key)) continue;
-    let section = sections.find((s) => s.key === key);
-    if (!section) {
-      section = { key, segment: sectionSegment(key), kinds: [] };
-      sections.push(section);
+    const section: BrowseSection = { key, segment: sectionSegment(key), kinds: [] };
+    const specs = def.collections.filter((c) => c.path[0] === key);
+    for (const spec of specs) addCollection(spec, section);
+
+    const value = model[key];
+    if (isJsonObject(value)) {
+      const taken = new Set(specs.map((c) => c.path[1]));
+      const rest = Object.fromEntries(Object.entries(value).filter(([k]) => !taken.has(k)));
+      if (Object.keys(rest).length > 0) {
+        // Built directly: a section's own `id` field (meta has one) stays an attribute.
+        const record: BrowseRecord = {
+          kind: `${SECTION_KIND}:${key}`,
+          id: key,
+          section: key,
+          anchor: key,
+          attributes: rest,
+          parentId: null,
+          children: [],
+        };
+        index(record);
+        section.kinds.unshift({ kind: record.kind, records: [record], nestedKind: null });
+      }
     }
-    addCollection(spec, section);
+    if (section.kinds.length > 0) sections.push(section);
   }
 
   // Anchors: the id, unless it is not unique on its section's page.
@@ -171,12 +205,17 @@ export function buildBrowseModel(
     return null;
   };
 
-  const links = new Map<BrowseRecord, Map<string, BrowseRecord>>();
+  // Links are kept per field, so an id is a link only in the field that
+  // refers to it, and two fields naming different records by the same id
+  // each keep their own.
+  const links = new Map<BrowseRecord, Map<string, Map<string, BrowseRecord>>>();
   const backlinks = new Map<BrowseRecord, BrowseRecord[]>();
-  const link = (from: BrowseRecord, id: string, to: BrowseRecord | null) => {
+  const link = (from: BrowseRecord, field: string, id: string, to: BrowseRecord | null) => {
     if (!to || to === from) return;
-    let out = links.get(from);
-    if (!out) links.set(from, (out = new Map<string, BrowseRecord>()));
+    let byField = links.get(from);
+    if (!byField) links.set(from, (byField = new Map<string, Map<string, BrowseRecord>>()));
+    let out = byField.get(field);
+    if (!out) byField.set(field, (out = new Map<string, BrowseRecord>()));
     if (out.has(id)) return;
     out.set(id, to);
     let back = backlinks.get(to);
@@ -186,17 +225,18 @@ export function buildBrowseModel(
 
   const kinds = new Set(byKind.keys());
   for (const record of all) {
-    // Declared references.
-    for (const ref of def.references) {
-      if (ref.from !== record.kind) continue;
-      for (const id of idsIn(ref.pick(record.attributes)))
-        link(record, id, resolve(id, ref.targets));
-    }
-    // A field named after a kind, holding ids of that kind (`appeal`, `group`).
     for (const [field, value] of Object.entries(record.attributes)) {
-      const kind = kinds.has(field) ? field : null;
-      if (!kind || field === 'id') continue;
-      for (const id of idsIn(value)) link(record, id, resolve(id, [kind]));
+      // Declared references, each read from this one field alone.
+      for (const ref of def.references) {
+        if (ref.from !== record.kind) continue;
+        for (const id of idsIn(ref.pick({ [field]: value }))) {
+          link(record, field, id, resolve(id, ref.targets));
+        }
+      }
+      // A field named after a kind, holding ids of that kind (`appeal`, `group`).
+      if (kinds.has(field)) {
+        for (const id of idsIn(value)) link(record, field, id, resolve(id, [field]));
+      }
     }
   }
 
@@ -217,5 +257,5 @@ export function buildBrowseModel(
 
 /** Where a record is shown: its section's page, at its anchor. */
 export function recordHref(base: string, record: BrowseRecord): string {
-  return `${base}/${sectionSegment(record.section)}#${record.anchor}`;
+  return `${base}/${sectionSegment(record.section)}#${encodeURIComponent(record.anchor)}`;
 }

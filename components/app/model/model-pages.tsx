@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import type { BrowseKind, BrowseSection } from '@/lib/app/frameworks/browse';
+import { SECTION_KIND } from '@/lib/app/frameworks/types';
 import { RecordCard, recordTitle } from '@/components/app/model/record-card';
 import { loadModel, MODEL_BASE, versionBase, type LoadedModel } from '@/components/app/model/load';
 import { FEATURED_SECTIONS, kindLabel, sectionCopy } from '@/components/app/model/presentation';
@@ -89,6 +90,7 @@ function VersionLine({ loaded }: { loaded: LoadedModel }) {
 function countLine(section: BrowseSection): string {
   const parts: string[] = [];
   for (const k of section.kinds) {
+    if (k.kind.startsWith(`${SECTION_KIND}:`)) continue;
     parts.push(
       `${k.records.length} ${kindLabel(k.kind, k.records.length === 1 ? 'one' : 'many').toLowerCase()}`
     );
@@ -109,7 +111,11 @@ function SectionLink({ section, base }: { section: BrowseSection; base: string }
           {copy.title}
         </Link>
       </h3>
-      <p className="mt-1 text-xs tracking-wide text-(--hd-muted) uppercase">{countLine(section)}</p>
+      {countLine(section) && (
+        <p className="mt-1 text-xs tracking-wide text-(--hd-muted) uppercase">
+          {countLine(section)}
+        </p>
+      )}
       {copy.intro && <p className="mt-2 text-sm leading-relaxed text-(--hd-muted)">{copy.intro}</p>}
     </li>
   );
@@ -139,8 +145,10 @@ function ApiLine({ loaded }: { loaded: LoadedModel }) {
 // The index
 // ---------------------------------------------------------------------------
 
-export function modelIndexMetadata(version?: string): Metadata {
-  const title = version ? `The model, version ${version}` : 'The model';
+export async function modelIndexMetadata(version?: string): Promise<Metadata> {
+  // A version is named only once it is known to exist, so a 404 never echoes the URL.
+  const known = version !== undefined && (await loadModel(version)) !== null;
+  const title = known ? `The model, version ${version}` : 'The model';
   return {
     title,
     description,
@@ -285,7 +293,7 @@ function KindBlock({
             {kind.records.map((r) => (
               <li key={r.anchor}>
                 <a
-                  href={`#${r.anchor}`}
+                  href={`#${encodeURIComponent(r.anchor)}`}
                   className="inline-flex min-h-9 items-center rounded-full border border-(--hd-rule) px-3 text-sm hover:border-(--hd-ink)"
                 >
                   {recordTitle(r).length > 48 ? `${recordTitle(r).slice(0, 46)}…` : recordTitle(r)}
@@ -335,7 +343,11 @@ export async function ModelSectionPage({
       </Band>
       {section.kinds.map((kind) => (
         <Band key={kind.kind}>
-          <KindBlock kind={kind} loaded={loaded} withHeading={several} />
+          <KindBlock
+            kind={kind}
+            loaded={loaded}
+            withHeading={several && !kind.kind.startsWith(`${SECTION_KIND}:`)}
+          />
         </Band>
       ))}
       <Band>

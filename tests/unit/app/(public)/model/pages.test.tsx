@@ -218,7 +218,7 @@ describe('versions', () => {
   });
 
   it('names the version in a pinned page’s metadata, and the latest without one', async () => {
-    expect(indexMetadata().title).toBe('The model');
+    expect((await indexMetadata()).title).toBe('The model');
     expect((await versionIndexMetadata(params({ version: '0.5.1' }))).title).toBe(
       'The model, version 0.5.1'
     );
@@ -226,6 +226,21 @@ describe('versions', () => {
       (await versionSectionMetadata(params({ version: '0.5.1', section: 'moves' }))).title
     ).toBe('Moves: the model, version 0.5.1');
     expect((await sectionMetadata(params({ section: 'nope' }))).title).toBe('The model');
+  });
+
+  it('names no version in the title of a version that does not exist', async () => {
+    expect((await versionIndexMetadata(params({ version: 'anything-you-like' }))).title).toBe(
+      'The model'
+    );
+  });
+
+  it('shows the newest retired version at /model when every version is retired', async () => {
+    serve(version('0.5.1', 'RETIRED', '2026-11-12T21:50:46Z'));
+    const index = await html(ModelIndex());
+    const line = index.querySelector('[data-testid="model-version"]')!.textContent;
+    expect(line).toContain('Version 0.5.1');
+    expect(line).toContain('This version is retired.');
+    expect(sectionLinks(index, '/model')).toContain('moves');
   });
 
   it('404s a version that is not published', async () => {
@@ -242,6 +257,20 @@ describe('versions', () => {
     await html(ModelSection(params({ section: 'appeals' })));
     await html(ModelSection(params({ section: 'moves' })));
     expect(materialise).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the whole model is on the pages', () => {
+  it('shows scoring, and culture’s own fields above its records', async () => {
+    const index = await html(ModelIndex());
+    expect(sectionLinks(index, '/model')).toEqual(expect.arrayContaining(['scoring', 'meta']));
+    const scoring = await html(ModelSection(params({ section: 'scoring' })));
+    expect(scoring.querySelector('[data-model-record="section:scoring:scoring"]')).not.toBeNull();
+    expect(scoring.textContent).toContain('Integrity caps');
+    const culture = await html(ModelSection(params({ section: 'culture' })));
+    const first = culture.querySelector('[data-model-record]')!;
+    expect(first.getAttribute('data-model-record')).toBe('section:culture:culture');
+    expect(first.textContent).toContain('Weight effect');
   });
 });
 

@@ -31,6 +31,7 @@ export const FEATURED_SECTIONS: readonly string[] = [
   'perspectives',
   'duties',
   'content_types',
+  'scoring',
   'research',
   'limitations',
   'culture',
@@ -90,6 +91,16 @@ export const SECTION_COPY: Readonly<Record<string, SectionCopy>> = {
     intro:
       'How the same copy reads differently across cultures, and the scales a review uses to say so. Approximate by design: culture is not destiny.',
   },
+  scoring: {
+    title: 'Scoring',
+    intro:
+      'How a review turns the AI reviewers’ marks into scores: the scale, the weights, the bands, and the caps that keep the best scores for copy that earns them.',
+  },
+  meta: { title: 'About this version' },
+  brand: { title: 'Name and principles' },
+  length_targets: { title: 'Length targets' },
+  judge_output_schema: { title: 'What an AI reviewer returns' },
+  influence_output_schema: { title: 'What the influence panel returns' },
   archetypes: { title: 'Reader archetypes' },
   exec_roles: { title: 'Executive readers' },
   audience_modifiers: { title: 'Reader settings' },
@@ -261,6 +272,8 @@ export function sectionCopy(key: string): SectionCopy {
 }
 
 export function kindLabel(kind: string, count: 'one' | 'many' = 'one'): string {
+  // A section's own fields (`section:scoring`) are named after the section.
+  if (kind.startsWith('section:')) return sectionCopy(kind.slice('section:'.length)).title;
   const known = KIND_LABEL[kind];
   if (known) return known[count];
   const base = humanise(kind.replace(/^(knowledge|culture)_/, ''));

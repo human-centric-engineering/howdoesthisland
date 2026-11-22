@@ -146,8 +146,11 @@ The routes in `app/(public)/model/` are one line each over `components/app/model
 
 - **Not tied to one version of the model.** `buildBrowseModel()`
   (`lib/app/frameworks/browse.ts`) builds the pages from the definition: a section is a
-  top-level part of the file, every field a record has is shown, and a link is a declared
-  reference (or a field named after a kind, such as a move's `appeal`) whose id resolves.
+  top-level part of the file, and its fields that are not collections (all of `scoring`,
+  `culture`'s note) are one record shown first, so the whole model is on the pages. Every
+  field a record has is shown, and a link is a declared reference (or a field named after
+  a kind, such as a move's `appeal`) whose id resolves, kept per field: an id is a link
+  only in the field that refers to it.
   A section, kind or field a later version adds appears with no code change.
 - **The words around the records** are `components/app/model/presentation.ts`: titles,
   intros, labels and which sections come first. Every entry is optional and has a
@@ -161,6 +164,7 @@ The routes in `app/(public)/model/` are one line each over `components/app/model
   the process (`materialise()`, and the built pages in `load.ts`); only "which version is
   latest" is read per request. A version shows the moment it is published, with nothing to
   revalidate. Search engines get the same server-rendered HTML either way.
+- **With every version retired**, `/model` shows the newest retired one, marked retired.
 - **The culture switch** applies as in the API: off, the `culture` section is not on the
   index and its page is a 404.
 - `/about` is the product's rationale and the lineage of the idea, in

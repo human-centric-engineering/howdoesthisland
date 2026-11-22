@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { isJsonObject } from '@/lib/app/frameworks/codec';
 import { recordHref, type BrowseModel, type BrowseRecord } from '@/lib/app/frameworks/browse';
+import { SECTION_KIND } from '@/lib/app/frameworks/types';
 import {
   SUBTITLE_FIELDS,
   TECHNICAL_FIELDS,
@@ -8,13 +9,14 @@ import {
   fieldLabel,
   kindLabel,
   readingOrder,
+  sectionCopy,
 } from '@/components/app/model/presentation';
 
 /**
  * One record of the model, as a card (t-63). Every field the record has is
  * shown, in the model's own order, so a field a later version adds appears
  * without a code change: text as text, lists as lists, maps as labelled
- * rows. An id the record refers to is shown as a link to that record.
+ * rows. An id is a link only in the field that refers to it.
  */
 
 const TITLE_MAX = 64;
@@ -24,17 +26,26 @@ function titleField(record: BrowseRecord): string | null {
   return TITLE_FIELDS.find((f) => typeof record.attributes[f] === 'string') ?? null;
 }
 
+/** A section's own fields, as one record (`section:scoring`). */
+function isSectionRecord(record: BrowseRecord): boolean {
+  return record.kind.startsWith(`${SECTION_KIND}:`);
+}
+
 export function recordTitle(record: BrowseRecord): string {
+  if (isSectionRecord(record)) return sectionCopy(record.id).title;
   const field = titleField(record);
   return field ? String(record.attributes[field]) : record.id;
 }
+
+/** A citation's authors and year: `O'Keefe & Hoeken (2021)`. */
+const CITATION = /^(.{1,60}?\(\d{4}[a-z]?\))/;
 
 /** A title short enough for a link: a citation up to its year, else cut at a word. */
 export function shortTitle(record: BrowseRecord): string {
   const full = recordTitle(record);
   if (full.length <= TITLE_MAX) return full;
-  const year = full.indexOf(')');
-  if (year > 0 && year < TITLE_MAX) return full.slice(0, year + 1);
+  const citation = CITATION.exec(full);
+  if (citation) return citation[1];
   const cut = full.lastIndexOf(' ', TITLE_MAX);
   return `${full.slice(0, cut > 0 ? cut : TITLE_MAX)}…`;
 }
@@ -64,18 +75,30 @@ function RecordLink({ to, base }: { to: BrowseRecord; base: string }) {
   );
 }
 
+type FieldLinks = ReadonlyMap<string, ReadonlyMap<string, BrowseRecord>>;
+const NO_LINKS: ReadonlyMap<string, BrowseRecord> = new Map();
+
+/**
+ * Labelled rows. At a record's top level each field gets its own links
+ * (`byField`); inside a field, everything shares that field's links.
+ */
 function Entries({
   entries,
   links,
+  byField,
   base,
-}: { entries: [string, unknown][] } & Omit<ValueProps, 'value'>) {
+}: { entries: [string, unknown][]; byField?: FieldLinks } & Omit<ValueProps, 'value'>) {
   return (
     <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(8rem,auto)_1fr]">
       {entries.map(([key, value]) => (
         <div key={key} className="contents">
           <dt className="text-sm font-semibold text-(--hd-muted)">{fieldLabel(key)}</dt>
           <dd className="min-w-0 text-sm leading-relaxed break-words">
-            <FieldValue value={value} links={links} base={base} />
+            <FieldValue
+              value={value}
+              links={byField ? (byField.get(key) ?? NO_LINKS) : links}
+              base={base}
+            />
           </dd>
         </div>
       ))}
@@ -131,13 +154,17 @@ interface CardProps {
   record: BrowseRecord;
   model: BrowseModel;
   base: string;
-  /** Heading level: a nested record sits one below its parent. */
+  /**
+   * Heading level: a nested record sits one below its parent. A section's own
+   * record has none: it sits under the section's heading.
+   */
   level?: 3 | 4;
 }
 
 export function RecordCard({ record, model, base, level = 3 }: CardProps) {
   const links = model.links(record);
-  const title = titleField(record);
+  // A section's fields are shown in full; its heading is the section's name.
+  const title = isSectionRecord(record) ? null : titleField(record);
   const shown = readingOrder(
     Object.entries(record.attributes).filter(
       ([key, value]) => key !== 'id' && key !== title && !isEmpty(value)
@@ -159,15 +186,17 @@ export function RecordCard({ record, model, base, level = 3 }: CardProps) {
       className="scroll-mt-24 border-t border-(--hd-rule) pt-6"
       data-model-record={`${record.kind}:${record.id}`}
     >
-      <Heading
-        className={
-          level === 3 ? 'text-2xl leading-tight font-bold' : 'text-xl leading-tight font-semibold'
-        }
-      >
-        <a href={`#${record.anchor}`} className="hover:underline">
-          {recordTitle(record)}
-        </a>
-      </Heading>
+      {!isSectionRecord(record) && (
+        <Heading
+          className={
+            level === 3 ? 'text-2xl leading-tight font-bold' : 'text-xl leading-tight font-semibold'
+          }
+        >
+          <a href={`#${encodeURIComponent(record.anchor)}`} className="hover:underline">
+            {recordTitle(record)}
+          </a>
+        </Heading>
+      )}
       {subtitles.map(([key, value]) => (
         <p
           key={key}
@@ -179,7 +208,7 @@ export function RecordCard({ record, model, base, level = 3 }: CardProps) {
       ))}
       {body.length > 0 && (
         <div className="mt-4">
-          <Entries entries={body} links={links} base={base} />
+          <Entries entries={body} links={NO_LINKS} byField={links} base={base} />
         </div>
       )}
       {technical.length > 0 && (
@@ -188,7 +217,7 @@ export function RecordCard({ record, model, base, level = 3 }: CardProps) {
             How the engine reads it
           </summary>
           <div className="mt-3 font-mono text-xs">
-            <Entries entries={technical} links={links} base={base} />
+            <Entries entries={technical} links={NO_LINKS} byField={links} base={base} />
           </div>
         </details>
       )}

@@ -31,7 +31,7 @@ describe('fallbacks for what the file does not list', () => {
 
 describe('readingOrder', () => {
   it('puts listed fields first, then text, lists, maps and numbers, each alphabetically', () => {
-    const order = readingOrder([
+    const order = readingOrder<unknown>([
       ['weight', 1],
       ['zeta', 'text'],
       ['map', { a: 1 }],
@@ -41,5 +41,12 @@ describe('readingOrder', () => {
       ['description', 'lead'],
     ]).map(([key]) => key);
     expect(order).toEqual(['description', 'rubric', 'alpha', 'zeta', 'items', 'map', 'weight']);
+  });
+});
+
+describe('section records', () => {
+  it('are named after their section', () => {
+    expect(kindLabel('section:scoring')).toBe('Scoring');
+    expect(kindLabel('section:new_part')).toBe('New part');
   });
 });
