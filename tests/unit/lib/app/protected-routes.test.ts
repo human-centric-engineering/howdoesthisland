@@ -7,6 +7,12 @@
  * headers, the frame-ancestors resolver), as `tests/unit/lib/security/proxy.test.ts`
  * does.
  *
+ * FORK NOTE: this is HowDoesThisLand's own test and reads the real
+ * `lib/app/protected-routes.ts` on purpose: what it proves is that the value
+ * we filled the seam with protects `/projects`. Removing `/projects` from the
+ * seam fails it, and should; the exact list is pinned in
+ * `tests/unit/lib/app/defaults.test.ts`.
+ *
  * @see lib/app/protected-routes.ts
  * @see proxy.ts
  */

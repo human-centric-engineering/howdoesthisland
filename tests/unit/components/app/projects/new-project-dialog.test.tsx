@@ -61,6 +61,52 @@ describe('NewProjectDialog', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
+  it('refreshes the list when the project was made but the answer cannot be read', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ made: true });
+    const user = await open();
+
+    await user.type(nameField(), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Make project' }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('stays open and locked while the project is being made', async () => {
+    let answer: (value: unknown) => void = () => {};
+    vi.mocked(apiClient.post).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const user = await open();
+
+    await user.type(nameField(), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Make project' }));
+
+    expect(await screen.findByRole('button', { name: /Making it/ })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    answer({ id: 'proj-9' });
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/projects/proj-9'));
+  });
+
+  it('Cancel closes it, and it opens again empty and without the last refusal', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('Framework not found', 'FRAMEWORK_NOT_FOUND', 404)
+    );
+    const user = await open();
+    await user.type(nameField(), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Make project' }));
+    await screen.findByRole('alert');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'New project' }));
+    expect(nameField()).toHaveValue('');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('shows a refused save by Save and stays open', async () => {
     vi.mocked(apiClient.post).mockRejectedValue(
       new APIClientError('Framework not found', 'FRAMEWORK_NOT_FOUND', 404)
