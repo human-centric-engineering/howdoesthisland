@@ -86,10 +86,10 @@ describe('ApiReference', () => {
       '[data-operation="GET /api/v1/frameworks/{slug}/versions/{version}"]'
     );
     expect(model?.textContent).not.toContain('No key needed');
-    // The quick scan takes a key, or a free review code in place of one (t-61).
+    // The quick scan takes a key for the full result, or anyone for less (t-68).
     const scan = container.querySelector('[data-operation="POST /api/v1/scan"]');
     expect(scan?.textContent).toContain('Key scope: assess');
-    expect(scan?.textContent).toContain('a free review code');
+    expect(scan?.textContent).toContain('With neither, anyone may call, and gets less');
     const workspace = container.querySelector('[data-operation="POST /api/v1/workspaces"]');
     expect(workspace?.textContent).toContain('Browser session only');
   });

@@ -177,6 +177,21 @@ describe('the landing page', () => {
     );
   });
 
+  it('with the switch on, offers the free quick scan beside sign-up (t-68)', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = true;
+    runQuickScan.mockRejectedValue(new Error('not needed here'));
+    render(await page());
+    expect(screen.getByTestId('hero-quick-scan')).toHaveAttribute('href', '/quick-scan');
+    expect(screen.getByRole('link', { name: 'create an account' })).toHaveAttribute(
+      'href',
+      '/signup'
+    );
+    // The free review is still the code's: the redeem button is unchanged.
+    expect(
+      screen.getAllByRole('link', { name: 'Have a code? Get your free review' })[0]
+    ).toHaveAttribute('href', '/redeem');
+  });
+
   it('never calls the free offer a scan, and never counts the AI reviewers', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
     const { container } = render(await page());

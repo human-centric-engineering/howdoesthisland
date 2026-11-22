@@ -89,5 +89,11 @@ export const EVENTS_MAX_MS = 5 * 60_000;
  */
 export const AI_ASSESSMENTS_PER_MINUTE = 10;
 
-/** Quick scans per IP per minute (`POST scan`), whoever is calling. */
-export const SCANS_PER_MINUTE = 30;
+/**
+ * Quick scans per IP per minute (`POST scan`), whoever is calling. Tightened
+ * from 30 when the quick scan opened to anyone (t-68): enough for a person
+ * editing and rescanning, while slowing anyone sending text in bulk to probe
+ * the model's patterns. A member scripting checks uses the `quick` profile of
+ * `POST assessments`, which this does not count.
+ */
+export const SCANS_PER_MINUTE = 10;

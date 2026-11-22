@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next';
 // FORK (HowDoesThisLand, t-63): the model explainer's chapters. Ledger row 25.
 import { CHAPTERS } from '@/lib/app/explainer/chapters';
+// FORK (HowDoesThisLand, t-68): the quick-scan switch. Ledger row 25.
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
 /**
  * Sitemap Configuration
@@ -30,6 +32,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly' as const,
     })),
     { path: '/model/sources', priority: 0.5, changeFrequency: 'monthly' as const },
+    // FORK (HowDoesThisLand, t-68): the free quick scan, while its switch is on. Ledger row 25.
+    ...(isQuickScanEnabled()
+      ? [{ path: '/quick-scan', priority: 0.8, changeFrequency: 'monthly' as const }]
+      : []),
     { path: '/privacy', priority: 0.3, changeFrequency: 'yearly' as const },
     { path: '/terms', priority: 0.3, changeFrequency: 'yearly' as const },
   ];

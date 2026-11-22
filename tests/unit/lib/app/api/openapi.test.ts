@@ -390,11 +390,11 @@ describe('what each auth kind becomes', () => {
       /`assess` scope/,
     ],
     [
-      'signed-in, a key with a scope, or a free review code (the quick scan)',
-      { who: 'signed-in', apiKeyScope: 'assess', orCode: true },
+      'signed-in, a key with a scope, or signed out for less (the quick scan)',
+      { who: 'signed-in', apiKeyScope: 'assess', orSignedOut: true },
       [{ session: [] }, { apiKey: ['assess'] }, {}],
       ['401', '403'],
-      /`assess` scope\. With neither, a free review code in `code`/,
+      /`assess` scope\. With neither, anyone may call, and gets less/,
     ],
     [
       'workspace-admin, platform admins anywhere',
@@ -419,12 +419,12 @@ describe('what each auth kind becomes', () => {
     ],
   ];
 
-  it('names ACCOUNT_REQUIRED as the 401 of a route a code opens, and UNAUTHORIZED for a bad key', () => {
+  it('says a route open to signed-out callers answers a bad key 401, and no credential with less', () => {
     const open = responsesOf(
-      route({ auth: { who: 'signed-in', apiKeyScope: 'assess', orCode: true } })
+      route({ auth: { who: 'signed-in', apiKeyScope: 'assess', orSignedOut: true } })
     );
-    expect(open['401']?.description).toMatch(/^`ACCOUNT_REQUIRED`/);
-    expect(open['401']?.description).toContain('`UNAUTHORIZED`: an API key that is not valid.');
+    expect(open['401']?.description).toMatch(/^`UNAUTHORIZED`: an API key that is not valid\./);
+    expect(open['401']?.description).toContain('no credential at all is answered, with less');
     const closed = responsesOf(route({ auth: { who: 'signed-in', apiKeyScope: 'assess' } }));
     expect(closed['401']?.description).toMatch(/^`UNAUTHORIZED`/);
   });

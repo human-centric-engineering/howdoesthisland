@@ -1,6 +1,7 @@
 /**
- * Tests: the quick-scan switch's default (t-61). Off in production and on
- * everywhere else when unset; `QUICK_SCAN_ENABLED` overrides it either way.
+ * Tests: the quick-scan switch's default (t-61, t-68). On everywhere when
+ * unset, production included, since the quick scan is offered free;
+ * `QUICK_SCAN_ENABLED` overrides it either way.
  * Who may run the quick scan is tested through the route
  * (`tests/unit/app/api/v1/scan/route.test.ts`).
  *
@@ -22,7 +23,7 @@ import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 
 describe('isQuickScanEnabled', () => {
   it.each([
-    ['production', undefined, false],
+    ['production', undefined, true],
     ['development', undefined, true],
     ['test', undefined, true],
     ['production', true, true],

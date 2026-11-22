@@ -241,22 +241,22 @@ one says what purging an assessment does to it.
 
 ## The API
 
-| Route                                     | Who                                                              | What                                                                                                     |
-| ----------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/scan`                       | session, key with `assess`, or a free review code; 30/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.       |
-| `POST /api/v1/assessments`                | session, or key with `assess`                                    | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                            |
-| `GET /api/v1/assessments`                 | same                                                             | The workspace's assessments, newest first; `page`, `limit`, `status`.                                    |
-| `GET /api/v1/assessments/{id}`            | same                                                             | One assessment: its copy (`text`), its judges and, once final, its result.                               |
-| `GET /api/v1/assessments/{id}/events`     | same                                                             | Progress as Server-Sent Events.                                                                          |
-| `POST /api/v1/assessments/{id}/cancel`    | same                                                             | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                     |
-| `DELETE /api/v1/assessments/{id}`         | same                                                             | Delete it, its judge runs and replies, and its text (unless another assessment shares it).               |
-| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                   | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`. |
+| Route                                     | Who                                                                    | What                                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/scan`                       | anyone (scores only) or a session / `assess` key (full); 10/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.       |
+| `POST /api/v1/assessments`                | session, or key with `assess`                                          | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                            |
+| `GET /api/v1/assessments`                 | same                                                                   | The workspace's assessments, newest first; `page`, `limit`, `status`.                                    |
+| `GET /api/v1/assessments/{id}`            | same                                                                   | One assessment: its copy (`text`), its judges and, once final, its result.                               |
+| `GET /api/v1/assessments/{id}/events`     | same                                                                   | Progress as Server-Sent Events.                                                                          |
+| `POST /api/v1/assessments/{id}/cancel`    | same                                                                   | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                     |
+| `DELETE /api/v1/assessments/{id}`         | same                                                                   | Delete it, its judge runs and replies, and its text (unless another assessment shares it).               |
+| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                         | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`. |
 
 Each route's docblock lists its error codes. A few rules hold across them:
 
 - **The quick scan is behind a switch** (t-61). `QUICK_SCAN_ENABLED`, read
-  through `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), is off by
-  default in production and on elsewhere. Off, `POST /api/v1/scan` answers 404
+  through `isQuickScanEnabled()` (`lib/app/quick-scan/switch.ts`), is on by
+  default everywhere since the owner offers it free (t-68); `false` withdraws it. Off, `POST /api/v1/scan` answers 404
   `NOT_FOUND` to everyone, and the OpenAPI document and `/developers` leave it
   out (the registry's `enabled`, read by `servedRoutes()`). The landing page's
   self-score (t-62, `selfScore()` in `lib/app/quick-scan/self-score.ts`) runs
@@ -271,14 +271,15 @@ Each route's docblock lists its error codes. A few rules hold across them:
   that later offers the quick scan checks the switch too. It does not cover the engine's
   fallback when a judge fails, calibration's quick mode, or the `quick`
   profile of `POST assessments`.
-- **Who may run the quick scan.** A session or an API key with `assess`,
-  through `withAuth` as on every route (a key without the scope, or a key or
-  session whose workspace is refused, is 403); their `code` is ignored. With
-  neither, a free review code in the body's `code` that has not expired, been
-  withdrawn or run out; it is checked with `checkCode()` once the JSON is
-  parsed, before the rest of the body, and never used up. Anything else is
-  401 `ACCOUNT_REQUIRED`, in the same words whatever was wrong with the code.
-  A caller sending an API key is judged on the key alone.
+- **Who may run the quick scan** (t-68). Anyone. A caller with no account gets
+  the scores and a caveat (`summariseQuickScan()`, `lib/app/quick-scan/summary.ts`):
+  the overall score, its band and each appeal's score, never the matched lines,
+  which would let anyone probe the model's patterns for free. A session or an API
+  key with `assess` gets the full result, through `withAuth` as on every route (a
+  key without the scope, or a key or session whose workspace is refused, is 403).
+  A `code` in the body is accepted and ignored: a free review code is for a full
+  review. The per-IP cap is 10 a minute, whoever is calling. The public page is
+  `/quick-scan`, which states the caveat beside every score.
 
 - **The version.** `framework` defaults to HowDoesThisLand, `version` to its
   latest published one. A retired version is readable but runs nothing new
