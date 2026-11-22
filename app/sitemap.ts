@@ -20,6 +20,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: '/contact', priority: 0.8, changeFrequency: 'monthly' as const },
     // FORK (HowDoesThisLand, t-62): the developer docs. Ledger: .context/app/platform-divergences.md row 25.
     { path: '/developers', priority: 0.7, changeFrequency: 'weekly' as const },
+    // FORK (HowDoesThisLand, t-63): the model's index; its sections are linked from it. Ledger row 25.
+    { path: '/model', priority: 0.8, changeFrequency: 'monthly' as const },
     { path: '/privacy', priority: 0.3, changeFrequency: 'yearly' as const },
     { path: '/terms', priority: 0.3, changeFrequency: 'yearly' as const },
   ];
