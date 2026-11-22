@@ -187,6 +187,52 @@ describe('/example-review', () => {
     expect(rows).toHaveLength(views!.final.lands.appeals.length + 1);
   });
 
+  it('lights up an appeal’s notes in its colour when pointed at, and dims the rest', async () => {
+    const user = userEvent.setup();
+    const { container } = render(await ExampleRoute());
+    await user.click(screen.getByRole('tab', { name: /Quick scan/ }));
+    const step = screen.getByTestId('step-quick');
+    const ethos = within(step).getByRole('button', { name: /^Ethos:/ });
+    await user.hover(ethos);
+    const marks = [...step.querySelectorAll<HTMLElement>('mark[data-notes]')];
+    const lit = marks.filter((m) => m.dataset.highlight === 'on');
+    const dimmed = marks.filter((m) => m.dataset.highlight === 'off');
+    // A phrase is lit when any of its notes is the appeal's; every other phrase dims.
+    expect(lit.length).toBeGreaterThan(0);
+    expect(lit.length + dimmed.length).toBe(marks.length);
+    for (const m of dimmed) expect(m.style.opacity).toBe('0.4');
+    const notes = [...step.querySelectorAll<HTMLElement>('li[id^="quick-note-"]')];
+    const litNotes = notes.filter((n) => n.dataset.highlight === 'on');
+    expect(litNotes.length).toBe(
+      Number(/, (\d+) notes?\./.exec(ethos.getAttribute('aria-label') ?? '')?.[1])
+    );
+    expect(notes.filter((n) => n.dataset.highlight === 'off').length).toBe(
+      notes.length - litNotes.length
+    );
+    expect(notes.length).toBeGreaterThan(litNotes.length);
+    await user.unhover(ethos);
+    expect(marks.every((m) => m.dataset.highlight === undefined && m.style.opacity === '')).toBe(
+      true
+    );
+
+    // An appeal with no notes leaves the copy alone.
+    const quiet = within(step)
+      .getAllByRole('button')
+      .find((b) => /, 0 notes\./.test(b.getAttribute('aria-label') ?? ''));
+    if (quiet) {
+      await user.hover(quiet);
+      expect(marks.every((m) => m.dataset.highlight === undefined)).toBe(true);
+      await user.unhover(quiet);
+    }
+
+    // A tap pins it, and Escape lets go.
+    await user.click(ethos);
+    expect(ethos).toHaveAttribute('aria-pressed', 'true');
+    await user.keyboard('{Escape}');
+    expect(ethos).toHaveAttribute('aria-pressed', 'false');
+    expect(container.querySelector('[data-highlight]')).toBeNull();
+  });
+
   it('leaves the quick-scan step out while the quick scan is switched off', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
     const { container } = render(await ExampleRoute());

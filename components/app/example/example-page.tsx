@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { MarkedUpCopy } from '@/components/app/report/marked-up-copy';
 import { HowItLands, Recommendations, Verdict } from '@/components/app/report/report';
 import { ScoreBars } from '@/components/app/report/charts/score-bars';
+import { AppealHighlight, type AppealRow } from '@/components/app/example/appeal-highlight';
 import { BeforeAfter } from '@/components/app/example/before-after';
 import { ReviewSteps } from '@/components/app/example/review-steps';
 import { loadExampleViews } from '@/components/app/example/load';
@@ -216,6 +217,41 @@ function ScoreMoves({ before, after }: { before: ReportView; after: ReportView }
   );
 }
 
+/** Which appeal (or reviewer group) each note's dimension belongs to, by note number. */
+function noteAppeals(view: ReportView): Record<number, string> {
+  const groupOf = new Map<string, string>();
+  for (const g of view.dimensions) for (const r of g.rows) groupOf.set(r.id, g.id);
+  const out: Record<number, string> = {};
+  for (const n of view.copy.notes) {
+    const g = groupOf.get(n.dimensionId);
+    if (g) out[n.number] = g;
+  }
+  return out;
+}
+
+function appealRows(view: ReportView): AppealRow[] {
+  return view.lands.appeals.map((a) => ({
+    id: a.id,
+    name: a.name,
+    score: a.score,
+    colour: APPEAL_COLOUR[a.id] ?? 'var(--hd-ink)',
+  }));
+}
+
+/** The copy marked up, with appeal scores beside it that point at their notes. */
+function PointedCopy({ view, prefix, label }: { view: ReportView; prefix: string; label: string }) {
+  return (
+    <AppealHighlight
+      appeals={appealRows(view)}
+      noteAppeal={noteAppeals(view)}
+      prefix={prefix}
+      aside={<Score view={view} label={label} />}
+    >
+      <MarkedUpCopy copy={view.copy} idPrefix={prefix} />
+    </AppealHighlight>
+  );
+}
+
 function Score({ view, label }: { view: ReportView; label: string }) {
   return (
     <div>
@@ -246,24 +282,7 @@ export default async function ExampleReviewPage() {
   const quickStep = (
     <section key="quick" data-testid="step-quick">
       <StepIntro title={S.quick.title} body={S.quick.body} />
-      <div className="grid gap-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <div className="grid content-start gap-8">
-          <Score view={draftQuick} label="Quick scan" />
-          <ScoreBars
-            title="Appeal scores"
-            description="From word patterns alone."
-            max={100}
-            testId="example-quick-appeals"
-            rows={draftQuick.lands.appeals.map((a) => ({
-              id: a.id,
-              label: a.name,
-              score: a.score,
-              colour: APPEAL_COLOUR[a.id],
-            }))}
-          />
-        </div>
-        <MarkedUpCopy copy={draftQuick.copy} idPrefix="quick-" />
-      </div>
+      <PointedCopy view={draftQuick} prefix="quick-" label="Quick scan" />
     </section>
   );
 
@@ -300,7 +319,7 @@ export default async function ExampleReviewPage() {
 
               <section key="review" data-testid="step-review">
                 <StepIntro title={S.review.title} body={S.review.body} />
-                <MarkedUpCopy copy={draftReviewed.copy} idPrefix="review-" />
+                <PointedCopy view={draftReviewed} prefix="review-" label="Full review" />
                 {draftReviewed.recommendations.length > 0 && (
                   <div className="mt-12 border-t border-(--hd-rule) pt-8">
                     <h3 className="text-2xl font-bold">The rewrites that matter most</h3>
@@ -376,7 +395,7 @@ export default async function ExampleReviewPage() {
                 </div>
                 <div className="mt-12 border-t border-(--hd-rule) pt-8">
                   <h3 className="mb-6 text-2xl font-bold">What works now</h3>
-                  <MarkedUpCopy copy={final.copy} idPrefix="final-" />
+                  <PointedCopy view={final} prefix="final-" label="Final draft · full review" />
                 </div>
               </section>,
             ]}
