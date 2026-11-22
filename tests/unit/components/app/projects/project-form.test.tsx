@@ -80,8 +80,9 @@ describe('ProjectForm pickers', () => {
   it('offers the version’s countries, and the culture reviewers, with the switch on', () => {
     render(<ProjectForm project={aProject()} catalogue={aCatalogue({ culture: true })} />);
 
-    expect(optionValues(/^Reader’s culture/)).toEqual(['__none__', 'global', 'gb']);
-    expect(optionValues(/^Writer’s culture/)).toEqual(['__none__', 'global', 'gb']);
+    // `global` is the engine's "no country in particular", offered first.
+    expect(optionValues(/^Reader’s culture/)).toEqual(['__none__', 'global', 'gb', 'fr']);
+    expect(optionValues(/^Writer’s culture/)).toEqual(['__none__', 'global', 'gb', 'fr']);
     expect(optionValues(/^AI reviewers/)).toContain('culture');
   });
 
@@ -118,6 +119,28 @@ describe('ProjectForm stored defaults the version cannot take', () => {
     render(<ProjectForm project={project} catalogue={aCatalogue()} />);
 
     expect(optionValues(/^legacy \(not in this version\)/)).toEqual(['__none__', 'x']);
+  });
+
+  it('keeps a stored value the version lacks as a choice after another is picked', async () => {
+    const project = aProject({ defaults: { profile: 'culture' } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: false })} />);
+
+    await user.selectOptions(field(/^AI reviewers/), 'full');
+
+    expect(optionValues(/^AI reviewers/)).toContain('culture');
+  });
+
+  it('shows a stored global culture as the plain choice it is', () => {
+    const project = aProject({ defaults: { context: { culture: { reader: 'global' } } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: true })} />);
+
+    const select = field<HTMLSelectElement>(/^Reader’s culture/);
+    expect(select.value).toBe('global');
+    expect(
+      within(select).getByRole('option', { name: 'Anywhere: no country in particular' })
+    ).toBeTruthy();
+    expect(within(select).queryByRole('option', { name: /not in this version/ })).toBeNull();
   });
 
   it('says so when the stored defaults cannot be shown, and lets Save replace them as they are', async () => {
@@ -219,14 +242,39 @@ describe('ProjectForm save', () => {
     });
   });
 
-  it('shows a refused save by Save, with the server’s message', async () => {
+  it('puts each default the API refuses under its picker, and says how many by Save', async () => {
     vi.mocked(apiClient.patch).mockRejectedValue(
       new APIClientError(
         "The project's defaults do not fit its framework's latest version.",
         'DEFAULTS_INVALID',
         400,
-        { issues: [{ path: 'defaults.context.contentType', message: 'Not a content type' }] }
+        {
+          issues: [
+            { path: 'defaults.context.contentType', message: 'Not a content type in this version' },
+            { path: 'defaults.context.audience.legacy', message: 'Not a legacy option' },
+            { path: 'defaults.context', message: 'Unrecognized key: "tone"' },
+          ],
+        }
       )
+    );
+    const project = aProject({ defaults: { context: { audience: { legacy: 'x' } } } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    await user.selectOptions(field(/^Type of copy/), 'general');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '2 defaults need changing. Unrecognized key: "tone"'
+    );
+    expect(screen.getByText('Not a content type in this version')).toBeInTheDocument();
+    expect(screen.getByText('Not a legacy option')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('shows any other refusal by Save, with the server’s message', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValue(
+      new APIClientError('Project not found', 'NOT_FOUND', 404)
     );
     const user = userEvent.setup();
     render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
@@ -234,10 +282,7 @@ describe('ProjectForm save', () => {
     await user.selectOptions(field(/^Type of copy/), 'general');
     await user.click(screen.getByRole('button', { name: 'Save project' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "The project's defaults do not fit its framework's latest version."
-    );
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Project not found');
   });
 
   it('puts a refused brief part’s message under that part', async () => {

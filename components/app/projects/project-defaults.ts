@@ -43,6 +43,21 @@ export function audienceSettings(
   return catalogue.request.audience.filter((m) => m.id !== REPEATED_MODIFIER);
 }
 
+/**
+ * The culture that means no country in particular. The engine takes it for a
+ * reader or writer (`GLOBAL_CULTURE` in `engine/context.ts`; a test holds the
+ * two equal) though the catalogue's countries do not list it.
+ */
+export const GLOBAL_CULTURE = 'global';
+
+/** The culture pickers' options: anywhere, then the version's countries. */
+export function cultureOptions(catalogue: DefaultsCatalogue): PickerOption[] {
+  return [
+    { value: GLOBAL_CULTURE, label: 'Anywhere: no country in particular' },
+    ...(catalogue.request.countries ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ];
+}
+
 /** The brief's parts, in the order the form shows them. */
 export const BRIEF_KEYS = ['offer', 'audience', 'voice', 'markets', 'goals'] as const;
 export type BriefKey = (typeof BRIEF_KEYS)[number];
@@ -221,7 +236,7 @@ export function withStored(options: PickerOption[], stored: string): PickerOptio
 export function audiencePickers(
   catalogue: DefaultsCatalogue,
   stored: Record<string, string>
-): Array<{ id: string; name: string; options: PickerOption[] }> {
+): Array<{ id: string; name: string; options: PickerOption[]; help?: string }> {
   const offered = audienceSettings(catalogue);
   const known = new Set(offered.map((m) => m.id));
   return [
@@ -232,6 +247,64 @@ export function audiencePickers(
     })),
     ...Object.keys(stored)
       .filter((id) => !known.has(id))
-      .map((id) => ({ id, name: `${id} (not in this version)`, options: [] })),
+      .map((id) =>
+        id === REPEATED_MODIFIER
+          ? {
+              id,
+              name: 'Audience archetype (set by Reader)',
+              options: [],
+              help: 'The Reader picker sets this. A default stored here is refused: set it to No default.',
+            }
+          : {
+              id,
+              name: `${id} (not in this version)`,
+              options: [],
+              help: 'A default this project holds for a setting the model no longer has. Set it to No default to remove it.',
+            }
+      ),
   ];
+}
+
+const defaultsIssuesSchema = z.object({
+  issues: z.array(z.object({ path: z.string(), message: z.string() })),
+});
+
+/** A form field a refused default is shown under. */
+export type DefaultsField =
+  | 'contentType'
+  | 'archetype'
+  | 'role'
+  | 'cultureReader'
+  | 'cultureWriter'
+  | 'profile'
+  | `modifiers.${string}`;
+
+const PATH_FIELDS: Record<string, DefaultsField> = {
+  'defaults.context.contentType': 'contentType',
+  'defaults.context.archetype': 'archetype',
+  'defaults.context.role': 'role',
+  'defaults.context.culture.reader': 'cultureReader',
+  'defaults.context.culture.writer': 'cultureWriter',
+  'defaults.profile': 'profile',
+};
+
+/**
+ * A 400 `DEFAULTS_INVALID`'s issues, each placed under its picker where the
+ * form has one, and the rest kept as text for the summary by Save. `null`
+ * when `details` is not that shape.
+ */
+export function defaultsIssues(
+  details: unknown
+): { fields: Array<{ field: DefaultsField; message: string }>; other: string[] } | null {
+  const parsed = defaultsIssuesSchema.safeParse(details);
+  if (!parsed.success) return null;
+  const fields: Array<{ field: DefaultsField; message: string }> = [];
+  const other: string[] = [];
+  for (const { path, message } of parsed.data.issues) {
+    const audience = /^defaults\.context\.audience\.([^.]+)$/.exec(path)?.[1];
+    const field = audience ? (`modifiers.${audience}` as const) : PATH_FIELDS[path];
+    if (field) fields.push({ field, message });
+    else other.push(message);
+  }
+  return { fields, other };
 }

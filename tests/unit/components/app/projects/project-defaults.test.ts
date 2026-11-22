@@ -9,12 +9,15 @@ import {
   NO_DEFAULT,
   audiencePickers,
   audienceSettings,
+  defaultsIssues,
   formValuesOf,
+  GLOBAL_CULTURE,
   patchBodyOf,
   profileOptions,
   storedContextReadable,
   withStored,
 } from '@/components/app/projects/project-defaults';
+import { GLOBAL_CULTURE as ENGINE_GLOBAL_CULTURE } from '@/lib/app/frameworks/howdoesthisland/engine/context';
 import { aCatalogue, aProject } from '@/tests/unit/components/app/projects/fixtures';
 
 describe('formValuesOf → patchBodyOf', () => {
@@ -115,5 +118,53 @@ describe('the pickers', () => {
     ]);
     expect(withStored(options, NO_DEFAULT)).toBe(options);
     expect(withStored(options, 'general')).toBe(options);
+  });
+});
+
+describe('defaultsIssues', () => {
+  it('places each refused path under its picker, and keeps the rest as text', () => {
+    expect(
+      defaultsIssues({
+        issues: [
+          { path: 'defaults.context.contentType', message: 'a' },
+          { path: 'defaults.context.archetype', message: 'b' },
+          { path: 'defaults.context.role', message: 'c' },
+          { path: 'defaults.context.audience.focus', message: 'd' },
+          { path: 'defaults.context.culture.reader', message: 'e' },
+          { path: 'defaults.context.culture.writer', message: 'f' },
+          { path: 'defaults.profile', message: 'g' },
+          { path: 'defaults.context.culture', message: 'h' },
+        ],
+      })
+    ).toEqual({
+      fields: [
+        { field: 'contentType', message: 'a' },
+        { field: 'archetype', message: 'b' },
+        { field: 'role', message: 'c' },
+        { field: 'modifiers.focus', message: 'd' },
+        { field: 'cultureReader', message: 'e' },
+        { field: 'cultureWriter', message: 'f' },
+        { field: 'profile', message: 'g' },
+      ],
+      other: ['h'],
+    });
+  });
+
+  it('answers null for details that are not that shape', () => {
+    expect(defaultsIssues({ unknownIds: ['a'] })).toBeNull();
+    expect(defaultsIssues(undefined)).toBeNull();
+  });
+});
+
+describe('the culture that means anywhere', () => {
+  it('is the engine’s own', () => {
+    expect(GLOBAL_CULTURE).toBe(ENGINE_GLOBAL_CULTURE);
+  });
+
+  it('labels the repeated archetype setting as the Reader picker’s, not as missing', () => {
+    const [, archetype] = audiencePickers(aCatalogue(), { archetype: 'general' });
+
+    expect(archetype?.name).toBe('Audience archetype (set by Reader)');
+    expect(archetype?.help).toContain('The Reader picker sets this');
   });
 });

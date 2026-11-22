@@ -51,8 +51,8 @@ export function aCatalogue({ culture = false } = {}): DefaultsCatalogue {
       ...(culture
         ? {
             countries: [
-              { id: 'global', name: 'Global', region: 'Global' },
               { id: 'gb', name: 'United Kingdom', region: 'Europe' },
+              { id: 'fr', name: 'France', region: 'Europe' },
             ],
           }
         : {}),

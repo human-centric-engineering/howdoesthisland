@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormError, SaveError } from '@/components/forms/form-error';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, APIClientError } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { WORDS } from '@/lib/app/reports/words';
 import {
@@ -45,6 +45,8 @@ import {
 import {
   NO_DEFAULT,
   audiencePickers,
+  cultureOptions,
+  defaultsIssues,
   formValuesOf,
   patchBodyOf,
   profileOptions,
@@ -110,6 +112,8 @@ interface PickerProps {
   label: string;
   help: string;
   options: PickerOption[];
+  /** The value the project holds, kept as a choice even when the version lacks it. */
+  stored: string;
   disabled: boolean;
   noDefaultLabel?: string;
 }
@@ -121,6 +125,7 @@ function Picker({
   label,
   help,
   options,
+  stored,
   disabled,
   noDefaultLabel = 'No default',
 }: PickerProps) {
@@ -133,22 +138,25 @@ function Picker({
       <Controller
         control={control}
         name={name}
-        render={({ field }) => {
+        render={({ field, fieldState }) => {
           const value = typeof field.value === 'string' ? field.value : NO_DEFAULT;
           return (
-            <Select value={value} onValueChange={field.onChange} disabled={disabled}>
-              <SelectTrigger id={id} onBlur={field.onBlur}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_DEFAULT}>{noDefaultLabel}</SelectItem>
-                {withStored(options, value).map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <>
+              <Select value={value} onValueChange={field.onChange} disabled={disabled}>
+                <SelectTrigger id={id} onBlur={field.onBlur}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_DEFAULT}>{noDefaultLabel}</SelectItem>
+                  {withStored(options, stored).map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormError message={fieldState.error?.message} />
+            </>
           );
         }}
       />
@@ -207,16 +215,31 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
       setSaved(true);
       router.refresh();
     } catch (err) {
-      save.report(err);
+      // The API names each default it refuses; put each under its picker.
+      const refused =
+        err instanceof APIClientError && err.code === 'DEFAULTS_INVALID'
+          ? defaultsIssues(err.details)
+          : null;
+      if (!refused) {
+        save.report(err);
+        return;
+      }
+      for (const { field, message } of refused.fields) setError(field, { type: 'server', message });
+      const count = refused.fields.length;
+      save.show(
+        [
+          count ? `${count} ${count === 1 ? 'default needs' : 'defaults need'} changing.` : '',
+          ...refused.other,
+        ]
+          .filter(Boolean)
+          .join(' ') || 'The project’s defaults do not fit the model version in use.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const countries = (catalogue.request.countries ?? []).map((c) => ({
-    value: c.id,
-    label: c.name,
-  }));
+  const countries = cultureOptions(catalogue);
 
   return (
     <form
@@ -288,6 +311,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
             <Picker
               control={control}
               name="contentType"
+              stored={stored.contentType}
               id="default-content-type"
               label={WORDS.TypeOfCopy}
               help="What kind of piece it is. It sets the mix of appeals the copy is scored against, and the length it is measured by."
@@ -297,6 +321,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
             <Picker
               control={control}
               name="profile"
+              stored={stored.profile}
               id="default-profile"
               label={WORDS.AiReviewers}
               help="Which AI reviewers read the copy. A set other than the quick scan or all of them also runs the four appeals. More reviewers take longer and cost more."
@@ -311,6 +336,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
               <Picker
                 control={control}
                 name="archetype"
+                stored={stored.archetype}
                 id="default-archetype"
                 label="Reader"
                 help="The kind of reader the copy is written for, as the model describes readers."
@@ -320,6 +346,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
               <Picker
                 control={control}
                 name="role"
+                stored={stored.role}
                 id="default-role"
                 label="Reader’s role"
                 help="The reader’s job, when the copy is for a senior decision-maker. Leave it on No default for anyone else."
@@ -331,12 +358,12 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
                   key={m.id}
                   control={control}
                   name={`modifiers.${m.id}`}
+                  stored={stored.modifiers[m.id] ?? NO_DEFAULT}
                   id={`default-audience-${m.id}`}
                   label={m.name}
                   help={
-                    m.options.length
-                      ? `${m.name}, for every review in this project. It changes what the AI reviewers expect of the copy.`
-                      : 'A default this project holds for a setting the model no longer has. Set it to No default to remove it.'
+                    m.help ??
+                    `${m.name}, for every review in this project. It changes what the AI reviewers expect of the copy.`
                   }
                   options={m.options}
                   disabled={isLoading}
@@ -352,6 +379,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
                 <Picker
                   control={control}
                   name="cultureReader"
+                  stored={stored.cultureReader}
                   id="default-culture-reader"
                   label="Reader’s culture"
                   help="Where the reader is from. The culture reviewer checks the copy against that culture’s expectations."
@@ -361,6 +389,7 @@ export function ProjectForm({ project, catalogue }: ProjectFormProps) {
                 <Picker
                   control={control}
                   name="cultureWriter"
+                  stored={stored.cultureWriter}
                   id="default-culture-writer"
                   label="Writer’s culture"
                   help="Where the writer is from, so the review can point out habits that will not travel to the reader."

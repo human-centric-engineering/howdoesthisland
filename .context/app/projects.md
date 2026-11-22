@@ -72,7 +72,8 @@ and in the signed-in nav. Code is `app/(protected)/projects/` and `components/ap
   archives or restores. It reads the project, then the framework's latest version, then
   that version's catalogue: the pickers offer the catalogue's ids, the same version the
   API checks defaults against. Each picker starts on **No default**, which sends nothing.
-- **Culture**: the reader's and writer's culture pickers, and the culture reviewer set,
+- **Culture**: the reader's and writer's culture pickers (Anywhere, the engine's `global`,
+  then the catalogue's countries), and the culture reviewer set,
   appear only when the catalogue lists countries, which it does only with the culture
   switch on, or while the project has a culture stored, so one the switch now refuses is
   seen rather than dropped.
@@ -84,7 +85,8 @@ and in the signed-in nav. Code is `app/(protected)/projects/` and `components/ap
 - **Nothing stored is dropped unseen.** A stored default the version no longer has stays
   selected, marked "not in this version", and an audience setting the version lacks keeps
   a picker of its own, so saving sends it and is refused with `DEFAULTS_INVALID` until it
-  is changed. An empty role or culture (the engine's "none") reads as No default. A stored
+  is changed; each refused default is shown under its picker. An empty role or culture (the
+  engine's "none") reads as No default. A stored
   context in a shape the pickers cannot read starts them all on No default, and the page
   says saving replaces it.
 
