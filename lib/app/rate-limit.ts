@@ -33,6 +33,14 @@
  * across them. Redeeming is also capped per person in its handler
  * (`lib/app/credits/codes/limiter.ts`). At about 59 bits a code cannot be
  * guessed at any of these rates. The quick scan reads no code (t-68).
+ *
+ * t-66: only a `/redeem` load that carries a code counts. The header links to
+ * the bare page on every public page and Next prefetches it, so counting
+ * every load let a room browsing behind one address use up the allowance
+ * before anyone entered a code. The rule skips a page load whose `code` is
+ * missing or blank — the page checks nothing then. It reads the URL, not a
+ * prefetch header, so a client cannot opt out of a real attempt; the routes
+ * always count.
  */
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { createRateLimiter, registerRateLimitTier } from '@/lib/security/rate-limit';
@@ -84,7 +92,27 @@ const redeemLimiter = createRateLimiter({
   uniqueTokenPerInterval: SECURITY_CONSTANTS.RATE_LIMIT.MAX_UNIQUE_TOKENS,
 });
 
-const redeemRule: RateLimitRule = { match: REDEEM_LIMIT_PATHS, tier: REDEEM_TIER, key: 'ip' };
+/** The page alone, which counts only when it is given a code. */
+const REDEEM_PAGE_PATH = /^\/redeem\/?$/;
+
+/**
+ * Whether a request is a `/redeem` load with no code to check: skipped, as
+ * the page then renders the empty box and reads nothing. Mirrors the page's
+ * reading — the first `code`, trimmed — so whatever the page would check
+ * is counted.
+ */
+export function isRedeemPageWithoutCode(request: Request): boolean {
+  const url = new URL(request.url);
+  if (!REDEEM_PAGE_PATH.test(url.pathname)) return false;
+  return !url.searchParams.get('code')?.trim();
+}
+
+const redeemRule: RateLimitRule = {
+  match: REDEEM_LIMIT_PATHS,
+  tier: REDEEM_TIER,
+  key: 'ip',
+  skip: isRedeemPageWithoutCode,
+};
 
 export function registerAppRateLimits(): void {
   registerRateLimitTier(SCAN_TIER, scanLimiter);

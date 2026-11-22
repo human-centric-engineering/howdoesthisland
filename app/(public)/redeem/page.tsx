@@ -43,7 +43,9 @@ export const metadata: Metadata = {
  * it was for is not verified, before offering to redeem as the person signed
  * in.
  *
- * Page loads count against the per-IP code tier (`lib/app/rate-limit.ts`).
+ * A load with a code counts against the per-IP code tier
+ * (`lib/app/rate-limit.ts`); one without, as the header's prefetched link is,
+ * does not (t-66).
  */
 export default async function RedeemPage({
   searchParams,

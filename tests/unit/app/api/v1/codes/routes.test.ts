@@ -15,7 +15,7 @@
  *
  * @see app/api/v1/codes/check/route.ts · app/api/v1/codes/redeem/route.ts
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockEnv = vi.hoisted(() => ({
@@ -62,7 +62,8 @@ import { POST as check } from '@/app/api/v1/codes/check/route';
 import { POST as redeem } from '@/app/api/v1/codes/redeem/route';
 import { CodeRefusedError } from '@/lib/app/credits/codes/redeem';
 import { codeCheckSchema, redemptionSchema, type Redemption } from '@/lib/app/credits/codes/wire';
-import { REDEEM_LIMIT_PATHS, REDEEM_TIER } from '@/lib/app/rate-limit';
+import { CODE_ATTEMPTS_PER_MINUTE_PER_IP } from '@/lib/app/credits/codes/limits';
+import { isRedeemPageWithoutCode, REDEEM_LIMIT_PATHS, REDEEM_TIER } from '@/lib/app/rate-limit';
 import { getTenantContext } from '@/lib/tenancy/context';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 
@@ -283,6 +284,9 @@ describe('POST /api/v1/codes/redeem', () => {
 });
 
 describe('the redeem proxy rule', () => {
+  // The dispatcher case turns the bypass off; put it back even if it fails.
+  afterEach(() => vi.unstubAllEnvs());
+
   it('covers the page and both code routes, and nothing else', () => {
     expect(REDEEM_TIER).toBe('redeem');
     for (const path of ['/redeem', '/redeem/', '/api/v1/codes/check', '/api/v1/codes/redeem']) {
@@ -298,5 +302,72 @@ describe('the redeem proxy rule', () => {
     ]) {
       expect(REDEEM_LIMIT_PATHS.test(path), path).toBe(false);
     }
+  });
+
+  it('skips only a page load with no code to check (t-66)', () => {
+    const req = (path: string) => new Request(`http://localhost${path}`);
+    for (const path of [
+      '/redeem',
+      '/redeem/',
+      '/redeem?code=',
+      '/redeem?code=%20%20',
+      // The page reads the first `code`, so a later one is never checked.
+      '/redeem?code=&code=ABCD-EFGH-JKMN',
+      '/redeem?_rsc=abc123',
+    ]) {
+      expect(isRedeemPageWithoutCode(req(path)), path).toBe(true);
+    }
+    for (const path of [
+      '/redeem?code=ABCD-EFGH-JKMN',
+      '/redeem/?code=x',
+      '/api/v1/codes/check',
+      '/api/v1/codes/redeem',
+      '/api/v1/codes/check?code=',
+    ]) {
+      expect(isRedeemPageWithoutCode(req(path)), path).toBe(false);
+    }
+  });
+
+  it('spends none of the per-IP allowance on page loads and prefetches, and all of it on attempts', async () => {
+    // tests/setup.ts bypasses rate limiting; run the dispatcher for real.
+    vi.stubEnv('RATE_LIMIT_BYPASS', '');
+    const { applyRateLimit } = await import('@/lib/security/rate-limit-middleware');
+    const ip = '203.0.113.66';
+    // What Next sends when it prefetches the header's link.
+    const PREFETCH = { rsc: '1', 'next-router-prefetch': '1', 'next-url': '/' };
+    const make = (path: string, headers: Record<string, string> = {}, method = 'GET') =>
+      new NextRequest(`http://localhost${path}`, {
+        method,
+        headers: { 'x-forwarded-for': ip, ...headers },
+      });
+
+    // Arrange: a room browsing, well past the cap, plain and prefetched.
+    for (let i = 0; i < CODE_ATTEMPTS_PER_MINUTE_PER_IP * 2; i += 1) {
+      const path = ['/redeem', `/redeem?_rsc=p${i}`, '/redeem?code='][i % 3];
+      expect(await applyRateLimit(make(path, i % 2 ? PREFETCH : {})), path).toBeNull();
+    }
+
+    // Act + assert: the whole allowance is still there for real attempts.
+    for (let i = 0; i < CODE_ATTEMPTS_PER_MINUTE_PER_IP; i += 1) {
+      const path = ['/redeem?code=ABCD-EFGH-JKMN', '/api/v1/codes/check', '/api/v1/codes/redeem'][
+        i % 3
+      ];
+      const method = path.startsWith('/api') ? 'POST' : 'GET';
+      expect(await applyRateLimit(make(path, {}, method)), path).toBeNull();
+    }
+    // Spent: every attempt now refused, a prefetch header gets none past.
+    for (const [path, method] of [
+      ['/redeem?code=ABCD-EFGH-JKMN', 'GET'],
+      ['/api/v1/codes/check', 'POST'],
+      ['/api/v1/codes/redeem', 'POST'],
+    ]) {
+      const blocked = await applyRateLimit(make(path, PREFETCH, method));
+      expect(blocked?.status, path).toBe(429);
+      expect(blocked?.headers.get('X-RateLimit-Limit')).toBe(
+        String(CODE_ATTEMPTS_PER_MINUTE_PER_IP)
+      );
+    }
+    // And the bare page still loads for this address.
+    expect(await applyRateLimit(make('/redeem', PREFETCH))).toBeNull();
   });
 });

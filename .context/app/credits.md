@@ -261,7 +261,12 @@ lookup, not a guesser:
   `CODE_ATTEMPTS_PER_MINUTE_PER_IP` (120) across the page and both routes. It is
   the looser of the two because a QR card is handed out at events, where a room
   scanning together shares one address, and one person's way through takes
-  several requests (raised from 30 in t-60's review);
+  several requests (raised from 30 in t-60's review). A page load counts only
+  when it carries a code: the header links to the bare page and Next prefetches
+  it on every public page, so counting those let a room browsing behind one
+  address spend the allowance before anyone entered a code (t-66). The skip
+  reads the URL, not a prefetch header, so no header gets a real attempt past
+  it;
 - per person in the redeem handler, `REDEEM_ATTEMPTS_PER_MINUTE_PER_USER` (10),
   every attempt counted, a malformed one too.
 
