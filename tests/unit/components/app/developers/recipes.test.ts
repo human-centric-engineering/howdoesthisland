@@ -9,7 +9,7 @@
  *
  * @see components/app/developers/recipes.ts
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { APP_ROUTES } from '@/lib/app/api/registry';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import {
@@ -74,5 +74,24 @@ describe('a body the route refuses', () => {
       judges: ['ethos'],
     });
     expect(parsed?.success).toBe(false);
+  });
+});
+
+describe('the wait bound, in words', () => {
+  async function waitSentence(ms: number): Promise<string> {
+    vi.resetModules();
+    vi.doMock('@/lib/app/assessments/limits', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@/lib/app/assessments/limits')>()),
+      WAIT_BOUND_MS: ms,
+    }));
+    const { RECIPES: fresh } = await import('@/components/app/developers/recipes');
+    vi.doUnmock('@/lib/app/assessments/limits');
+    return fresh.flatMap((r) => r.then ?? []).find((t) => t.includes('take longer than')) ?? '';
+  }
+
+  it('says one minute, several minutes, or seconds, by what the bound is', async () => {
+    expect(await waitSentence(60_000)).toContain('take longer than 1 minute.');
+    expect(await waitSentence(120_000)).toContain('take longer than 2 minutes.');
+    expect(await waitSentence(90_000)).toContain('take longer than 90 seconds.');
   });
 });

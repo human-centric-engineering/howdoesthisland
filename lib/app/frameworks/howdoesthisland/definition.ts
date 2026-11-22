@@ -9,6 +9,7 @@
  */
 import { isJsonObject } from '@/lib/app/frameworks/codec';
 import { isCultureEnabled } from '@/lib/app/frameworks/culture';
+import { howDoesThisLandCatalogue } from '@/lib/app/frameworks/howdoesthisland/catalogue';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { HOWDOESTHISLAND_JUDGE_SLOTS } from '@/lib/app/frameworks/howdoesthisland/judge-slots';
 import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
@@ -310,6 +311,7 @@ export const howDoesThisLand: FrameworkDefinition = {
     const meta = isJsonObject(document.meta) ? document.meta : {};
     return { version: String(meta.version), schemaVersion: String(meta.schema_version) };
   },
+  catalogue: howDoesThisLandCatalogue,
   // The culture switch is read here, when the engine is made, so one engine
   // answers the same way for its whole life.
   createEngine: (model) => createHowDoesThisLandEngine(model, { culture: isCultureEnabled() }),

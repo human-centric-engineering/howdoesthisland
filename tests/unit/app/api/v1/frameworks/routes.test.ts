@@ -1,16 +1,20 @@
 /**
- * Unit tests: the public `frameworks` routes (t-11).
+ * Unit tests: what the `frameworks` routes answer (t-11, t-67).
  *
  * GET /api/v1/frameworks
  * GET /api/v1/frameworks/{slug}
+ * GET /api/v1/frameworks/{slug}/versions/{version}/catalogue
  * GET /api/v1/frameworks/{slug}/versions/{version}
  * GET /api/v1/frameworks/{slug}/versions/{version}/{kind}
  *
  * The routes, the service, the store and the codec all run for real, on the
  * committed 0.5.1 file imported into the in-memory repo the store's own tests
- * use. Only the two Prisma-backed objects are replaced, by that fake.
+ * use. Only the two Prisma-backed objects are replaced, by that fake, and the
+ * guards, which pass every request here: who may call each route is
+ * `access.test.ts`, with the guards running for real.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
@@ -21,6 +25,15 @@ import { GET as listRoute } from '@/app/api/v1/frameworks/route';
 import { GET as frameworkRoute } from '@/app/api/v1/frameworks/[slug]/route';
 import { GET as versionRoute } from '@/app/api/v1/frameworks/[slug]/versions/[version]/route';
 import { GET as kindRoute } from '@/app/api/v1/frameworks/[slug]/versions/[version]/[kind]/route';
+import { GET as catalogueRoute } from '@/app/api/v1/frameworks/[slug]/versions/[version]/catalogue/route';
+
+// The guards pass every request; `access.test.ts` runs them for real.
+vi.mock('@/lib/auth/guards', () => {
+  type Handler = (request: Request, session: unknown, ctx: unknown) => Promise<Response>;
+  const pass = (handler: Handler) => (request: Request, ctx: unknown) =>
+    handler(request, {}, ctx ?? { params: Promise.resolve({}) });
+  return { withAuth: pass, withAdminAuth: pass };
+});
 
 const mockEnv = vi.hoisted(
   (): {
@@ -71,8 +84,8 @@ function canonical(value: unknown): string {
 const canonicalHash = (value: unknown) =>
   createHash('sha256').update(canonical(value)).digest('hex');
 
-function get(path: string, headers: Record<string, string> = {}): Request {
-  return new Request(`${BASE}${path}`, { headers });
+function get(path: string, headers: Record<string, string> = {}): NextRequest {
+  return new NextRequest(`${BASE}${path}`, { headers });
 }
 const ctx = <T>(params: T) => ({ params: Promise.resolve(params) });
 
@@ -107,7 +120,7 @@ function withCulture<T>(enabled: boolean | undefined, fn: () => Promise<T>): Pro
 }
 
 describe('GET /api/v1/frameworks', () => {
-  it('lists the framework with its published version only, without signing in', async () => {
+  it('lists the framework with its published version only', async () => {
     const res = await listRoute(get(''));
     expect(res.status).toBe(200);
     expect(await body(res)).toEqual({
@@ -144,24 +157,12 @@ describe('GET /api/v1/frameworks', () => {
 });
 
 describe('GET /api/v1/frameworks/{slug}', () => {
-  it('serves the framework and the kinds a version has, culture included when on', async () => {
+  it('serves the framework and its versions, and no longer lists the record kinds', async () => {
     const res = await frameworkRoute(get(`/${SLUG}`), ctx({ slug: SLUG }));
     expect(res.status).toBe(200);
     const { data } = await body(res);
     expect(data).toMatchObject({ slug: SLUG, latestVersion: '0.5.1' });
-    const kinds = (data as { kinds: string[] }).kinds;
-    expect(kinds.slice(0, 3)).toEqual(['appeal', 'dimension', 'lens']);
-    expect(kinds).toContain('lever');
-    expect(kinds).toContain('culture_country');
-  });
-
-  it('leaves the culture kinds out when the switch is off', async () => {
-    const res = await withCulture(false, () =>
-      frameworkRoute(get(`/${SLUG}`), ctx({ slug: SLUG }))
-    );
-    const kinds = ((await body(res)).data as { kinds: string[] }).kinds;
-    expect(kinds.filter((k) => k.startsWith('culture_'))).toEqual([]);
-    expect(kinds).toContain('appeal');
+    expect(data).not.toHaveProperty('kinds');
   });
 
   it.each([['nope'], ['HowDoesThisLand'], ['../etc']])(
@@ -180,6 +181,78 @@ describe('GET /api/v1/frameworks/{slug}', () => {
       ctx({ slug: SLUG })
     );
     expect(res.status).toBe(304);
+  });
+});
+
+const catalogue = (v = '0.5.1', extra: Record<string, string> = {}) =>
+  catalogueRoute(get(`/${SLUG}/versions/${v}/catalogue`, extra), ctx({ slug: SLUG, version: v }));
+
+/** Every string anywhere in a value. */
+function strings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(strings);
+  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap(strings);
+  return [];
+}
+
+describe('GET /api/v1/frameworks/{slug}/versions/{version}/catalogue', () => {
+  const MODEL = JSON.parse(RAW) as Record<string, Array<Record<string, unknown>>>;
+
+  it('lists what a request takes and a result names, by id and name', async () => {
+    const res = await catalogue();
+    expect(res.status).toBe(200);
+    const { data, meta } = await body(res);
+    expect(meta).toMatchObject({ framework: SLUG, version: '0.5.1' });
+    const c = data as {
+      request: Record<string, Array<{ id: string }>>;
+      result: Record<string, Array<{ id: string }>>;
+    };
+    expect(c.request.contentTypes.map((x) => x.id)).toEqual(MODEL.content_types.map((x) => x.id));
+    expect(c.request.roles.map((x) => x.id)).toEqual(MODEL.exec_roles.map((x) => x.id));
+    expect(c.result.appeals).toEqual(MODEL.appeals.map(({ id, name }) => ({ id, name })));
+    expect(c.result.dimensions).toHaveLength(
+      MODEL.dimensions.length + MODEL.extra_dimensions.length
+    );
+    expect(c.request.countries?.length).toBeGreaterThan(0);
+  });
+
+  it('carries nothing that makes the model work: no rubric, weight, pattern, formula or instruction', async () => {
+    const served = new Set(strings((await body(await catalogue())).data));
+    const secret = [
+      ...MODEL.dimensions.flatMap((d) => [
+        ...strings(d.rubric),
+        ...strings(d.heuristic),
+        String(d.description),
+      ]),
+      ...MODEL.red_flags.map((f) => String(f.pattern)),
+      ...MODEL.judges.flatMap((j) => [
+        String(j.instruction),
+        String(j.persona),
+        ...strings(j.rules),
+      ]),
+      ...strings(JSON.parse(RAW).scoring),
+      // Prose and patterns, not ids: an id the catalogue names may also appear in them.
+    ].filter((x) => x.length > 12 && /[\s\\]/.test(x));
+    expect(secret.length).toBeGreaterThan(100);
+    expect(secret.filter((x) => served.has(x))).toEqual([]);
+    const text = JSON.stringify((await body(await catalogue())).data);
+    for (const key of ['rubric', 'weight', 'heuristic', 'pattern', 'instruction', 'persona']) {
+      expect(text).not.toContain(`"${key}`);
+    }
+  });
+
+  it('leaves countries out when the culture switch is off', async () => {
+    const res = await withCulture(false, () => catalogue());
+    const c = (await body(res)).data as { request: Record<string, unknown> };
+    expect(c.request).not.toHaveProperty('countries');
+  });
+
+  it('404s a draft, and 304s on a matching If-None-Match', async () => {
+    expect((await catalogue('0.6.0')).status).toBe(404);
+    const etag = (await catalogue()).headers.get('ETag');
+    expect((await catalogue('0.5.1', { 'If-None-Match': etag ?? '' })).status).toBe(304);
+    // Its ETag is its own, not the whole model's.
+    expect(etag).not.toBe((await version('0.5.1')).headers.get('ETag'));
   });
 });
 

@@ -77,10 +77,12 @@ export interface FrameworkSummary {
   versions: VersionSummary[];
 }
 
-export interface FrameworkDetail extends FrameworkSummary {
-  /** The record kinds `…/versions/{version}/{kind}` serves, in model order. */
-  kinds: string[];
-}
+/**
+ * One framework and its versions. It no longer lists the record kinds (t-67):
+ * the kind route is for platform admins only, and the list described the
+ * model's structure to everyone else.
+ */
+export type FrameworkDetail = FrameworkSummary;
 
 function summariseVersion(v: ServedVersion): VersionSummary {
   return {
@@ -129,8 +131,8 @@ async function findServed(
 }
 
 export async function getFramework(slug: string, deps = defaultDeps): Promise<FrameworkDetail> {
-  const { def, framework } = await findServed(slug, deps);
-  return { ...summarise(framework), kinds: servedKinds(def) };
+  const { framework } = await findServed(slug, deps);
+  return summarise(framework);
 }
 
 /** A published version, found but not yet read. */
@@ -217,6 +219,19 @@ export async function versionDocument(
     ? Object.fromEntries(Object.entries(model).filter(([key]) => !resolved.omitted.includes(key)))
     : model;
   return { data, meta: versionMeta(resolved) };
+}
+
+/**
+ * What API callers may know about a version (t-67): its catalogue, built
+ * from the model as served (less any withheld section), and the version's
+ * meta. The whole model is for platform admins only.
+ */
+export async function versionCatalogue(
+  resolved: ResolvedVersion,
+  deps = defaultDeps
+): Promise<{ data: JsonObject; meta: VersionMeta }> {
+  const { data, meta } = await versionDocument(resolved, deps);
+  return { data: resolved.def.catalogue(data), meta };
 }
 
 function recordsAt(model: JsonObject, path: readonly string[]): JsonObject[] {

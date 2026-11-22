@@ -1,14 +1,16 @@
 /**
  * GET /api/v1/frameworks — every framework with a published version, and
- * those versions, newest first (t-11).
+ * those versions, most recently published first (t-11).
  *
- * Authentication: none. Rate limiting: the `/api/v1` section cap, keyed on the
- * caller's IP when anonymous (`lib/security/rate-limit-policy.ts`).
+ * Authentication: a browser session, or an API key with the `assess` scope
+ * (t-67). Errors: 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (a key without `assess`).
  */
+import { withAuth } from '@/lib/auth/guards';
 import { listFrameworks } from '@/lib/app/frameworks/api/service';
 import { conditionalResponse, frameworkErrorResponse } from '@/lib/app/frameworks/api/respond';
+import { frameworkReader } from '@/lib/app/frameworks/api/route-auth';
 
-export async function GET(request: Request): Promise<Response> {
+export const GET = withAuth(async (request) => {
   try {
     const frameworks = await listFrameworks();
     return await conditionalResponse(request, frameworks, () =>
@@ -17,4 +19,4 @@ export async function GET(request: Request): Promise<Response> {
   } catch (error) {
     return frameworkErrorResponse(error);
   }
-}
+}, frameworkReader());

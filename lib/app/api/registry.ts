@@ -217,8 +217,31 @@ export const frameworkSummarySchema = z.object({
 });
 
 /** `FrameworkDetail`. */
-export const frameworkDetailSchema = frameworkSummarySchema.extend({
-  kinds: z.array(z.string()),
+export const frameworkDetailSchema = frameworkSummarySchema;
+
+const idNameSchema = z.object({ id: z.string(), name: z.string() });
+
+/** `howDoesThisLandCatalogue()` (t-67): ids and names only, never the model. */
+export const frameworkCatalogueSchema = z.object({
+  request: z.object({
+    contentTypes: z.array(idNameSchema),
+    archetypes: z.array(idNameSchema),
+    roles: z.array(idNameSchema),
+    audience: z.array(
+      idNameSchema.extend({ options: z.array(z.object({ id: z.string(), label: z.string() })) })
+    ),
+    countries: z.array(idNameSchema.extend({ region: z.string() })).optional(),
+  }),
+  result: z.object({
+    appeals: z.array(idNameSchema),
+    dimensions: z.array(
+      idNameSchema.extend({ appeal: z.string().nullable(), group: z.string().nullable() })
+    ),
+    lenses: z.array(idNameSchema),
+    groups: z.array(idNameSchema),
+    redFlags: z.array(idNameSchema.extend({ severity: z.string() })),
+    duties: z.array(idNameSchema),
+  }),
 });
 
 /** A framework record or model as the version materialises it: open JSON. */
@@ -525,28 +548,43 @@ export const APP_ROUTES: readonly RouteContract[] = [
     response: { status: 200, data: openApiDocumentSchema, conditional: true, envelope: false },
   },
 
-  // Frameworks (t-11): public, read-only, conditional GETs.
+  // Frameworks (t-11). The model is IP (t-67): whole or by kind, platform
+  // admins only; callers building reviews read the catalogue.
   {
     method: 'GET',
     path: '/api/v1/frameworks',
     summary: 'List every framework with a published version, newest version first.',
-    auth: { who: 'anyone' },
+    auth: ASSESS,
     request: {},
     response: { status: 200, data: z.array(frameworkSummarySchema), conditional: true },
   },
   {
     method: 'GET',
     path: '/api/v1/frameworks/{slug}',
-    summary: 'Get one framework, its published versions and the record kinds a version serves.',
-    auth: { who: 'anyone' },
+    summary: 'Get one framework and its published versions, with the one new reviews use.',
+    auth: ASSESS,
     request: { params: frameworkParams, invalidParamsStatus: 404 },
     response: { status: 200, data: frameworkDetailSchema, conditional: true },
   },
   {
     method: 'GET',
+    path: '/api/v1/frameworks/{slug}/versions/{version}/catalogue',
+    summary:
+      "List what a version's reviews take and return, by id and name: the types of copy, readers and settings a review's context takes, and the appeals, dimensions and red flags a result names.",
+    auth: ASSESS,
+    request: { params: versionParams, invalidParamsStatus: 404 },
+    response: {
+      status: 200,
+      data: frameworkCatalogueSchema,
+      meta: versionMetaSchema,
+      conditional: true,
+    },
+  },
+  {
+    method: 'GET',
     path: '/api/v1/frameworks/{slug}/versions/{version}',
-    summary: 'Get the whole model of a published version.',
-    auth: { who: 'anyone' },
+    summary: 'Get the whole model of a published version. Platform admins only.',
+    auth: { who: 'platform-admin' },
     request: { params: versionParams, invalidParamsStatus: 404 },
     response: {
       status: 200,
@@ -558,8 +596,9 @@ export const APP_ROUTES: readonly RouteContract[] = [
   {
     method: 'GET',
     path: '/api/v1/frameworks/{slug}/versions/{version}/{kind}',
-    summary: "Get one kind of record from a published version, in the model's order.",
-    auth: { who: 'anyone' },
+    summary:
+      "Get one kind of record from a published version, in the model's order. Platform admins only.",
+    auth: { who: 'platform-admin' },
     request: { params: kindParams, invalidParamsStatus: 404 },
     response: {
       status: 200,

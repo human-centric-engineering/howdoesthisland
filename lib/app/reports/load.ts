@@ -1,9 +1,10 @@
 /**
  * Loading a report for a server component (t-29).
  *
- * Two API reads, both through `requireServerData`: the assessment, and the
- * model version it ran on, which names everything the result holds by id.
- * That is one page's worth of data in two calls, never one per row. A 404 on
+ * Two reads: the assessment, through the API (`requireServerData`), and the
+ * model version it ran on, which names everything the result holds by id,
+ * read in process (t-67: the whole model is for platform admins only over
+ * HTTP). That is one page's worth of data in two calls, never one per row. A 404 on
  * the assessment (another workspace's id included) renders the not-found
  * page. A 404 on the model version is an `unreadable` report, since retrying
  * cannot bring it back. Any other failure throws to the route's error boundary.
@@ -13,12 +14,12 @@
  * gaps.
  *
  * **Where the answers come from is a {@link ReportSource}** (t-31). The web
- * page reads through the API ({@link apiReportSource}). The PDF's print page
+ * page reads the assessment through the API ({@link apiReportSource}). The PDF's print page
  * has no session to call the API with, so it reads the same services the API
  * routes answer from (`lib/app/reports/pdf/print-source.ts`). Both go through
  * the parsing and building below, so the PDF cannot drift from the page.
  */
-import { loadServerData, requireServerData, ServerLoadError } from '@/lib/api/server-load';
+import { requireServerData } from '@/lib/api/server-load';
 import { logger } from '@/lib/logging';
 import {
   reportAssessmentSchema,
@@ -26,6 +27,7 @@ import {
   reportResultSchema,
   type ReportAssessment,
 } from '@/lib/app/reports/input';
+import { asOnTheWire, loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { buildReportView, type ReportView } from '@/lib/app/reports/view';
 
 export type ReportLoad =
@@ -41,9 +43,6 @@ export type ReportLoad =
 export const assessmentPath = (id: string): string =>
   `/api/v1/assessments/${encodeURIComponent(id)}`;
 
-export const modelPath = (slug: string, version: string): string =>
-  `/api/v1/frameworks/${encodeURIComponent(slug)}/versions/${encodeURIComponent(version)}`;
-
 /**
  * Where a report's two answers come from, each as the API would send it.
  *
@@ -51,7 +50,8 @@ export const modelPath = (slug: string, version: string): string =>
  *   found never returns: the API source renders the not-found page, and the
  *   print source throws `NotFoundError`, which the print page answers the
  *   same way.
- * - `model`: the `GET /api/v1/frameworks/{slug}/versions/{version}` data, or
+ * - `model`: the model version's document, as
+ *   `GET /api/v1/frameworks/{slug}/versions/{version}` would send it, or
  *   `null` when that version is not found. Any other failure throws.
  */
 export interface ReportSource {
@@ -65,13 +65,12 @@ export const apiReportSource: ReportSource = {
     const { data } = await requireServerData<unknown>(assessmentPath(id), { notFound: true });
     return data;
   },
+  // In process, as the PDF and a share link read it (t-67): the whole model
+  // is for platform admins only over HTTP, and the report parses only the
+  // fields it shows, so the rest never reaches the browser.
   async model(slug, version) {
-    const path = modelPath(slug, version);
-    // 404 is expected here, and logged by `loadReport` with the assessment it belongs to.
-    const loaded = await loadServerData<unknown>(path, { expected: [404] });
-    if (loaded.ok) return loaded.data;
-    if (loaded.failure.kind !== 'not_found') throw new ServerLoadError(path, loaded.failure);
-    return null;
+    const data = await loadModelDocument(slug, version);
+    return data === null ? null : asOnTheWire(data);
   },
 };
 

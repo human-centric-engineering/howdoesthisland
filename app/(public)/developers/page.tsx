@@ -333,8 +333,8 @@ export default async function DevelopersPage() {
             <div className="space-y-1">
               <h3 className="font-semibold">No key needed</h3>
               <p className="text-muted-foreground text-sm">
-                The frameworks the reviews score against, shared reports and this API’s own
-                description.
+                Shared reports and this API’s own description. The catalogue of what a review takes
+                and returns needs a key with <code>assess</code>.
               </p>
               <RouteLinks ops={anonymous} />
             </div>
