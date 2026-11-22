@@ -148,4 +148,79 @@ describe('ProjectWeights', () => {
       body: { overlay: null },
     });
   });
+
+  it('keeps an appeal the version no longer lets move, so its value is seen', () => {
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { weights: { logos: 0.05 } } })}
+        catalogue={aCatalogue({ adjustment: BOUNDS })}
+      />
+    );
+
+    expect(screen.getByRole('spinbutton', { name: /^Logos, in points/ })).toHaveValue(5);
+  });
+
+  it('keeps a priority list the version no longer offers while the project uses it', () => {
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { priorityDimensions: { remove: ['kai_call'] } } })}
+        catalogue={aCatalogue({
+          adjustment: { ...BOUNDS, priorityDimensions: { add: 0, remove: 0 } },
+        })}
+      />
+    );
+
+    expect(screen.getByText(/^No longer a priority/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Make a priority/)).toBeNull();
+    expect(screen.getByRole('checkbox', { name: 'Call to action' })).toBeChecked();
+  });
+
+  it('says when the stored adjustment is in a shape it cannot show, and lets it be replaced', () => {
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { weights: 'lots' } })}
+        catalogue={aCatalogue({ adjustment: BOUNDS })}
+      />
+    );
+
+    expect(screen.getByRole('note')).toHaveTextContent(/not in a shape this page can show/);
+    expect(screen.getByRole('button', { name: 'Save weighting' })).toBeEnabled();
+  });
+
+  it('shows a refusal it cannot place by Save, and any other failure', async () => {
+    vi.mocked(apiClient.patch)
+      .mockRejectedValueOnce(
+        new APIClientError('No', 'OVERLAY_INVALID', 400, {
+          issues: [{ path: 'overlay', message: 'This version declares no bounds' }],
+        })
+      )
+      .mockRejectedValueOnce(new APIClientError('Down', 'INTERNAL_ERROR', 500));
+    const user = userEvent.setup();
+    render(<ProjectWeights project={aProject()} catalogue={aCatalogue({ adjustment: BOUNDS })} />);
+
+    await user.type(screen.getByRole('spinbutton', { name: /^Ethos, in points/ }), '5');
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+    expect(await screen.findByText('This version declares no bounds')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('This version declares no bounds')).toBeNull();
+  });
+
+  it('shows a failed removal beside its button', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValue(new APIClientError('Down', 'INTERNAL_ERROR', 500));
+    const user = userEvent.setup();
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { weights: 'lots' } })}
+        catalogue={aCatalogue()}
+      />
+    );
+
+    expect(screen.getByText(/The model version in use allows no adjustment/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remove the adjustment' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });
