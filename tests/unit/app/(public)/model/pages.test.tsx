@@ -42,12 +42,16 @@ const materialise = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/app/frameworks/store', () => ({ materialise }));
 
 import { __resetModelCacheForTests } from '@/components/app/model/load';
-import ModelIndex from '@/app/(public)/model/page';
+import ModelIndex, { generateMetadata as indexMetadata } from '@/app/(public)/model/page';
 import ModelSection, {
   generateMetadata as sectionMetadata,
 } from '@/app/(public)/model/[section]/page';
-import VersionIndex from '@/app/(public)/model/v/[version]/page';
-import VersionSection from '@/app/(public)/model/v/[version]/[section]/page';
+import VersionIndex, {
+  generateMetadata as versionIndexMetadata,
+} from '@/app/(public)/model/v/[version]/page';
+import VersionSection, {
+  generateMetadata as versionSectionMetadata,
+} from '@/app/(public)/model/v/[version]/[section]/page';
 import AboutPage, { metadata as aboutMetadata } from '@/app/(public)/about/page';
 import { ABOUT_COPY } from '@/components/app/marketing/about-copy';
 
@@ -211,6 +215,17 @@ describe('versions', () => {
     );
     expect(links.length).toBeGreaterThan(0);
     expect(links.every((href) => href!.startsWith('/model/v/0.5.1/'))).toBe(true);
+  });
+
+  it('names the version in a pinned page’s metadata, and the latest without one', async () => {
+    expect(indexMetadata().title).toBe('The model');
+    expect((await versionIndexMetadata(params({ version: '0.5.1' }))).title).toBe(
+      'The model, version 0.5.1'
+    );
+    expect(
+      (await versionSectionMetadata(params({ version: '0.5.1', section: 'moves' }))).title
+    ).toBe('Moves: the model, version 0.5.1');
+    expect((await sectionMetadata(params({ section: 'nope' }))).title).toBe('The model');
   });
 
   it('404s a version that is not published', async () => {
