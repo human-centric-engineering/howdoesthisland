@@ -230,6 +230,14 @@ version gone or unreadable) does not.
   gone or not parseable) is not counted. A malformed, unknown, revoked or
   expired token, or a suspended workspace, answers the same 404, and the page
   the same not-found.
+- **The link's preview card** (`app/(public)/r/[token]/opengraph-image.tsx`
+  and its `twitter-image` twin, t-62) is the same neutral card for every link:
+  "A report, shared with you." It reads no params and no data, so a chat
+  app's unfurl says nothing about the report the token opens. It exists so the
+  link does not inherit the landing page's card from the `(public)` root;
+  Next gives a segment's own image file priority over page metadata, so
+  `metadata` alone could not turn the inherited one off. Both cards are drawn
+  by `shareCard()` (`components/app/brand/share-card.tsx`).
 - **What a link serves** (`sharedAssessmentSchema` in the route registry) is
   the report's fields, picked one by one: no id, cost, source, failure,
   per-judge cost or timing, workspace or author, and no `context` (open JSON

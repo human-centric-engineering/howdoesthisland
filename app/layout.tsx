@@ -13,6 +13,7 @@ import { AnalyticsScripts, UserIdentifier, PageTracker } from '@/components/anal
 import { SurfaceSync } from '@/components/surface-sync';
 import { DEFAULT_SURFACE } from '@/lib/app/surface';
 import { BRAND } from '@/lib/brand';
+import { env } from '@/lib/env';
 // HowDoesThisLand: next/font variables on <html>, so portaled overlays get them
 // too. Ledger: .context/app/platform-divergences.md row 5.
 import { appFontVariables } from '@/components/app/brand/fonts';
@@ -23,6 +24,9 @@ import { appFontVariables } from '@/components/app/brand/fonts';
 // double-branding. Previously this hardcoded "- Next.js Starter" and the
 // starter blurb, which every fork inherited on any un-templated page.
 export const metadata: Metadata = {
+  // HowDoesThisLand: the base for the social cards' absolute URLs. Without it
+  // Next uses localhost off Vercel. Ledger: .context/app/platform-divergences.md row 26.
+  metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),
   title: {
     default: BRAND.name,
     template: `%s - ${BRAND.name}`,
