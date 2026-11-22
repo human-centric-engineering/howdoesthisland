@@ -77,9 +77,12 @@ function viewOf(
 }
 
 /** The example reviewed with one version's model, or null when it no longer fits. */
-async function build(version: string): Promise<ExampleViews | null> {
+/** No document for the version yet: not a verdict on the example, so not kept. */
+const MISSING = Symbol('missing');
+
+async function build(version: string): Promise<ExampleViews | null | typeof MISSING> {
   const document = await loadModelDocument(HOWDOESTHISLAND_SLUG, version);
-  if (!document) return null;
+  if (!document) return MISSING;
   try {
     const reviews = reviewExample(howDoesThisLand, document);
     const problems = [...reviews.draft.problems, ...reviews.final.problems];
@@ -106,36 +109,57 @@ async function build(version: string): Promise<ExampleViews | null> {
   }
 }
 
-/** Built views by version: a handful at most. A failed build is kept too, so it is logged once. */
+/** Built views by version: a handful at most. A model the example doesn't fit is kept, so it is logged once. */
 const built = new Map<string, Promise<ExampleViews | null>>();
-let latest: { version: string | null; at: number } | null = null;
 
-async function latestVersion(now: number): Promise<string | null> {
+/**
+ * The latest published version, looked up at most once a {@link LOOKUP_TTL_MS}:
+ * concurrent views share one lookup in flight. A lookup that fails keeps the
+ * last good answer (retried after the same interval), so a database blip does
+ * not turn every view into an error; with no good answer yet, it throws.
+ */
+let latest: { version: Promise<string | null>; at: number; good: string | null } | null = null;
+
+function latestVersion(now: number): Promise<string | null> {
   if (latest && now - latest.at < LOOKUP_TTL_MS) return latest.version;
-  try {
-    const version = (await getFramework(HOWDOESTHISLAND_SLUG)).latestVersion;
-    latest = { version, at: now };
-    return version;
-  } catch (err) {
-    if (err instanceof FrameworkApiError) {
-      latest = { version: null, at: now };
-      return null;
+  const previous = latest?.good ?? null;
+  const lookup = getFramework(HOWDOESTHISLAND_SLUG).then(
+    (fw) => {
+      if (latest?.version === lookup) latest.good = fw.latestVersion;
+      return fw.latestVersion;
+    },
+    (err: unknown) => {
+      if (err instanceof FrameworkApiError) return null;
+      logger.error('Worked example: the latest version could not be looked up', err);
+      if (previous !== null) return previous;
+      throw err;
     }
-    throw err;
-  }
+  );
+  latest = { version: lookup, at: now, good: previous };
+  return lookup;
 }
 
 /** The example, reviewed with the latest published model, or null when there is none it fits. */
 export async function loadExampleViews(now: number = Date.now()): Promise<ExampleViews | null> {
   const version = await latestVersion(now);
   if (!version) return null;
-  let views = built.get(version);
+  let views: Promise<ExampleViews | null> | undefined = built.get(version);
   if (!views) {
-    // A read that failed (not a model the example doesn't fit) is retried on the next view.
-    views = build(version).catch((err: unknown) => {
-      built.delete(version);
-      throw err;
-    });
+    // A read that failed, or found no document yet (a publish in progress),
+    // is retried on the next view; only "doesn't fit" is kept.
+    views = build(version).then(
+      (result) => {
+        if (result === MISSING) {
+          built.delete(version);
+          return null;
+        }
+        return result;
+      },
+      (err: unknown) => {
+        built.delete(version);
+        throw err;
+      }
+    );
     built.set(version, views);
   }
   return views;

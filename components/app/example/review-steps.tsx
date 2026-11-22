@@ -21,12 +21,14 @@ export function ReviewSteps({ steps, children }: { steps: Step[]; children: Reac
   const base = useId();
 
   const go = useCallback(
-    (i: number, focus = false) => {
+    (i: number, fromTabs = false) => {
       const next = Math.max(0, Math.min(steps.length - 1, i));
       setActive(next);
       const tab = tabs.current[next];
-      if (focus) tab?.focus();
-      // On a narrow screen the tab row scrolls: keep the current step in view.
+      if (!fromTabs) return;
+      tab?.focus();
+      // On a narrow screen the tab row scrolls: keep the chosen step in view.
+      // Not from Back and Next, which scroll the page to the steps instead.
       tab?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
     },
     [steps.length]
@@ -81,7 +83,7 @@ export function ReviewSteps({ steps, children }: { steps: Step[]; children: Reac
                 aria-selected={selected}
                 aria-controls={`${base}-panel-${s.id}`}
                 tabIndex={selected ? 0 : -1}
-                onClick={() => go(i)}
+                onClick={() => go(i, true)}
                 onKeyDown={onKey}
                 className="group flex shrink-0 flex-col items-center gap-2 px-1 text-center focus-visible:outline-none"
               >

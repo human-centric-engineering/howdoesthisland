@@ -8,7 +8,7 @@
  *
  * @see components/app/example/example-page.tsx
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -49,15 +49,25 @@ import {
 } from '@/components/app/example/load';
 import { DRAFT, FINAL } from '@/lib/app/example/example-review';
 
-const MODEL = JSON.parse(
-  readFileSync('lib/app/frameworks/howdoesthisland/data/model-0.5.1.json', 'utf8')
-) as Record<string, unknown>;
+/** The newest model file, as the example's own test reads it: the one that will be served next. */
+const DATA = 'lib/app/frameworks/howdoesthisland/data';
+const versionOf = (file: string) =>
+  (/^model-(\d+)\.(\d+)\.(\d+)\.json$/.exec(file) ?? []).slice(1).map(Number);
+const NEWEST = readdirSync(DATA)
+  .filter((f) => versionOf(f).length === 3)
+  .sort((a, b) => {
+    const [x, y] = [versionOf(a), versionOf(b)];
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  })
+  .at(-1)!;
+const NEWEST_VERSION = versionOf(NEWEST).join('.');
+const MODEL = JSON.parse(readFileSync(`${DATA}/${NEWEST}`, 'utf8')) as Record<string, unknown>;
 
 beforeEach(() => {
   __resetExampleCacheForTests();
   mockEnv.QUICK_SCAN_ENABLED = true;
   log.error.mockReset();
-  mocks.getFramework.mockReset().mockResolvedValue({ latestVersion: '0.5.1' });
+  mocks.getFramework.mockReset().mockResolvedValue({ latestVersion: NEWEST_VERSION });
   mocks.loadModel.mockReset().mockResolvedValue(MODEL);
 });
 
@@ -215,5 +225,37 @@ describe('loadExampleViews', () => {
     mocks.loadModel.mockRejectedValueOnce(new Error('database down'));
     await expect(loadExampleViews(1)).rejects.toThrow('database down');
     expect(await loadExampleViews(2)).not.toBeNull();
+  });
+
+  it('shares one lookup between concurrent views', async () => {
+    let resolve!: (v: { latestVersion: string }) => void;
+    mocks.getFramework.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+    const views = [loadExampleViews(1), loadExampleViews(1), loadExampleViews(1)];
+    resolve({ latestVersion: NEWEST_VERSION });
+    const [a, b, c] = await Promise.all(views);
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+    expect(mocks.getFramework).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the last good version when a lookup fails, and retries after the interval', async () => {
+    const good = await loadExampleViews(1);
+    mocks.getFramework.mockRejectedValue(new Error('database blip'));
+    expect(await loadExampleViews(1 + LOOKUP_TTL_MS)).toBe(good);
+    expect(await loadExampleViews(2 + LOOKUP_TTL_MS)).toBe(good);
+    // One failed lookup in the interval, not one per view.
+    expect(mocks.getFramework).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws when the first lookup ever fails, having no good version to keep', async () => {
+    mocks.getFramework.mockRejectedValue(new Error('database down'));
+    await expect(loadExampleViews(1)).rejects.toThrow('database down');
+  });
+
+  it('does not keep a version whose document is not readable yet', async () => {
+    mocks.loadModel.mockResolvedValueOnce(null);
+    expect(await loadExampleViews(1)).toBeNull();
+    expect(await loadExampleViews(2)).not.toBeNull();
+    expect(mocks.loadModel).toHaveBeenCalledTimes(2);
   });
 });
