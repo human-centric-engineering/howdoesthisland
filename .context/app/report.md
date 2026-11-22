@@ -48,6 +48,10 @@ in the components:
   perspectives, and with no notes there is no marked-up copy.
 - **Context used** and the version's **calibration status** (§8.5 items 9 and 10) have no data until f-projects and f-calibration ship, so they are not
   sections yet. There is no stub.
+- **A project's weighting** (t-72) is named on the cover when the review used one
+  (`assessment.overlay`), in the model's names ("Ethos +10 points", "Call to action made a
+  priority"), so a reader knows the scores were weighted for that project. A share link
+  serves it too: it holds only numbers and the version's ids.
 - **Recommendations** are shown high impact first. They keep their place in
   the result as their number, because the editor names them that way (`rec_2`
   is recommendation 2).

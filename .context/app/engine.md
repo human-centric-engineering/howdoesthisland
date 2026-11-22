@@ -24,7 +24,8 @@ const result = engine.assemble(text, ctx, quick, outputs, source);
 
 - **`FrameworkEngine`** (`lib/app/frameworks/engine.ts`) has `quickScan`, `assemble` and
   the judge methods (f-judges): `activeJudgeSlots`, `buildJudgeRequest`, `outputSchema`
-  and `validateJudgeReply`. `rewriteRequest` arrives with f-rewrite, so no method is a
+  and `validateJudgeReply`, and a project's weighting (t-72): `parseOverlay` and
+  `withOverlay` ([below](#a-projects-weighting-d5-t-72)). `rewriteRequest` arrives with f-rewrite, so no method is a
   stub.
 - **The judge slots are the definition's, not the engine's.** `judges.slots` on the
   framework definition is the one list (each slot is a platform agent, see
@@ -59,7 +60,8 @@ diff against `prototype/src/engine.js` stays readable.
 | `prompts.ts`        | `audienceText`, `contentBlock`, `judgePrompt`                         |
 | `validate-reply.ts` | `validJudgeOutput`, replaced by post-validation                       |
 
-Two have no prototype function. `judge-schemas.ts` builds each judge's strict reply
+Three have no prototype function. `overlay.ts` checks a project's weighting against the
+version's bounds (t-72). `judge-schemas.ts` builds each judge's strict reply
 schema, and `judges.ts` decides which judges a profile runs and builds each call.
 
 Not ported here: `rewritePrompt`, `calibrate` and `toApi` (see the porting map, app-plan
@@ -137,6 +139,38 @@ fails on any difference not listed there, and on any listed difference that has 
 - **Judge output validation** (BRIEF §5). The prototype's `validJudgeOutput` checked only
   that a reply had an array. `validateJudgeReply` checks it against the version and the
   text (above). The prompts themselves are unchanged.
+
+## A project's weighting (D5, t-72)
+
+A project may shift the appeal mix and the priority dimensions, within bounds its
+version declares (`scoring.adjustment_bounds`, see
+[`frameworks.md`](./frameworks.md#adjustment-bounds-d5)). The engine holds the
+adjustment, called the **overlay**:
+
+```ts
+const parsed = engine.parseOverlay(project.overlay); // untrusted; absent is none
+if (!parsed.ok) refuse(parsed.issues); // each by its path: weights.ethos, priorityDimensions.add.0
+const adjusted = parsed.overlay ? engine.withOverlay(parsed.overlay) : engine;
+```
+
+- **`parseOverlay`** (`engine/overlay.ts`) takes `{ weights?, priorityDimensions? }`:
+  a delta per appeal, as a share of the mix, and core dimension ids to `add` to or
+  `remove` from the content type's priorities. It refuses an unknown key or id (a lens
+  or an extra dimension included), a repeat, an id both added and removed, a delta past
+  its appeal's bound, more ids than the bound, and **any** overlay on a version without
+  bounds. What changes nothing (a zero, an empty list) is dropped, and an overlay left
+  empty is `null`. Rubrics, prompts and ids are never adjustable: an overlay holds only
+  numbers and the version's own ids.
+- **`withOverlay`** returns a second engine; the first is not changed. The overlay rides
+  in `EngineOptions`, so everything that reads weights or priorities reads the adjusted
+  ones: `effectiveWeights` (the overlay is one more delta, added before the floor and the
+  normalising, so the other appeals give way in proportion), `appealScore`'s priority
+  step, the library's recommendations, and the judges' prompts (the target mix and the
+  priority dimensions they are told). The quick scan reads neither.
+- **With no overlay, every score is the prototype's**: the baseline tests run an engine
+  never given one, and `overlay.test.ts` checks `withOverlay(null)` on a version with
+  bounds gives the same outputs. The result carries no overlay field, so the baseline
+  shape is unchanged; the assessment row records it (`Assessment.overlay`).
 
 ## The culture switch (D11)
 

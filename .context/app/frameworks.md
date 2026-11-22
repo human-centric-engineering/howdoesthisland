@@ -53,11 +53,47 @@ All of it is reported in one run, and nothing is written:
 - judges whose ids are not the definition's `judges.slots` (order aside): each slot is a
   platform agent in every workspace ([`judges.md`](./judges.md)), so a version
   cannot add, drop or rename one without code;
+- `scoring.adjustment_bounds` that are malformed ([below](#adjustment-bounds-d5));
 - a file that is not JSON.
 
 The reference fields follow the model's own spec, `meta.reference_rules`, and are
 declared in `lib/app/frameworks/howdoesthisland/definition.ts`. Model 0.5.0 is
 refused: it has 38 unresolved references, an export fault fixed in 0.5.1.
+
+## Adjustment bounds (D5)
+
+A project may adjust a version's weights (the appeal mix and the priority dimensions)
+only within bounds **the version declares**, in `scoring.adjustment_bounds`. They are
+versioned data, not a policy in code (owner ruling, 2026-11-22, t-72): a bound is a claim
+about that version's weights, so it lives beside them, and an adjustment a review
+recorded stays checkable against the limits it was made under.
+
+```json
+"scoring": {
+  "adjustment_bounds": {
+    "weights": { "ethos": 0.1, "pathos": 0.05 },
+    "priority_dimensions": { "add": 2, "remove": 1 }
+  }
+}
+```
+
+- **`weights.<appeal>`**: how far a project may move that appeal's weight from the
+  content type's, either way, as a share of the mix (`0.1` is ten points), from 0 to 1.
+  An appeal left out may not move.
+- **`priority_dimensions.add` / `.remove`**: how many of the version's **core**
+  dimensions (`dimensions[]`, never a lens or an extra dimension) a project may add to,
+  or take off, a content type's priority dimensions. Left out, none.
+- **A version without the block allows no adjustment.** 0.5.1 declares none, so projects
+  can adjust nothing until a later version publishes bounds (t-73).
+- **The import checks it strictly**: a misspelt appeal or key, a negative or fractional
+  bound, a weight bound over 1, or an empty block is refused. The engine reads it with
+  the same schema (`adjustmentBoundsSchema` in `engine/model.ts`).
+- **The catalogue serves the bounds** (`request.adjustment`, null for none) so the project
+  page can offer the choice. The bounds say how far a customer may move a weight; they
+  never include a weight or a content type's priorities, which stay the model's IP.
+
+Rubrics, prompts and ids are never adjustable, by anyone but a new version. How the engine
+applies an adjustment is in [`engine.md`](./engine.md#a-projects-weighting-d5-t-72).
 
 ## How it is stored
 
