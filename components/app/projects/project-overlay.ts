@@ -33,8 +33,16 @@ const storedOverlaySchema = z.object({
     .optional(),
 });
 
-const toPoints = (share: number): number => +(share * 100).toFixed(1);
-const toShare = (points: number): number => +(points / 100).toFixed(4);
+/**
+ * Shares ↔ points without losing what the API stored: rounding only clears
+ * float noise (`0.07 * 100`), so an untouched value saves back as it was.
+ */
+const toPoints = (share: number): number => +(share * 100).toFixed(6);
+const toShare = (points: number): number => +(points / 100).toFixed(8);
+/** A limit as the page states it: a tenth of a point is the finest it shows. */
+const shownPoints = (share: number): number => +(share * 100).toFixed(1);
+/** The engine's slack (`engine/overlay.ts`), so the form and the API agree at the limit. */
+const EPSILON = 1e-9;
 
 /** Whether the project holds an overlay this page can read. */
 export function storedOverlayReadable(project: ProjectWire): boolean {
@@ -81,10 +89,16 @@ export function weightsFormSchema(
   adjustment: Adjustment
 ): z.ZodType<WeightsFormValues, WeightsFormValues> {
   const appeal = (a: AppealId) => {
-    const most = toPoints(adjustment.weights[a]);
-    return z.number({ error: 'Enter a number of points' }).refine((p) => Math.abs(p) <= most, {
-      error: most === 0 ? 'This model version does not let it move' : `At most ${most} either way`,
-    });
+    // Checked in shares against the exact bound, as the API checks it; only
+    // the message rounds.
+    const bound = adjustment.weights[a];
+    const most = shownPoints(bound);
+    return z
+      .number({ error: 'Enter a number of points' })
+      .refine((p) => Math.abs(toShare(p)) <= bound + EPSILON, {
+        error:
+          bound === 0 ? 'This model version does not let it move' : `At most ${most} either way`,
+      });
   };
   const ids = (most: number, verb: string) =>
     z.array(z.string()).max(most, { error: `${verb} at most ${most}` });
@@ -147,7 +161,7 @@ export function movableAppeals(
   return APPEAL_IDS.filter((a) => adjustment.weights[a] > 0).map((a) => ({
     id: a,
     name: catalogue.result.appeals.find((x) => x.id === a)?.name ?? a,
-    most: toPoints(adjustment.weights[a]),
+    most: shownPoints(adjustment.weights[a]),
   }));
 }
 

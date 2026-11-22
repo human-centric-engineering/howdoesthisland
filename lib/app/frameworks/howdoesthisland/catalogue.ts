@@ -125,7 +125,7 @@ function adjustmentOf(
   if (!bounds) return null;
   const w = bounds.weights ?? {};
   const pd = bounds.priority_dimensions ?? {};
-  return {
+  const adjustment = {
     weights: {
       ethos: w.ethos ?? 0,
       pathos: w.pathos ?? 0,
@@ -134,6 +134,14 @@ function adjustmentOf(
     },
     priorityDimensions: { add: pd.add ?? 0, remove: pd.remove ?? 0 },
   };
+
+  // Bounds that are all zero allow nothing, as no bounds do: say so the same
+  // way, so a page offers no empty choice.
+  const allowsNone =
+    Object.values(adjustment.weights).every((b) => b === 0) &&
+    adjustment.priorityDimensions.add === 0 &&
+    adjustment.priorityDimensions.remove === 0;
+  return allowsNone ? null : adjustment;
 }
 
 export function howDoesThisLandCatalogue(model: JsonObject): JsonObject {

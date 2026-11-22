@@ -140,7 +140,7 @@ describe('ProjectWeights', () => {
     );
 
     expect(screen.getByText(/Ethos \+5 points/)).toBeInTheDocument();
-    expect(screen.getByText(/refused until it is removed/)).toBeInTheDocument();
+    expect(screen.getByText(/refused until the adjustment is removed/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Remove the adjustment' }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
@@ -217,10 +217,36 @@ describe('ProjectWeights', () => {
       />
     );
 
-    expect(screen.getByText(/The model version in use allows no adjustment/)).toBeInTheDocument();
+    expect(screen.getByText(/The latest model version allows no adjustment/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Remove the adjustment' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('shows a stored priority this version lacks, ticked, so it can be removed (review round 1)', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue({});
+    const user = userEvent.setup();
+    render(
+      <ProjectWeights
+        project={aProject({ overlay: { priorityDimensions: { add: ['dim_gone'] } } })}
+        catalogue={aCatalogue({ adjustment: BOUNDS })}
+      />
+    );
+
+    // In both lists; ticked in the one it was stored in.
+    const [gone, inRemove] = screen.getAllByRole('checkbox', {
+      name: 'dim_gone (not in this version)',
+    });
+    expect(gone).toBeChecked();
+    expect(inRemove).not.toBeChecked();
+    await user.click(gone);
+    await user.click(screen.getByRole('button', { name: 'Save weighting' }));
+
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/projects/proj-1', {
+        body: { overlay: null },
+      })
+    );
   });
 });

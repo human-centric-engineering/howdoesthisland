@@ -35,4 +35,15 @@ describe('the catalogue’s adjustment', () => {
     expect(served).not.toContain('priority_dimensions');
     expect(served).not.toContain('"weights":{"ethos":0.28');
   });
+
+  it('is null for bounds that allow nothing, as for none (review round 1)', () => {
+    for (const bounds of [
+      { weights: {} },
+      { weights: { ethos: 0 }, priority_dimensions: { add: 0 } },
+    ]) {
+      expect(
+        request.parse(howDoesThisLandCatalogue(withBounds(bounds))).request.adjustment
+      ).toBeNull();
+    }
+  });
 });

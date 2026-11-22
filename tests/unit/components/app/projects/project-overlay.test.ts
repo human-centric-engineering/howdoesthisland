@@ -49,6 +49,23 @@ describe('weightsValuesOf and overlayBodyOf', () => {
   });
 });
 
+describe('precision (review round 1)', () => {
+  it('saves an untouched stored delta back exactly', () => {
+    const project = aProject({ overlay: { weights: { ethos: 0.12345, pathos: 0.07 } } });
+    expect(overlayBodyOf(weightsValuesOf(project))).toEqual({ overlay: project.overlay });
+  });
+
+  it('holds a value to the exact bound, as the API does, not the rounded one shown', () => {
+    const schema = weightsFormSchema({ ...BOUNDS, weights: { ...BOUNDS.weights, ethos: 0.0749 } });
+    const at = (ethos: number) =>
+      schema.safeParse({ weights: { ...zero, ethos }, add: [], remove: [] });
+    expect(at(7.49).success).toBe(true);
+    const over = at(7.5);
+    expect(over.success).toBe(false);
+    expect(over.success ? '' : over.error.issues[0]?.message).toBe('At most 7.5 either way');
+  });
+});
+
 describe('storedOverlayReadable', () => {
   it('reads none and the engine’s shape, and not another', () => {
     expect(storedOverlayReadable(aProject())).toBe(true);

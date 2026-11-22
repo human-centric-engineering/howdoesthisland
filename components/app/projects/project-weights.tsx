@@ -96,8 +96,9 @@ function NotAllowed({ project, catalogue }: ProjectWeightsProps) {
         <CardTitle className="text-lg">{TITLE}</CardTitle>
         <CardDescription>
           This project adjusts the model&rsquo;s weights
-          {described.length > 0 ? `: ${described.join(' · ')}` : ''}. The model version in use
-          allows no adjustment, so {WORDS.review}s in this project are refused until it is removed.
+          {described.length > 0 ? `: ${described.join(' · ')}` : ''}. The latest model version
+          allows no adjustment, so {WORDS.review}s in this project scored with it are refused until
+          the adjustment is removed.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -132,7 +133,16 @@ function WeightsForm({
     most: 0,
   }));
   const appeals = [...movable, ...stranded];
-  const dimensions = coreDimensions(catalogue);
+  // The core dimensions, then any the project names that this version lacks,
+  // so a stored id the API now refuses is seen, and can be unticked, rather
+  // than sent unseen and filling the quota.
+  const core = coreDimensions(catalogue);
+  const dimensions = [
+    ...core,
+    ...[...new Set([...initial.add, ...initial.remove])]
+      .filter((id) => !core.some((d) => d.id === id))
+      .map((id) => ({ id, name: `${id} (not in this version)` })),
+  ];
   const { add: canAdd, remove: canRemove } = adjustment.priorityDimensions;
   // A list the version no longer offers still shows while the project uses it.
   const showAdd = canAdd > 0 || initial.add.length > 0;
