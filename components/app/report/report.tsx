@@ -154,7 +154,8 @@ function Cover({ view }: { view: ReportView }) {
   );
 }
 
-function Verdict({ view }: { view: ReportView }) {
+/** The overall score, its band, and the editor's verdict. Exported for the worked example (t-69). */
+export function Verdict({ view, idPrefix = '' }: { view: ReportView; idPrefix?: string }) {
   const { verdict } = view;
   return (
     <div className="grid gap-8 md:grid-cols-[12rem_minmax(0,1fr)]">
@@ -178,7 +179,7 @@ function Verdict({ view }: { view: ReportView }) {
                     <p className="font-semibold">{c.change}</p>
                     <p className="text-(--hd-muted)">{c.why}</p>
                     {c.recommendation !== null ? (
-                      <a href={`#rec-${c.recommendation}`} className="text-xs underline">
+                      <a href={`#${idPrefix}rec-${c.recommendation}`} className="text-xs underline">
                         Recommendation {c.recommendation}
                       </a>
                     ) : null}
@@ -203,7 +204,8 @@ function Verdict({ view }: { view: ReportView }) {
   );
 }
 
-function HowItLands({ view }: { view: ReportView }) {
+/** The appeal scores and the balance against the target mix. Exported for the worked example (t-69). */
+export function HowItLands({ view }: { view: ReportView }) {
   const { lands } = view;
   return (
     <div className="grid gap-6">
@@ -263,11 +265,12 @@ function HowItLands({ view }: { view: ReportView }) {
   );
 }
 
-function Recommendations({ view }: { view: ReportView }) {
+/** The recommendations, each with its rewrite. Exported for the worked example (t-69). */
+export function Recommendations({ view, idPrefix = '' }: { view: ReportView; idPrefix?: string }) {
   return (
     <ol className="grid gap-8">
       {view.recommendations.map((r) => (
-        <li key={r.number} id={`rec-${r.number}`} className="break-inside-avoid">
+        <li key={r.number} id={`${idPrefix}rec-${r.number}`} className="break-inside-avoid">
           <p className="font-mono text-xs text-(--hd-muted) uppercase">
             {r.number} · <span style={{ color: APPEAL_COLOUR[r.appealId] }}>{r.appealName}</span> ·{' '}
             {r.dimensionName} · {r.impact} impact

@@ -28,6 +28,7 @@ describe('sitemap', () => {
     const urls = sitemap().map((e) => e.url);
     expect(urls).toContain('https://howdoesthisland.example');
     expect(urls).toContain('https://howdoesthisland.example/developers');
+    expect(urls).toContain('https://howdoesthisland.example/example-review');
   });
 
   it('falls back to localhost when no address is set', () => {

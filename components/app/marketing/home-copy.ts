@@ -6,9 +6,7 @@
  * or listed one by one, so the panel can change without the page going
  * stale (the owner's ruling, 2026-11-21).
  *
- * Kept apart from the page so the self-score reviews exactly the words the
- * page shows: {@link HOME_PAGE_TEXT} is built from these strings, not
- * written a second time. Words follow app-plan §4, "The words we use".
+ * Words follow app-plan §4, "The words we use".
  */
 
 export const HOME_COPY = {
@@ -91,32 +89,3 @@ export const HOME_APPEALS = [
 ] as const;
 
 export type HomeAppealId = (typeof HOME_APPEALS)[number]['id'];
-
-/**
- * The page's own words, in reading order, as the self-score reviews them:
- * the headline, the body copy and the steps. Labels, buttons and the panel
- * the score sits in are left out, as the prototype left them out.
- */
-export const HOME_PAGE_TEXT = [
-  `${HOME_COPY.h1Lead} ${HOME_COPY.h1Turn}`,
-  HOME_COPY.sub,
-  `${HOME_COPY.story} ${HOME_COPY.story2}`,
-  HOME_COPY.compare,
-  HOME_COPY.nowH,
-  HOME_COPY.now,
-  HOME_COPY.rootsH,
-  HOME_COPY.roots,
-  ...HOME_COPY.steps.map((s) => `${s.title}. ${s.body}`),
-  HOME_COPY.honestH,
-  HOME_COPY.honest,
-  HOME_COPY.good,
-  HOME_COPY.who,
-  HOME_COPY.ctaH,
-  HOME_COPY.cta,
-].join('\n\n');
-
-/** Who the page is for, as the self-score reads it: a landing page, to a cold reader. */
-export const HOME_CONTEXT = {
-  contentType: 'landing_page',
-  audience: { relationship: 'cold' },
-} as const;

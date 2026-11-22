@@ -6,7 +6,14 @@ import type { ReportView } from '@/lib/app/reports/view';
  * dimension and, where there is one, its recommendation. Plain anchors, so it
  * needs no client script and the links survive into the PDF.
  */
-export function MarkedUpCopy({ copy }: { copy: ReportView['copy'] }) {
+export function MarkedUpCopy({
+  copy,
+  idPrefix = '',
+}: {
+  copy: ReportView['copy'];
+  /** Prefixes every id and link, so the copy can appear more than once on a page. */
+  idPrefix?: string;
+}) {
   const byNumber = new Map(copy.notes.map((n) => [n.number, n]));
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem] print:block">
@@ -30,7 +37,7 @@ export function MarkedUpCopy({ copy }: { copy: ReportView['copy'] }) {
               {ending.map((n) => (
                 <a
                   key={n}
-                  href={`#note-${n}`}
+                  href={`#${idPrefix}note-${n}`}
                   aria-label={`Note ${n}`}
                   className="ml-0.5 align-super font-mono text-[0.6rem] text-(--hd-muted) no-underline"
                 >
@@ -45,14 +52,14 @@ export function MarkedUpCopy({ copy }: { copy: ReportView['copy'] }) {
         {copy.notes.map((n) => (
           <li
             key={n.number}
-            id={`note-${n.number}`}
+            id={`${idPrefix}note-${n.number}`}
             className="break-inside-avoid border-l-2 pl-3"
             style={{ borderColor: n.polarity === 'weakness' ? 'var(--hd-red)' : 'var(--hd-logos)' }}
           >
             <p className="font-mono text-[0.7rem] text-(--hd-muted) uppercase">
               {n.number} · {n.polarity === 'weakness' ? 'To fix' : 'Works'} ·{' '}
               {n.dimensionShown ? (
-                <a href={`#dim-${n.dimensionId}`} className="underline">
+                <a href={`#${idPrefix}dim-${n.dimensionId}`} className="underline">
                   {n.dimensionName}
                 </a>
               ) : (
@@ -66,7 +73,10 @@ export function MarkedUpCopy({ copy }: { copy: ReportView['copy'] }) {
               <p className="mt-1 text-(--hd-muted) italic">&ldquo;{n.quote}&rdquo;</p>
             ) : null}
             {n.recommendation !== null ? (
-              <a href={`#rec-${n.recommendation}`} className="mt-1 inline-block text-xs underline">
+              <a
+                href={`#${idPrefix}rec-${n.recommendation}`}
+                className="mt-1 inline-block text-xs underline"
+              >
                 See recommendation {n.recommendation}
               </a>
             ) : null}

@@ -1,13 +1,13 @@
 /**
- * What the landing hero shows with the quick-scan switch off (t-62; the
- * owner's choice): a short passage of sample copy with a review's notes
- * marked in place, in the report's own mark-up (`MarkedUpCopy`). Static, with
- * no scores, so nothing on the page is quick-scan output. The notes are the
- * prototype's for calibration case ev05, a cold email, worded as the AI
- * reviewers write them.
- *
- * Replace with a stored full review when there is one to show.
+ * What the landing hero shows (t-62, t-69; the owner's choice): the opening
+ * of a sample cold email with a review's notes marked in place, in the
+ * report's own mark-up. Static. The email is the one `/example-review` takes
+ * through a full review (`lib/app/example/example-review.ts`), and the whole
+ * card links there: one link, so the note numbers are plain markers, not
+ * links of their own.
  */
+import Link from 'next/link';
+import { draftNote } from '@/lib/app/example/example-review';
 
 type Run = string | { text: string; note: number };
 
@@ -31,35 +31,44 @@ const PASSAGE: readonly Run[][] = [
   ],
 ];
 
+/**
+ * The AI reviewers' notes on these lines in the full example
+ * (`/example-review`), read from it, so the card and the page never disagree.
+ * The dimension names are the model's, as the page's notes show them.
+ */
 const NOTES = [
   {
     number: 1,
     dimension: 'Goodwill and reader focus',
-    note: 'Start with her problem, not your job title. The more a message is about the sender, the less it is trusted.',
+    note: draftNote(
+      'My name is Tom and I am the Business Development Manager at BrightPath Consulting.'
+    ),
   },
   {
     number: 2,
-    dimension: 'Specific claims and evidence',
-    note: '“Leading provider” with nothing behind it. Name a client and a result, or cut the claim.',
+    dimension: 'Integrity and candour',
+    note: draftNote('We are a leading provider of digital transformation solutions.'),
   },
   {
     number: 3,
-    dimension: 'Mechanism and reasoning',
-    note: 'Show how, not just what. A named method makes a familiar promise believable.',
+    dimension: 'Borrowed credibility',
+    note: draftNote('Our innovative approach delivers outstanding results for our clients.'),
   },
   {
     number: 4,
     dimension: 'The call to act',
-    note: 'Shrink the ask, and give a reason for now. A small first step is far more likely to be taken.',
+    note: draftNote(
+      'I would love to set up a 45-minute call to walk you through our capabilities.'
+    ),
   },
 ] as const;
 
-export function SampleMarkUp() {
+export function SampleMarkUp({ href }: { href: string }) {
   return (
     <section
       aria-labelledby="sample-mark-up-heading"
       data-testid="sample-mark-up"
-      className="border border-(--hd-rule) bg-(--hd-paper) p-6 sm:p-7"
+      className="group relative border border-(--hd-rule) bg-(--hd-paper) p-6 transition-[border-color,box-shadow,transform] duration-300 focus-within:border-(--hd-ink) hover:-translate-y-0.5 hover:border-(--hd-ink) hover:shadow-lg motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-7"
     >
       <p className="hd-slug">Sample · A cold email</p>
       <h2 id="sample-mark-up-heading" className="mt-2 text-2xl leading-tight font-bold">
@@ -77,13 +86,7 @@ export function SampleMarkUp() {
                   className="bg-transparent text-inherit underline decoration-(--hd-red) decoration-2 underline-offset-4"
                 >
                   {run.text}
-                  <a
-                    href={`#sample-note-${run.note}`}
-                    aria-label={`Note ${run.note}`}
-                    className="ml-0.5 align-super font-mono text-[0.6rem] text-(--hd-muted) no-underline"
-                  >
-                    {run.note}
-                  </a>
+                  <sup className="ml-0.5 font-mono text-[0.6rem] text-(--hd-muted)">{run.note}</sup>
                 </mark>
               )
             )}
@@ -92,11 +95,7 @@ export function SampleMarkUp() {
       </div>
       <ol className="mt-6 grid gap-3 text-sm" aria-label="Notes">
         {NOTES.map((n) => (
-          <li
-            key={n.number}
-            id={`sample-note-${n.number}`}
-            className="border-l-2 border-(--hd-red) pl-3"
-          >
+          <li key={n.number} className="border-l-2 border-(--hd-red) pl-3">
             <p className="font-mono text-[0.7rem] text-(--hd-muted) uppercase">
               {n.number} · To fix · {n.dimension}
             </p>
@@ -104,9 +103,20 @@ export function SampleMarkUp() {
           </li>
         ))}
       </ol>
-      <p className="mt-5 border-t border-dashed border-(--hd-rule) pt-4 text-sm text-(--hd-muted)">
-        An example of the notes a review writes. In yours, a note about a line quotes that line
-        exactly.
+      <p className="mt-5 border-t border-dashed border-(--hd-rule) pt-4 text-sm">
+        <Link
+          href={href}
+          className="font-semibold underline-offset-4 group-hover:underline after:absolute after:inset-0 after:content-['']"
+          data-testid="sample-mark-up-link"
+        >
+          See this email reviewed, step by step
+          <span
+            aria-hidden="true"
+            className="ml-1 inline-block transition-transform group-hover:translate-x-1"
+          >
+            →
+          </span>
+        </Link>
       </p>
     </section>
   );
