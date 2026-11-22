@@ -63,6 +63,11 @@ export const createAssessmentSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     ...versionChoice,
     context: contextField,
+    /**
+     * The workspace's project to review it in (t-70). Its defaults fill what
+     * `context` and `profile` leave out, and it is recorded on the review.
+     */
+    projectId: z.string().min(1).max(64).optional(),
     /** `quick`, `full` (the default) or one of the version's catalogue groups. */
     profile: z.string().trim().min(1).max(64).optional(),
     /** An explicit list of judge slots, in place of a profile. */
@@ -100,6 +105,8 @@ export const listAssessmentsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(ASSESSMENT_STATES).optional(),
+  /** Only the reviews in this project (t-70). */
+  projectId: z.string().min(1).max(64).optional(),
 });
 
 /** `{id}` in `/api/v1/assessments/{id}`. */

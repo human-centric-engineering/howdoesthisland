@@ -79,6 +79,7 @@ import type {
 import type { PaginationMeta } from '@/types/api';
 import type { FrameworkCalibration, StartedRun } from '@/lib/app/calibration/admin';
 import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
+import { projectSchema, type ProjectView } from '@/lib/app/projects/wire';
 
 /** The route directories this fork added under `app/api/v1/`. */
 const APP_ROUTE_DIRS = [
@@ -91,6 +92,8 @@ const APP_ROUTE_DIRS = [
   'codes',
   'frameworks',
   'openapi.json',
+  // A workspace's projects (t-70).
+  'projects',
   'scan',
   'shared-reports',
   'shares',
@@ -350,6 +353,7 @@ describe('response schemas match what the services return', () => {
       Wire<Awaited<ReturnType<typeof remove>>>
     >();
     expectTypeOf<z.infer<typeof paginationMetaSchema>>().toEqualTypeOf<Wire<PaginationMeta>>();
+    expectTypeOf<z.infer<typeof projectSchema>>().toEqualTypeOf<Wire<ProjectView>>();
     expectTypeOf<z.infer<typeof reportShareSchema>>().toEqualTypeOf<Wire<ReportShareView>>();
     expectTypeOf<z.infer<typeof createdReportShareSchema>>().toEqualTypeOf<
       Wire<CreatedReportShare>

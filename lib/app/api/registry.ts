@@ -50,6 +50,14 @@ import {
   scanRequestSchema,
 } from '@/lib/app/assessments/api/validations';
 import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-auth';
+import { PROJECTS_SCOPE } from '@/lib/app/projects/route-auth';
+import {
+  createProjectSchema,
+  listProjectsQuerySchema,
+  projectIdParamSchema,
+  updateProjectSchema,
+} from '@/lib/app/projects/validations';
+import { projectSchema } from '@/lib/app/projects/wire';
 import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import { quickScanSummarySchema } from '@/lib/app/quick-scan/summary';
 import {
@@ -344,6 +352,10 @@ export const assessmentSummarySchema = z.object({
   profile: z.string(),
   judges: z.array(z.string()),
   framework: frameworkRefSchema,
+  projectId: z
+    .string()
+    .nullable()
+    .describe("The workspace's project it was reviewed in, or `null`."),
   title: z.string().nullable(),
   source: z.object({
     kind: z.enum(['text', 'file', 'url']),
@@ -526,6 +538,7 @@ const kindParams = versionParams.extend({ kind: kindParam });
 
 /** A browser session, or an API key with the `assess` scope. */
 const ASSESS: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE };
+const PROJECTS: RouteAuth = { who: 'signed-in', apiKeyScope: PROJECTS_SCOPE };
 /** The quick scan's callers (t-68): as `ASSESS` for the full result, or anyone for the scores. */
 const QUICK_SCAN: RouteAuth = { who: 'signed-in', apiKeyScope: ASSESS_SCOPE, orSignedOut: true };
 const assessmentParams = assessmentIdParamSchema;
@@ -697,6 +710,49 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: { who: 'signed-in', apiKeyScope: REPORTS_SCOPE },
     request: { params: assessmentParams },
     response: { status: 200, data: reportPdfSchema, file: 'application/pdf' },
+  },
+  // Projects (t-70).
+  {
+    method: 'POST',
+    path: '/api/v1/projects',
+    summary:
+      'Make a project: a name, a brief the AI reviewers read, and the defaults its reviews take (type of copy, audience, culture, profile).',
+    auth: PROJECTS,
+    request: { body: createProjectSchema },
+    response: { status: 201, data: projectSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/projects',
+    summary: "List the workspace's projects, newest first; archived ones only when asked.",
+    auth: PROJECTS,
+    request: { query: listProjectsQuerySchema },
+    response: { status: 200, data: z.array(projectSchema), meta: paginationMetaSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/projects/{id}',
+    summary: 'Get one project.',
+    auth: PROJECTS,
+    request: { params: projectIdParamSchema },
+    response: { status: 200, data: projectSchema },
+  },
+  {
+    method: 'PATCH',
+    path: '/api/v1/projects/{id}',
+    summary:
+      "Change a project's name, brief or defaults (each replaced whole), or archive or restore it.",
+    auth: PROJECTS,
+    request: { params: projectIdParamSchema, body: updateProjectSchema },
+    response: { status: 200, data: projectSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/projects/{id}',
+    summary: 'Archive a project. Its reviews keep their link, and it can be restored.',
+    auth: PROJECTS,
+    request: { params: projectIdParamSchema },
+    response: { status: 200, data: projectSchema },
   },
   // Share links (t-32).
   {

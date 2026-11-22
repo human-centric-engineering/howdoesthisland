@@ -363,8 +363,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: async () => {
       // FORK (HowDoesThisLand): pinned to our sections and sources, the
       // workspace invitations (t-9), content and assessments (t-22), share
-      // links (t-32), calibration runs (t-37), credit entries (t-57), review
-      // codes (t-59) and their redemptions (t-60). The reads are stubbed: this pins the shape, not the query. Ledger:
+      // links (t-32), calibration runs (t-37), credit entries (t-57), projects
+      // (t-70), review codes (t-59) and their redemptions (t-60). The reads are stubbed: this pins the shape, not the query. Ledger:
       // .context/app/platform-divergences.md row 2.
       const reads = [
         vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
@@ -373,6 +373,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.reportShare, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.calibrationRun, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.creditEntry, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.project, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCode, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCodeRedemption, 'findMany').mockResolvedValue([] as never),
       ];
@@ -383,6 +384,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         reportShares: [],
         calibrationRuns: [],
         creditEntries: [],
+        projects: [],
         reviewCodes: [],
         codeRedemptions: [],
       });
@@ -398,6 +400,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
         ['CreditEntry', 'creditEntries'],
+        ['Project', 'projects'],
         ['ReviewCode', 'reviewCodes'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
       ]);
@@ -425,7 +428,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       // The reads trigger the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our sources, the workspace
       // invitations (t-9), assessments (t-22), judge replies (t-26), share
-      // links (t-32), credit entries (t-57) and code redemptions (t-60). Ledger:
+      // links (t-32), projects (t-70), credit entries (t-57) and code
+      // redemptions (t-60). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppOrgSources().map((source) => [source.model, source.section])).toEqual([
         ['WorkspaceInvitation', 'workspaceInvitations'],
@@ -435,6 +439,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['JudgeReply', 'judgeReplies'],
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
+        ['Project', 'projects'],
         ['CreditEntry', 'creditEntries'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
       ]);
@@ -454,8 +459,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppOwnerClassificationForTests();
       // The read triggers the lazy init, so this exercises the REAL file.
       // FORK (HowDoesThisLand): pinned to our models, the workspace invitation
-      // (t-9), content and assessments (t-22), share links (t-32), and the
-      // credit (t-57) and code (t-59, t-60) models, as not personal. Ledger:
+      // (t-9), content and assessments (t-22), share links (t-32), the credit
+      // (t-57) and code (t-59, t-60) models, and projects (t-70), as not
+      // personal. Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(
         Object.entries(appOwnerClassifications()).map(([model, rule]) => [model, rule.kind])
@@ -466,6 +472,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'not-personal'],
         ['CalibrationRun', 'not-personal'],
         ['CreditEntry', 'not-personal'],
+        ['Project', 'not-personal'],
         ['ReviewCode', 'not-personal'],
         ['ReviewCodeRedemption', 'not-personal'],
       ]);
@@ -776,12 +783,18 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/api-key-scopes.ts',
     risk: 'a stray scope would be mintable on every install \u2014 and a name colliding with a core scope would change what an existing key satisfies',
-    // FORK (HowDoesThisLand): pinned to `assess` (t-24) and `reports` (t-31).
+    // FORK (HowDoesThisLand): pinned to `assess` (t-24), `reports` (t-31) and
+    // `projects` (t-70).
     // Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      expect(APP_API_KEY_SCOPES).toEqual(['assess', 'reports']);
+      expect(APP_API_KEY_SCOPES).toEqual(['assess', 'reports', 'projects']);
       // …and the union it feeds is core plus ours, by value not just by length.
-      expect(listValidApiKeyScopes()).toEqual([...CORE_API_KEY_SCOPES, 'assess', 'reports']);
+      expect(listValidApiKeyScopes()).toEqual([
+        ...CORE_API_KEY_SCOPES,
+        'assess',
+        'reports',
+        'projects',
+      ]);
     },
   },
   {

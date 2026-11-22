@@ -41,6 +41,8 @@ export type AssessmentSummary = {
   /** The judge slots the profile resolved to, in the version's order. */
   judges: string[];
   framework: FrameworkRef;
+  /** The workspace's project it was reviewed in (t-70), or `null`. */
+  projectId: string | null;
   title: string | null;
   source: { kind: 'text' | 'file' | 'url'; url: string | null; fileName: string | null };
   wordCount: number;
@@ -132,6 +134,7 @@ const SOURCE_KIND = { TEXT: 'text', FILE: 'file', URL: 'url' } as const;
 
 const summarySelect = {
   id: true,
+  projectId: true,
   status: true,
   profile: true,
   judges: true,
@@ -196,6 +199,7 @@ function summaryView(row: SummaryRow): AssessmentSummary {
     profile: row.profile,
     judges: row.judges,
     framework: { slug: row.frameworkVersion.framework.slug, version: row.frameworkVersion.version },
+    projectId: row.projectId,
     title: row.content.title,
     source: {
       kind: SOURCE_KIND[row.content.sourceKind],
@@ -248,10 +252,12 @@ export async function listAssessments(query: {
   page: number;
   limit: number;
   status?: AssessmentState;
+  projectId?: string;
 }): Promise<{ items: AssessmentSummary[]; total: number }> {
   const where: Prisma.AssessmentWhereInput = {
     orgId: requireOrgId(),
     ...(query.status ? { status: toDbStatus(query.status) } : {}),
+    ...(query.projectId ? { projectId: query.projectId } : {}),
   };
   const [rows, total] = await Promise.all([
     prisma.assessment.findMany({

@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
   monthSpend: vi.fn(),
   // The cost rows the `kept-nowhere` tier reads (t-51): none unless a test seeds some.
   costRows: vi.fn(),
+  // The workspaces' projects (t-70): none unless a test adds some.
+  projects: [] as Record<string, unknown>[],
 }));
 vi.mock('@/lib/auth/config', () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock('next/headers', () => ({ headers: vi.fn(() => Promise.resolve(new Headers())) }));
@@ -65,6 +67,12 @@ vi.mock('@/lib/db/client', () => ({
       },
       // No workspace has a judge run on record, so the per-judge tier is empty.
       judgeRun: { ...fake.db.judgeRun, findMany: vi.fn(async () => []) },
+      project: {
+        findFirst: vi.fn(
+          async ({ where }: { where: { id: string; orgId: string } }) =>
+            mocks.projects.find((p) => p.id === where.id && p.orgId === where.orgId) ?? null
+        ),
+      },
     };
   },
 }));
@@ -288,6 +296,7 @@ beforeEach(() => {
   mocks.loadOrgQuotas.mockResolvedValue({});
   mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: 0 } });
   mocks.costRows.mockResolvedValue([]);
+  mocks.projects.length = 0;
   forgetSpendCaps();
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   aiAssessmentLimiter.reset(`user:${BOB}`);
@@ -653,6 +662,109 @@ describe('POST /api/v1/assessments — refusals', () => {
     // The cap is per user: Bob has his own.
     signedIn(BOB, WS_B);
     expect((await post({ source: { text: TEXT }, judges: TWO })).status).toBe(202);
+  });
+});
+
+describe('POST /api/v1/assessments — in a project (t-70)', () => {
+  /** A project in `orgId`, as the service reads it. */
+  function project(over: Record<string, unknown> = {}) {
+    const row = {
+      id: 'project-1',
+      orgId: WS_A,
+      archivedAt: null,
+      framework: { slug: 'howdoesthisland' },
+      defaults: {
+        context: {
+          contentType: 'landing_page',
+          audience: { awareness: 'solution_aware', relationship: 'cold' },
+        },
+        profile: 'quick',
+      },
+      ...over,
+    };
+    mocks.projects.push(row);
+    return row;
+  }
+
+  it('takes the project’s defaults under the request’s own fields, and records the project', async () => {
+    project();
+
+    const res = await post({
+      source: { text: TEXT },
+      projectId: 'project-1',
+      context: { audience: { relationship: 'warm' } },
+      wait: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect((await json(res)).data).toMatchObject({ projectId: 'project-1', profile: 'quick' });
+    expect(fake.assessments).toHaveLength(1);
+    expect(fake.assessments[0]).toMatchObject({
+      projectId: 'project-1',
+      profile: 'quick',
+      judges: [],
+      // The project's type of copy and awareness; the request's relationship.
+      context: {
+        contentType: 'landing_page',
+        audience: expect.objectContaining({ awareness: 'solution_aware', relationship: 'warm' }),
+      },
+    });
+    expect(fake.contents[0]).toMatchObject({ projectId: 'project-1' });
+  });
+
+  it('lets the request’s profile or judges win over the project’s', async () => {
+    project();
+
+    const res = await post({ source: { text: TEXT }, projectId: 'project-1', judges: TWO });
+
+    expect(res.status).toBe(202);
+    expect(fake.assessments[0]).toMatchObject({ profile: 'custom', judges: TWO });
+  });
+
+  it('records no project for a review outside one', async () => {
+    await post({ source: { text: TEXT }, profile: 'quick', wait: true });
+
+    expect(fake.assessments[0]).toMatchObject({ projectId: null });
+  });
+
+  it.each([
+    ['another workspace’s project', { orgId: WS_B }, 404, 'PROJECT_NOT_FOUND', {}],
+    ['an archived project', { archivedAt: new Date() }, 409, 'PROJECT_ARCHIVED', {}],
+    [
+      'a project scored with another framework',
+      {},
+      400,
+      'PROJECT_FRAMEWORK_MISMATCH',
+      { framework: 'other' },
+    ],
+    [
+      'defaults the version no longer has',
+      { defaults: { context: { contentType: 'retired_type' } } },
+      400,
+      'CONTEXT_INVALID',
+      {},
+    ],
+  ])('refuses a review in %s, and stores nothing', async (_what, over, status, expected, extra) => {
+    project(over);
+
+    const res = await post({ source: { text: TEXT }, projectId: 'project-1', ...extra });
+
+    expect(await code(res)).toEqual({ status, code: expected });
+    expect(fake.assessments).toHaveLength(0);
+    expect(fake.contents).toHaveLength(0);
+  });
+
+  it('lists only a project’s reviews when asked', async () => {
+    project();
+    await post({ source: { text: TEXT }, projectId: 'project-1', wait: true });
+    await post({ source: { text: TEXT }, profile: 'quick', wait: true });
+
+    const all = await json(await getList());
+    const inProject = await json(await getList('?projectId=project-1'));
+
+    expect(all.meta).toMatchObject({ total: 2 });
+    expect(inProject.meta).toMatchObject({ total: 1 });
+    expect(inProject.data).toEqual([expect.objectContaining({ projectId: 'project-1' })]);
   });
 });
 

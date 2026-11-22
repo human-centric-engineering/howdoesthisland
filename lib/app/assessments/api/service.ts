@@ -58,6 +58,7 @@ import { CANCEL_GRACE_MS, POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/l
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
 import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
+import { mergeContext, projectForReview, type ReviewProject } from '@/lib/app/projects/service';
 import {
   isFinal,
   readAssessment,
@@ -166,6 +167,8 @@ export type CreatedAssessment =
 /** A request checked as far as it can be without fetching or reading anything. */
 export interface PreparedAssessment {
   resolved: VersionToScore;
+  /** The project it is reviewed in (t-70), or `null`. */
+  projectId: string | null;
   ctx: unknown;
   profile: JudgeProfile;
   judges: readonly string[];
@@ -191,9 +194,12 @@ export interface PreparedAssessment {
  * held budget another request was refused for.
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
-  const resolved = await versionToScore(body);
-  const ctx = contextFor(resolved, body.context);
-  const profile: JudgeProfile = body.judges ?? body.profile ?? 'full';
+  const project = body.projectId ? await projectForReview(body.projectId) : null;
+  const resolved = await versionToScore(frameworkChoice(body, project));
+  // The project's defaults under the request's own fields (t-70), checked
+  // against this version as any context is.
+  const ctx = contextFor(resolved, mergeContext(project?.defaults.context, body.context));
+  const profile: JudgeProfile = body.judges ?? body.profile ?? project?.defaults.profile ?? 'full';
   const judges = judgesFor(resolved, profile);
   // Pasted text can be refused now; a page or a file only once it is read.
   if ('text' in body.source) {
@@ -207,7 +213,27 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     judges.length,
     body.store !== false
   );
-  return { resolved, ctx, profile, judges, hold: null, rate };
+  return { resolved, projectId: project?.id ?? null, ctx, profile, judges, hold: null, rate };
+}
+
+/**
+ * The framework a review is scored with: a project's, when it is in one. A
+ * request naming another framework is refused, since the project's defaults
+ * are that framework's ids.
+ */
+function frameworkChoice(
+  body: CreateAssessmentBody,
+  project: ReviewProject | null
+): { framework?: string; version?: string } {
+  if (!project) return body;
+  if (body.framework !== undefined && body.framework !== project.framework) {
+    throw new APIError(
+      `This project's reviews are scored with ${project.framework}, not ${body.framework}.`,
+      'PROJECT_FRAMEWORK_MISMATCH',
+      400
+    );
+  }
+  return { framework: project.framework, version: body.version };
 }
 
 /**
@@ -256,6 +282,7 @@ export async function createAssessment(
           sourceKind: source.sourceKind,
           sourceUrl: source.sourceUrl,
           fileName: source.fileName,
+          projectId: prepared.projectId,
         },
         frameworkVersionId: resolved.version.id,
         profile,

@@ -99,6 +99,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A change to the workspace’s CopyCredits; `actorUserId` is the admin who made it or the member who redeemed a code.',
       },
+      // t-70: the workspace's, read and changed by every member.
+      Project: {
+        kind: 'not-personal',
+        because:
+          'A project the workspace keeps for a client or campaign; `createdByUserId` is who made it.',
+      },
       // t-59: install-level config, made and read by platform admins.
       ReviewCode: {
         kind: 'not-personal',
