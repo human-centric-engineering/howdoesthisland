@@ -95,17 +95,21 @@ served to the public. The whole model and its kinds are for platform admins only
 caller building reviews reads the catalogue. In Sunrise's envelope, rate limited by the
 `/api/v1` catch-all rule. Who may call each route is `lib/app/frameworks/api/route-auth.ts`.
 
-| Route                                                        | Who                       | Serves                                                                                                             |
-| ------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/frameworks`                                     | a session or `assess` key | Every framework with a published version, and those versions, most recently published first.                       |
-| `GET /api/v1/frameworks/{slug}`                              | a session or `assess` key | One framework and its versions, with `latestVersion`.                                                              |
-| `GET /api/v1/frameworks/{slug}/versions/{version}/catalogue` | a session or `assess` key | The ids and names a review's `context` takes and a result names (the definition's `catalogue()`). Never the model. |
-| `GET /api/v1/frameworks/{slug}/versions/{version}`           | platform admins           | The whole model, materialised from the records. `meta.sourceSha256` is the imported file's checksum.               |
-| `GET /api/v1/frameworks/{slug}/versions/{version}/{kind}`    | platform admins           | One kind's records (`red_flag`, `lever`, …), in model order. A nested kind's `meta.parents` maps parents.          |
+| Route                                                        | Who                       | Serves                                                                                                                                                      |
+| ------------------------------------------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/frameworks`                                     | a session or `assess` key | Every framework with a published version, and those versions, most recently published first.                                                                |
+| `GET /api/v1/frameworks/{slug}`                              | a session or `assess` key | One framework and its versions, with `latestVersion`.                                                                                                       |
+| `GET /api/v1/frameworks/{slug}/versions/{version}/catalogue` | a session or `assess` key | The ids and names a review's `context` takes and a result names, moves, perspectives and levers included (the definition's `catalogue()`). Never the model. |
+| `GET /api/v1/frameworks/{slug}/versions/{version}`           | platform admins           | The whole model, materialised from the records. `meta.sourceSha256` is the imported file's checksum.                                                        |
+| `GET /api/v1/frameworks/{slug}/versions/{version}/{kind}`    | platform admins           | One kind's records (`red_flag`, `lever`, …), in model order. A nested kind's `meta.parents` maps parents.                                                   |
 
 - **Reports read the model in process**, not over HTTP: the web report, a share link and
   the PDF all go through `loadModelDocument()` (`lib/app/reports/pdf/print-source.ts`).
   The report parses only the fields it shows, so the rest never reaches the browser.
+  `GET /api/v1/shared-reports/{token}`, which needs no sign-in, answers with the
+  version's catalogue, never the model.
+- **Bump `catalogueShape`** on the definition when the catalogue's fields change: it is
+  part of the catalogue's ETag.
 - **The catalogue is built field by field** (`lib/app/frameworks/howdoesthisland/catalogue.ts`),
   so a field a later version adds is not served until someone adds it there on purpose.
   A test checks it carries none of 0.5.1's rubrics, patterns, scoring text or reviewer

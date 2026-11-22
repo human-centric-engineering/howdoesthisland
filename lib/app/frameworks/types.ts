@@ -79,6 +79,8 @@ export interface FrameworkDefinition {
    * carries nothing that makes the model work.
    */
   catalogue: (model: JsonObject) => JsonObject;
+  /** Bumped when `catalogue`'s fields change; part of the catalogue's ETag. */
+  catalogueShape: number;
   /**
    * The engine that scores a text against a version of this framework, given
    * that version's materialised model (`materialise()`). Throws when the model

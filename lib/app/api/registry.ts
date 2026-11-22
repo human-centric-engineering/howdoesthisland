@@ -234,13 +234,14 @@ export const frameworkCatalogueSchema = z.object({
   }),
   result: z.object({
     appeals: z.array(idNameSchema),
-    dimensions: z.array(
-      idNameSchema.extend({ appeal: z.string().nullable(), group: z.string().nullable() })
-    ),
+    dimensions: z.array(idNameSchema.extend({ appeal: z.string(), group: z.string().nullable() })),
     lenses: z.array(idNameSchema),
     groups: z.array(idNameSchema),
     redFlags: z.array(idNameSchema.extend({ severity: z.string() })),
     duties: z.array(idNameSchema),
+    moves: z.array(idNameSchema),
+    perspectives: z.array(idNameSchema.extend({ levers: z.array(idNameSchema) })),
+    cultureScales: z.array(idNameSchema).optional(),
   }),
 });
 
@@ -428,14 +429,14 @@ export const sharedAssessmentSchema = assessmentDetailSchema
 export { createdReportShareSchema, reportShareSchema };
 
 /**
- * `SharedReport`: what `GET shared-reports/{token}` answers with, the
- * assessment and what the report shows of the model version it ran on, so a reader needs no second
+ * `SharedReport`, less its model, plus the version's catalogue: what
+ * `GET shared-reports/{token}` answers with, so a reader needs no second
  * call (and has nothing to make one with). `expiresAt` is when the link stops.
  */
 export const sharedReportSchema = z.object({
   assessment: sharedAssessmentSchema,
-  /** Only the fields the report shows (`reportModelSchema`), never the whole model (t-67). */
-  model: jsonObjectSchema,
+  /** The names of what the result names by id: never the model, which is IP (t-67). */
+  catalogue: frameworkCatalogueSchema,
   expiresAt: isoDateTime,
 });
 

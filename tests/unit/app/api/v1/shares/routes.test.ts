@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
   listShares: vi.fn(),
   revokeShare: vi.fn(),
   readSharedReport: vi.fn(),
+  resolveVersion: vi.fn(),
+  versionCatalogue: vi.fn(),
 }));
 vi.mock('@/lib/auth/config', () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock('next/headers', () => ({ headers: vi.fn(() => Promise.resolve(new Headers())) }));
@@ -59,6 +61,11 @@ vi.mock('@/lib/app/reports/share/service', () => ({
   listShares: mocks.listShares,
   revokeShare: mocks.revokeShare,
   readSharedReport: mocks.readSharedReport,
+}));
+
+vi.mock('@/lib/app/frameworks/api/service', () => ({
+  resolveVersion: mocks.resolveVersion,
+  versionCatalogue: mocks.versionCatalogue,
 }));
 
 import { GET as list, POST as create } from '@/app/api/v1/assessments/[id]/shares/route';
@@ -269,10 +276,19 @@ describe('GET /api/v1/shared-reports/{token}', () => {
       params: Promise.resolve({ token }),
     });
   const REPORT = {
-    assessment: { status: 'completed', title: 'Spring' },
-    model: { meta: { name: 'HDTL' } },
+    assessment: {
+      status: 'completed',
+      title: 'Spring',
+      framework: { slug: 'howdoesthisland', version: '0.5.1' },
+    },
+    model: { meta: { name: 'HDTL' }, scoring: { integrity_caps: [{ cap: 40 }] } },
     expiresAt: new Date('2026-12-16T09:00:00.000Z'),
   };
+  const CATALOGUE = { request: { contentTypes: [] }, result: { appeals: [] } };
+  beforeEach(() => {
+    mocks.resolveVersion.mockResolvedValue({ version: { id: 'v1' } });
+    mocks.versionCatalogue.mockResolvedValue({ data: CATALOGUE, meta: {} });
+  });
 
   it('answers the report to anyone with the token, and lets nothing keep a copy', async () => {
     mocks.getSession.mockResolvedValue(null);
@@ -284,7 +300,14 @@ describe('GET /api/v1/shared-reports/{token}', () => {
     expect(res.headers.get('cache-control')).toBe('private, no-store');
     expect(mocks.readSharedReport).toHaveBeenCalledWith('tok');
     const body = await json(res);
-    expect(body.data).toEqual({ ...REPORT, expiresAt: '2026-12-16T09:00:00.000Z' });
+    // The version's catalogue, never the model: a link is public, the model IP (t-67).
+    expect(body.data).toEqual({
+      assessment: REPORT.assessment,
+      catalogue: CATALOGUE,
+      expiresAt: '2026-12-16T09:00:00.000Z',
+    });
+    expect(mocks.resolveVersion).toHaveBeenCalledWith('howdoesthisland', '0.5.1');
+    expect(JSON.stringify(body)).not.toContain('integrity_caps');
     // The share's id is the service's, not the reader's.
     expect(JSON.stringify(body)).not.toContain('share-1');
   });

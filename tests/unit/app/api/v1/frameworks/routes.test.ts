@@ -214,6 +214,28 @@ describe('GET /api/v1/frameworks/{slug}/versions/{version}/catalogue', () => {
       MODEL.dimensions.length + MODEL.extra_dimensions.length
     );
     expect(c.request.countries?.length).toBeGreaterThan(0);
+    // Every id a result names has a name here: moves, perspectives and their levers, scales.
+    expect(c.result.moves.map((x) => x.id)).toEqual(MODEL.moves.map((x) => x.id));
+    const perspectives = c.result.perspectives as Array<{ id: string; levers: { id: string }[] }>;
+    expect(perspectives.flatMap((p) => p.levers.map((l) => l.id))).toEqual(
+      MODEL.perspectives.flatMap((p) => (p.levers as { id: string }[]).map((l) => l.id))
+    );
+    expect(c.result.cultureScales?.length).toBeGreaterThan(0);
+    // An extra dimension carries the appeal id a result's row names, and its group.
+    const extra = MODEL.extra_dimensions[0];
+    expect(c.result.dimensions).toContainEqual({
+      id: extra.id,
+      name: extra.name,
+      appeal: extra.appeal,
+      group: extra.group,
+    });
+  });
+
+  it('throws, rather than serving an empty list, when a record it reads is malformed', async () => {
+    const def = howDoesThisLand;
+    const model = JSON.parse(RAW) as Record<string, Array<Record<string, unknown>>>;
+    model.exec_roles = [...model.exec_roles, { id: 'no_name' }];
+    expect(() => def.catalogue(model)).toThrow();
   });
 
   it('carries nothing that makes the model work: no rubric, weight, pattern, formula or instruction', async () => {
@@ -241,10 +263,14 @@ describe('GET /api/v1/frameworks/{slug}/versions/{version}/catalogue', () => {
     }
   });
 
-  it('leaves countries out when the culture switch is off', async () => {
+  it('leaves countries and cultural scales out when the culture switch is off', async () => {
     const res = await withCulture(false, () => catalogue());
-    const c = (await body(res)).data as { request: Record<string, unknown> };
+    const c = (await body(res)).data as {
+      request: Record<string, unknown>;
+      result: Record<string, unknown>;
+    };
     expect(c.request).not.toHaveProperty('countries');
+    expect(c.result).not.toHaveProperty('cultureScales');
   });
 
   it('404s a draft, and 304s on a matching If-None-Match', async () => {

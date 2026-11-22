@@ -361,7 +361,7 @@ describe('response schemas match what the services return', () => {
     expectTypeOf<z.infer<typeof startedRunSchema>>().toEqualTypeOf<Wire<StartedRun>>();
     // The route answers 422 rather than send a `null` model.
     expectTypeOf<z.infer<typeof sharedReportSchema>>().toEqualTypeOf<
-      Wire<Omit<SharedReport, 'model'> & { model: NonNullable<SharedReport['model']> }>
+      Wire<Omit<SharedReport, 'model'> & { catalogue: HowDoesThisLandCatalogue }>
     >();
   });
 

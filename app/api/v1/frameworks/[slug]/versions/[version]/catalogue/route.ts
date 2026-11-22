@@ -18,16 +18,17 @@ import {
 import { conditionalResponse, frameworkErrorResponse } from '@/lib/app/frameworks/api/respond';
 import { frameworkReader } from '@/lib/app/frameworks/api/route-auth';
 
-/** Its own ETag key, apart from every record kind's. */
-const CATALOGUE = '#catalogue';
-
 export const GET = withAuth<{ slug: string; version: string }>(
   async (request, _session, { params }) => {
     try {
       const { slug, version } = await params;
       const resolved = await resolveVersion(slug, version);
-      return await conditionalResponse(request, versionETagSource(resolved, CATALOGUE), () =>
-        versionCatalogue(resolved)
+      // Its own ETag key, apart from every record kind's, and moved by the
+      // catalogue's shape, so a changed field list is never answered 304.
+      return await conditionalResponse(
+        request,
+        versionETagSource(resolved, `#catalogue@${resolved.def.catalogueShape}`),
+        () => versionCatalogue(resolved)
       );
     } catch (error) {
       return frameworkErrorResponse(error);

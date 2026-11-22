@@ -4,8 +4,9 @@
  *
  * The print page is opened by the PDF route's own headless browser, which has
  * no session and no API key to call the API with. So it reads what
- * `GET /api/v1/assessments/{id}` and `GET /api/v1/frameworks/{slug}/versions/{version}`
- * would have sent, from the same functions, and round-trips each answer
+ * `GET /api/v1/assessments/{id}` would have sent, and the model version (which
+ * every report reads in process, t-67), from the same functions, and
+ * round-trips each answer
  * through JSON so the parser sees the wire shape (a `Date` as an ISO string),
  * exactly as it does for the web page.
  *
@@ -28,8 +29,9 @@ export function asOnTheWire(value: unknown): unknown {
 
 /**
  * The model document a framework version holds, or `null` when that version
- * no longer resolves. Shared with the share link's read
- * (`lib/app/reports/share/service.ts`), so both resolve it alike.
+ * no longer resolves. Shared with the web report's and the share link's reads
+ * (`lib/app/reports/load.ts`, `lib/app/reports/share/service.ts`), so all three
+ * resolve it alike.
  */
 export async function loadModelDocument(
   slug: string,

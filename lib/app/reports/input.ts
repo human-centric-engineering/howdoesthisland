@@ -1,12 +1,14 @@
 /**
  * What the report reads, checked (t-29).
  *
- * The report reads two API answers: the assessment
- * (`GET /api/v1/assessments/{id}`) and the model version it ran on
- * (`GET /api/v1/frameworks/{slug}/versions/{version}`). The first serves
+ * The report reads two answers: the assessment
+ * (`GET /api/v1/assessments/{id}`) and the model version it ran on, read in
+ * process (`loadModelDocument()`; over HTTP the model is for platform admins
+ * only, t-67). The first serves
  * `result` and `context` as `unknown`, because they are each framework's own
  * shapes (`lib/app/api/registry.ts`). The report never reads `context`, so
- * a share link does not serve it. The second is the whole model document.
+ * a share link does not serve it. The second is the whole model document,
+ * which {@link reportModelSchema} narrows to what the report shows.
  * Both are external data to the page, so each is parsed here and never cast.
  *
  * The schemas cover the fields the report shows, and Zod strips the rest, so
