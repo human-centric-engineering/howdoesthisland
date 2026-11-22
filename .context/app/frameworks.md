@@ -137,36 +137,27 @@ Imports and publishes 0.5.1 against the dev database at `multi` (a no-op when al
 done), checks a changed file is refused, and reads the model back from inside a
 workspace that is not the install org.
 
-## The model pages (`/model`)
+## The model on the public site (`/model`)
 
-The public, signed-out pages that show a published version (t-63). `/model` and
-`/model/{section}` show the latest version; `/model/v/{version}/…` pins one, and its links
-stay in that version, so a review made with an older version can point at what scored it.
-The routes in `app/(public)/model/` are one line each over `components/app/model/`.
+The model is HowDoesThisLand's IP (owner ruling, 2026-11-22): the site explains it, and
+never publishes it. `/model` ("How a review works"), a page per chapter and
+`/model/sources` render **the explainer** (`lib/app/explainer/`), a companion written by
+hand as copy. They never read the model.
 
-- **Not tied to one version of the model.** `buildBrowseModel()`
-  (`lib/app/frameworks/browse.ts`) builds the pages from the definition: a section is a
-  top-level part of the file, and its fields that are not collections (all of `scoring`,
-  `culture`'s note) are one record shown first, so the whole model is on the pages. Every
-  field a record has is shown, and a link is a declared reference (or a field named after
-  a kind, such as a move's `appeal`) whose id resolves, kept per field: an id is a link
-  only in the field that refers to it.
-  A section, kind or field a later version adds appears with no code change.
-- **The words around the records** are `components/app/model/presentation.ts`: titles,
-  intros, labels and which sections come first. Every entry is optional and has a
-  fallback, and none counts records; counts are read from the version shown. Keep it that
-  way: copy that names the model's current parts goes stale when the model changes.
-- **Cached per version, rendered per request.** The `(public)` layout reads request
-  headers (maintenance mode), so these pages cannot be statically generated without a
-  layout of their own (which maintenance mode would not cover) or turning on Cache
-  Components for the whole app. Both were judged worse than this (t-63). A
-  published version never changes, so its model is cached by version id for the life of
-  the process (`materialise()`, and the built pages in `load.ts`); only "which version is
-  latest" is read per request. A version shows the moment it is published, with nothing to
-  revalidate. Search engines get the same server-rendered HTML either way.
-- **With every version retired**, `/model` shows the newest retired one, marked retired.
-- **The culture switch** applies as in the API: off, the `culture` section is not on the
-  index and its page is a 404.
+- **`chapters.ts`**: chapters of groups of entries, each in plain words with a summary,
+  an explanation, sometimes an example, and its sources. No rubric, weight, formula,
+  threshold, detection pattern or reviewer instruction, no counts of the model's parts,
+  and no version number. A test checks the first and last against 0.5.1.
+- **A pointer** on an entry names the model concept it explains (`{ kind, id }`, or
+  `section` for a top-level part). It is never shown; a test fails when the model loses
+  it, so a model change that leaves the explainer wrong is caught.
+- **`sources.ts`**: who, what, when and why each source matters, for a reader meeting it
+  for the first time, with a stable link (an encyclopedia entry or a DOI). Cited from the
+  explainer and from `/about`; a test checks every citation resolves.
+- **The pages** (`components/app/model/explainer-pages.tsx`) are guided reading: each
+  chapter top to bottom, entries opening in place, sources in a popover. All of it is
+  server-rendered, folded detail included, with a title, description and canonical URL
+  per page, and every page in the sitemap (ledger row 25).
+- The culture review is left out while its switch is off in production.
 - `/about` is the product's rationale and the lineage of the idea, in
-  `components/app/marketing/about-page.tsx` (ledger row 27). It reads no model, so it
-  never goes stale when the model changes.
+  `components/app/marketing/about-page.tsx` (ledger row 27).

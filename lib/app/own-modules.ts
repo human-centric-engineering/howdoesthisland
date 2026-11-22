@@ -84,4 +84,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/credits/',
   // The quick-scan switch, and who may run the quick scan (t-61).
   'lib/app/quick-scan/',
+  // The model explained in human terms for the public pages, and its sources (t-63).
+  'lib/app/explainer/',
 ];

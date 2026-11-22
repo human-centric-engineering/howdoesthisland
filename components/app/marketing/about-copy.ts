@@ -101,7 +101,24 @@ export const ABOUT_COPY = {
   limits:
     'It has limits, and says so. It can’t tell whether your facts are true. Changes to wording usually make modest differences (O’Keefe and Hoeken, 2021): who you are, what you offer and whether your reader trusts you matter more. Treat a score as a well-informed second opinion, not a forecast.',
 
+  sourcesH: 'Where these ideas come from',
+  sourcesLead: 'Open any of them for who, what and why it matters.',
+  /** Ids in `lib/app/explainer/sources.ts`, in the order the page draws on them. */
+  sources: [
+    'newton-1990',
+    'camerer-1989',
+    'kunda-1990',
+    'friestad-wright-1994',
+    'aristotle-rhetoric',
+    'kairos',
+    'cialdini-influence',
+    'kahneman-2011',
+    'heath-made-to-stick',
+    'peitho',
+    'okeefe-hoeken-2021',
+  ],
+
   ctaH: 'See how your next message lands.',
   cta: 'Have a free review code? Use it on a message that matters, and read it from your reader’s side before you send it.',
-  modelLink: 'Read the model behind the reviews',
+  modelLink: 'How a review works: the model in plain words',
 } as const;

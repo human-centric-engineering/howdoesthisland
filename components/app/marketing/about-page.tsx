@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ABOUT_COPY as C } from '@/components/app/marketing/about-copy';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
+import { source } from '@/lib/app/explainer/sources';
+import { SourceChip } from '@/components/app/model/source-chip';
 
 /**
  * `/about`: why HowDoesThisLand exists and where the idea comes from (t-63).
@@ -130,6 +132,18 @@ export default function AboutPage() {
           <p>{C.trust}</p>
           <p className="text-(--hd-ink)">{C.limits}</p>
         </Split>
+
+        <Band>
+          <h2 className="text-2xl leading-tight font-bold">{C.sourcesH}</h2>
+          <p className="mt-2 text-sm text-(--hd-muted)">{C.sourcesLead}</p>
+          <ul className="mt-4 flex flex-wrap gap-2" data-testid="about-sources">
+            {C.sources.map((id) => (
+              <li key={id}>
+                <SourceChip source={source(id)} />
+              </li>
+            ))}
+          </ul>
+        </Band>
 
         <Band>
           <div className="grid items-end gap-8 bg-(--hd-ink) p-6 text-(--hd-paper) sm:p-12 lg:grid-cols-[minmax(0,1fr)_auto]">
