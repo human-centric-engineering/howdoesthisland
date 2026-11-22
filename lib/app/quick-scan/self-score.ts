@@ -31,7 +31,8 @@
  * a {@link RETRY_FAILED_MS}; each distinct failure is logged once, and again
  * only after that stage has recovered. A stage that has not answered in
  * {@link TIMEOUT_MS} counts as failed, so a stalled run cannot hold every
- * later view of `/`, and no new run starts beside one still going until
+ * later view of `/`, though what it finds if it lands later is still kept;
+ * and no new run starts beside one still going until
  * {@link ABANDON_AFTER_MS}, so a hung database does not collect a stalled
  * query a minute.
  */
@@ -104,8 +105,17 @@ interface Kept<T> {
   answer: Promise<T | null>;
 }
 
-/** Start a run of `work`, which answers `null` on failure and never throws. */
-function start<T>(stage: Stage, key: string, work: () => Promise<T | null>): Kept<T> {
+/**
+ * Start a run of `work`, which answers `null` on failure and never throws.
+ * `found` gets the run's value whenever it lands, even after the view's
+ * answer has timed out, so a slow success is kept rather than thrown away.
+ */
+function start<T>(
+  stage: Stage,
+  key: string,
+  work: () => Promise<T | null>,
+  found: (value: T, run: Kept<T>) => void
+): Kept<T> {
   const run = work();
   const kept: Kept<T> = {
     key,
@@ -118,10 +128,15 @@ function start<T>(stage: Stage, key: string, work: () => Promise<T | null>): Kep
   void run.finally(() => {
     kept.running = false;
   });
+  void run.then((value) => {
+    if (value === null) return;
+    kept.failed = false;
+    lastLogged[stage] = null;
+    found(value, kept);
+  });
   void kept.answer.then((value) => {
     kept.answered = true;
     if (value === null) kept.failed = true;
-    else lastLogged[stage] = null;
   });
   return kept;
 }
@@ -156,9 +171,9 @@ export async function selfScore(
   if (!isQuickScanEnabled()) return null;
 
   if (!stillAnswers(lookup, 'latest', LOOKUP_TTL_MS)) {
-    lookup = start('lookup', 'latest', findLatestVersion);
-    void lookup.answer.then((found) => {
-      if (found) lastVersion = found;
+    lookup = start('lookup', 'latest', findLatestVersion, (found, run) => {
+      // An abandoned run that lands late never overwrites a newer one.
+      if (run === lookup) lastVersion = found;
     });
   }
   // Wait only for a first lookup; a refresh runs behind the view.
@@ -168,10 +183,15 @@ export async function selfScore(
   // The page's copy is a few KB, so the key is the inputs themselves.
   const key = JSON.stringify([version.id, version.sourceSha256, text, context]);
   if (!stillAnswers(scan, key, Infinity)) {
-    scan = start('scan', key, () => scoreWith(text, context, version.version));
-    void scan.answer.then((score) => {
-      if (score) lastGood = score;
-    });
+    scan = start(
+      'scan',
+      key,
+      () => scoreWith(text, context, version.version),
+      (score, run) => {
+        // An older version's scan that lands late never replaces a newer score.
+        if (run === scan) lastGood = score;
+      }
+    );
   }
   // Wait only when there is no score to show; a new run finishes behind the view.
   if (lastGood && !scan.answered) return lastGood;
@@ -181,8 +201,13 @@ export async function selfScore(
 async function findLatestVersion(): Promise<LatestVersion | null> {
   try {
     const framework = await prismaFrameworkCatalog.findFramework(DEFAULT_FRAMEWORK);
+    if (!framework) {
+      return failed('lookup', 'Self-score could not run', {
+        error: `${DEFAULT_FRAMEWORK} is not in the framework catalog.`,
+      });
+    }
     // Newest first, so the first published is the latest.
-    const version = framework?.versions.find((v) => v.status === 'PUBLISHED');
+    const version = framework.versions.find((v) => v.status === 'PUBLISHED');
     if (version) return version;
     return failed('lookup', 'Self-score could not run', {
       error: `${DEFAULT_FRAMEWORK} has no published version.`,

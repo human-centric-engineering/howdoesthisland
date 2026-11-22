@@ -131,6 +131,15 @@ describe('selfScore', () => {
     });
   });
 
+  it('answers null, and says so, when the framework is not in the catalog', async () => {
+    findFramework.mockResolvedValue(null);
+    await expect(selfScore('x', CONTEXT)).resolves.toBeNull();
+    expect(runQuickScan).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('Self-score could not run', {
+      error: 'howdoesthisland is not in the framework catalog.',
+    });
+  });
+
   it('answers null when the framework lookup throws', async () => {
     findFramework.mockRejectedValue(new Error('connection refused'));
     await expect(selfScore('x', CONTEXT)).resolves.toBeNull();
@@ -291,8 +300,8 @@ describe('selfScore, kept per framework version', () => {
     const first = selfScore('copy', CONTEXT);
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
     await first;
-    // The slow run finishes late; its answer came too late for the view.
-    settle(scanView(SOLID));
+    // The slow run finishes late, and fails: no appeal scores.
+    settle(scanView({ overall: 63, band: 'Solid' }));
     await vi.advanceTimersByTimeAsync(0);
 
     vi.advanceTimersByTime(RETRY_FAILED_MS);
@@ -370,6 +379,69 @@ describe('selfScore, kept per framework version', () => {
     await vi.advanceTimersByTimeAsync(0);
     await expect(selfScore('copy', CONTEXT)).resolves.toEqual(good);
     expect(runQuickScan).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a scan that lands after its view timed out, without scanning again', async () => {
+    vi.useFakeTimers();
+    let settle: (v: unknown) => void = () => {};
+    runQuickScan.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await expect(first).resolves.toBeNull();
+
+    settle(scanView(SOLID));
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    expect(runQuickScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a lookup that lands after its view timed out', async () => {
+    vi.useFakeTimers();
+    let settle: (v: unknown) => void = () => {};
+    findFramework.mockReturnValue(new Promise((resolve) => (settle = resolve)));
+    runQuickScan.mockResolvedValue(scanView(SOLID));
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await expect(first).resolves.toBeNull();
+
+    settle(served({ id: 'v51', version: '0.5.1', status: 'PUBLISHED' }));
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 63 });
+    expect(findFramework).toHaveBeenCalledTimes(1);
+  });
+
+  it('never lets an older version’s late scan replace a newer score', async () => {
+    vi.useFakeTimers();
+    let settleOld: (v: unknown) => void = () => {};
+    runQuickScan.mockReturnValueOnce(new Promise((resolve) => (settleOld = resolve)));
+    const first = selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    await first;
+
+    // 0.5.2 is published and scored while 0.5.1's scan is still out.
+    findFramework.mockResolvedValue(V52);
+    runQuickScan.mockResolvedValueOnce({
+      ...scanView({ ...SOLID, overall: 80, band: 'Strong' }),
+      framework: { slug: 'howdoesthisland', version: '0.5.2' },
+    });
+    vi.advanceTimersByTime(RETRY_FAILED_MS);
+    await selfScore('copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 80 });
+
+    settleOld(scanView(SOLID));
+    await vi.advanceTimersByTimeAsync(0);
+    // The newer score stays, while 0.5.2's run answers and while a later one fails.
+    await expect(selfScore('copy', CONTEXT)).resolves.toMatchObject({ overall: 80 });
+    runQuickScan.mockRejectedValue(new Error('scan refused'));
+    await selfScore('new copy', CONTEXT);
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(selfScore('new copy', CONTEXT)).resolves.toMatchObject({
+      overall: 80,
+      scoredWith: 'howdoesthisland@0.5.2',
+    });
   });
 
   it('logs a repeat lookup failure after the lookup has recovered', async () => {

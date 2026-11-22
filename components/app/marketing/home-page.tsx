@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { connection } from 'next/server';
 import { Button } from '@/components/ui/button';
 import { CodeEntryForm } from '@/components/app/redeem/redeem-states';
@@ -25,7 +26,9 @@ import { selfScore } from '@/lib/app/quick-scan/self-score';
  * the quick-scan switch on, or a static marked-up sample with it off
  * (`selfScore()` returns `null` off, before any engine call). Rendered per
  * request, so the switch is the running server's; the score is kept per
- * published framework version (`self-score.ts`), not rerun per view.
+ * published framework version (`self-score.ts`), not rerun per view. The
+ * panel streams under its own Suspense boundary, with the sample standing in,
+ * so a slow first score never holds the rest of the page.
  */
 
 const description =
@@ -73,9 +76,14 @@ function Band({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
+/** The hero's panel: the live self-score, or the sample without one. */
+async function HeroPanel() {
+  const score = await selfScore(HOME_PAGE_TEXT, HOME_CONTEXT);
+  return score ? <SelfScorePanel score={score} /> : <SampleMarkUp />;
+}
+
 export default async function HomePage() {
   await connection();
-  const score = await selfScore(HOME_PAGE_TEXT, HOME_CONTEXT);
 
   return (
     <div className="container mx-auto px-4 py-6 md:py-10">
@@ -98,7 +106,9 @@ export default async function HomePage() {
               <CodeEntryForm />
             </div>
           </div>
-          {score ? <SelfScorePanel score={score} /> : <SampleMarkUp />}
+          <Suspense fallback={<SampleMarkUp />}>
+            <HeroPanel />
+          </Suspense>
         </div>
 
         {/* The problem */}

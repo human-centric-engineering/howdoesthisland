@@ -10,6 +10,7 @@
  * @see components/app/marketing/home-page.tsx · app/(public)/page.tsx
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cloneElement, isValidElement, Suspense, type ReactElement, type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('next/server', async (importOriginal) => ({
@@ -35,6 +36,40 @@ import { HOME_CONTEXT, HOME_PAGE_TEXT } from '@/components/app/marketing/home-co
 type PageModule = typeof import('@/app/(public)/page');
 let HomePage: PageModule['default'];
 let metadata: PageModule['metadata'];
+
+type AnyProps = { children?: ReactNode; fallback?: ReactNode };
+
+function isAsyncComponent(type: unknown): type is (props: AnyProps) => Promise<ReactNode> {
+  return typeof type === 'function' && type.constructor.name === 'AsyncFunction';
+}
+
+/**
+ * The tree as the server sends it once every boundary has resolved: each
+ * async component is awaited in place, as Next does on the server, and a
+ * Suspense boundary is kept so its fallback can be checked. Testing Library
+ * renders on the client, which cannot await an async component itself.
+ */
+async function resolved(node: ReactNode): Promise<ReactNode> {
+  if (Array.isArray(node)) return Promise.all(node.map(resolved));
+  if (!isValidElement<AnyProps>(node)) return node;
+  if (isAsyncComponent(node.type)) return resolved(await node.type(node.props));
+  if (node.props.children === undefined) return node;
+  return cloneElement(node, undefined, await resolved(node.props.children));
+}
+
+async function page(): Promise<ReactElement> {
+  const tree = await resolved(await HomePage());
+  if (!isValidElement(tree)) throw new Error('HomePage rendered no element');
+  return tree;
+}
+
+/** The Suspense boundaries in a tree, before anything inside them resolves. */
+function boundaries(node: ReactNode): ReactElement<AnyProps>[] {
+  if (Array.isArray(node)) return node.flatMap(boundaries);
+  if (!isValidElement<AnyProps>(node)) return [];
+  const inner = boundaries(node.props.children);
+  return node.type === Suspense ? [node, ...inner] : inner;
+}
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -67,7 +102,7 @@ describe('the landing page', () => {
 
   it('with the switch on, shows its own copy’s quick-scan score, rendered on the server', async () => {
     mockEnv.QUICK_SCAN_ENABLED = true;
-    const { container } = render(await HomePage());
+    const { container } = render(await page());
 
     expect(runQuickScan).toHaveBeenCalledWith({
       text: HOME_PAGE_TEXT,
@@ -83,7 +118,7 @@ describe('the landing page', () => {
 
   it('with the switch off, makes no quick-scan call and shows no quick-scan output', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
-    const { container } = render(await HomePage());
+    const { container } = render(await page());
 
     expect(runQuickScan).not.toHaveBeenCalled();
     expect(findFramework).not.toHaveBeenCalled();
@@ -92,16 +127,27 @@ describe('the landing page', () => {
     expect(screen.getByTestId('sample-mark-up')).toHaveTextContent('What a review marks up');
   });
 
+  it('streams the panel under its own boundary, with the sample standing in', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = true;
+    // The shell renders without waiting on the score.
+    findFramework.mockReturnValue(new Promise(() => {}));
+    const [panel] = boundaries(await HomePage());
+
+    expect(panel).toBeDefined();
+    render(<>{panel.props.fallback}</>);
+    expect(screen.getByTestId('sample-mark-up')).toBeInTheDocument();
+  });
+
   it('falls back to the sample when the self-score cannot run', async () => {
     mockEnv.QUICK_SCAN_ENABLED = true;
     runQuickScan.mockRejectedValue(new Error('no published version'));
-    render(await HomePage());
+    render(await page());
     expect(screen.getByTestId('sample-mark-up')).toBeInTheDocument();
   });
 
   it('sends “Have a code?” and the code box to /redeem', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
-    const { container } = render(await HomePage());
+    const { container } = render(await page());
 
     const links = screen.getAllByRole('link', { name: 'Have a code? Get your free review' });
     expect(links.length).toBeGreaterThanOrEqual(2);
@@ -115,7 +161,7 @@ describe('the landing page', () => {
 
   it('offers sign-up without a code, second', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
-    render(await HomePage());
+    render(await page());
     expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute(
       'href',
       '/signup'
@@ -124,7 +170,7 @@ describe('the landing page', () => {
 
   it('never calls the free offer a scan, and never counts the AI reviewers', async () => {
     mockEnv.QUICK_SCAN_ENABLED = false;
-    const { container } = render(await HomePage());
+    const { container } = render(await page());
     const text = container.textContent ?? '';
     expect(text).not.toMatch(/free (quick )?scan|10 seconds/i);
     // The panel can change, so the page names it without a number.
