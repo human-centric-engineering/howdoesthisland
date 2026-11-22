@@ -1,0 +1,314 @@
+// @vitest-environment happy-dom
+
+/**
+ * The project form (t-71): the brief and the defaults, saved with PATCH.
+ *
+ * Mocked: the API client, the router, and the Radix select (a native one in
+ * its place; see `select-mock.tsx`). What is proved: each picker offers only
+ * the catalogue's ids, the culture pickers follow the culture switch, every
+ * field has its help, the save sends the brief and defaults whole, and a
+ * refused save shows by Save.
+ *
+ * @see components/app/projects/project-form.tsx
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+const refresh = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
+vi.mock('@/lib/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/client')>()),
+  apiClient: { patch: vi.fn(), post: vi.fn(), get: vi.fn(), delete: vi.fn() },
+}));
+vi.mock('@/components/ui/select', async () => {
+  const { selectMock } = await import('@/tests/unit/components/app/projects/select-mock');
+  return selectMock;
+});
+
+import { ProjectForm } from '@/components/app/projects/project-form';
+import { apiClient, APIClientError } from '@/lib/api/client';
+import { aCatalogue, aProject } from '@/tests/unit/components/app/projects/fixtures';
+
+/** The input a label names; the label also holds its help button. */
+function field<T extends HTMLElement = HTMLElement>(label: RegExp): T {
+  return screen.getByLabelText<T>(label, { selector: 'input, textarea, select' });
+}
+
+function optionValues(label: RegExp): string[] {
+  const select = field(label);
+  return within(select)
+    .getAllByRole('option')
+    .map((o) => o.getAttribute('value') ?? '');
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(apiClient.patch).mockResolvedValue({});
+});
+
+describe('ProjectForm pickers', () => {
+  it('offers only the version’s ids, after No default', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(optionValues(/^Type of copy/)).toEqual(['__none__', 'general', 'landing_page']);
+    expect(optionValues(/^Reader(?!’)/)).toEqual(['__none__', 'general', 'sceptic']);
+    expect(optionValues(/^Reader’s role/)).toEqual(['__none__', 'cfo']);
+    expect(optionValues(/^Relationship with the reader/)).toEqual(['__none__', 'cold', 'warm']);
+  });
+
+  it('leaves out the audience setting the engine refuses (archetype)', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(
+      screen.queryByLabelText(/^Audience archetype/, { selector: 'select' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('has no culture pickers, and no culture reviewer set, with the culture switch off', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue({ culture: false })} />);
+
+    expect(
+      screen.queryByLabelText(/^Reader’s culture/, { selector: 'select' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/^Writer’s culture/, { selector: 'select' })
+    ).not.toBeInTheDocument();
+    expect(optionValues(/^AI reviewers/)).toEqual(['__none__', 'quick', 'core', 'craft', 'full']);
+  });
+
+  it('offers the version’s countries, and the culture reviewers, with the switch on', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue({ culture: true })} />);
+
+    // `global` is the engine's "no country in particular", offered first.
+    expect(optionValues(/^Reader’s culture/)).toEqual(['__none__', 'global', 'gb', 'fr']);
+    expect(optionValues(/^Writer’s culture/)).toEqual(['__none__', 'global', 'gb', 'fr']);
+    expect(optionValues(/^AI reviewers/)).toContain('culture');
+  });
+
+  it('keeps a stored default the version no longer has, marked as such', () => {
+    const project = aProject({ defaults: { context: { contentType: 'haiku' } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    const select = field<HTMLSelectElement>(/^Type of copy/);
+    expect(select.value).toBe('haiku');
+    expect(
+      within(select).getByRole('option', { name: 'haiku (not in this version)' })
+    ).toBeTruthy();
+  });
+});
+
+describe('ProjectForm stored defaults the version cannot take', () => {
+  it('shows a stored culture with the switch off, and sends it back rather than dropping it', async () => {
+    const project = aProject({ defaults: { context: { culture: { reader: 'fr' } } } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: false })} />);
+
+    expect(field<HTMLSelectElement>(/^Reader’s culture/).value).toBe('fr');
+    await user.type(field(/^Goals/), 'Book a call');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]?.[1]).toMatchObject({
+      body: { defaults: { context: { culture: { reader: 'fr' } } } },
+    });
+  });
+
+  it('gives a stored audience setting the version lacks a picker that can clear it', () => {
+    const project = aProject({ defaults: { context: { audience: { legacy: 'x' } } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    expect(optionValues(/^legacy \(not in this version\)/)).toEqual(['__none__', 'x']);
+  });
+
+  it('keeps a stored value the version lacks as a choice after another is picked', async () => {
+    const project = aProject({ defaults: { profile: 'culture' } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: false })} />);
+
+    await user.selectOptions(field(/^AI reviewers/), 'full');
+
+    expect(optionValues(/^AI reviewers/)).toContain('culture');
+  });
+
+  it('shows a stored global culture as the plain choice it is', () => {
+    const project = aProject({ defaults: { context: { culture: { reader: 'global' } } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: true })} />);
+
+    const select = field<HTMLSelectElement>(/^Reader’s culture/);
+    expect(select.value).toBe('global');
+    expect(
+      within(select).getByRole('option', { name: 'Anywhere: no country in particular' })
+    ).toBeTruthy();
+    expect(within(select).queryByRole('option', { name: /not in this version/ })).toBeNull();
+  });
+
+  it('says so when the stored defaults cannot be shown, and lets Save replace them as they are', async () => {
+    const project = aProject({ defaults: { context: { audience: 'all' } } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    expect(screen.getByRole('note')).toHaveTextContent('Saving replaces them');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]?.[1]).toMatchObject({
+      body: { defaults: {} },
+    });
+  });
+
+  it('keeps Save off until something changes when the stored defaults are readable', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(screen.getByRole('button', { name: 'Save project' })).toBeDisabled();
+  });
+
+  it('drops the picker for a stored setting once a refresh shows the save cleared it', () => {
+    const before = aProject({ defaults: { context: { audience: { legacy: 'x' } } } });
+    const { rerender } = render(<ProjectForm project={before} catalogue={aCatalogue()} />);
+    expect(screen.getByLabelText(/^legacy/, { selector: 'select' })).toBeInTheDocument();
+
+    rerender(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    expect(screen.queryByLabelText(/^legacy/, { selector: 'select' })).not.toBeInTheDocument();
+  });
+
+  it('opens a project whose role and culture are the engine’s empty "none"', () => {
+    const project = aProject({ defaults: { context: { role: '', culture: { writer: '' } } } });
+    render(<ProjectForm project={project} catalogue={aCatalogue({ culture: true })} />);
+
+    expect(field<HTMLSelectElement>(/^Reader’s role/).value).toBe('__none__');
+    expect(field<HTMLSelectElement>(/^Writer’s culture/).value).toBe('__none__');
+  });
+});
+
+describe('ProjectForm help', () => {
+  it('gives every field a help popover', () => {
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue({ culture: true })} />);
+
+    // Name, five brief parts; type of copy, AI reviewers, reader, role, one
+    // audience setting; two culture pickers.
+    const fields = 1 + 5 + 4 + 1 + 2;
+    expect(screen.getAllByRole('textbox')).toHaveLength(6);
+    expect(screen.getAllByRole('combobox')).toHaveLength(fields - 6);
+    expect(screen.getAllByRole('button', { name: 'More information' })).toHaveLength(fields);
+  });
+});
+
+describe('ProjectForm save', () => {
+  it('sends the brief and the defaults whole, leaving out what is blank or No default', async () => {
+    const user = userEvent.setup();
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue({ culture: true })} />);
+
+    await user.clear(field(/^Tone of voice/));
+    await user.type(field(/^Goals/), '  Book a call  ');
+    await user.selectOptions(field(/^Type of copy/), 'landing_page');
+    await user.selectOptions(field(/^Relationship with the reader/), 'warm');
+    await user.selectOptions(field(/^Reader’s culture/), 'gb');
+    await user.selectOptions(field(/^AI reviewers/), 'craft');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/projects/proj-1', {
+      body: {
+        name: 'Spring launch',
+        brief: { offer: 'Bookkeeping for sole traders', goals: 'Book a call' },
+        defaults: {
+          context: {
+            contentType: 'landing_page',
+            audience: { relationship: 'warm' },
+            culture: { reader: 'gb' },
+          },
+          profile: 'craft',
+        },
+      },
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved.');
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('sends empty defaults once every picker is back on No default', async () => {
+    const user = userEvent.setup();
+    const project = aProject({ defaults: { context: { role: 'cfo' }, profile: 'core' } });
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    await user.selectOptions(field(/^Reader’s role/), '__none__');
+    await user.selectOptions(field(/^AI reviewers/), '__none__');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]?.[1]).toMatchObject({
+      body: { defaults: {} },
+    });
+  });
+
+  it('puts each default the API refuses under its picker, and says how many by Save', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValue(
+      new APIClientError(
+        "The project's defaults do not fit its framework's latest version.",
+        'DEFAULTS_INVALID',
+        400,
+        {
+          issues: [
+            { path: 'defaults.context.contentType', message: 'Not a content type in this version' },
+            { path: 'defaults.context.audience.legacy', message: 'Not a legacy option' },
+            { path: 'defaults.context', message: 'Unrecognized key: "tone"' },
+          ],
+        }
+      )
+    );
+    const project = aProject({ defaults: { context: { audience: { legacy: 'x' } } } });
+    const user = userEvent.setup();
+    render(<ProjectForm project={project} catalogue={aCatalogue()} />);
+
+    await user.selectOptions(field(/^Type of copy/), 'general');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '2 defaults need changing. Unrecognized key: "tone"'
+    );
+    expect(screen.getByText('Not a content type in this version')).toBeInTheDocument();
+    expect(screen.getByText('Not a legacy option')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('shows any other refusal by Save, with the server’s message', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValue(
+      new APIClientError('Project not found', 'NOT_FOUND', 404)
+    );
+    const user = userEvent.setup();
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    await user.selectOptions(field(/^Type of copy/), 'general');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Project not found');
+  });
+
+  it('puts a refused brief part’s message under that part', async () => {
+    vi.mocked(apiClient.patch).mockRejectedValue(
+      new APIClientError('Invalid request body', 'VALIDATION_ERROR', 400, {
+        errors: [{ path: 'brief.markets', message: 'Too long' }],
+      })
+    );
+    const user = userEvent.setup();
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    await user.type(field(/^Markets/), 'UK');
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    expect(await screen.findByText('Too long')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('blocks a blank name without saving', async () => {
+    const user = userEvent.setup();
+    render(<ProjectForm project={aProject()} catalogue={aCatalogue()} />);
+
+    await user.clear(field(/^Name/));
+    await user.click(screen.getByRole('button', { name: 'Save project' }));
+
+    expect(await screen.findByText('Give the project a name')).toBeInTheDocument();
+    expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+});

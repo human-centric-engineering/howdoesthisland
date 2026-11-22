@@ -375,6 +375,9 @@ a new term is added here in the same PR.
 | **rewrite**                                       | A whole new draft from the review (`f-rewrite`)                                               | regeneration                                         |
 | **word count**, **length**                        | As copywriters count them                                                                     | tokens, characters (unless a limit is in characters) |
 | **placeholder**                                   | A gap for a fact only the writer knows: `[ADD: client name]`                                  | variable, slot                                       |
+| **project**                                       | One client's, product's or campaign's work: its brief and the defaults its reviews take       | job, account, folder                                 |
+| **reader**                                        | Who the copy is written for, as the model describes them (its archetype)                      | archetype, persona, target                           |
+| **archive**, **archived**, **restore**            | Put a project aside, keeping its reviews; restore brings it back                              | delete, deactivate, disable                          |
 
 **Settled by the owner on 2026-11-15** (open question 5): _assessment_ is **review**, the
 _judges_ are **AI reviewers**, _content type_ is **type of copy**, and the _report_ stays
