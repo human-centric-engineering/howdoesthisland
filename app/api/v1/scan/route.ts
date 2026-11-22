@@ -107,11 +107,12 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (await presentsAccount(request)) {
       const asAnyone = request.clone();
       const answer = await scanAsMember(request);
-      // A browser session whose workspace the guard refuses (suspended, or no
-      // longer theirs) gets what anyone signed out gets, not a refusal a
-      // stranger would not meet. An API key is refused: its caller asked for
-      // the full result and should learn why not.
-      if (answer.status === 403 && !presentsApiKey(asAnyone)) {
+      // A browser session the guard refuses (its workspace suspended or no
+      // longer theirs, 403; or the session gone between the two lookups, 401)
+      // gets what anyone signed out gets, not a refusal a stranger would not
+      // meet. The guard refuses before the handler runs, so nothing is scanned
+      // twice. An API key is refused: its caller asked for the full result.
+      if ((answer.status === 401 || answer.status === 403) && !presentsApiKey(asAnyone)) {
         return await scanBody(withoutCode(await readJson(asAnyone)), false);
       }
       return answer;

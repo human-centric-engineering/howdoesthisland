@@ -413,6 +413,20 @@ describe('who gets the full result (t-61, t-68)', () => {
     });
   });
 
+  it('the signed-out answer when the session is gone by the time the guard looks', async () => {
+    const base = createMockAuthSession();
+    // `presentsAccount` sees a session; the guard's own lookup finds none.
+    mocks.getSession
+      .mockResolvedValueOnce({
+        session: { ...base.session, userId: ALICE, activeOrgId: WS_A },
+        user: { ...base.user, id: ALICE },
+      })
+      .mockResolvedValue(null);
+    const res = await scan({ text: TEXT });
+    expect(res.status).toBe(200);
+    expect((await read(res)).data).toHaveProperty('caveat');
+  });
+
   it('500, not the signed-out answer, when the session lookup fails', async () => {
     mocks.getSession.mockRejectedValue(new Error('session store down'));
     const res = await scan({ text: TEXT });

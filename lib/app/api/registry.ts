@@ -627,8 +627,9 @@ export const APP_ROUTES: readonly RouteContract[] = [
     request: { body: scanRequestSchema },
     // Which one a caller gets follows the credential, not the body: with a
     // session or a key, the full view; with neither, the summary, which alone
-    // has `caveat` (`asQuickScanSummary` tells them apart so).
-    response: { status: 200, data: z.union([quickScanViewSchema, quickScanSummarySchema]) },
+    // has `caveat` and `appeals`. The summary comes first: the view's
+    // `unknown` fields would also accept a summary, and strip its caveat.
+    response: { status: 200, data: z.union([quickScanSummarySchema, quickScanViewSchema]) },
   },
   {
     method: 'POST',
