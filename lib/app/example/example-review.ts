@@ -14,6 +14,7 @@
  *
  * The sender, client and numbers are invented for the example.
  */
+import { z } from 'zod';
 import type { FrameworkDefinition, JsonObject } from '@/lib/app/frameworks/types';
 
 /** Who the email is for: a cold reader, as the context of a review says it. */
@@ -554,7 +555,27 @@ export interface ExampleReview {
   full: unknown;
   /** What validation dropped or recorded missing, by slot: empty when the example holds. */
   problems: string[];
+  /** The reviewer slots whose replies the engine accepted, in run order. */
+  accepted: string[];
 }
+
+/**
+ * The note an AI reviewer wrote on `quote` in the first draft. The landing
+ * page's sample shows these notes, so it reads them from here rather than
+ * keeping a second copy that could drift.
+ */
+export function draftNote(quote: string): string {
+  for (const reply of Object.values(DRAFT_REPLIES)) {
+    const parsed = highlightsOf.safeParse(reply);
+    const found = parsed.success ? parsed.data.highlights.find((h) => h.quote === quote) : null;
+    if (found?.note) return found.note;
+  }
+  throw new Error(`No note on "${quote}" in the example's first draft`);
+}
+
+const highlightsOf = z.object({
+  highlights: z.array(z.object({ quote: z.string(), note: z.string().optional() })),
+});
 
 /**
  * Review both drafts with the engine, as a run would: the quick scan, each
@@ -574,6 +595,7 @@ export function reviewExample(
   const review = (stage: ExampleStage): ExampleReview => {
     const { text, replies, editor } = inputs[stage];
     const problems: string[] = [];
+    const accepted: string[] = [];
     const quick = engine.quickScan(text, parsed.ctx);
     const outputs: Record<string, unknown> = {};
     for (const slot of slots) {
@@ -584,6 +606,7 @@ export function reviewExample(
       }
       for (const d of checked.drops) problems.push(`${stage}.${slot}: ${JSON.stringify(d)}`);
       outputs[slot] = checked.output;
+      accepted.push(slot);
     }
     const assembled = engine.assemble(text, parsed.ctx, quick, outputs, null);
     const summary = engine.validateEditorReply(editor, assembled);
@@ -601,6 +624,7 @@ export function reviewExample(
       quick: engine.assemble(text, parsed.ctx, quick, {}, null),
       full,
       problems,
+      accepted,
     };
   };
 

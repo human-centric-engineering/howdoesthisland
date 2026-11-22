@@ -7,6 +7,7 @@
  * links of their own.
  */
 import Link from 'next/link';
+import { draftNote } from '@/lib/app/example/example-review';
 
 type Run = string | { text: string; note: number };
 
@@ -30,27 +31,35 @@ const PASSAGE: readonly Run[][] = [
   ],
 ];
 
-/** The AI reviewers' notes on these lines in the full example (`/example-review`). */
+/**
+ * The AI reviewers' notes on these lines in the full example
+ * (`/example-review`), read from it, so the card and the page never disagree.
+ * The dimension names are the model's, as the page's notes show them.
+ */
 const NOTES = [
   {
     number: 1,
     dimension: 'Goodwill and reader focus',
-    note: 'The first line is about the sender. A cold reader decides in this sentence whether the email is for her.',
+    note: draftNote(
+      'My name is Tom and I am the Business Development Manager at BrightPath Consulting.'
+    ),
   },
   {
     number: 2,
     dimension: 'Integrity and candour',
-    note: 'A self-awarded superlative with nothing behind it. A sceptical reader discounts it, and what follows.',
+    note: draftNote('We are a leading provider of digital transformation solutions.'),
   },
   {
     number: 3,
     dimension: 'Borrowed credibility',
-    note: 'Which clients, and what results? One named result would do more than both adjectives.',
+    note: draftNote('Our innovative approach delivers outstanding results for our clients.'),
   },
   {
     number: 4,
     dimension: 'The call to act',
-    note: 'Forty-five minutes about “our capabilities” is a big ask from a stranger, and it is about him.',
+    note: draftNote(
+      'I would love to set up a 45-minute call to walk you through our capabilities.'
+    ),
   },
 ] as const;
 

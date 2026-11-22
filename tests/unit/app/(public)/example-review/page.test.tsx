@@ -13,6 +13,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+const mockEnv = vi.hoisted((): { NODE_ENV: string; QUICK_SCAN_ENABLED: boolean | undefined } => ({
+  NODE_ENV: 'test',
+  QUICK_SCAN_ENABLED: true,
+}));
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
+const log = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger: log }));
+
 vi.mock('next/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/server')>()),
   connection: vi.fn(() => Promise.resolve()),
@@ -34,6 +42,11 @@ vi.mock('@/lib/app/reports/pdf/print-source', async (importOriginal) => ({
 }));
 
 import ExampleRoute, { metadata } from '@/app/(public)/example-review/page';
+import {
+  __resetExampleCacheForTests,
+  LOOKUP_TTL_MS,
+  loadExampleViews,
+} from '@/components/app/example/load';
 import { DRAFT, FINAL } from '@/lib/app/example/example-review';
 
 const MODEL = JSON.parse(
@@ -41,6 +54,9 @@ const MODEL = JSON.parse(
 ) as Record<string, unknown>;
 
 beforeEach(() => {
+  __resetExampleCacheForTests();
+  mockEnv.QUICK_SCAN_ENABLED = true;
+  log.error.mockReset();
   mocks.getFramework.mockReset().mockResolvedValue({ latestVersion: '0.5.1' });
   mocks.loadModel.mockReset().mockResolvedValue(MODEL);
 });
@@ -139,5 +155,65 @@ describe('/example-review', () => {
   it('is a 404 when no version is published', async () => {
     mocks.getFramework.mockResolvedValue({ latestVersion: null });
     await expect(ExampleRoute()).rejects.toThrow('NOT_FOUND');
+  });
+
+  it('leaves the quick-scan step out while the quick scan is switched off', async () => {
+    mockEnv.QUICK_SCAN_ENABLED = false;
+    const { container } = render(await ExampleRoute());
+    expect(container.querySelector('[data-testid="step-quick"]')).toBeNull();
+    expect(within(screen.getByRole('tablist')).getAllByRole('tab')).toHaveLength(4);
+  });
+
+  it('lists only the reviewers whose replies ran, as a report does', async () => {
+    const views = await loadExampleViews();
+    expect(views?.draft.method.reviewers.map((r) => [r.slot, r.status])).toEqual([
+      ['judge_ethos', 'succeeded'],
+      ['judge_pathos', 'succeeded'],
+      ['judge_logos', 'succeeded'],
+      ['judge_kairos', 'succeeded'],
+    ]);
+  });
+});
+
+describe('loadExampleViews', () => {
+  it('builds once per version, and looks up the latest at most once a minute', async () => {
+    const t0 = 1_000_000;
+    const first = await loadExampleViews(t0);
+    const again = await loadExampleViews(t0 + 1_000);
+    expect(again).toBe(first);
+    expect(mocks.getFramework).toHaveBeenCalledTimes(1);
+    expect(mocks.loadModel).toHaveBeenCalledTimes(1);
+    await loadExampleViews(t0 + LOOKUP_TTL_MS + 1);
+    expect(mocks.getFramework).toHaveBeenCalledTimes(2);
+    expect(mocks.loadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers null, logged once, for a version the example no longer fits', async () => {
+    const model = JSON.parse(JSON.stringify(MODEL)) as Record<string, Array<{ id: string }>>;
+    model.content_types = model.content_types.filter((c) => c.id !== 'sales_email');
+    mocks.loadModel.mockResolvedValue(model);
+    expect(await loadExampleViews(1)).toBeNull();
+    expect(await loadExampleViews(2)).toBeNull();
+    expect(log.error).toHaveBeenCalledTimes(1);
+    await expect(ExampleRoute()).rejects.toThrow('NOT_FOUND');
+  });
+
+  it('logs once, and still renders, when the model refuses part of the example', async () => {
+    const model = JSON.parse(JSON.stringify(MODEL)) as Record<string, Array<{ id: string }>>;
+    model.dimensions = model.dimensions.filter((d) => d.id !== 'eth_goodwill');
+    mocks.loadModel.mockResolvedValue(model);
+    expect(await loadExampleViews(1)).not.toBeNull();
+    await loadExampleViews(2);
+    expect(log.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers null with no framework, and retries a read that failed', async () => {
+    const { FrameworkApiError } = await import('@/lib/app/frameworks/api/service');
+    mocks.getFramework.mockRejectedValueOnce(new FrameworkApiError('FRAMEWORK_NOT_FOUND', 'none'));
+    expect(await loadExampleViews(1)).toBeNull();
+    __resetExampleCacheForTests();
+    mocks.loadModel.mockRejectedValueOnce(new Error('database down'));
+    await expect(loadExampleViews(1)).rejects.toThrow('database down');
+    expect(await loadExampleViews(2)).not.toBeNull();
   });
 });

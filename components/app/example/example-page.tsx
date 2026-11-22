@@ -9,6 +9,7 @@ import { ScoreBars } from '@/components/app/report/charts/score-bars';
 import { BeforeAfter } from '@/components/app/example/before-after';
 import { ReviewSteps } from '@/components/app/example/review-steps';
 import { loadExampleViews } from '@/components/app/example/load';
+import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
 import { BRAND } from '@/lib/brand';
 import type { ReportView } from '@/lib/app/reports/view';
@@ -174,6 +175,31 @@ export default async function ExampleReviewPage() {
   const draftReport = forStep(views.draft);
   const final = forStep(views.final);
   const S = COPY.steps;
+  // The quick scan is shown only while it is offered (its switch), as on every page.
+  const quickScan = isQuickScanEnabled();
+  const quickStep = (
+    <section key="quick" data-testid="step-quick">
+      <StepIntro title={S.quick.title} body={S.quick.body} />
+      <div className="grid gap-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid content-start gap-8">
+          <Score view={draftQuick} label="Quick scan" />
+          <ScoreBars
+            title="Appeal scores"
+            description="From word patterns alone."
+            max={100}
+            testId="example-quick-appeals"
+            rows={draftQuick.lands.appeals.map((a) => ({
+              id: a.id,
+              label: a.name,
+              score: a.score,
+              colour: APPEAL_COLOUR[a.id],
+            }))}
+          />
+        </div>
+        <MarkedUpCopy copy={draftQuick.copy} idPrefix="quick-" />
+      </div>
+    </section>
+  );
 
   return (
     <div className="container mx-auto px-4 py-6 md:py-10">
@@ -190,7 +216,7 @@ export default async function ExampleReviewPage() {
           <ReviewSteps
             steps={[
               { id: 'draft', label: S.draft.label },
-              { id: 'quick', label: S.quick.label },
+              ...(quickScan ? [{ id: 'quick', label: S.quick.label }] : []),
               { id: 'review', label: S.review.label },
               { id: 'report', label: S.report.label },
               { id: 'rewrite', label: S.rewrite.label },
@@ -204,39 +230,21 @@ export default async function ExampleReviewPage() {
                 </div>
               </section>,
 
-              <section key="quick" data-testid="step-quick">
-                <StepIntro title={S.quick.title} body={S.quick.body} />
-                <div className="grid gap-10 lg:grid-cols-[18rem_minmax(0,1fr)]">
-                  <div className="grid content-start gap-8">
-                    <Score view={draftQuick} label="Quick scan" />
-                    <ScoreBars
-                      title="Appeal scores"
-                      description="From word patterns alone."
-                      max={100}
-                      testId="example-quick-appeals"
-                      rows={draftQuick.lands.appeals.map((a) => ({
-                        id: a.id,
-                        label: a.name,
-                        score: a.score,
-                        colour: APPEAL_COLOUR[a.id],
-                      }))}
-                    />
-                  </div>
-                  <MarkedUpCopy copy={draftQuick.copy} idPrefix="quick-" />
-                </div>
-              </section>,
+              ...(quickScan ? [quickStep] : []),
 
               <section key="review" data-testid="step-review">
                 <StepIntro title={S.review.title} body={S.review.body} />
                 <MarkedUpCopy copy={draftReviewed.copy} idPrefix="review-" />
-                <div className="mt-12 border-t border-(--hd-rule) pt-8">
-                  <h3 className="text-2xl font-bold">The rewrites that matter most</h3>
-                  <p className="mt-2 mb-6 text-(--hd-muted)">
-                    Square brackets mark a fact only Tom has: the reviewers leave a gap rather than
-                    invent one.
-                  </p>
-                  <Recommendations view={draftReviewed} idPrefix="review-" />
-                </div>
+                {draftReviewed.recommendations.length > 0 && (
+                  <div className="mt-12 border-t border-(--hd-rule) pt-8">
+                    <h3 className="text-2xl font-bold">The rewrites that matter most</h3>
+                    <p className="mt-2 mb-6 text-(--hd-muted)">
+                      Square brackets mark a fact only Tom has: the reviewers leave a gap rather
+                      than invent one.
+                    </p>
+                    <Recommendations view={draftReviewed} idPrefix="review-" />
+                  </div>
+                )}
               </section>,
 
               <section key="report" data-testid="step-report">

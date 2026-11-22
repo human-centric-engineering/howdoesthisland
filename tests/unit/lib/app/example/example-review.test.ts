@@ -7,12 +7,22 @@
  * in the repo, so a model change that breaks the example fails in the PR that
  * brings it. The scores are the engine's, never typed in.
  *
+ * The page serves the latest *published* version, which can lag the newest
+ * file until it is published; a version the example does not fit is logged
+ * once and answers 404 there (`components/app/example/load.ts`).
+ *
  * @see lib/app/example/example-review.ts
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
-import { DRAFT, EXAMPLE_INPUTS, FINAL, reviewExample } from '@/lib/app/example/example-review';
+import {
+  DRAFT,
+  draftNote,
+  EXAMPLE_INPUTS,
+  FINAL,
+  reviewExample,
+} from '@/lib/app/example/example-review';
 
 const DATA = 'lib/app/frameworks/howdoesthisland/data';
 const versionOf = (file: string) =>
@@ -89,5 +99,24 @@ describe('when a reply or the editor is refused whole', () => {
     expect(reviews.draft.problems.some((p) => p.startsWith('draft.editor:'))).toBe(true);
     expect(reviews.draft.full).not.toHaveProperty('editor');
     expect(reviews.final.problems).toEqual([]);
+  });
+});
+
+describe('draftNote', () => {
+  it('reads a reviewer’s note on a line of the first draft, and refuses a line with none', () => {
+    expect(draftNote('We are a leading provider of digital transformation solutions.')).toMatch(
+      /superlative/
+    );
+    expect(() => draftNote('Hi Sarah,')).toThrow();
+  });
+
+  it('every reply that ran is accepted, in run order', () => {
+    const reviews = reviewExample(howDoesThisLand, MODEL);
+    expect(reviews.draft.accepted).toEqual([
+      'judge_ethos',
+      'judge_pathos',
+      'judge_logos',
+      'judge_kairos',
+    ]);
   });
 });
