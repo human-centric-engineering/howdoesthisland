@@ -112,6 +112,18 @@ describe('buildBrowseModel over model 0.5.1', () => {
     );
   });
 
+  it('links a key named after a kind inside a field (a scoring cap’s appeal)', () => {
+    const scoring = browse.section('scoring')!.kinds[0].records[0];
+    const caps = browse.links(scoring).get('integrity_caps')!;
+    expect(caps.get('kairos')?.kind).toBe('appeal');
+    expect(caps.get('kai_integrity')?.kind).toBe('dimension');
+  });
+
+  it('links a length target’s key to its type of copy', () => {
+    const targets = browse.section('length-targets')!.kinds[0].records[0];
+    expect(browse.links(targets).get('cv_resume')?.get('cv_resume')?.kind).toBe('content_type');
+  });
+
   it('points every link at an anchor that is on the target section’s page, once', () => {
     const anchorsBySection = new Map<string, string[]>();
     for (const r of all) {

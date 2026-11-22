@@ -94,6 +94,22 @@ function idsIn(value: unknown): string[] {
   return [];
 }
 
+/** Every key and value in a field, the field itself included, however deep. */
+function keyedValues(key: string, value: unknown): [string, unknown][] {
+  const out: [string, unknown][] = [[key, value]];
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (isJsonObject(v)) {
+      for (const [k, inner] of Object.entries(v)) {
+        out.push([k, inner]);
+        walk(inner);
+      }
+    }
+  };
+  walk(value);
+  return out;
+}
+
 function makeRecord(
   kind: string,
   section: string,
@@ -233,9 +249,11 @@ export function buildBrowseModel(
           link(record, field, id, resolve(id, ref.targets));
         }
       }
-      // A field named after a kind, holding ids of that kind (`appeal`, `group`).
-      if (kinds.has(field)) {
-        for (const id of idsIn(value)) link(record, field, id, resolve(id, [field]));
+      // A key named after a kind, holding ids of that kind (`appeal`, `group`),
+      // at the top level or inside the field (a scoring cap's `appeal`).
+      for (const [key, inner] of keyedValues(field, value)) {
+        if (!kinds.has(key)) continue;
+        for (const id of idsIn(inner)) link(record, field, id, resolve(id, [key]));
       }
     }
   }

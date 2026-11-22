@@ -90,18 +90,22 @@ function Entries({
 }: { entries: [string, unknown][]; byField?: FieldLinks } & Omit<ValueProps, 'value'>) {
   return (
     <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[minmax(8rem,auto)_1fr]">
-      {entries.map(([key, value]) => (
-        <div key={key} className="contents">
-          <dt className="text-sm font-semibold text-(--hd-muted)">{fieldLabel(key)}</dt>
-          <dd className="min-w-0 text-sm leading-relaxed break-words">
-            <FieldValue
-              value={value}
-              links={byField ? (byField.get(key) ?? NO_LINKS) : links}
-              base={base}
-            />
-          </dd>
-        </div>
-      ))}
+      {entries.map(([key, value]) => {
+        const own = byField ? (byField.get(key) ?? NO_LINKS) : links;
+        // A key that is itself an id the field refers to (a length target's
+        // type of copy) is shown as a link to that record.
+        const keyedTo = own.get(key);
+        return (
+          <div key={key} className="contents">
+            <dt className="text-sm font-semibold text-(--hd-muted)">
+              {keyedTo ? <RecordLink to={keyedTo} base={base} /> : fieldLabel(key)}
+            </dt>
+            <dd className="min-w-0 text-sm leading-relaxed break-words">
+              <FieldValue value={value} links={own} base={base} />
+            </dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }
@@ -158,16 +162,20 @@ interface CardProps {
    * Heading level: a nested record sits one below its parent. A section's own
    * record has none: it sits under the section's heading.
    */
-  level?: 3 | 4;
+  level?: 2 | 3 | 4;
+  /** Inside a parent record (a perspective's lever): set smaller. */
+  nested?: boolean;
 }
 
-export function RecordCard({ record, model, base, level = 3 }: CardProps) {
+export function RecordCard({ record, model, base, level = 3, nested = false }: CardProps) {
   const links = model.links(record);
   // A section's fields are shown in full; its heading is the section's name.
   const title = isSectionRecord(record) ? null : titleField(record);
   const shown = readingOrder(
     Object.entries(record.attributes).filter(
-      ([key, value]) => key !== 'id' && key !== title && !isEmpty(value)
+      // A record's id is its anchor; a section's `id` field (meta's) is data.
+      ([key, value]) =>
+        (key !== 'id' || isSectionRecord(record)) && key !== title && !isEmpty(value)
     )
   );
   const subtitles = shown.filter(
@@ -178,7 +186,7 @@ export function RecordCard({ record, model, base, level = 3 }: CardProps) {
     ([key]) => !subtitles.some(([s]) => s === key) && !TECHNICAL_FIELDS.has(key)
   );
   const linkedFrom = model.referencedBy(record);
-  const Heading = level === 3 ? 'h3' : 'h4';
+  const Heading = level === 2 ? 'h2' : level === 3 ? 'h3' : 'h4';
 
   return (
     <article
@@ -189,7 +197,7 @@ export function RecordCard({ record, model, base, level = 3 }: CardProps) {
       {!isSectionRecord(record) && (
         <Heading
           className={
-            level === 3 ? 'text-2xl leading-tight font-bold' : 'text-xl leading-tight font-semibold'
+            nested ? 'text-xl leading-tight font-semibold' : 'text-2xl leading-tight font-bold'
           }
         >
           <a href={`#${encodeURIComponent(record.anchor)}`} className="hover:underline">
@@ -224,7 +232,14 @@ export function RecordCard({ record, model, base, level = 3 }: CardProps) {
       {record.children.length > 0 && (
         <div className="mt-6 space-y-6 border-l-2 border-(--hd-rule) pl-4 sm:pl-6">
           {record.children.map((child) => (
-            <RecordCard key={child.anchor} record={child} model={model} base={base} level={4} />
+            <RecordCard
+              key={child.anchor}
+              record={child}
+              model={model}
+              base={base}
+              level={level === 2 ? 3 : 4}
+              nested
+            />
           ))}
         </div>
       )}

@@ -274,6 +274,32 @@ describe('the whole model is on the pages', () => {
   });
 });
 
+describe('details of the rendered cards', () => {
+  it('shows a length target’s type of copy as a link in the row’s label', async () => {
+    const page = await html(ModelSection(params({ section: 'length-targets' })));
+    const label = page.querySelector('dt a[data-model-link="content_type:cv_resume"]');
+    expect(label?.getAttribute('href')).toBe('/model/content-types#cv_resume');
+  });
+
+  it('shows meta’s own id field, since the pages show the whole model', async () => {
+    const page = await html(ModelSection(params({ section: 'meta' })));
+    const card = page.querySelector('[data-model-record="section:meta:meta"]')!;
+    const rows = [...card.querySelectorAll('dt')].map((dt) => [
+      dt.textContent,
+      dt.nextElementSibling?.textContent,
+    ]);
+    expect(rows).toContainEqual(['Id', 'howdoesthisland']);
+  });
+
+  it('heads records h2 under a one-kind section, and h3 under a kind heading', async () => {
+    const appeals = await html(ModelSection(params({ section: 'appeals' })));
+    expect(appeals.querySelector('#ethos h2')).not.toBeNull();
+    const sources = await html(ModelSection(params({ section: 'knowledge-refs' })));
+    expect(sources.querySelector('h2#kind-knowledge_thinker')).not.toBeNull();
+    expect(sources.querySelector('[data-model-record^="knowledge_thinker:"] h3')).not.toBeNull();
+  });
+});
+
 describe('/about', () => {
   it('renders the About copy, with the way in and a link to the model, and reads no model', async () => {
     const page = await html(AboutPage());

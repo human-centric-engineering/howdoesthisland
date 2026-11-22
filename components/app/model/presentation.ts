@@ -11,6 +11,7 @@
  * Words follow app-plan §4, "The words we use": copy, review, AI reviewers,
  * type of copy.
  */
+import { SECTION_KIND } from '@/lib/app/frameworks/types';
 
 export interface SectionCopy {
   title: string;
@@ -273,7 +274,8 @@ export function sectionCopy(key: string): SectionCopy {
 
 export function kindLabel(kind: string, count: 'one' | 'many' = 'one'): string {
   // A section's own fields (`section:scoring`) are named after the section.
-  if (kind.startsWith('section:')) return sectionCopy(kind.slice('section:'.length)).title;
+  const prefix = `${SECTION_KIND}:`;
+  if (kind.startsWith(prefix)) return sectionCopy(kind.slice(prefix.length)).title;
   const known = KIND_LABEL[kind];
   if (known) return known[count];
   const base = humanise(kind.replace(/^(knowledge|culture)_/, ''));

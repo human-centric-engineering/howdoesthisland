@@ -305,7 +305,13 @@ function KindBlock({
       )}
       <div className="space-y-8">
         {kind.records.map((r) => (
-          <RecordCard key={r.anchor} record={r} model={browse} base={base} />
+          <RecordCard
+            key={r.anchor}
+            record={r}
+            model={browse}
+            base={base}
+            level={withHeading ? 3 : 2}
+          />
         ))}
       </div>
     </section>
