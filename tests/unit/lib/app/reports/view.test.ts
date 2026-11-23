@@ -94,6 +94,10 @@ describe('buildReportView — a full review', () => {
       expect.stringMatching(/ no longer a priority$/),
     ]);
     expect(adjusted.cover.weighting?.join(' ')).not.toMatch(/kai_call|eth_goodwill/);
+    // A move under a tenth of a point keeps its sign (review round 2).
+    expect(
+      view(apiAssessment({ overlay: { weights: { ethos: 0.0004 } } })).cover.weighting
+    ).toEqual(['Ethos +under 0.1 points']);
     // Another framework's shape is still named as an adjustment, not hidden.
     expect(view(apiAssessment({ overlay: { boost: 'x' } })).cover.weighting).toEqual([
       'Adjusted for this project',

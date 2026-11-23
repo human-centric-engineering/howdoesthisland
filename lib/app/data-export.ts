@@ -152,7 +152,7 @@ export function initAppSubjectSources(): void {
         section: 'projects',
         disposition: 'export',
         description:
-          'Projects you made in a workspace: their name, brief and the defaults their reviews take.',
+          'Projects you made in a workspace: their name, brief, the defaults their reviews take, and their weighting.',
       },
       {
         model: 'ReviewCode',

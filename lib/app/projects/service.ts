@@ -200,13 +200,16 @@ export async function updateProject(id: string, body: UpdateProjectBody): Promis
   if (!existing) throw new NotFoundError('Project not found');
   // An overlay of null clears it, which needs no version; anything else is
   // checked against the latest, as the defaults are.
-  const checksOverlay = body.overlay !== undefined && body.overlay !== null;
+  // `{}` is none too, as the column stores it, so it clears the same way.
+  const clears =
+    body.overlay === null || (body.overlay !== undefined && Object.keys(body.overlay).length === 0);
+  const checksOverlay = body.overlay !== undefined && !clears;
   const resolved =
     body.defaults !== undefined || checksOverlay
       ? await versionToScore({ framework: existing.framework.slug })
       : null;
   if (resolved && body.defaults !== undefined) checkDefaultsWith(resolved, body.defaults);
-  let overlay: StoredOverlay | null | undefined = body.overlay === null ? null : undefined;
+  let overlay: StoredOverlay | null | undefined = clears ? null : undefined;
   if (resolved && checksOverlay) overlay = overlayToStore(resolved.engine, body.overlay);
 
   const data: Prisma.ProjectUpdateManyMutationInput = {

@@ -79,7 +79,7 @@ allows no adjustment**, and 0.5.1 declares none.
   `overlay.priorityDimensions.add.0`) for an unknown key or id, a move past a bound, too
   many ids, or any overlay at all while the version declares no bounds.
 - **Stored as the engine checked it**: a zero or an empty list is dropped, and an overlay
-  left empty is none. `overlay: null` clears it, with no check. In the column, none is
+  left empty is none. `overlay: null` (or `{}`) clears it, with no check. In the column, none is
   `{}`, which the API answers as `null`: SQL `NULL` would need a runtime Prisma import
   `lib/app/**` may not make.
 - **A review in the project is scored with it**, stored or `store: false`. It is checked

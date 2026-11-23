@@ -252,10 +252,16 @@ function formatSeconds(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** Points of the mix, signed: `+10 points`, `−5 points`. */
+/**
+ * Points of the mix, signed: `+10 points`, `−5 points`. The sign is the
+ * delta's own, taken before rounding, and a move under a tenth of a point is
+ * said as such rather than rounded to `0`.
+ */
 function signedPoints(share: number): string {
-  const p = +(share * 100).toFixed(1);
-  return `${p > 0 ? '+' : '−'}${Math.abs(p)} point${Math.abs(p) === 1 ? '' : 's'}`;
+  const sign = share > 0 ? '+' : '−';
+  const p = Math.abs(+(share * 100).toFixed(1));
+  if (p === 0) return `${sign}under 0.1 points`;
+  return `${sign}${p} point${p === 1 ? '' : 's'}`;
 }
 
 /**

@@ -548,6 +548,12 @@ describe('a project’s weight adjustment (t-72)', () => {
     const cleared = await json(await change(id, { overlay: null }));
     expect(cleared.data?.overlay).toBeNull();
     expect(projects.rows[0]?.overlay).toEqual({});
+
+    // `{}` clears the same way, needing no version either (review round 2).
+    mocks.engineForVersion.mockImplementation(async () => {
+      throw new Error('no version should be read');
+    });
+    expect((await change(id, { overlay: {} })).status).toBe(200);
   });
 
   it('stores an overlay that changes nothing as none', async () => {
