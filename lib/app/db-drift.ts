@@ -133,4 +133,19 @@ export function registerAppDriftProbes(): void {
     table: 'app_project',
     probe: constraintExists('app_project_createdByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-74: a project document's hand-written FKs. To its knowledge document,
+  // CASCADE: one deleted through core's knowledge page takes its links. To
+  // its adder, SET NULL: the link is the workspace's.
+  registerAppDriftProbe({
+    name: 'app_project_document_knowledgeDocumentId_fkey (hand-written FK → ai_knowledge_document)',
+    kind: 'FK constraint',
+    table: 'app_project_document',
+    probe: constraintExists('app_project_document_knowledgeDocumentId_fkey', 'ON DELETE CASCADE'),
+  });
+  registerAppDriftProbe({
+    name: 'app_project_document_addedByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_project_document',
+    probe: constraintExists('app_project_document_addedByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

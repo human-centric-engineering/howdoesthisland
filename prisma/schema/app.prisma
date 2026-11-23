@@ -589,9 +589,9 @@ model ReviewCodeRedemption {
 /// link. `createdByUserId` has a hand-written FK to "user" (SET NULL).
 /// Tenant-owned (`orgId`, cascade, `org_isolation`).
 model Project {
-  id              String       @id @default(cuid())
+  id              String            @id @default(cuid())
   orgId           String?
-  org             Org?         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org             Org?              @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name            String
   /// What the copy is for, in the author's words: `{ offer, audience, voice, markets, goals }`.
   brief           Json
@@ -602,17 +602,63 @@ model Project {
   /// version declares (lib/app/projects/overlay.ts). `{}` for none, which the
   /// API answers as null: SQL NULL would need `Prisma.DbNull`, a runtime
   /// Prisma import `lib/app/**` may not make (as `writeAppSettings`).
-  overlay         Json         @default("{}")
+  overlay         Json              @default("{}")
   frameworkId     String
-  framework       Framework    @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
+  framework       Framework         @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
   archivedAt      DateTime?
   /// Who made it. FK → user, ON DELETE SET NULL (the workspace keeps it).
   createdByUserId String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
   contents        Content[]
   assessments     Assessment[]
+  documents       ProjectDocument[]
 
   @@index([orgId, archivedAt, createdAt])
   @@map("app_project")
+}
+
+/// A context document linked to a project (t-74, D18, app-plan §8.4): a
+/// positioning paper, a brand guide, last year's campaign. Its text lives in
+/// the workspace's knowledge base (core's `AiKnowledgeDocument`), put there by
+/// `uploadDocument`, which chunks and embeds it; this row links it to the
+/// project. Its status is the knowledge row's, read live.
+///
+/// `uploadDocument` deduplicates by content hash across the workspace, so one
+/// knowledge row can back several projects' links, or one first uploaded
+/// through core's knowledge page. Removing a link deletes the knowledge row
+/// only when an upload by this app created it (`createdByUpload` on some link
+/// to it), no other link remains, and no agent is granted it
+/// (lib/app/projects/documents.ts).
+///
+/// `knowledgeDocumentId` and `addedByUserId` are plain strings with
+/// hand-written FKs in the migration, so core's schema is not edited (§9).
+model ProjectDocument {
+  id                  String   @id @default(cuid())
+  orgId               String?
+  org                 Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  projectId           String
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// FK → ai_knowledge_document, ON DELETE CASCADE: a document deleted
+  /// through core's knowledge page takes its links with it.
+  knowledgeDocumentId String
+  /// The name the project shows it by: given when added, else the document's own title.
+  title               String
+  /// The file it was read from, or null for a page.
+  fileName            String?
+  /// The page it was fetched from, after redirects, or null for a file.
+  sourceUrl           String?
+  /// Whether an upload by this app made the knowledge row, rather than
+  /// reusing one by content hash. Kept on some link while any remains: a
+  /// removed link that holds it hands it to another (documents.ts).
+  createdByUpload     Boolean  @default(false)
+  /// Who added it. FK → user, ON DELETE SET NULL (the workspace keeps it).
+  addedByUserId       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([projectId, knowledgeDocumentId])
+  @@index([knowledgeDocumentId])
+  @@index([orgId])
+  @@map("app_project_document")
 }

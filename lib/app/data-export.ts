@@ -155,6 +155,13 @@ export function initAppSubjectSources(): void {
           'Projects you made in a workspace: their name, brief, the defaults their reviews take, and their weighting.',
       },
       {
+        model: 'ProjectDocument',
+        section: 'projectDocuments',
+        disposition: 'export',
+        description:
+          'Context documents you added to a workspace’s projects: the name each is shown by, and the file or page it came from.',
+      },
+      {
         model: 'ReviewCode',
         section: 'reviewCodes',
         disposition: 'export',
@@ -218,6 +225,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     calibrationRuns,
     creditEntries,
     projects,
+    projectDocuments,
     reviewCodes,
     codeRedemptions,
   ] = await Promise.all([
@@ -273,6 +281,12 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       where: { createdByUserId: userId },
       orderBy: { createdAt: 'asc' },
     }),
+    // The documents they added to projects (t-74). The text is in the
+    // knowledge base, whose own source gives them what they uploaded.
+    prisma.projectDocument.findMany({
+      where: { addedByUserId: userId },
+      orderBy: { createdAt: 'asc' },
+    }),
     // The codes they made as an admin (t-59), without the code, a bearer
     // credential for the install's credits, or the idempotency key, a
     // caller's bookkeeping that may carry someone else's id (a lead's).
@@ -299,6 +313,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     calibrationRuns,
     creditEntries,
     projects,
+    projectDocuments,
     reviewCodes,
     codeRedemptions,
   };

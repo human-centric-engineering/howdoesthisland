@@ -108,6 +108,7 @@ model Org {
   budgetHolds          BudgetHold[]
   creditEntries        CreditEntry[]
   projects             Project[]
+  projectDocuments     ProjectDocument[]
   codeRedemptions      ReviewCodeRedemption[]
 
   @@map("org")
