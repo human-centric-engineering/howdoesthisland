@@ -9,6 +9,7 @@
  * is not confirmed to someone outside.
  */
 import type { AssessmentStatus, Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
@@ -78,7 +79,7 @@ export type AssessmentDetail = AssessmentSummary & {
    * checked against its version, or `null` for none. Its shape is the
    * framework's.
    */
-  overlay: unknown;
+  overlay: Record<string, unknown> | null;
   /** The framework's assembled result, once final; `null` before. */
   result: unknown;
   judgeRuns: JudgeRunView[];
@@ -97,7 +98,7 @@ export type EphemeralAssessment = {
   costUsd: number;
   context: unknown;
   /** The project's adjustment to the weights it was scored with (t-72), or `null`. */
-  overlay: unknown;
+  overlay: Record<string, unknown> | null;
   result: unknown;
   judgeRuns: JudgeRunView[];
 };
@@ -237,12 +238,22 @@ export function inJudgeOrder<T extends { judge: string }>(
   return [...runs].sort((a, b) => (order.get(a.judge) ?? 0) - (order.get(b.judge) ?? 0));
 }
 
+/**
+ * The recorded overlay as the API answers it. Only the engine's checked
+ * overlay is ever written (`enqueue.ts`), an object or nothing; anything else
+ * reads as none.
+ */
+function storedOverlay(value: unknown): Record<string, unknown> | null {
+  const parsed = z.record(z.string(), z.unknown()).safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 function detailView(row: DetailRow): AssessmentDetail {
   return {
     ...summaryView(row),
     text: row.content.text,
     context: row.context,
-    overlay: row.overlay ?? null,
+    overlay: storedOverlay(row.overlay),
     result: row.result,
     judgeRuns: inJudgeOrder(row.judges, row.judgeRuns).map(judgeRunView),
   };
