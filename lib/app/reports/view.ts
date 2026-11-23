@@ -23,7 +23,6 @@ import type {
 } from '@/lib/app/reports/input';
 import { sharesOf } from '@/lib/app/reports/shares';
 import { overlayShapeSchema } from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
-import { APPEALS } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 
 export const APPEAL_IDS = ['ethos', 'pathos', 'logos', 'kairos'] as const;
 
@@ -106,7 +105,7 @@ export interface ReportView {
     wordCount: number;
     /**
      * The project's adjustment to the weights it was scored with (t-72), one
-     * phrase per change ("Ethos +10 points", "Integrity added as a
+     * phrase per change ("Ethos +10 points", "Integrity made a
      * priority"), or `null` when none applied.
      */
     weighting: string[] | null;
@@ -275,7 +274,7 @@ function weightingOf(overlay: unknown, appeals: Names, dims: Names): string[] | 
   if (!parsed.success) return ['Adjusted for this project'];
   const { weights, priorityDimensions } = parsed.data;
   const out: string[] = [];
-  for (const a of APPEALS) {
+  for (const a of APPEAL_IDS) {
     const d = weights?.[a];
     if (d) out.push(`${nameIn(appeals, a)} ${signedPoints(d)}`);
   }

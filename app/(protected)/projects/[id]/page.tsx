@@ -85,12 +85,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <ProjectForm key={project.id} project={project} catalogue={catalogue} />
       {/* Only when the version declares bounds, or the project holds an adjustment (t-72). */}
-      {/* Keyed on what is stored, so a save's refresh rebuilds rows for values it cleared. */}
-      <ProjectWeights
-        key={`weights-${project.id}-${JSON.stringify(project.overlay)}`}
-        project={project}
-        catalogue={catalogue}
-      />
+      <ProjectWeights key={`weights-${project.id}`} project={project} catalogue={catalogue} />
     </div>
   );
 }

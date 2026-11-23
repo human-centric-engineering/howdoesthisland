@@ -65,6 +65,17 @@ describe('adjustment bounds in the model', () => {
     expect(problems[0]).toContain('adjustment_bounds');
   });
 
+  it('reads bounds that allow nothing as none, as the catalogue does (review round 3)', () => {
+    const zero = indexModel(withBounds({ weights: { ethos: 0 }, priority_dimensions: { add: 0 } }));
+    expect(zero.BOUNDS).toBeNull();
+    expect(parseOverlay(zero, { weights: { ethos: 0.01 } })).toEqual({
+      ok: false,
+      issues: [
+        { path: 'weights', message: 'This version declares no bounds, so it allows no adjustment' },
+      ],
+    });
+  });
+
   it('the engine refuses malformed bounds too, naming the field', () => {
     expect(() => indexModel(withBounds({ weights: { ethos: 'lots' } }))).toThrow(
       /adjustment_bounds/

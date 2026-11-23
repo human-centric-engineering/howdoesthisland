@@ -121,12 +121,16 @@ function WeightsForm({
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [initial] = useState(() => weightsValuesOf(project));
+  // Rows for values the version no longer offers come from the project as
+  // last loaded, not the form's first values, so the refresh after a save
+  // drops a row for a value it cleared, and the form (and its "Saved.") stays.
+  const stored = weightsValuesOf(project);
   const readable = storedOverlayReadable(project);
   // What the version lets move, and any appeal the project moved that it no
   // longer does, so a refused value is seen rather than sent unseen.
   const movable = movableAppeals(catalogue, adjustment);
   const stranded = APPEAL_IDS.filter(
-    (a) => initial.weights[a] !== 0 && !movable.some((m) => m.id === a)
+    (a) => stored.weights[a] !== 0 && !movable.some((m) => m.id === a)
   ).map((a) => ({
     id: a,
     name: catalogue.result.appeals.find((x) => x.id === a)?.name ?? a,
@@ -139,14 +143,14 @@ function WeightsForm({
   const core = coreDimensions(catalogue);
   const dimensions = [
     ...core,
-    ...[...new Set([...initial.add, ...initial.remove])]
+    ...[...new Set([...stored.add, ...stored.remove])]
       .filter((id) => !core.some((d) => d.id === id))
       .map((id) => ({ id, name: `${id} (not in this version)` })),
   ];
   const { add: canAdd, remove: canRemove } = adjustment.priorityDimensions;
   // A list the version no longer offers still shows while the project uses it.
-  const showAdd = canAdd > 0 || initial.add.length > 0;
-  const showRemove = canRemove > 0 || initial.remove.length > 0;
+  const showAdd = canAdd > 0 || stored.add.length > 0;
+  const showRemove = canRemove > 0 || stored.remove.length > 0;
 
   const {
     register,

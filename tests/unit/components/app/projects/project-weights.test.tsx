@@ -67,6 +67,7 @@ describe('ProjectWeights', () => {
     expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/projects/proj-1', {
       body: { overlay: { weights: { ethos: 0.08 }, priorityDimensions: { add: ['kai_call'] } } },
     });
+    expect(screen.getByRole('status')).toHaveTextContent('Saved.');
   });
 
   it('refuses a move past the limit before saving', async () => {
@@ -248,5 +249,20 @@ describe('ProjectWeights', () => {
         body: { overlay: null },
       })
     );
+  });
+
+  it('drops a cleared row once the refreshed project no longer holds it, keeping "Saved." (review round 3)', () => {
+    const catalogue = aCatalogue({ adjustment: BOUNDS });
+    const { rerender } = render(
+      <ProjectWeights
+        project={aProject({ overlay: { priorityDimensions: { add: ['dim_gone'] } } })}
+        catalogue={catalogue}
+      />
+    );
+    expect(screen.getAllByRole('checkbox', { name: /dim_gone/ })).toHaveLength(2);
+
+    rerender(<ProjectWeights project={aProject()} catalogue={catalogue} />);
+
+    expect(screen.queryByRole('checkbox', { name: /dim_gone/ })).toBeNull();
   });
 });

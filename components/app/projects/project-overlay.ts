@@ -34,8 +34,9 @@ const storedOverlaySchema = z.object({
 });
 
 /**
- * Shares ↔ points without losing what the API stored: rounding only clears
- * float noise (`0.07 * 100`), so an untouched value saves back as it was.
+ * Shares ↔ points, rounding only to clear float noise (`0.07 * 100`): an
+ * untouched value saves back as it was to eight decimal places of a share,
+ * far finer than any bound or the tenth of a point the report shows.
  */
 const toPoints = (share: number): number => +(share * 100).toFixed(6);
 const toShare = (points: number): number => +(points / 100).toFixed(8);

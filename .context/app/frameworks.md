@@ -83,7 +83,8 @@ recorded stays checkable against the limits it was made under.
 - **`priority_dimensions.add` / `.remove`**: how many of the version's **core**
   dimensions (`dimensions[]`, never a lens or an extra dimension) a project may add to,
   or take off, a content type's priority dimensions. Left out, none.
-- **A version without the block allows no adjustment.** 0.5.1 declares none, so projects
+- **A version without the block, or with bounds that are all zero, allows no adjustment**
+  (the engine and the catalogue read both as none). 0.5.1 declares none, so projects
   can adjust nothing until a later version publishes bounds (t-73).
 - **The import checks it strictly**: a misspelt appeal or key, a negative or fractional
   bound, a weight bound over 1, or an empty block is refused. The engine reads it with

@@ -360,6 +360,17 @@ export interface EngineModel {
   readonly BOUNDS: AdjustmentBounds | null;
 }
 
+/**
+ * Whether bounds allow anything. All-zero bounds allow nothing, so they are
+ * read as none, and refused as none, as the catalogue serves them (null).
+ */
+function allowsSome(bounds: AdjustmentBounds | undefined): boolean {
+  if (!bounds) return false;
+  const w = bounds.weights ?? {};
+  const pd = bounds.priority_dimensions ?? {};
+  return APPEALS.some((a) => (w[a] ?? 0) > 0) || (pd.add ?? 0) > 0 || (pd.remove ?? 0) > 0;
+}
+
 const byId = <T extends { id: string }>(list: readonly T[]): Map<string, T> =>
   new Map(list.map((x) => [x.id, x]));
 
@@ -418,7 +429,9 @@ export function indexModel(model: object): EngineModel {
     JUDGE: byId(data.judges),
     JUDGE_APPEALS: new Set(data.judges.map((j) => j.appeal)),
     REF: new Map(Object.values(data.knowledge_refs).flatMap((refs) => refs.map((r) => [r.id, r]))),
-    BOUNDS: data.scoring.adjustment_bounds ?? null,
+    BOUNDS: allowsSome(data.scoring.adjustment_bounds)
+      ? (data.scoring.adjustment_bounds ?? null)
+      : null,
   };
   indexed.set(model, engineModel);
   return engineModel;
