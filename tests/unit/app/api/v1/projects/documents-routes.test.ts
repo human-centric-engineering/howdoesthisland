@@ -325,16 +325,18 @@ describe('DELETE /api/v1/projects/{id}/documents/{documentId}', () => {
   });
 });
 
+const PROJECTS_AUTH = { who: 'signed-in', apiKeyScope: 'projects' };
+
 describe('the route registry', () => {
   it('declares the three routes with the projects scope', () => {
     const declared = APP_ROUTES.filter((route) => route.path.includes('/documents')).map(
-      (route) => [route.method, route.path, route.auth.apiKeyScope]
+      (route) => [route.method, route.path, route.auth]
     );
 
     expect(declared).toEqual([
-      ['GET', '/api/v1/projects/{id}/documents', 'projects'],
-      ['POST', '/api/v1/projects/{id}/documents', 'projects'],
-      ['DELETE', '/api/v1/projects/{id}/documents/{documentId}', 'projects'],
+      ['GET', '/api/v1/projects/{id}/documents', PROJECTS_AUTH],
+      ['POST', '/api/v1/projects/{id}/documents', PROJECTS_AUTH],
+      ['DELETE', '/api/v1/projects/{id}/documents/{documentId}', PROJECTS_AUTH],
     ]);
   });
 });

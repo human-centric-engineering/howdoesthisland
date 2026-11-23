@@ -237,7 +237,12 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
               onChange={(event) => void onFile(event)}
             />
           </div>
-          <form className="space-y-2" onSubmit={(event) => void onUrl(event)}>
+          <form
+            method="post"
+            noValidate
+            className="space-y-2"
+            onSubmit={(event) => void onUrl(event)}
+          >
             <Label htmlFor="project-document-url" className="flex items-center gap-1">
               Add a page
               <FieldHelp title="Add a page">

@@ -365,7 +365,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       // FORK (HowDoesThisLand): pinned to our sections and sources, the
       // workspace invitations (t-9), content and assessments (t-22), share
       // links (t-32), calibration runs (t-37), credit entries (t-57), projects
-      // (t-70), review codes (t-59) and their redemptions (t-60). The reads are stubbed: this pins the shape, not the query. Ledger:
+      // (t-70), the documents added to them (t-74), review codes (t-59) and their redemptions (t-60). The reads are stubbed: this pins the shape, not the query. Ledger:
       // .context/app/platform-divergences.md row 2.
       const reads = [
         vi.spyOn(prisma.workspaceInvitation, 'findMany').mockResolvedValue([] as never),
@@ -375,6 +375,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.calibrationRun, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.creditEntry, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.project, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.projectDocument, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCode, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCodeRedemption, 'findMany').mockResolvedValue([] as never),
       ];
@@ -386,6 +387,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         calibrationRuns: [],
         creditEntries: [],
         projects: [],
+        projectDocuments: [],
         reviewCodes: [],
         codeRedemptions: [],
       });
@@ -402,6 +404,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['CalibrationRun', 'calibrationRuns'],
         ['CreditEntry', 'creditEntries'],
         ['Project', 'projects'],
+        // FORK (HowDoesThisLand): the documents a person added to projects (t-74).
+        ['ProjectDocument', 'projectDocuments'],
         ['ReviewCode', 'reviewCodes'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
       ]);
@@ -441,6 +445,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReportShare', 'reportShares'],
         ['CalibrationRun', 'calibrationRuns'],
         ['Project', 'projects'],
+        // FORK (HowDoesThisLand): projects' document links (t-74).
+        ['ProjectDocument', 'projectDocuments'],
         ['CreditEntry', 'creditEntries'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
       ]);
@@ -474,6 +480,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['CalibrationRun', 'not-personal'],
         ['CreditEntry', 'not-personal'],
         ['Project', 'not-personal'],
+        // FORK (HowDoesThisLand): a project's document link (t-74).
+        ['ProjectDocument', 'not-personal'],
         ['ReviewCode', 'not-personal'],
         ['ReviewCodeRedemption', 'not-personal'],
       ]);
