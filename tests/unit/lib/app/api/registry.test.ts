@@ -79,7 +79,14 @@ import type {
 import type { PaginationMeta } from '@/types/api';
 import type { FrameworkCalibration, StartedRun } from '@/lib/app/calibration/admin';
 import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
-import { projectSchema, type ProjectView } from '@/lib/app/projects/wire';
+import {
+  projectDocumentSchema,
+  projectSchema,
+  removedDocumentSchema,
+  type ProjectDocumentView,
+  type ProjectView,
+} from '@/lib/app/projects/wire';
+import type { RemovedDocument } from '@/lib/app/projects/documents';
 
 /** The route directories this fork added under `app/api/v1/`. */
 const APP_ROUTE_DIRS = [
@@ -354,6 +361,10 @@ describe('response schemas match what the services return', () => {
     >();
     expectTypeOf<z.infer<typeof paginationMetaSchema>>().toEqualTypeOf<Wire<PaginationMeta>>();
     expectTypeOf<z.infer<typeof projectSchema>>().toEqualTypeOf<Wire<ProjectView>>();
+    expectTypeOf<z.infer<typeof projectDocumentSchema>>().toEqualTypeOf<
+      Wire<ProjectDocumentView>
+    >();
+    expectTypeOf<z.infer<typeof removedDocumentSchema>>().toEqualTypeOf<Wire<RemovedDocument>>();
     expectTypeOf<z.infer<typeof reportShareSchema>>().toEqualTypeOf<Wire<ReportShareView>>();
     expectTypeOf<z.infer<typeof createdReportShareSchema>>().toEqualTypeOf<
       Wire<CreatedReportShare>

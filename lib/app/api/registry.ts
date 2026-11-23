@@ -52,12 +52,18 @@ import {
 import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-auth';
 import { PROJECTS_SCOPE } from '@/lib/app/projects/route-auth';
 import {
+  addDocumentSchema,
   createProjectSchema,
   listProjectsQuerySchema,
+  projectDocumentParamSchema,
   projectIdParamSchema,
   updateProjectSchema,
 } from '@/lib/app/projects/validations';
-import { projectSchema } from '@/lib/app/projects/wire';
+import {
+  projectDocumentSchema,
+  projectSchema,
+  removedDocumentSchema,
+} from '@/lib/app/projects/wire';
 import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import { quickScanSummarySchema } from '@/lib/app/quick-scan/summary';
 import {
@@ -780,6 +786,34 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: PROJECTS,
     request: { params: projectIdParamSchema },
     response: { status: 200, data: projectSchema },
+  },
+  // Project documents (t-74).
+  {
+    method: 'GET',
+    path: '/api/v1/projects/{id}/documents',
+    summary:
+      "List a project's context documents, oldest first, each with its status in the workspace's knowledge base.",
+    auth: PROJECTS,
+    request: { params: projectIdParamSchema },
+    response: { status: 200, data: z.array(projectDocumentSchema) },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/projects/{id}/documents',
+    summary:
+      "Add a context document to a project, from a file or a page: its text is read, then chunked and embedded into the workspace's knowledge base before the answer. The same text already in the project answers 200 with its existing link.",
+    auth: PROJECTS,
+    request: { params: projectIdParamSchema, body: addDocumentSchema },
+    response: { status: 201, data: projectDocumentSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/projects/{id}/documents/{documentId}',
+    summary:
+      "Remove a document from a project. It leaves the workspace's knowledge base too only when this app's upload put it there, no other project links it, and no agent is granted it.",
+    auth: PROJECTS,
+    request: { params: projectDocumentParamSchema },
+    response: { status: 200, data: removedDocumentSchema },
   },
   // Share links (t-32).
   {
