@@ -64,6 +64,7 @@ export type SharedAssessment = Pick<
   | 'createdAt'
   | 'completedAt'
   | 'text'
+  | 'overlay'
   | 'result'
 > & { judgeRuns: Pick<JudgeRunView, 'judge' | 'status' | 'model'>[] };
 
@@ -325,6 +326,9 @@ function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
     createdAt: a.createdAt,
     completedAt: a.completedAt,
     text: a.text,
+    // The report's cover names the project's weight adjustment (t-72). Only
+    // numbers and the version's own ids: the engine checked it before the run.
+    overlay: a.overlay,
     result,
     judgeRuns: a.judgeRuns.map((r) => ({ judge: r.judge, status: r.status, model: r.model })),
   };

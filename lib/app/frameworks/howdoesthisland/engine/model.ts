@@ -198,6 +198,50 @@ const scaleSchema = z.object({
   high: z.string(),
 });
 
+/** How far a project may move one appeal's weight, either way, as a share of the mix. */
+const weightBound = z.number().min(0).max(1);
+/** How many priority dimensions a project may add, or remove. */
+const dimensionCount = z.number().int().min(0);
+
+/**
+ * How far a project may adjust this version's weights (D5, t-72):
+ * `scoring.adjustment_bounds`, optional.
+ *
+ * Bounds are versioned data, not a policy in code (owner ruling, 2026-11-22):
+ * a bound is a claim about this version's weights, so it lives beside them
+ * and a recorded adjustment stays checkable against the limits it was made
+ * under. **A version that declares none allows no adjustment.**
+ *
+ * - `weights.<appeal>`: how far a project may move that appeal's weight from
+ *   the content type's, either way (`0.1` is ten points of the mix). An
+ *   appeal left out may not move.
+ * - `priority_dimensions.add` / `.remove`: how many of the version's core
+ *   dimensions a project may add to, or take off, a content type's priority
+ *   dimensions. Left out, none.
+ *
+ * Strict, unlike the import's loose records: a misspelt appeal would
+ * otherwise read as a bound of zero, silently allowing nothing.
+ */
+export const adjustmentBoundsSchema = z
+  .strictObject({
+    weights: z
+      .strictObject({
+        ethos: weightBound.optional(),
+        pathos: weightBound.optional(),
+        logos: weightBound.optional(),
+        kairos: weightBound.optional(),
+      })
+      .optional(),
+    priority_dimensions: z
+      .strictObject({ add: dimensionCount.optional(), remove: dimensionCount.optional() })
+      .optional(),
+  })
+  .refine((b) => b.weights !== undefined || b.priority_dimensions !== undefined, {
+    error: 'Declare weights or priority_dimensions bounds, or leave adjustment_bounds out',
+  });
+
+export type AdjustmentBounds = z.infer<typeof adjustmentBoundsSchema>;
+
 export const engineModelSchema = z.object({
   meta: z.object({ version: z.string() }),
   dimensions: z.array(coreDimensionSchema),
@@ -248,6 +292,7 @@ export const engineModelSchema = z.object({
         })
       )
       .optional(),
+    adjustment_bounds: adjustmentBoundsSchema.optional(),
   }),
   length_targets: z.record(z.string(), z.tuple([z.number(), z.number()])).optional(),
   culture: z.object({ countries: z.array(countrySchema), scales: z.array(scaleSchema) }).optional(),
@@ -311,6 +356,19 @@ export interface EngineModel {
   readonly JUDGE_APPEALS: ReadonlySet<string>;
   /** Every reference record (thinker, framework, …) by id. */
   readonly REF: ReadonlyMap<string, { id: string; name: string }>;
+  /** How far a project may adjust the weights (t-72), or null: no adjustment allowed. */
+  readonly BOUNDS: AdjustmentBounds | null;
+}
+
+/**
+ * Whether bounds allow anything. All-zero bounds allow nothing, so they are
+ * read as none, and refused as none, as the catalogue serves them (null).
+ */
+function allowsSome(bounds: AdjustmentBounds | undefined): boolean {
+  if (!bounds) return false;
+  const w = bounds.weights ?? {};
+  const pd = bounds.priority_dimensions ?? {};
+  return APPEALS.some((a) => (w[a] ?? 0) > 0) || (pd.add ?? 0) > 0 || (pd.remove ?? 0) > 0;
 }
 
 const byId = <T extends { id: string }>(list: readonly T[]): Map<string, T> =>
@@ -371,6 +429,9 @@ export function indexModel(model: object): EngineModel {
     JUDGE: byId(data.judges),
     JUDGE_APPEALS: new Set(data.judges.map((j) => j.appeal)),
     REF: new Map(Object.values(data.knowledge_refs).flatMap((refs) => refs.map((r) => [r.id, r]))),
+    BOUNDS: allowsSome(data.scoring.adjustment_bounds)
+      ? (data.scoring.adjustment_bounds ?? null)
+      : null,
   };
   indexed.set(model, engineModel);
   return engineModel;

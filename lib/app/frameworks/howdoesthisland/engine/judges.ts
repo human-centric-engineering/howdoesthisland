@@ -28,7 +28,10 @@ import {
   type JudgeShape,
 } from '@/lib/app/frameworks/howdoesthisland/engine/judge-schemas';
 import { CULTURE_GROUP, type EngineModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
-import { judgePrompt } from '@/lib/app/frameworks/howdoesthisland/engine/prompts';
+import {
+  judgePrompt,
+  type JudgePromptOptions,
+} from '@/lib/app/frameworks/howdoesthisland/engine/prompts';
 import type { EngineContext } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 
 export const JUDGE_LIMITS: Readonly<Record<JudgeShape, { maxTokens: number; timeoutMs: number }>> =
@@ -91,7 +94,7 @@ export function buildJudgeRequest(
   slot: string,
   text: string,
   ctx: EngineContext,
-  opts: { culture: boolean; projectContext?: string | null }
+  opts: JudgePromptOptions
 ): JudgeRequest {
   return {
     slot,

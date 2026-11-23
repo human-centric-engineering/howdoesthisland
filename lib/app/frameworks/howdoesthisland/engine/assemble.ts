@@ -33,6 +33,7 @@ import {
   bandOf,
   effectiveWeights,
   fnTarget,
+  priorityDimensions,
 } from '@/lib/app/frameworks/howdoesthisland/engine/scoring';
 import { clamp, locate } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 import type {
@@ -73,7 +74,7 @@ function libraryRecs(
   opts: EngineOptions
 ): Recommendation[] {
   const recs: Recommendation[] = [];
-  const prio = must(m.CT, ctx.contentType, 'content type').priority_dimensions;
+  const prio = priorityDimensions(m, ctx, opts.overlay);
   const groups = new Map<string, Dimension[]>([
     ['ethos', []],
     ['pathos', []],
@@ -337,10 +338,10 @@ export function assemble(
   }
 
   const s: Record<Appeal, number> = {
-    ethos: appealScore(m, 'ethos', sc, ctx),
-    pathos: appealScore(m, 'pathos', sc, ctx),
-    logos: appealScore(m, 'logos', sc, ctx),
-    kairos: appealScore(m, 'kairos', sc, ctx),
+    ethos: appealScore(m, 'ethos', sc, ctx, opts.overlay),
+    pathos: appealScore(m, 'pathos', sc, ctx, opts.overlay),
+    logos: appealScore(m, 'logos', sc, ctx, opts.overlay),
+    kairos: appealScore(m, 'kairos', sc, ctx, opts.overlay),
   };
   const w = effectiveWeights(m, ctx, opts);
   const overall = Math.round(APPEALS.reduce((t, a) => t + s[a] * w[a], 0));

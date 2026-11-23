@@ -18,6 +18,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { createFakeDb, type FakeDb, type Row } from '@/tests/unit/lib/app/assessments/fake-db';
 
 const mockEnv = vi.hoisted(() => ({
@@ -678,6 +679,7 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
       orgId: WS_A,
       archivedAt: null,
       framework: { slug: 'howdoesthisland' },
+      overlay: null,
       defaults: {
         context: {
           contentType: 'landing_page',
@@ -732,6 +734,104 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
     await post({ source: { text: TEXT }, profile: 'quick', wait: true });
 
     expect(fake.assessments[0]).toMatchObject({ projectId: null });
+  });
+
+  describe('with a weight adjustment (t-72)', () => {
+    /** 0.5.1 with bounds, scored for real: the run assembles with the overlay. */
+    function useBoundedVersion() {
+      const model = structuredClone(loadModel());
+      const scoring = z.record(z.string(), z.unknown()).parse(model.scoring);
+      const bounded = createHowDoesThisLandEngine(
+        {
+          ...model,
+          scoring: { ...scoring, adjustment_bounds: { weights: { ethos: 0.1 } } },
+        },
+        { culture: true }
+      );
+      mocks.engineForVersion.mockImplementation(async (id: string) =>
+        id === 'version-1'
+          ? {
+              version: {
+                id,
+                status: 'PUBLISHED',
+                frameworkSlug: 'howdoesthisland',
+                version: '0.5.1',
+              },
+              engine: bounded,
+              label: 'howdoesthisland@0.5.1',
+            }
+          : null
+      );
+      return bounded;
+    }
+
+    it('records the project’s overlay on the assessment, and scores with it', async () => {
+      const bounded = useBoundedVersion();
+      project({ overlay: { weights: { ethos: 0.1 } } });
+
+      const res = await post({ source: { text: TEXT }, projectId: 'project-1', wait: true });
+
+      expect(res.status).toBe(200);
+      const data = assessmentDetailSchema.parse((await json(res)).data);
+      expect(data.overlay).toEqual({ weights: { ethos: 0.1 } });
+      expect(fake.assessments[0]).toMatchObject({ overlay: { weights: { ethos: 0.1 } } });
+      // The stored result is the adjusted engine's, not the plain one's.
+      const parsed = bounded.parseContext(fake.assessments[0]?.context);
+      if (!parsed.ok) throw new Error('the stored context should parse');
+      const ctx = parsed.ctx;
+      const plain = bounded.assemble(TEXT, ctx, bounded.quickScan(TEXT, ctx));
+      const adjusted = bounded.withOverlay({ weights: { ethos: 0.1 } });
+      const expected = adjusted.assemble(TEXT, ctx, adjusted.quickScan(TEXT, ctx));
+      expect(fake.assessments[0]?.result).toMatchObject({
+        effective_weights: expected.effective_weights,
+      });
+      expect(expected.effective_weights.ethos).toBeGreaterThan(plain.effective_weights.ethos);
+    });
+
+    it('records none for a project without one', async () => {
+      useBoundedVersion();
+      project();
+
+      const res = await post({ source: { text: TEXT }, projectId: 'project-1', wait: true });
+
+      expect(assessmentDetailSchema.parse((await json(res)).data).overlay).toBeNull();
+      expect(fake.assessments[0]?.overlay ?? null).toBeNull();
+    });
+
+    it('refuses a review whose version does not allow the project’s overlay, and stores nothing', async () => {
+      // 0.5.1 as published: no bounds.
+      project({ overlay: { weights: { ethos: 0.1 } } });
+
+      const res = await post({ source: { text: TEXT }, projectId: 'project-1' });
+
+      expect(res.status).toBe(400);
+      const body = await json(res);
+      expect(body.error).toMatchObject({
+        code: 'OVERLAY_INVALID',
+        details: {
+          fromProjectOverlay: true,
+          issues: [
+            {
+              path: 'overlay.weights',
+              message: 'This version declares no bounds, so it allows no adjustment',
+            },
+          ],
+        },
+      });
+      expect(fake.assessments).toHaveLength(0);
+    });
+
+    it('scores a review kept nowhere with the overlay too, and says so', async () => {
+      useBoundedVersion();
+      project({ overlay: { weights: { ethos: 0.1 } } });
+
+      const res = await post({ source: { text: TEXT }, projectId: 'project-1', store: false });
+
+      expect(res.status).toBe(200);
+      const data = ephemeralAssessmentSchema.parse((await json(res)).data);
+      expect(data.overlay).toEqual({ weights: { ethos: 0.1 } });
+      expect(fake.assessments).toHaveLength(0);
+    });
   });
 
   it.each([

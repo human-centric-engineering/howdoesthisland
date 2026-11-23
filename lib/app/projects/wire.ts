@@ -13,6 +13,12 @@ export const projectSchema = z.object({
   defaults: projectDefaultsSchema,
   /** The framework its reviews are scored with, by slug. */
   framework: z.string(),
+  /**
+   * Its adjustment to the framework's weights (t-72), as the version checked
+   * it, or null for none. Its shape is the framework's: HowDoesThisLand's is
+   * `{ weights?, priorityDimensions? }`.
+   */
+  overlay: z.record(z.string(), z.unknown()).nullable(),
   archived: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   /** Reviews kept in it, stored ones only. */
@@ -28,6 +34,7 @@ export interface ProjectView {
   brief: z.infer<typeof briefSchema>;
   defaults: z.infer<typeof projectDefaultsSchema>;
   framework: string;
+  overlay: Record<string, unknown> | null;
   archived: boolean;
   archivedAt: Date | null;
   reviewCount: number;

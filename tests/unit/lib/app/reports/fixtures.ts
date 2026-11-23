@@ -107,6 +107,7 @@ export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment 
     completedAt: '2026-11-15T09:01:00.000Z',
     text: TEXT,
     context: CTX,
+    overlay: null,
     result: engineResult({
       judges: judges.map((s) => s.replace(/^judge_/, '')),
       editor: WRITTEN_EDITOR,

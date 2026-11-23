@@ -65,6 +65,8 @@ function createProjectTable() {
       const row: Row = {
         id: `project-${seq}`,
         archivedAt: null,
+        // The column's default.
+        overlay: {},
         createdAt: at,
         updatedAt: at,
         ...data,
@@ -126,6 +128,7 @@ import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthislan
 import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-fixtures';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 import { projectSchema } from '@/lib/app/projects/wire';
+import { z } from 'zod';
 
 const WS_A = 'org-a';
 const WS_B = 'org-b';
@@ -134,6 +137,36 @@ const BOB = 'cmuser00000000000000bob01';
 const KEY_ID = 'cmkey000000000000000key1';
 
 const engine = createHowDoesThisLandEngine(loadModel(), { culture: false });
+
+/** 0.5.1 with adjustment bounds (t-72): the shape the next version will publish. */
+function boundedModel() {
+  const model = structuredClone(loadModel());
+  const scoring = z.record(z.string(), z.unknown()).parse(model.scoring);
+  return {
+    ...model,
+    scoring: {
+      ...scoring,
+      adjustment_bounds: {
+        weights: { ethos: 0.1, pathos: 0.05 },
+        priority_dimensions: { add: 1, remove: 1 },
+      },
+    },
+  };
+}
+const boundedEngine = createHowDoesThisLandEngine(boundedModel(), { culture: false });
+
+/** Score every project with the bounded version from here on. */
+function useBoundedVersion() {
+  mocks.engineForVersion.mockImplementation(async (id: string) =>
+    id === 'version-1'
+      ? {
+          version: { id, status: 'PUBLISHED', frameworkSlug: 'howdoesthisland', version: '0.6.0' },
+          engine: boundedEngine,
+          label: 'howdoesthisland@0.6.0',
+        }
+      : null
+  );
+}
 
 function signedIn(userId: string, orgId: string) {
   const base = createMockAuthSession();
@@ -449,5 +482,85 @@ describe('GET, PATCH and DELETE /api/v1/projects/{id}', () => {
 
     const restored = await json(await change(id, { archived: false }));
     expect(restored.data).toMatchObject({ archived: false, archivedAt: null });
+  });
+});
+
+describe('a project’s weight adjustment (t-72)', () => {
+  it('refuses any overlay while the latest version declares no bounds, by its path', async () => {
+    const res = await post({ name: 'Launch', overlay: { weights: { ethos: 0.05 } } });
+
+    expect(res.status).toBe(400);
+    const body = await json(res);
+    expect(body.error?.code).toBe('OVERLAY_INVALID');
+    expect(body.error?.details?.issues).toEqual([
+      {
+        path: 'overlay.weights',
+        message: 'This version declares no bounds, so it allows no adjustment',
+      },
+    ]);
+    expect(projects.rows).toHaveLength(0);
+  });
+
+  it('stores an overlay within the bounds, as the version checked it, and serves it', async () => {
+    useBoundedVersion();
+    const id = await made({
+      name: 'Launch',
+      overlay: { weights: { ethos: 0.1, pathos: 0 }, priorityDimensions: { add: ['kai_call'] } },
+    });
+
+    const stored = { weights: { ethos: 0.1 }, priorityDimensions: { add: ['kai_call'] } };
+    expect(projects.rows[0]?.overlay).toEqual(stored);
+    const read = await json(await getOne(id));
+    expect(projectSchema.parse(read.data).overlay).toEqual(stored);
+  });
+
+  it('refuses an out-of-bounds change with each path, and changes nothing', async () => {
+    useBoundedVersion();
+    const id = await made({ name: 'Launch', overlay: { weights: { ethos: 0.05 } } });
+
+    const res = await change(id, {
+      name: 'Renamed',
+      overlay: { weights: { kairos: 0.01 }, priorityDimensions: { add: ['nope'] } },
+    });
+
+    expect(res.status).toBe(400);
+    const body = await json(res);
+    expect(body.error?.code).toBe('OVERLAY_INVALID');
+    expect(body.error?.details?.issues?.map((i) => i.path)).toEqual([
+      'overlay.weights.kairos',
+      'overlay.priorityDimensions.add.0',
+    ]);
+    expect(projects.rows[0]).toMatchObject({
+      name: 'Launch',
+      overlay: { weights: { ethos: 0.05 } },
+    });
+  });
+
+  it('replaces the overlay whole, and clears it with null', async () => {
+    useBoundedVersion();
+    const id = await made({ name: 'Launch', overlay: { weights: { ethos: 0.05 } } });
+
+    const replaced = await json(await change(id, { overlay: { weights: { pathos: -0.05 } } }));
+    expect(replaced.data?.overlay).toEqual({ weights: { pathos: -0.05 } });
+
+    // Null needs no version: it clears even once the version allows nothing.
+    mocks.engineForVersion.mockResolvedValue(null);
+    const cleared = await json(await change(id, { overlay: null }));
+    expect(cleared.data?.overlay).toBeNull();
+    expect(projects.rows[0]?.overlay).toEqual({});
+
+    // `{}` clears the same way, needing no version either (review round 2).
+    mocks.engineForVersion.mockImplementation(async () => {
+      throw new Error('no version should be read');
+    });
+    expect((await change(id, { overlay: {} })).status).toBe(200);
+  });
+
+  it('stores an overlay that changes nothing as none', async () => {
+    useBoundedVersion();
+    const id = await made({ name: 'Launch', overlay: { weights: { ethos: 0 } } });
+
+    expect(projects.rows[0]?.overlay).toEqual({});
+    expect((await json(await getOne(id))).data?.overlay).toBeNull();
   });
 });

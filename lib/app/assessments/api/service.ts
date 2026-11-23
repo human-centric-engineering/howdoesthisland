@@ -59,6 +59,7 @@ import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/v
 import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
 import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
 import { mergeContext, projectForReview, type ReviewProject } from '@/lib/app/projects/service';
+import { overlayForReview, type StoredOverlay } from '@/lib/app/projects/overlay';
 import {
   isFinal,
   readAssessment,
@@ -167,9 +168,12 @@ export type CreatedAssessment =
 
 /** A request checked as far as it can be without fetching or reading anything. */
 export interface PreparedAssessment {
+  /** The version, its engine scoring with the project's overlay when there is one (t-72). */
   resolved: VersionToScore;
   /** The project it is reviewed in (t-70), or `null`. */
   projectId: string | null;
+  /** The project's adjustment to the weights, as checked against this version (t-72), or `null`. */
+  overlay: StoredOverlay | null;
   ctx: unknown;
   profile: JudgeProfile;
   judges: readonly string[];
@@ -196,13 +200,18 @@ export interface PreparedAssessment {
  */
 export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
   const project = body.projectId ? await projectForReview(body.projectId) : null;
-  const resolved = await versionToScore(frameworkChoice(body, project));
+  const version = await versionToScore(frameworkChoice(body, project));
   // The project's defaults under the request's own fields (t-70), checked
   // against this version as any context is.
   const ctx = fromProjectDefaults(
     (err) => issuesFromDefaults(err, project?.defaults.context, body.context),
-    () => contextFor(resolved, mergeContext(project?.defaults.context, body.context))
+    () => contextFor(version, mergeContext(project?.defaults.context, body.context))
   );
+  // The project's adjustment to the weights (t-72), checked against this
+  // version as its defaults are: 400 `OVERLAY_INVALID` when the version's
+  // bounds do not allow it, or it declares none.
+  const adjusted = overlayForReview(version.engine, project?.overlay);
+  const resolved: VersionToScore = { ...version, engine: adjusted.engine };
   const ownProfile = body.judges ?? body.profile;
   const profile: JudgeProfile = ownProfile ?? project?.defaults.profile ?? 'full';
   const judges = fromProjectDefaults(
@@ -221,7 +230,16 @@ export async function prepareAssessment(body: CreateAssessmentBody): Promise<Pre
     judges.length,
     body.store !== false
   );
-  return { resolved, projectId: project?.id ?? null, ctx, profile, judges, hold: null, rate };
+  return {
+    resolved,
+    projectId: project?.id ?? null,
+    overlay: adjusted.overlay,
+    ctx,
+    profile,
+    judges,
+    hold: null,
+    rate,
+  };
 }
 
 /**
@@ -345,6 +363,7 @@ export async function createAssessment(
         frameworkVersionId: resolved.version.id,
         profile,
         context: storedContext(ctx),
+        overlay: prepared.overlay,
         requestedVia: caller.apiKeyId ? 'API' : 'APP',
         apiKeyId: caller.apiKeyId,
         userId: caller.userId,
@@ -380,7 +399,7 @@ async function createEphemeral(
   const runId = crypto.randomUUID();
   const run = () =>
     refusingAsApi(() =>
-      runEphemeral(resolved, source, ctx, profile, judges, caller, runId, signal)
+      runEphemeral(resolved, source, ctx, prepared.overlay, profile, judges, caller, runId, signal)
     );
   // A run that calls judges takes one of the workspace's places, or is
   // refused with `WorkspaceBusyError` (t-28). The quick scan calls no model.
@@ -455,6 +474,7 @@ async function runEphemeral(
   resolved: VersionToScore,
   source: Source,
   ctx: unknown,
+  overlay: StoredOverlay | null,
   profile: JudgeProfile,
   judges: readonly string[],
   caller: Caller,
@@ -522,6 +542,7 @@ async function runEphemeral(
     ...scoresOf(result),
     costUsd,
     context: ctx,
+    overlay,
     result,
     judgeRuns: judges.flatMap((slot) => runs.get(slot) ?? []),
   };

@@ -2,7 +2,8 @@
  * The workspace's projects (t-70, f-projects).
  *
  * POST /api/v1/projects — make a project: a name, a brief, the defaults its
- *   reviews take, and the framework they are scored with.
+ *   reviews take, its weighting (`overlay`, t-72), and the framework they are
+ *   scored with.
  * GET  /api/v1/projects — the workspace's projects, newest first. Archived
  *   ones only with `archived=true`.
  *
@@ -14,6 +15,8 @@
  * - 400 `VALIDATION_ERROR` — the body does not fit the schema.
  * - 400 `DEFAULTS_INVALID` — the defaults name an id or profile the
  *   framework's latest version lacks; `details.issues` gives each path.
+ * - 400 `OVERLAY_INVALID` — the weighting does not fit the bounds the
+ *   framework's latest version declares, or it declares none.
  * - 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (scope).
  * - 404 `FRAMEWORK_NOT_FOUND` / `FRAMEWORK_VERSION_NOT_FOUND` — no such
  *   framework, or none of its versions is published.

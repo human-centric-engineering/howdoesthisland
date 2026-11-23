@@ -48,6 +48,8 @@
  * - 404 `FRAMEWORK_NOT_FOUND` / `FRAMEWORK_VERSION_NOT_FOUND`.
  * - 404 `PROJECT_NOT_FOUND` — no such project in this workspace.
  * - 409 `PROJECT_ARCHIVED` — the project is archived; restore it first.
+ * - 400 `OVERLAY_INVALID` — the project's weighting (t-72) does not fit this
+ *   version's bounds, or it declares none; `details.fromProjectOverlay` is true.
  * - 413 `FILE_TOO_LARGE`, 415 `INVALID_FILE_TYPE` — the file (intake).
  * - 422 `TEXT_TOO_LONG` — over 40,000 characters.
  * - 422 `TOO_MANY_PAGES`, `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE` — the file.

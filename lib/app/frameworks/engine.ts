@@ -96,12 +96,22 @@ export type JudgeReplyValidation<Output = unknown, Reason extends string = strin
 export type ContextParse<Ctx = unknown> =
   { ok: true; ctx: Ctx } | { ok: false; issues: { path: string; message: string }[] };
 
+/**
+ * A project's adjustment to a version's weights (D5, t-72) checked against
+ * the bounds that version declares: the overlay the engine scores with (null
+ * for none), or each problem by its dotted path in the overlay.
+ */
+export type OverlayParse<Overlay = unknown> =
+  | { ok: true; overlay: Overlay | null }
+  | { ok: false; issues: { path: string; message: string }[] };
+
 export interface FrameworkEngine<
   Ctx = unknown,
   Quick = unknown,
   JudgeOutputs = unknown,
   Result = unknown,
   JudgeOutput = unknown,
+  Overlay = unknown,
 > {
   /**
    * Who the text is for, as a caller sent it (untrusted; absent is `{}`),
@@ -158,4 +168,18 @@ export interface FrameworkEngine<
    * change naming a recommendation the result does not have is dropped.
    */
   validateEditorReply(reply: unknown, result: Result): JudgeReplyValidation<EditorSummary>;
+  /**
+   * A project's overlay (untrusted; absent is none) checked against this
+   * version's bounds. A version that declares none refuses any overlay.
+   * Added in f-projects (t-72).
+   */
+  parseOverlay(input: unknown): OverlayParse<Overlay>;
+  /**
+   * This engine, scoring with `overlay` (as {@link parseOverlay} returned
+   * it). Every method then reads the adjusted weights; with `null` it scores
+   * exactly as an engine never given one. This engine is not changed.
+   */
+  withOverlay(
+    overlay: Overlay | null
+  ): FrameworkEngine<Ctx, Quick, JudgeOutputs, Result, JudgeOutput, Overlay>;
 }

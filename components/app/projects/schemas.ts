@@ -1,7 +1,8 @@
 /**
  * What the projects pages read from the API (t-71), validated rather than
  * cast: a project (`lib/app/projects/wire.ts`), and the part of a framework
- * version's catalogue the defaults pickers are filled from.
+ * version's catalogue the defaults pickers and the weights section (t-72) are
+ * filled from.
  */
 import { z } from 'zod';
 import { projectSchema } from '@/lib/app/projects/wire';
@@ -47,8 +48,29 @@ export const defaultsCatalogueSchema = z.object({
       idName.extend({ options: z.array(z.object({ id: z.string(), label: z.string() })) })
     ),
     countries: z.array(idName.extend({ region: z.string() })).optional(),
+    /**
+     * How far a project may adjust the weights (t-72), or null for a version
+     * that allows none: the weights section is offered only when it is set.
+     */
+    adjustment: z
+      .object({
+        weights: z.object({
+          ethos: z.number(),
+          pathos: z.number(),
+          logos: z.number(),
+          kairos: z.number(),
+        }),
+        priorityDimensions: z.object({ add: z.number().int(), remove: z.number().int() }),
+      })
+      .nullable(),
   }),
-  result: z.object({ profiles: z.array(idName) }),
+  result: z.object({
+    profiles: z.array(idName),
+    /** The appeals, by name, for the weights section. */
+    appeals: z.array(idName),
+    /** A core dimension has no `group`; only those can be made a priority (t-72). */
+    dimensions: z.array(idName.extend({ appeal: z.string(), group: z.string().nullable() })),
+  }),
 });
 
 export type DefaultsCatalogue = z.infer<typeof defaultsCatalogueSchema>;

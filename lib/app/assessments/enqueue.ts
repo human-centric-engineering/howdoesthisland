@@ -41,6 +41,12 @@ export interface EnqueueAssessmentInput {
   profile: JudgeProfile;
   /** Who the text is for, already validated against the framework's context schema. */
   context: Prisma.InputJsonObject;
+  /**
+   * The project's adjustment to the weights (t-72), already checked against
+   * this version (`lib/app/projects/overlay.ts`), or none. The run scores
+   * with it, and the row records it.
+   */
+  overlay?: Prisma.InputJsonObject | null;
   requestedVia: 'APP' | 'API';
   apiKeyId?: string | null;
   /** A real `User.id`, or nothing. */
@@ -124,6 +130,7 @@ export async function enqueueAssessment(
         profile: storedProfileName(input.profile),
         judges: [...judges],
         context: input.context,
+        ...(input.overlay ? { overlay: input.overlay } : {}),
         requestedVia: input.requestedVia,
         apiKeyId: input.apiKeyId ?? null,
         createdByUserId: userId,

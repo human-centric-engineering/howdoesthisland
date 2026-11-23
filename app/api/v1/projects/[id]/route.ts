@@ -2,8 +2,9 @@
  * One of the workspace's projects (t-70).
  *
  * GET    /api/v1/projects/{id} — the project.
- * PATCH  /api/v1/projects/{id} — change its name, brief or defaults (each
- *   replaced whole), or archive or restore it (`archived`).
+ * PATCH  /api/v1/projects/{id} — change its name, brief, defaults or
+ *   weighting (`overlay`, t-72; each replaced whole, `overlay: null` or `{}`
+ *   clears it), or archive or restore it (`archived`).
  * DELETE /api/v1/projects/{id} — archive it. Its reviews keep their link,
  *   and `PATCH { archived: false }` restores it.
  *
@@ -13,6 +14,9 @@
  * - 400 `VALIDATION_ERROR` — PATCH: the body does not fit, or changes nothing.
  * - 400 `DEFAULTS_INVALID` — PATCH: the defaults name an id or profile the
  *   framework's latest version lacks; `details.issues` gives each path.
+ * - 400 `OVERLAY_INVALID` — PATCH: the weighting does not fit the bounds the
+ *   framework's latest version declares, or it declares none;
+ *   `details.issues` gives each path (`overlay.weights.ethos`).
  * - 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (scope).
  * - 404 `NOT_FOUND` — no such project in this workspace. Another workspace's
  *   id reads the same, so an id is not confirmed to an outsider.

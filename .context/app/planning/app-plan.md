@@ -1579,6 +1579,12 @@ versions and calibration in the app; editing in the app is in §12. **Projects m
 weights** (appeal mix and priority dimensions) within bounds the framework sets; rubrics,
 prompts and ids are not adjustable. The adjustment is recorded on each assessment.
 
+**The bounds are versioned data in the model JSON** (`scoring.adjustment_bounds`), not a
+policy in code (owner ruling, 2026-11-22, t-72): a bound is a claim about one version's
+weights, and keeping it with them keeps a recorded adjustment checkable against the limits
+it was made under. **A version that declares no bounds allows no adjustment**; 0.5.1
+declares none. See [`frameworks.md`](../frameworks.md#adjustment-bounds-d5).
+
 **D6 · No billing yet** (owner, Q4)
 
 The app is a prototype without billing until Sunrise ships it. Every AI call's cost is

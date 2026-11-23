@@ -240,6 +240,23 @@ export const frameworkCatalogueSchema = z.object({
       idNameSchema.extend({ options: z.array(z.object({ id: z.string(), label: z.string() })) })
     ),
     countries: z.array(idNameSchema.extend({ region: z.string() })).optional(),
+    /**
+     * How far a project may adjust the version's weights (t-72), or `null`
+     * when it allows none: per appeal, how far either way as a share of the
+     * mix, and how many core dimensions may be added to or removed from a
+     * content type's priorities.
+     */
+    adjustment: z
+      .object({
+        weights: z.object({
+          ethos: z.number(),
+          pathos: z.number(),
+          logos: z.number(),
+          kairos: z.number(),
+        }),
+        priorityDimensions: z.object({ add: z.number().int(), remove: z.number().int() }),
+      })
+      .nullable(),
   }),
   result: z.object({
     appeals: z.array(idNameSchema),
@@ -398,12 +415,19 @@ export const assessmentResultField = z.unknown();
 export const storedResultField = z.unknown();
 /** A shared report's result: only what the report reads. */
 export const sharedResultField = z.unknown();
+/**
+ * The project's adjustment to the weights an assessment was scored with
+ * (t-72), or `null` for none. Its shape is the framework's; HowDoesThisLand's
+ * is `{ weights?, priorityDimensions? }`.
+ */
+export const assessmentOverlayField = z.record(z.string(), z.unknown()).nullable();
 
 /** `AssessmentDetail`. */
 export const assessmentDetailSchema = assessmentSummarySchema.extend({
   /** The copy assessed; the result's offsets point into it. */
   text: z.string(),
   context: assessmentContextField,
+  overlay: assessmentOverlayField,
   result: storedResultField,
   judgeRuns: z.array(judgeRunViewSchema),
 });
@@ -436,6 +460,8 @@ export const sharedAssessmentSchema = assessmentDetailSchema
     createdAt: true,
     completedAt: true,
     text: true,
+    // The report's cover names it, so a reader knows the scores were weighted for this project.
+    overlay: true,
   })
   .extend({ result: sharedResultField, judgeRuns: z.array(sharedJudgeRunSchema) });
 
@@ -467,6 +493,7 @@ export const ephemeralAssessmentSchema = z.object({
   band: z.string().nullable(),
   costUsd: z.number(),
   context: assessmentContextField,
+  overlay: assessmentOverlayField,
   result: assessmentResultField,
   judgeRuns: z.array(judgeRunViewSchema),
 });

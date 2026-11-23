@@ -29,6 +29,7 @@ import {
   type Sentence,
 } from '@/lib/app/frameworks/howdoesthisland/engine/text';
 import type { CraftMetrics } from '@/lib/app/frameworks/howdoesthisland/engine/craft';
+import type { WeightOverlay } from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
 import type {
   CultureProfile,
   EngineContext,
@@ -42,6 +43,12 @@ import type {
 export interface EngineOptions {
   /** The culture switch (D11): `isCultureEnabled()` where the engine is created. */
   culture: boolean;
+  /**
+   * A project's adjustment to the weights (t-72), as `parseOverlay()` checked
+   * it against this version, or none. The quick scan reads no weights, so
+   * only assembly and the judges' prompts see it.
+   */
+  overlay?: WeightOverlay | null;
 }
 
 /** The lever each red flag misuses. */

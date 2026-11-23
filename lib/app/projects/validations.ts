@@ -52,6 +52,13 @@ export const projectDefaultsSchema = z.strictObject({
 
 export type ProjectDefaults = z.infer<typeof projectDefaultsSchema>;
 
+/**
+ * A project's adjustment to its framework's weights (t-72): open JSON here,
+ * as `defaults.context` is, since what it may hold and how far are the
+ * version's (`lib/app/projects/overlay.ts`). Null clears it.
+ */
+export const overlayInputSchema = z.record(z.string(), z.unknown()).nullable();
+
 const nameField = z.string().trim().min(1, 'Give the project a name').max(MAX_PROJECT_NAME);
 
 /** POST /api/v1/projects. */
@@ -61,20 +68,27 @@ export const createProjectSchema = z.strictObject({
   defaults: projectDefaultsSchema.optional(),
   /** The framework its reviews are scored with; HowDoesThisLand's by default. */
   framework: slugParam.optional(),
+  /**
+   * Its adjustment to the framework's weights (t-72), checked against the
+   * bounds the latest version declares. Left out or null, none.
+   */
+  overlay: overlayInputSchema.optional(),
 });
 
 export type CreateProjectBody = z.infer<typeof createProjectSchema>;
 
 /**
- * PATCH /api/v1/projects/{id}. `brief` and `defaults` replace what is there
- * whole. `archived: false` restores an archived project. The framework is
- * fixed once made, because the defaults are checked against it.
+ * PATCH /api/v1/projects/{id}. `brief`, `defaults` and `overlay` replace what
+ * is there whole; `overlay: null` clears it. `archived: false` restores an
+ * archived project. The framework is fixed once made, because the defaults
+ * are checked against it.
  */
 export const updateProjectSchema = z
   .strictObject({
     name: nameField.optional(),
     brief: briefSchema.optional(),
     defaults: projectDefaultsSchema.optional(),
+    overlay: overlayInputSchema.optional(),
     archived: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { error: 'Nothing to change' });

@@ -170,6 +170,7 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         judges: true,
         createdAt: true,
         context: true,
+        overlay: true,
         createdByUserId: true,
         content: { select: { text: true, sourceUrl: true } },
         judgeRuns: { include: { reply: { select: { output: true } } } },
@@ -275,6 +276,8 @@ type AssessmentRow = {
   judges: string[];
   createdAt: Date;
   context: Prisma.JsonValue;
+  /** The project's adjustment the run scores with (t-72), or null. */
+  overlay: Prisma.JsonValue;
   createdByUserId: string | null;
   content: { text: string; sourceUrl: string | null };
   judgeRuns: StoredJudgeRun[];
@@ -312,7 +315,23 @@ async function drive(
     });
     return written ? 'failed' : await lostTo(row.id);
   }
-  const { engine, label } = loaded;
+  const { label } = loaded;
+  // Checked against this version when the review was asked for, and a
+  // published version never changes, so a refusal here is a stored overlay
+  // nothing checked: failed rather than scored without it.
+  const adjusted = loaded.engine.parseOverlay(row.overlay);
+  if (!adjusted.ok) {
+    logger.error('Stored weight adjustment does not fit its version', undefined, {
+      assessmentId: row.id,
+      issues: adjusted.issues,
+    });
+    const written = await finish(row.id, token, {
+      status: 'FAILED',
+      error: 'Its weight adjustment does not fit its framework version.',
+    });
+    return written ? 'failed' : await lostTo(row.id);
+  }
+  const engine = adjusted.overlay ? loaded.engine.withOverlay(adjusted.overlay) : loaded.engine;
   const { text, sourceUrl } = row.content;
   let quick: unknown;
   try {
