@@ -3,8 +3,8 @@
 A project holds the background of one piece of a workspace's work: a client, a
 product or a campaign (t-70, `f-projects`). It has a **brief**, in the author's own
 words, and the **defaults** a review in it takes, so nobody restates the type of
-copy and the audience on every review. Context documents (t-74) and the AI
-reviewers reading the brief (t-75) build on it. Code is `lib/app/projects/`.
+copy and the audience on every review. Its **background documents** (t-74) and the AI
+reviewers reading the brief and passages from them (t-75) build on it. Code is `lib/app/projects/`.
 
 ## What a project holds
 
@@ -96,6 +96,53 @@ workspace), 409 `PROJECT_ARCHIVED` (restore it first), 400
 `PROJECT_FRAMEWORK_MISMATCH` (the request names another framework), 400
 `OVERLAY_INVALID` (its weighting does not fit this version, above).
 
+## Background documents (t-74, D18)
+
+A project's documents (a positioning paper, a brand guide, last year's campaign)
+live in the workspace's **knowledge base**, core's `AiKnowledgeDocument`, which
+chunks and embeds them; `ProjectDocument` links each to the project
+(`lib/app/projects/documents.ts`). The visible words are **background
+documents**; the code and API say `documents`.
+
+| Route                                                 | Does                                                                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/projects/{id}/documents`                 | List, oldest first, each with its knowledge row's `status`, read live.                                                                                 |
+| `POST /api/v1/projects/{id}/documents`                | Add one from `{ url }` or `{ file: { name, base64 } }`, with an optional `title`. 201; the same text already in the project answers 200 with its link. |
+| `DELETE /api/v1/projects/{id}/documents/{documentId}` | Remove it. `knowledgeDocumentDeleted` says whether the knowledge row went too.                                                                         |
+
+- **Adding is synchronous**, as core's upload is: intake reads the file or page
+  (`lib/app/intake/`, with a 200,000-character cap rather than a review's 40,000),
+  then `uploadDocument` chunks and embeds it before the answer. The route allows
+  300 seconds. A per-user sub-cap of 20 adds in ten minutes applies, since each
+  add embeds. A project holds at most 50. A read that cannot be embedded is 502
+  `DOCUMENT_NOT_INDEXED`, and the failed knowledge row this call made is deleted,
+  since nobody here can see or retry it.
+- **Status is not stored on the link.** It is the knowledge row's
+  (`processing`, `ready`, `failed`, `pending_review`, `cleaning`), read with the
+  list in one query, so a document core re-processes later reads as such. A stored
+  copy would only ever have said `ready`, because the link is made once indexing
+  is done. The page re-reads the list every few seconds while any is `processing`.
+- **Whether this app's upload made the knowledge row** (`createdByUpload`).
+  `uploadDocument` deduplicates by content hash and returns an existing ready row,
+  or a racing upload's, without saying which. The service reads the ids with the
+  text's hash before the call: a row among them was reused. A row new since then
+  counts as this upload's only if it names this user as uploader and this file
+  name, which tells it from a racing upload by core's knowledge page or another
+  project. What is left is the same person uploading the same file through core's
+  page and this app at once, counted as the app's.
+- **Removing a link** deletes the knowledge row only when an upload by the app
+  made it, no other link to it remains, and no agent is granted it, directly or
+  through a tag it carries. Otherwise only the link goes. When the link holding
+  `createdByUpload` goes while others remain, the flag moves to one of them, so
+  the last link out still knows. One serializable transaction, retried on a clash.
+- `knowledgeDocumentId` has a hand-written FK to `ai_knowledge_document`,
+  **CASCADE**, so a document deleted through core's knowledge page takes its links;
+  `addedByUserId` one to `user`, SET NULL. Both have drift probes. Links are in the
+  org export and in the subject export of the person who added them; the text is
+  in the knowledge base's own sections of both.
+- **Not here:** embedding spend is recorded in core's cost log against the
+  workspace but is not charged CopyCredits or held against the monthly budget.
+
 ## The pages
 
 `/projects` and `/projects/[id]` (t-71), protected through `lib/app/protected-routes.ts`
@@ -122,6 +169,9 @@ and in the signed-in nav. Code is `app/(protected)/projects/` and `components/ap
   points with their limit, and the core dimensions as checkboxes, up to the number the
   bounds allow. A project still holding a weighting the version no longer allows sees it
   described, told that its reviews are refused until it is removed, and a Remove button.
+- **Background documents** (t-74) is its own card: each document with where it came
+  from and its status, a file picker and a page address to add one, and a remove
+  button. The one being added shows as being read until the API answers.
 - **AI reviewers** offers `quick`, the version's `judge_catalogue` groups and `full`. A
   group also runs the four appeals, which the field's help says.
 - **Nothing stored is dropped unseen.** A stored default the version no longer has stays
