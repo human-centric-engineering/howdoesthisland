@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 
 /**
- * /projects/[id] (t-71) — the project, then its framework's latest version's
- * catalogue, which fills the default pickers.
+ * /projects/[id] (t-71) — the project, then its framework's latest version,
+ * its background documents (t-74), and the version's catalogue, which fills
+ * the default pickers.
  *
  * @see app/(protected)/projects/[id]/page.tsx
  */
@@ -35,6 +36,21 @@ function answer({
     if (path === '/api/v1/projects/proj-1') return { data: aProject({ archived }), meta: null };
     if (path === '/api/v1/frameworks/howdoesthisland')
       return { data: { name: 'HowDoesThisLand', latestVersion }, meta: null };
+    if (path === '/api/v1/projects/proj-1/documents')
+      return {
+        data: [
+          {
+            id: 'doc-1',
+            title: 'Brand guide',
+            fileName: 'brand-guide.pdf',
+            sourceUrl: null,
+            status: 'ready',
+            chunkCount: 12,
+            addedAt: '2026-11-23T10:00:00.000Z',
+          },
+        ],
+        meta: null,
+      };
     if (path === '/api/v1/frameworks/howdoesthisland/versions/0.5.1/catalogue')
       return { data: aCatalogue(), meta: null };
     throw new Error(`unexpected ${path}`);
@@ -48,21 +64,25 @@ beforeEach(() => {
 });
 
 describe('/projects/[id]', () => {
-  it('reads the project as a 404-able page, then the latest version’s catalogue', async () => {
+  it('reads the project as a 404-able page, its documents, then the latest version’s catalogue', async () => {
     render(await page());
 
     expect(requireServerData).toHaveBeenNthCalledWith(1, '/api/v1/projects/proj-1', {
       notFound: true,
     });
     expect(requireServerData).toHaveBeenNthCalledWith(2, '/api/v1/frameworks/howdoesthisland');
+    expect(requireServerData).toHaveBeenNthCalledWith(3, '/api/v1/projects/proj-1/documents');
     expect(requireServerData).toHaveBeenNthCalledWith(
-      3,
+      4,
       '/api/v1/frameworks/howdoesthisland/versions/0.5.1/catalogue'
     );
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Spring launch');
     expect(screen.getByText(/3 reviews · scored with HowDoesThisLand 0\.5\.1/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Archive project' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Background documents' })).toHaveTextContent(
+      'Brand guide'
+    );
   });
 
   it('says an archived project is archived and offers to restore it', async () => {

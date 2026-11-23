@@ -1,7 +1,7 @@
 /**
  * `/projects/[id]` (t-71): a project's brief and the defaults its reviews
  * take, written down once, its adjustment to the weights when the version
- * allows one (t-72), and archiving it.
+ * allows one (t-72), its background documents (t-74), and archiving it.
  *
  * Read through the API (API-first): the project, then its framework's latest
  * version, then that version's catalogue, which fills the default pickers.
@@ -21,12 +21,15 @@ import {
   defaultsCatalogueSchema,
   frameworkEndpoint,
   frameworkLatestSchema,
+  projectDocumentListSchema,
+  projectDocumentsEndpoint,
   projectEndpoint,
   projectSchema,
 } from '@/components/app/projects/schemas';
 import { ProjectForm } from '@/components/app/projects/project-form';
 import { ProjectArchive } from '@/components/app/projects/project-archive';
 import { ProjectWeights } from '@/components/app/projects/project-weights';
+import { ProjectDocuments } from '@/components/app/projects/project-documents';
 import { reviewCount } from '@/components/app/projects/project-list';
 
 export const metadata: Metadata = { title: 'Project' };
@@ -47,6 +50,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     // refuses a save. The error boundary says so and offers Try again.
     throw new Error(`${project.framework} has no version in use`);
   }
+  const documents = projectDocumentListSchema.parse(
+    (await requireServerData<unknown>(projectDocumentsEndpoint(project.id))).data
+  );
   const catalogue = defaultsCatalogueSchema.parse(
     (
       await requireServerData<unknown>(
@@ -86,6 +92,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <ProjectForm key={project.id} project={project} catalogue={catalogue} />
       {/* Only when the version declares bounds, or the project holds an adjustment (t-72). */}
       <ProjectWeights key={`weights-${project.id}`} project={project} catalogue={catalogue} />
+      <ProjectDocuments projectId={project.id} documents={documents} />
     </div>
   );
 }
