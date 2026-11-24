@@ -145,6 +145,11 @@
  * history that cannot be read, nothing is refused. The install-wide cap is left to that gate
  * too: no workspace admin can raise it.
  *
+ * **Rewrites** (t-81). A running rewrite holds its estimate (`heldUsd`, the
+ * median of the workspace's last completed rewrites) in every check, a
+ * review's or a rewrite's, until it ends and is charged; its row is written
+ * under the same lock ({@link reserveRewriteBudget}), so it is its own hold.
+ *
  * **Indexes.** Every query here runs on each non-quick request, the first
  * time before the per-user limiter, so each reads an index that serves its filter and order
  * (t-54): `Assessment` `[orgId, profile, status, createdAt]` and

@@ -85,16 +85,17 @@ review is claimed). It checks the credits first, then the cap.
 cost rows (`AiCostLog`, every billed attempt included), at `creditsForUsd()`,
 rounded up to a whole credit. One that spent nothing writes no entry.
 
-| Review                     | Charged by                                                                                                                            | `reference`             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| Completed, partial, failed | the write that ends it (`finish()`, the last attempt's failure), in the same transaction                                              | `assessment:<id>`       |
-| Cancelled while running    | the run's last write once its judges in flight land (`freePlace`), in the same transaction                                            | `assessment:<id>`       |
-| Cancelled, never claimed   | the cancel itself                                                                                                                     | `assessment:<id>`       |
-| Cancelled, its lease out   | the recovery job, clearing the lapsed lease in the same transaction (the cancel does not: the run may be alive, its renewals failing) | `assessment:<id>`       |
-| Given up on                | the recovery job's give-up write                                                                                                      | `assessment:<id>`       |
-| Deleted, not yet charged   | the delete, in its transaction, even while a run holds it (that run's process may be gone)                                            | `assessment:<id>`       |
-| `store: false`             | the request once the run ends, however it ends, before its hold is released                                                           | `ephemeral-run:<runId>` |
-| `store: false`, left over  | the recovery job, once the run's rows are an hour quiet (its charge failed, or it died)                                               | `ephemeral-run:<runId>` |
+| Review                     | Charged by                                                                                                                                        | `reference`             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Completed, partial, failed | the write that ends it (`finish()`, the last attempt's failure), in the same transaction                                                          | `assessment:<id>`       |
+| Cancelled while running    | the run's last write once its judges in flight land (`freePlace`), in the same transaction                                                        | `assessment:<id>`       |
+| Cancelled, never claimed   | the cancel itself                                                                                                                                 | `assessment:<id>`       |
+| Cancelled, its lease out   | the recovery job, clearing the lapsed lease in the same transaction (the cancel does not: the run may be alive, its renewals failing)             | `assessment:<id>`       |
+| Given up on                | the recovery job's give-up write                                                                                                                  | `assessment:<id>`       |
+| Deleted, not yet charged   | the delete, in its transaction, even while a run holds it (that run's process may be gone)                                                        | `assessment:<id>`       |
+| `store: false`             | the request once the run ends, however it ends, before its hold is released                                                                       | `ephemeral-run:<runId>` |
+| `store: false`, left over  | the recovery job, once the run's rows are an hour quiet (its charge failed, or it died)                                                           | `ephemeral-run:<runId>` |
+| A rewrite (t-81)           | the write that ends it; the delete of its review while it runs; the rewrite recovery job once its lease runs out ([`rewrites.md`](./rewrites.md)) | `rewrite:<id>`          |
 
 - **Once.** The insert skips a duplicate `(kind, reference)` (ON CONFLICT DO
   NOTHING), so finishers that race write one entry. A stored review is never
