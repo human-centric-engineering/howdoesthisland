@@ -16,6 +16,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   apiClient: { post: vi.fn(), delete: vi.fn() },
 }));
+vi.mock('@/lib/app/intake/send-upload', () => ({ sendUpload: vi.fn() }));
 
 import {
   DOCUMENT_MAX_POLLS,
@@ -25,6 +26,7 @@ import {
 import { DOCUMENT_EXTENSIONS, type ProjectDocumentWire } from '@/components/app/projects/schemas';
 import { SUPPORTED_EXTENSIONS } from '@/lib/app/intake/extract-text';
 import { apiClient, APIClientError } from '@/lib/api/client';
+import { sendUpload } from '@/lib/app/intake/send-upload';
 
 function aDocument(over: Partial<ProjectDocumentWire> = {}): ProjectDocumentWire {
   return {
@@ -84,8 +86,8 @@ describe('ProjectDocuments', () => {
     expect(screen.getByText('No background documents yet.')).toBeInTheDocument();
   });
 
-  it('adds a file as base64 and refreshes the page', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue({});
+  it('adds a file as a multipart upload and refreshes the page', async () => {
+    vi.mocked(sendUpload).mockResolvedValue({});
     const user = userEvent.setup();
     render(<ProjectDocuments projectId="proj-1" documents={[]} />);
 
@@ -93,16 +95,18 @@ describe('ProjectDocuments', () => {
     await user.upload(screen.getByLabelText(/Add a file/, { selector: 'input' }), file);
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/projects/proj-1/documents', {
-      body: {
-        source: { file: { name: 'voice.txt', base64: btoa('Our voice is plain.') } },
-      },
-    });
+    expect(sendUpload).toHaveBeenCalledWith(
+      '/api/v1/projects/proj-1/documents',
+      file,
+      {},
+      expect.stringContaining('too large for this server')
+    );
+    expect(apiClient.post).not.toHaveBeenCalled();
   });
 
   it('shows the file being read until the API answers', async () => {
     let answer: (value: unknown) => void = () => {};
-    vi.mocked(apiClient.post).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    vi.mocked(sendUpload).mockReturnValue(new Promise((resolve) => (answer = resolve)));
     const user = userEvent.setup();
     render(<ProjectDocuments projectId="proj-1" documents={[]} />);
 
@@ -128,7 +132,7 @@ describe('ProjectDocuments', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'huge.pdf is 11.0 MB; the largest we read is 10 MB.'
     );
-    expect(apiClient.post).not.toHaveBeenCalled();
+    expect(sendUpload).not.toHaveBeenCalled();
   });
 
   it('adds a page by its address and clears the field', async () => {
@@ -210,7 +214,7 @@ describe('ProjectDocuments', () => {
   });
 
   it('says so when the project already holds the text it was given', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue(aDocument());
+    vi.mocked(sendUpload).mockResolvedValue(aDocument());
     const user = userEvent.setup();
     render(<ProjectDocuments projectId="proj-1" documents={[aDocument()]} />);
 
@@ -223,7 +227,7 @@ describe('ProjectDocuments', () => {
   });
 
   it('says nothing more when the text is new to the project', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue(aDocument({ id: 'doc-new' }));
+    vi.mocked(sendUpload).mockResolvedValue(aDocument({ id: 'doc-new' }));
     const user = userEvent.setup();
     render(<ProjectDocuments projectId="proj-1" documents={[aDocument()]} />);
 

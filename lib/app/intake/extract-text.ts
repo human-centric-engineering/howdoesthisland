@@ -11,8 +11,8 @@
  * §8.2): an assessment of the first part of a document reads as an assessment
  * of all of it.
  *
- * Pure: no database, no network. The caller decodes `source.file_base64` and
- * passes the bytes with the name the client gave.
+ * Pure: no database, no network. The caller passes the bytes of an upload
+ * (`readUpload` in `upload.ts`, t-80) with the name the client gave.
  */
 
 import { JSDOM } from 'jsdom';

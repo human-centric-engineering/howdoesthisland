@@ -32,8 +32,8 @@ import { SaveError } from '@/components/forms/form-error';
 import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useLocalStorage } from '@/lib/hooks/use-local-storage';
-import { readAsBase64 } from '@/lib/app/intake/read-as-base64';
-import { MAX_CONTENT_CHARS, MAX_PAGE_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { sendUpload } from '@/lib/app/intake/send-upload';
+import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
 import { WORDS } from '@/lib/app/reports/words';
 import { SettingPicker } from '@/components/app/projects/setting-picker';
 import { DOCUMENT_EXTENSIONS, type ProjectWire } from '@/components/app/projects/schemas';
@@ -56,7 +56,8 @@ import {
   problemsOf,
   readDraft,
   refusalOf,
-  requestBodyOf,
+  jsonSourceOf,
+  requestOptionsOf,
   reviewerName,
   reviewerSetOptions,
   settingsInProject,
@@ -77,6 +78,10 @@ import { ReviewProgress } from '@/components/app/workbench/review-progress';
 const MODEL_DEFAULT = 'The model’s default';
 
 const createdIdSchema = z.object({ id: z.string().min(1) });
+
+/** A host that refuses the upload before the route reads it (Vercel staging, over 4.5 MB). */
+const FILE_TOO_LARGE_FOR_HOST =
+  'This file is too large for this server to accept. Paste its text instead, or try a smaller file.';
 
 const STARTED_UNREADABLE = `The ${WORDS.review} has started, but this page could not read the reply, so it cannot show its progress. There is no need to start it again.`;
 
@@ -140,13 +145,16 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
     if (save.block(problemsOf(draft, file, catalogue, project))) return;
     setSending(true);
     try {
-      const chosen =
-        draft.source === 'file' && file
-          ? { name: file.name, base64: await readAsBase64(file) }
-          : null;
-      const data = await apiClient.post<unknown>(ASSESSMENTS_ENDPOINT, {
-        body: requestBodyOf(draft, chosen, catalogue, version),
-      });
+      const options = requestOptionsOf(draft, catalogue, version);
+      const source = jsonSourceOf(draft);
+      // A file goes as its own bytes in a multipart upload (t-80); text and a
+      // page as JSON. `problemsOf` has made sure a file draft has its file.
+      const data =
+        source === null && file
+          ? await sendUpload(ASSESSMENTS_ENDPOINT, file, options, FILE_TOO_LARGE_FOR_HOST)
+          : await apiClient.post<unknown>(ASSESSMENTS_ENDPOINT, {
+              body: { source, ...options },
+            });
       // From here the review exists and is charged: whatever the reply holds,
       // the draft is spent, and nothing may invite starting it again.
       clearStored();
@@ -253,9 +261,9 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
               A file to review
               <FieldHelp title="A file to review">
                 PDF, Word, PowerPoint, HTML, Markdown or plain text, up to{' '}
-                {MAX_PAGE_FILE_BYTES / 1_048_576} MB; for a larger one, paste its text. Its text is
-                read and reviewed; a scanned PDF with no text in it cannot be. The file is not kept
-                in this browser&rsquo;s draft.
+                {MAX_REVIEW_FILE_BYTES / 1_048_576} MB; for a larger one, paste its text. Its text
+                is read and reviewed; a scanned PDF with no text in it cannot be. The file is not
+                kept in this browser&rsquo;s draft.
               </FieldHelp>
             </Label>
             <Input

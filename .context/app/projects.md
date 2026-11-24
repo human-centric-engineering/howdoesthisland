@@ -104,11 +104,11 @@ chunks and embeds them; `ProjectDocument` links each to the project
 (`lib/app/projects/documents.ts`). The visible words are **background
 documents**; the code and API say `documents`.
 
-| Route                                                 | Does                                                                                                                                                                                       |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/projects/{id}/documents`                 | List, oldest first, each with its knowledge row's `status`, read live.                                                                                                                     |
-| `POST /api/v1/projects/{id}/documents`                | Add one from `{ url }` or `{ file: { name, base64 } }`, with an optional `title`. 201; the same text already in the project answers 200 with its link, renamed to `title` if one is given. |
-| `DELETE /api/v1/projects/{id}/documents/{documentId}` | Remove it. `knowledgeDocumentDeleted` says whether the knowledge row went too.                                                                                                             |
+| Route                                                 | Does                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/projects/{id}/documents`                 | List, oldest first, each with its knowledge row's `status`, read live.                                                                                                                                                                                                        |
+| `POST /api/v1/projects/{id}/documents`                | Add one from `{ url }` as JSON, or a file as `multipart/form-data` (`file`, and `{ title }` in `options`; [uploads](./intake.md#uploads)), with an optional `title`. 201; the same text already in the project answers 200 with its link, renamed to `title` if one is given. |
+| `DELETE /api/v1/projects/{id}/documents/{documentId}` | Remove it. `knowledgeDocumentDeleted` says whether the knowledge row went too.                                                                                                                                                                                                |
 
 - **Adding is synchronous**, as core's upload is: intake reads the file or page
   (`lib/app/intake/`, with a 200,000-character cap rather than a review's 40,000),

@@ -8,6 +8,7 @@
  * (`lib/app/projects/service.ts`).
  */
 import { z } from 'zod';
+import type { UploadedFile } from '@/lib/app/intake/upload';
 import { slugParam } from '@/lib/app/frameworks/api/validations';
 
 /** The longest a project's name may be. */
@@ -120,29 +121,41 @@ export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_DOCUMENT_TITLE = 200;
 
 /**
- * Where a context document comes from (t-74): a file in the intake formats
- * or a page by URL, as a review's source is (`assessmentSourceSchema`),
- * without pasted text.
+ * Where a context document comes from (t-74), as JSON: a page by URL, as a
+ * review's source may be (`assessmentSourceSchema`). A file is sent as
+ * `multipart/form-data` instead (t-80, `lib/app/intake/upload.ts`).
  */
-export const documentSourceSchema = z.union([
-  z.strictObject({ url: z.url({ protocol: /^https?$/ }).max(2048) }),
-  z.strictObject({
-    file: z.strictObject({
-      /** The file's name; its extension picks the reader (`extractText`). */
-      name: z.string().trim().min(1).max(255),
-      base64: z.base64().max(Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4),
-    }),
-  }),
-]);
+export const documentSourceSchema = z.strictObject(
+  { url: z.url({ protocol: /^https?$/ }).max(2048) },
+  {
+    error: 'Give source as { url }; send a file as multipart/form-data, in a `file` part',
+  }
+);
 
-/** POST /api/v1/projects/{id}/documents. */
-export const addDocumentSchema = z.strictObject({
-  source: documentSourceSchema,
+const documentOptionsShape = {
   /** The name the project shows it by; the document's own title when left out. */
   title: z.string().trim().min(1).max(MAX_DOCUMENT_TITLE).optional(),
+};
+
+/** POST /api/v1/projects/{id}/documents, as JSON: a page. */
+export const addDocumentSchema = z.strictObject({
+  source: documentSourceSchema,
+  ...documentOptionsShape,
 });
 
+/**
+ * POST /api/v1/projects/{id}/documents, as `multipart/form-data` (t-80): the
+ * `options` part, every field of the JSON body but `source`, whose place the
+ * `file` part takes.
+ */
+export const documentUploadOptionsSchema = z.strictObject(documentOptionsShape);
+
 export type AddDocumentBody = z.infer<typeof addDocumentSchema>;
+
+/** What the service adds: a JSON body, or an upload's options with its file as the source. */
+export type AddDocumentRequest = Omit<AddDocumentBody, 'source'> & {
+  source: AddDocumentBody['source'] | { file: UploadedFile };
+};
 
 /** `{id}` and `{documentId}` in `/api/v1/projects/{id}/documents/{documentId}`. */
 export const projectDocumentParamSchema = z.object({

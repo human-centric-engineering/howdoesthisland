@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { APIClientError } from '@/lib/api/client';
 import {
   MAX_CONTENT_CHARS,
-  MAX_PAGE_FILE_BYTES,
+  MAX_REVIEW_FILE_BYTES,
   MAX_URL_CHARS,
 } from '@/lib/app/assessments/limits';
 import { USAGE_PAGE } from '@/lib/app/usage/wire';
@@ -245,12 +245,6 @@ export function choosableReviewers(
     .map((r) => ({ slot: r.id, name: reviewerName(catalogue, r.id) }));
 }
 
-/** A file chosen for review, read as the API takes it. */
-export interface ChosenFile {
-  name: string;
-  base64: string;
-}
-
 /**
  * The ticked AI reviewers the version still offers. A restored draft can name
  * one it no longer does (a slot dropped, or culture switched off), which has
@@ -303,10 +297,10 @@ export function problemsOf(
   }
   if (draft.source === 'file') {
     if (!file) problems.push({ field: 'assess-file', message: 'Choose a file to review.' });
-    else if (file.size > MAX_PAGE_FILE_BYTES) {
+    else if (file.size > MAX_REVIEW_FILE_BYTES) {
       problems.push({
         field: 'assess-file',
-        message: `${file.name} is ${(file.size / 1_048_576).toFixed(1)} MB; the largest this page sends is ${MAX_PAGE_FILE_BYTES / 1_048_576} MB. Paste its text instead.`,
+        message: `${file.name} is ${(file.size / 1_048_576).toFixed(1)} MB; the largest a ${WORDS.review} reads is ${MAX_REVIEW_FILE_BYTES / 1_048_576} MB. Paste its text instead.`,
       });
     }
   }
@@ -329,26 +323,19 @@ export function problemsOf(
 }
 
 /**
- * `POST /api/v1/assessments`'s body for the draft, once {@link problemsOf}
- * finds none. It names the `version` the page's catalogue is, so the review
+ * `POST /api/v1/assessments`'s fields for the draft but its source, once
+ * {@link problemsOf} finds none: the JSON body beside {@link jsonSourceOf},
+ * or a file upload's `options` part (t-80). It names the `version` the page's catalogue is, so the review
  * runs on the version whose settings and reviewers were offered, not on one
  * published since the page was opened.
  */
-export function requestBodyOf(
+export function requestOptionsOf(
   draft: Draft,
-  file: ChosenFile | null,
   catalogue: AssessCatalogue,
   version: string
 ): Record<string, unknown> {
-  const source =
-    draft.source === 'text'
-      ? { text: draft.text }
-      : draft.source === 'url'
-        ? { url: draft.url.trim() }
-        : { file };
   const context = contextOf(draft.settings);
   return {
-    source,
     framework: HOWDOESTHISLAND_SLUG,
     version,
     ...(Object.keys(context).length ? { context } : {}),
@@ -357,6 +344,13 @@ export function requestBodyOf(
       ? { judges: tickedReviewers(draft, catalogue) }
       : { profile: draft.profile }),
   };
+}
+
+/** A text or page draft's `source`, as the JSON body takes it; `null` for a file, which is uploaded. */
+export function jsonSourceOf(draft: Draft): { text: string } | { url: string } | null {
+  if (draft.source === 'text') return { text: draft.text };
+  if (draft.source === 'url') return { url: draft.url.trim() };
+  return null;
 }
 
 /** A refusal, in words a person can act on, and the usage page when it points there. */

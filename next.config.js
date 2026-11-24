@@ -67,6 +67,17 @@ const nextConfig = {
   // See allowedDevOrigins() above — dev-only, derived from the app's own URLs.
   allowedDevOrigins: allowedDevOrigins(),
 
+  // HowDoesThisLand (t-80, divergence ledger row 29): the proxy keeps only the
+  // first `proxyClientMaxBodySize` bytes of a body and passes the rest on cut
+  // short, without an error. A 10 MB file sent as multipart is a little over
+  // Next's 10 MB default, so the cap is the largest upload body a route reads,
+  // `MAX_UPLOAD_BODY_BYTES` in `lib/app/intake/upload.ts` (10 MB and 64 KB). A
+  // test holds the two equal. Node loads this file directly, so the number is
+  // repeated here rather than imported.
+  experimental: {
+    proxyClientMaxBodySize: 10 * 1024 * 1024 + 64 * 1024,
+  },
+
   // Prevent Next.js from bundling Prisma's WASM query compiler.
   // Without this, Turbopack/webpack breaks the WASM module loading.
   // `ioredis` is an optional peer dep loaded lazily by the Redis rate-limit

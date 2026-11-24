@@ -191,7 +191,7 @@ const TEXT = 'Our voice is plain, warm and direct. We never say "solutions".';
 
 const hashOf = (text: string) => createHash('sha256').update(text).digest('hex');
 const fileSource = (text = TEXT, name = 'voice.txt') => ({
-  source: { file: { name, base64: Buffer.from(text).toString('base64') } },
+  source: { file: { name, bytes: Buffer.from(text) } },
 });
 
 /** A knowledge row put there outside this app: core's knowledge page. */

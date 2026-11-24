@@ -7,11 +7,14 @@
  * Authentication: a browser session, or an API key with the `assess` scope.
  * Everything is the workspace the caller acts in.
  *
- * **POST** body (`createAssessmentSchema`): `source` is one of `{ text }`,
- * `{ url }` (fetched safely, D14) or `{ file: { name, base64 } }`. A
- * `profile` (`quick`, `full` — the default — or a catalogue group) or a
- * `judges` list, `framework`, `version`, `context`, `title`, `wait`, `store`,
- * and `projectId` (t-70): the workspace's project, whose defaults fill what
+ * **POST** body, as JSON (`createAssessmentSchema`): `source` is `{ text }`
+ * or `{ url }` (fetched safely, D14). A file is sent as
+ * `multipart/form-data` instead (t-80, `readUpload`): a `file` part, and an
+ * `options` part holding the JSON body's other fields as JSON
+ * (`assessmentUploadOptionsSchema`). A file never goes as base64, which the
+ * proxy would cut short. Either takes a `profile` (`quick`, `full` — the
+ * default — or a catalogue group) or a `judges` list, `framework`,
+ * `version`, `context`, `title`, `wait`, `store`, and `projectId` (t-70): the workspace's project, whose defaults fill what
  * `context` and the profile leave out, and which the review records. A
  * review in a project that calls a judge gives the AI reviewers its brief
  * and passages from its background documents (t-75), and answers them as
@@ -31,7 +34,9 @@
  *
  * POST errors:
  * - 400 `VALIDATION_ERROR` — the body does not fit the schema (both a profile
- *   and judges; `store: false` with `wait: false`; a malformed URL or base64).
+ *   and judges; `store: false` with `wait: false`; a malformed URL; a file
+ *   in JSON); a multipart body with no file, an unknown part, or one that
+ *   cannot be parsed, as one cut short.
  * - 400 `CONTENT_EMPTY` — no text once trimmed.
  * - 400 `CONTEXT_INVALID` — the context names an id the version lacks.
  * - 400 `PROFILE_UNKNOWN` — no such profile or judge, or one switched off.
@@ -57,7 +62,8 @@
  * - 409 `PROJECT_ARCHIVED` — the project is archived; restore it first.
  * - 400 `OVERLAY_INVALID` — the project's weighting (t-72) does not fit this
  *   version's bounds, or it declares none; `details.fromProjectOverlay` is true.
- * - 413 `FILE_TOO_LARGE`, 415 `INVALID_FILE_TYPE` — the file (intake).
+ * - 413 `FILE_TOO_LARGE`, 415 `INVALID_FILE_TYPE` — the file (intake); a
+ *   multipart body over `MAX_UPLOAD_BODY_BYTES`, refused before it is read.
  * - 422 `TEXT_TOO_LONG` — over 40,000 characters.
  * - 422 `TOO_MANY_PAGES`, `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE` — the file.
  * - 422 `URL_NOT_ALLOWED`, `FETCH_FAILED`, `FETCH_TIMEOUT` — the page.
@@ -103,9 +109,12 @@ import {
   prepareAssessment,
 } from '@/lib/app/assessments/api/service';
 import {
+  assessmentUploadOptionsSchema,
   createAssessmentSchema,
   listAssessmentsQuerySchema,
+  type AssessmentRequest,
 } from '@/lib/app/assessments/api/validations';
+import { isMultipart, readUpload } from '@/lib/app/intake/upload';
 import { listAssessments } from '@/lib/app/assessments/api/views';
 import { RUNNING_PER_WORKSPACE } from '@/lib/app/assessments/limits';
 import { assertPlaceFree, WorkspaceBusyError } from '@/lib/app/assessments/places';
@@ -115,8 +124,15 @@ import { startWaitingReviews } from '@/lib/app/assessments/kick';
 /** Long enough for a run the response did not wait for to finish under `after()`. */
 export const maxDuration = 300;
 
+/** The request as the service takes it: a JSON body, or a file and its options. */
+async function bodyOf(request: NextRequest): Promise<AssessmentRequest> {
+  if (!isMultipart(request)) return validateRequestBody(request, createAssessmentSchema);
+  const { file, options } = await readUpload(request, assessmentUploadOptionsSchema);
+  return { ...options, source: { file } };
+}
+
 export const POST = withAuth(async (request: NextRequest, session) => {
-  const body = await validateRequestBody(request, createAssessmentSchema);
+  const body = await bodyOf(request);
   // A request refused for its version, context, profile or pasted text spent
   // nothing, so it is not counted; one that gets past them is, before
   // anything is fetched. Only one whose judges resolve to some calls a model.
