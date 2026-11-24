@@ -9,7 +9,10 @@
  * gives those fields their typed reading.
  */
 import { z } from 'zod';
-import { adjustmentBoundsSchema } from '@/lib/app/frameworks/howdoesthisland/engine/model';
+import {
+  adjustmentBoundsSchema,
+  checkBands,
+} from '@/lib/app/frameworks/howdoesthisland/engine/model';
 
 const id = z.string().min(1);
 const ids = z.array(id);
@@ -151,7 +154,9 @@ export const metaSchema = z.looseObject({
 });
 
 export const scoringSchema = z.looseObject({
-  bands: z.array(z.looseObject({ label: z.string(), min: z.number(), max: z.number() })),
+  bands: z
+    .array(z.looseObject({ label: z.string(), min: z.number(), max: z.number() }))
+    .superRefine(checkBands),
   integrity_caps: z.array(z.looseObject({ appeal: id, dimension: id })),
   /** How far a project may adjust the weights (t-72); a version without it allows none. */
   adjustment_bounds: adjustmentBoundsSchema.optional(),
