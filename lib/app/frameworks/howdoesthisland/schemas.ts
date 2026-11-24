@@ -9,10 +9,7 @@
  * gives those fields their typed reading.
  */
 import { z } from 'zod';
-import {
-  adjustmentBoundsSchema,
-  checkBands,
-} from '@/lib/app/frameworks/howdoesthisland/engine/model';
+import { adjustmentBoundsSchema } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 
 const id = z.string().min(1);
 const ids = z.array(id);
@@ -152,6 +149,49 @@ export const metaSchema = z.looseObject({
   version: semver,
   schema_version: z.string().min(1),
 });
+
+/**
+ * Bands must cover every score the engine can give, once each: whole-number
+ * limits, the first from 0, each next one starting where the last ended, the
+ * last up to 100. The engine rounds `overall` before `bandOf` reads it,
+ * so a gap (39 then 41) or a fractional limit would leave some score with no
+ * band, which no band filter on the review list could ever match. Labels are
+ * unique, since the list filters by label.
+ *
+ * Checked here, where a version comes in, and not by the engine's read
+ * (`engine/model.ts`), so a version stored before this check still opens.
+ */
+export function checkBands(
+  bands: ReadonlyArray<{ label: string; min: number; max: number }>,
+  ctx: z.RefinementCtx
+): void {
+  const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
+  if (bands.length === 0) return fail('Declare at least one band');
+  const labels = bands.map((b) => b.label);
+  const twice = labels.find((label, i) => labels.indexOf(label) !== i);
+  if (twice !== undefined) {
+    return fail(`Two bands are labelled '${twice}'; a band filter could not tell them apart`);
+  }
+  if (bands.some((b) => !Number.isInteger(b.min) || !Number.isInteger(b.max))) {
+    return fail('Band limits must be whole numbers, since overall scores are');
+  }
+  const sorted = [...bands].sort((a, b) => a.min - b.min);
+  if (sorted[0].min !== 0) return fail(`The lowest band must start at 0, not ${sorted[0].min}`);
+  for (let i = 0; i < sorted.length; i++) {
+    const b = sorted[i];
+    if (b.max < b.min) return fail(`A band runs from ${b.min} down to ${b.max}`);
+    const next = sorted[i + 1];
+    if (next && next.min !== b.max + 1) {
+      return fail(
+        next.min <= b.max
+          ? `Bands overlap: ${b.min}–${b.max} and ${next.min}–${next.max}`
+          : `No band covers ${b.max + 1}–${next.min - 1}`
+      );
+    }
+  }
+  const last = sorted[sorted.length - 1];
+  if (last.max !== 100) return fail(`The highest band must end at 100, not ${last.max}`);
+}
 
 export const scoringSchema = z.looseObject({
   bands: z

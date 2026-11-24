@@ -1,15 +1,16 @@
 /**
  * Bands cover every overall score once (t-79 review). The engine rounds
  * `overall` before `bandOf` reads it, so whole-number bands from 0 to 100,
- * each starting where the last ended, leave no score without a band. Both
- * the engine's schema and the framework definition's refuse any other set.
+ * each starting where the last ended, leave no score without a band. The
+ * framework definition refuses any other set where a version comes in; the
+ * engine still reads one stored before that check.
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { checkBands, indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
+import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import { bandOf } from '@/lib/app/frameworks/howdoesthisland/engine/scoring';
-import { scoringSchema } from '@/lib/app/frameworks/howdoesthisland/schemas';
+import { checkBands, scoringSchema } from '@/lib/app/frameworks/howdoesthisland/schemas';
 
 const DATA = 'lib/app/frameworks/howdoesthisland/data';
 const read = (file: string): Record<string, unknown> =>
@@ -66,6 +67,14 @@ describe('checkBands', () => {
       'A band runs from 51 down to 40',
     ],
     ['no bands', [], 'Declare at least one band'],
+    [
+      'two bands with one label',
+      [
+        { min: 0, max: 49, label: 'Weak' },
+        { min: 50, max: 100, label: 'Weak' },
+      ],
+      "Two bands are labelled 'Weak'; a band filter could not tell them apart",
+    ],
   ])('refuses %s', (_name, value, message) => {
     expect(messageFor(value)).toEqual([message]);
   });
@@ -80,12 +89,16 @@ describe('checkBands', () => {
     }
   );
 
-  it('is enforced by the engine and by the framework definition', () => {
+  it('is refused where a version comes in, while the engine still reads one stored before', () => {
     const model = read('model-0.5.2.json');
     const scoring = z.looseObject({}).parse(model.scoring);
     const gapped = { ...scoring, bands: SHIPPED.filter((b) => b.label !== 'Developing') };
 
-    expect(() => indexModel({ ...model, scoring: gapped })).toThrow('No band covers 40–59');
-    expect(scoringSchema.safeParse(gapped).success).toBe(false);
+    const result = scoringSchema.safeParse(gapped);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((i) => i.message)).toEqual(['No band covers 40–59']);
+    const m = indexModel({ ...model, scoring: gapped });
+    expect(bandOf(m, 50)).toBe('');
+    expect(bandOf(m, 75)).toBe('Strong');
   });
 });

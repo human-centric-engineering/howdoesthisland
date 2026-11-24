@@ -112,9 +112,11 @@ export function ReviewList({
 
   // Until the refresh lands, count without the rows just deleted, so the
   // status line (read out by screen readers) never describes a stale list.
-  const count = total - gone.size;
+  // Only the deleted rows still in `reviews`: the refresh keeps `gone` but
+  // sends a `total` that already leaves the others out.
+  const count = total - (reviews.length - shown.length);
   const first = (page - 1) * REVIEW_LIST_LIMIT + 1;
-  const hasOlder = page * REVIEW_LIST_LIMIT < total;
+  const hasOlder = page * REVIEW_LIST_LIMIT < count;
 
   return (
     <div className="space-y-3">

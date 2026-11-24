@@ -141,6 +141,39 @@ describe('ReviewList', () => {
     );
   });
 
+  it('counts right once the refresh lands without the deleted row', async () => {
+    const user = userEvent.setup();
+    const { rerender } = list({ total: 45, page: 2 });
+
+    await user.click(screen.getByRole('button', { name: 'Delete Spring landing page' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' })
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('21–21 of 44 reviews, newest first')
+    );
+
+    // What the refresh sends: the row gone from the page and from the total.
+    const next = [two[1], aReview({ id: 'rev-3', title: 'Autumn email' })];
+    rerender(
+      <ReviewList reviews={next} total={44} showProject basePath="/home" filter={{}} page={2} />
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('21–22 of 44 reviews, newest first');
+  });
+
+  it('drops the Older link when the delete leaves nothing past this page', async () => {
+    const user = userEvent.setup();
+    list({ total: 41, page: 2 });
+    expect(screen.getByRole('link', { name: 'Older' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete Spring landing page' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' })
+    );
+
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Older' })).toBeNull());
+  });
+
   it('says one review once the other is deleted', async () => {
     const user = userEvent.setup();
     list();

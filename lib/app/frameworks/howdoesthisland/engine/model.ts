@@ -242,40 +242,6 @@ export const adjustmentBoundsSchema = z
 
 export type AdjustmentBounds = z.infer<typeof adjustmentBoundsSchema>;
 
-/**
- * Bands must cover every score the engine can give, once each: whole-number
- * limits, the first from 0, each next one starting where the last ended, the
- * last up to 100. The engine rounds `overall` before {@link bandOf} reads it,
- * so a gap (39 then 41) or a fractional limit would leave some score with no
- * band, which no band filter on the review list could ever match.
- */
-export function checkBands(
-  bands: ReadonlyArray<{ min: number; max: number }>,
-  ctx: z.RefinementCtx
-): void {
-  const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
-  if (bands.length === 0) return fail('Declare at least one band');
-  if (bands.some((b) => !Number.isInteger(b.min) || !Number.isInteger(b.max))) {
-    return fail('Band limits must be whole numbers, since overall scores are');
-  }
-  const sorted = [...bands].sort((a, b) => a.min - b.min);
-  if (sorted[0].min !== 0) return fail(`The lowest band must start at 0, not ${sorted[0].min}`);
-  for (let i = 0; i < sorted.length; i++) {
-    const b = sorted[i];
-    if (b.max < b.min) return fail(`A band runs from ${b.min} down to ${b.max}`);
-    const next = sorted[i + 1];
-    if (next && next.min !== b.max + 1) {
-      return fail(
-        next.min <= b.max
-          ? `Bands overlap: ${b.min}–${b.max} and ${next.min}–${next.max}`
-          : `No band covers ${b.max + 1}–${next.min - 1}`
-      );
-    }
-  }
-  const last = sorted[sorted.length - 1];
-  if (last.max !== 100) return fail(`The highest band must end at 100, not ${last.max}`);
-}
-
 export const engineModelSchema = z.object({
   meta: z.object({ version: z.string() }),
   dimensions: z.array(coreDimensionSchema),
@@ -315,9 +281,10 @@ export const engineModelSchema = z.object({
   /** Every kind of reference record; the prompts read only their names. */
   knowledge_refs: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string() }))),
   scoring: z.object({
-    bands: z
-      .array(z.object({ min: z.number(), max: z.number(), label: z.string() }))
-      .superRefine(checkBands),
+    // Read as stored: whether bands cover every score is checked where a
+    // version comes in (`checkBands` in `../schemas.ts`), so a version stored
+    // before that check still opens.
+    bands: z.array(z.object({ min: z.number(), max: z.number(), label: z.string() })),
     integrity_caps: z
       .array(
         z.object({
