@@ -44,8 +44,9 @@ export function ReviewFilters({ basePath, filter, catalogue, projects }: ReviewF
     router.push(filterHref(basePath, { ...filter, [key]: value === ANY ? undefined : value }));
   const filtered = FILTER_KEYS.some((key) => filter[key]);
 
-  // A value the options lack (a project since archived, a type a newer version
-  // dropped) is still offered, so the picker says what the list is filtered by.
+  // A value the options lack (a type a newer version dropped, a project id that
+  // is not the workspace's) is still offered, so the picker says what the list
+  // is filtered by. Archived projects are among the options (`/home` loads them).
   const withCurrent = (options: Array<{ id: string; name: string }>, current?: string) =>
     current && !options.some((o) => o.id === current)
       ? [...options, { id: current, name: current }]

@@ -110,15 +110,18 @@ export function ReviewList({
 
   if (shown.length === 0) return null;
 
+  // Until the refresh lands, count without the rows just deleted, so the
+  // status line (read out by screen readers) never describes a stale list.
+  const count = total - gone.size;
   const first = (page - 1) * REVIEW_LIST_LIMIT + 1;
   const hasOlder = page * REVIEW_LIST_LIMIT < total;
 
   return (
     <div className="space-y-3">
       <p className="text-muted-foreground text-sm" role="status">
-        {total === reviews.length
-          ? `${total.toLocaleString('en-GB')} ${total === 1 ? WORDS.review : `${WORDS.review}s`}`
-          : `${first.toLocaleString('en-GB')}–${(first + reviews.length - 1).toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} ${WORDS.review}s, newest first`}
+        {count === shown.length
+          ? `${count.toLocaleString('en-GB')} ${count === 1 ? WORDS.review : `${WORDS.review}s`}`
+          : `${first.toLocaleString('en-GB')}–${(first + shown.length - 1).toLocaleString('en-GB')} of ${count.toLocaleString('en-GB')} ${WORDS.review}s, newest first`}
       </p>
       <Table>
         <TableHeader>

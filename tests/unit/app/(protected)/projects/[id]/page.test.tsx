@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
 /**
- * /projects/[id] (t-71) — the project, then its framework's latest version,
- * its background documents (t-74), and the version's catalogue, which fills
- * the default pickers.
+ * /projects/[id] (t-71) — the project, then at once its framework's latest
+ * version, its background documents (t-74) and its reviews (t-79), then the
+ * version's catalogue, which fills the default pickers.
  *
  * @see app/(protected)/projects/[id]/page.tsx
  */
@@ -96,18 +96,43 @@ describe('/projects/[id]', () => {
     );
   });
 
-  it('reads the project as a 404-able page, its documents, then the latest version’s catalogue', async () => {
+  it('says an archived project with no reviews must be restored, not chosen on /assess', async () => {
+    answer({ reviews: [], archived: true });
+    render(await page());
+    const section = screen.getByRole('region', { name: 'Its reviews' });
+    expect(section).toHaveTextContent(
+      'No reviews in this project. Restore it to review copy in it.'
+    );
+    expect(section).not.toHaveTextContent('assess page');
+  });
+
+  it('offers a way back to the newest from a page past the last', async () => {
+    answer({ reviews: [] });
+    render(await page('proj-1', { page: '3' }));
+    const section = screen.getByRole('region', { name: 'Its reviews' });
+    expect(section).toHaveTextContent('No reviews on this page.');
+    expect(screen.getByRole('link', { name: 'Back to the newest' })).toHaveAttribute(
+      'href',
+      '/projects/proj-1'
+    );
+  });
+
+  it('reads the project as a 404-able page, then its documents, reviews and framework at once, then the catalogue', async () => {
     render(await page());
 
+    const paths = requireServerData.mock.calls.map(([path]) => path);
     expect(requireServerData).toHaveBeenNthCalledWith(1, '/api/v1/projects/proj-1', {
       notFound: true,
     });
-    expect(requireServerData).toHaveBeenNthCalledWith(2, '/api/v1/frameworks/howdoesthisland');
-    expect(requireServerData).toHaveBeenNthCalledWith(3, '/api/v1/projects/proj-1/documents');
-    expect(requireServerData).toHaveBeenNthCalledWith(
-      4,
-      '/api/v1/frameworks/howdoesthisland/versions/0.5.1/catalogue'
-    );
+    // None of these waits on another: all three start before the catalogue,
+    // the one load that needs the framework's answer.
+    expect(paths.slice(1, 4).sort()).toEqual([
+      '/api/v1/assessments?limit=20&projectId=proj-1',
+      '/api/v1/frameworks/howdoesthisland',
+      '/api/v1/projects/proj-1/documents',
+    ]);
+    expect(paths[4]).toBe('/api/v1/frameworks/howdoesthisland/versions/0.5.1/catalogue');
+    expect(paths).toHaveLength(5);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Spring launch');
     expect(screen.getByText(/3 reviews · scored with HowDoesThisLand 0\.5\.1/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save project' })).toBeInTheDocument();

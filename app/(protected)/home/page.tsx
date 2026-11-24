@@ -41,7 +41,8 @@ const NO_FILTERS: FilterCatalogue = { request: { contentTypes: [] }, result: { b
  *
  * Read through the API (API-first). The list is one call,
  * `GET /api/v1/assessments`, whose rows carry their project's name, so no row
- * fetches its own. The filters' choices are the workspace's projects and the
+ * fetches its own. The filters' choices are the workspace's projects (archived
+ * ones included, marked) and the
  * framework's latest catalogue (its types of copy and bands).
  *
  * The proxy only checks that a session cookie exists, and it sends anyone with
@@ -71,8 +72,12 @@ export default async function HomePage({
 
   const [catalogue, projects] = await Promise.all([
     loadFilterCatalogue(),
-    requireAllServerData<{ id: string }>(PROJECTS_ENDPOINT).then((rows) =>
-      projectListSchema.parse(rows).map(({ id, name }) => ({ id, name }))
+    // Archived ones too: their reviews are still listed, so they can be
+    // filtered by, and a filter on one still names it.
+    requireAllServerData<{ id: string }>(`${PROJECTS_ENDPOINT}?archived=true`).then((rows) =>
+      projectListSchema
+        .parse(rows)
+        .map(({ id, name, archived }) => ({ id, name: archived ? `${name} (archived)` : name }))
     ),
   ]);
 

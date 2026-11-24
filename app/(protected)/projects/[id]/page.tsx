@@ -4,8 +4,9 @@
  * allows one (t-72), its background documents (t-74), archiving it, and its
  * own reviews, newest first (t-79).
  *
- * Read through the API (API-first): the project, then its framework's latest
- * version, then that version's catalogue, which fills the default pickers.
+ * Read through the API (API-first): the project, then at once its documents,
+ * its reviews and its framework's latest version, then that version's
+ * catalogue, which fills the default pickers.
  * Those are the ids the API checks a project's defaults against
  * (`lib/app/projects/service.ts`). Its reviews are one call to
  * `GET /api/v1/assessments?projectId=`, a page at a time (`?page=`). Another workspace's id is a 404 from the
@@ -58,28 +59,15 @@ export default async function ProjectPage({
   const project = projectSchema.parse(
     (await requireServerData<unknown>(projectEndpoint(id), { notFound: true })).data
   );
-  const framework = frameworkLatestSchema.parse(
-    (await requireServerData<unknown>(frameworkEndpoint(project.framework))).data
-  );
-  if (!framework.latestVersion) {
-    // Every version retired: nothing to check defaults against, and the API
-    // refuses a save. The error boundary says so and offers Try again.
-    throw new Error(`${project.framework} has no version in use`);
-  }
-  const documents = projectDocumentListSchema.parse(
-    (await requireServerData<unknown>(projectDocumentsEndpoint(project.id))).data
-  );
-  const catalogue = defaultsCatalogueSchema.parse(
-    (
-      await requireServerData<unknown>(
-        catalogueEndpoint(project.framework, framework.latestVersion)
-      )
-    ).data
-  );
-
-  const loadedReviews = await requireServerData<unknown>(
-    reviewListEndpoint({ projectId: project.id }, page)
-  );
+  // The rest needs only the project, so it loads at once; only the catalogue
+  // waits, for the framework's latest version.
+  const [{ framework, catalogue }, documents, loadedReviews] = await Promise.all([
+    loadFrameworkAndCatalogue(project.framework),
+    requireServerData<unknown>(projectDocumentsEndpoint(project.id)).then(({ data }) =>
+      projectDocumentListSchema.parse(data)
+    ),
+    requireServerData<unknown>(reviewListEndpoint({ projectId: project.id }, page)),
+  ]);
   const reviews = reviewListSchema.parse(loadedReviews.data);
   const reviewTotal = parsePaginationMeta(loadedReviews.meta)?.total ?? reviews.length;
 
@@ -117,9 +105,21 @@ export default async function ProjectPage({
         </h2>
         {reviews.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            {page > 1
-              ? `No ${WORDS.review}s on this page.`
-              : `No ${WORDS.review}s in this project yet. Choose it on the assess page to review copy in it.`}
+            {page > 1 ? (
+              <>
+                No {WORDS.review}s on this page.{' '}
+                <Link
+                  href={`/projects/${encodeURIComponent(project.id)}`}
+                  className="underline underline-offset-4"
+                >
+                  Back to the newest
+                </Link>
+              </>
+            ) : project.archived ? (
+              `No ${WORDS.review}s in this project. Restore it to review copy in it.`
+            ) : (
+              `No ${WORDS.review}s in this project yet. Choose it on the assess page to review copy in it.`
+            )}
           </p>
         ) : (
           <ReviewList
@@ -143,4 +143,20 @@ export default async function ProjectPage({
       />
     </div>
   );
+}
+
+/** The framework's latest version and, for it, the catalogue the default pickers read. */
+async function loadFrameworkAndCatalogue(slug: string) {
+  const framework = frameworkLatestSchema.parse(
+    (await requireServerData<unknown>(frameworkEndpoint(slug))).data
+  );
+  if (!framework.latestVersion) {
+    // Every version retired: nothing to check defaults against, and the API
+    // refuses a save. The error boundary says so and offers Try again.
+    throw new Error(`${slug} has no version in use`);
+  }
+  const catalogue = defaultsCatalogueSchema.parse(
+    (await requireServerData<unknown>(catalogueEndpoint(slug, framework.latestVersion))).data
+  );
+  return { framework: { ...framework, latestVersion: framework.latestVersion }, catalogue };
 }

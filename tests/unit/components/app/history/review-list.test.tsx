@@ -126,6 +126,33 @@ describe('ReviewList', () => {
     expect(screen.getByRole('link', { name: /^Pasted copy/ })).toBeInTheDocument();
   });
 
+  it('counts without a deleted row before the refresh lands', async () => {
+    const user = userEvent.setup();
+    list({ total: 45, page: 2 });
+    expect(screen.getByRole('status')).toHaveTextContent('21–22 of 45 reviews, newest first');
+
+    await user.click(screen.getByRole('button', { name: 'Delete Spring landing page' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' })
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('21–21 of 44 reviews, newest first')
+    );
+  });
+
+  it('says one review once the other is deleted', async () => {
+    const user = userEvent.setup();
+    list();
+
+    await user.click(screen.getByRole('button', { name: 'Delete Spring landing page' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' })
+    );
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/^1 review$/));
+  });
+
   it('keeps the row and says so when the delete fails', async () => {
     del.mockRejectedValue(new APIClientError('Boom', 'INTERNAL_ERROR', 500));
     const user = userEvent.setup();

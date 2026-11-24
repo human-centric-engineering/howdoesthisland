@@ -111,6 +111,19 @@ describe('/home', () => {
     expect(screen.getByLabelText('Project')).toHaveValue('proj-1');
   });
 
+  it('offers archived projects too, marked, so a filter on one still names it', async () => {
+    requireAllServerData.mockResolvedValue([
+      aProject(),
+      aProject({ id: 'proj-2', name: 'Old campaign', archived: true }),
+    ]);
+    render(await page({ projectId: 'proj-2' }));
+
+    expect(requireAllServerData).toHaveBeenCalledWith('/api/v1/projects?archived=true');
+    expect(screen.getByLabelText('Project')).toHaveValue('proj-2');
+    expect(screen.getByRole('option', { name: 'Old campaign (archived)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Spring launch' })).toBeInTheDocument();
+  });
+
   it('shows the empty desk only when the workspace has no review at all', async () => {
     answer([], 0);
     render(await page());
