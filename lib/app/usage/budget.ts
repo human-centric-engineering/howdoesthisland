@@ -459,6 +459,14 @@ async function inFlightCost(
           select: { assessmentId: true, status: true, errorCode: true },
         })
       : [];
+  // Rewrites running (t-81): each holds its estimate until it ends and is
+  // charged, including one whose process died, until recovery fails and
+  // charges it. Only those before a claimed review, as for the reviews.
+  const rewrites = await db.rewrite.findMany({
+    where: { orgId, status: 'RUNNING', ...(self ? { createdAt: { lt: self.createdAt } } : {}) },
+    select: { heldUsd: true },
+  });
+  const rewriting = rewrites.reduce((sum, r) => sum + r.heldUsd, 0);
   const yet = live.reduce((sum, r) => {
     const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
     const unsettled = Math.max(0, r.judges.length - done);
@@ -466,7 +474,7 @@ async function inFlightCost(
     if (r.status !== 'CANCELLED') return sum + unsettled * rate.perJudgeUsd + editor;
     const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
     return sum + Math.max(judges, editor);
-  }, held);
+  }, held + rewriting);
   return { yet, spent: open.reduce((sum, r) => sum + r.costUsd, 0) };
 }
 
@@ -564,6 +572,18 @@ const usedUp = (budget: Budget) =>
   (budget.balance !== null && budget.balance <= 0) ||
   (budget.cap !== null && budget.cap.spent >= budget.cap.limit);
 
+/** How a refusal names what it refused: a review, or a rewrite (t-81). */
+interface RefusalWords {
+  thing: 'review' | 'rewrite';
+  /** What did not happen, as a sentence's opening. */
+  notStarted: string;
+}
+const REVIEW_WORDS: RefusalWords = { thing: 'review', notStarted: 'No AI reviewer was started' };
+const REWRITE_WORDS: RefusalWords = {
+  thing: 'rewrite',
+  notStarted: 'The editor was not asked to rewrite it',
+};
+
 const HOW_TO_GET_CREDITS =
   'Credits come from a review code or from HowDoesThisLand; the balance is on';
 
@@ -574,7 +594,8 @@ function creditRefusal(
   balance: number,
   basis: EstimateBasis,
   estimate: number,
-  inFlight: InFlight
+  inFlight: InFlight,
+  words: RefusalWords = REVIEW_WORDS
 ): BudgetRefusal | null {
   const held = inFlight.yet + inFlight.spent;
   const remaining = usdForCredits(balance) - held;
@@ -597,14 +618,14 @@ function creditRefusal(
   } else if (remaining <= 0) {
     reason = `Reviews already starting, queued, running or finishing hold the workspace's ${credits(balance)}.`;
   } else if (held > 0) {
-    reason = `This review would cost about ${credits(details.estimateCredits)}, more than the ${details.remainingCredits.toLocaleString('en-GB')} left of the workspace's ${credits(balance)} once ${details.heldCredits.toLocaleString('en-GB')} are held for reviews already starting, queued, running or finishing.`;
+    reason = `This ${words.thing} would cost about ${credits(details.estimateCredits)}, more than the ${details.remainingCredits.toLocaleString('en-GB')} left of the workspace's ${credits(balance)} once ${details.heldCredits.toLocaleString('en-GB')} are held for reviews already starting, queued, running or finishing.`;
   } else {
-    reason = `This review would cost about ${credits(details.estimateCredits)}, more than the workspace's ${credits(balance)}.`;
+    reason = `This ${words.thing} would cost about ${credits(details.estimateCredits)}, more than the workspace's ${credits(balance)}.`;
   }
   return {
     code: 'INSUFFICIENT_CREDITS',
     reason,
-    message: `${reason} No AI reviewer was started, and nothing was charged. ${HOW_TO_GET_CREDITS} ${USAGE_PAGE}.`,
+    message: `${reason} ${words.notStarted}, and nothing was charged. ${HOW_TO_GET_CREDITS} ${USAGE_PAGE}.`,
     details,
   };
 }
@@ -617,12 +638,22 @@ function refusalFor(
   stored: boolean
 ): BudgetRefusal | null {
   const { rate } = budget;
-  const estimate = heldCost(rate, judgeCount, stored);
+  return refusalForCost(budget, heldCost(rate, judgeCount, stored), rate.basis, inFlight);
+}
+
+/** The refusal for something costing `estimate` with `inFlight` held back, or `null` when it fits. */
+function refusalForCost(
+  budget: Omit<Budget, 'rate'>,
+  estimate: number,
+  basis: EstimateBasis,
+  inFlight: InFlight,
+  words: RefusalWords = REVIEW_WORDS
+): BudgetRefusal | null {
   if (budget.balance !== null) {
-    const refusal = creditRefusal(budget.balance, rate.basis, estimate, inFlight);
+    const refusal = creditRefusal(budget.balance, basis, estimate, inFlight, words);
     if (refusal) return refusal;
   }
-  return budget.cap ? capRefusal(budget.cap, rate.basis, estimate, inFlight.yet) : null;
+  return budget.cap ? capRefusal(budget.cap, basis, estimate, inFlight.yet, words) : null;
 }
 
 /** The monthly cap's refusal (t-49), or `null` when what is left of it covers `estimate`. */
@@ -630,7 +661,8 @@ function capRefusal(
   cap: { limit: number; spent: number },
   basis: EstimateBasis,
   estimate: number,
-  inFlight: number
+  inFlight: number,
+  words: RefusalWords = REVIEW_WORDS
 ): BudgetRefusal | null {
   const { limit, spent } = cap;
   const capUsedUp = spent >= limit;
@@ -655,11 +687,11 @@ function capRefusal(
   else if (remaining <= 0)
     message = `Reviews already starting, queued, running or finishing are held the rest of ${workspaceBudget} (${dollars(inFlight)}).`;
   else
-    message = `This review would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${workspaceBudget}.`;
+    message = `This ${words.thing} would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${workspaceBudget}.`;
   return {
     code: 'BUDGET_EXCEEDED',
     reason: message,
-    message: `${message} No AI reviewer was started. See ${USAGE_PAGE}; an admin can raise the budget on /admin.`,
+    message: `${message} ${words.notStarted}. See ${USAGE_PAGE}; an admin can raise the budget on /admin.`,
     details,
   };
 }
@@ -900,4 +932,118 @@ export async function reserveReviewBudget(
   }
   if ('refusal' in taken) refuse(taken.refusal);
   return keepHold(orgId, taken.id);
+}
+
+/** Completed rewrites the rewrite estimate reads, most recent first (t-81). */
+export const REWRITE_HISTORY = 20;
+
+/**
+ * What a rewrite is likely to cost this workspace (t-81): the median cost of
+ * its last {@link REWRITE_HISTORY} completed rewrites (`rewrites`), or `0`
+ * with none (`none`), so any positive remainder is enough, as for a
+ * workspace's first review. The editor's summary spend is no guide: a
+ * rewrite writes the whole text, a summary a few sentences.
+ */
+export async function estimateRewriteCost(
+  orgId: string,
+  db: Pick<Prisma.TransactionClient, 'rewrite'> = prisma
+): Promise<ReviewEstimate> {
+  const past = await db.rewrite.findMany({
+    where: { orgId, status: 'COMPLETED' },
+    orderBy: { createdAt: 'desc' },
+    take: REWRITE_HISTORY,
+    select: { costUsd: true },
+  });
+  if (past.length === 0) return { estimateUsd: 0, basis: 'none' };
+  return { estimateUsd: usd(median(past.map((r) => r.costUsd))), basis: 'rewrites' };
+}
+
+/**
+ * Check a rewrite against the workspace's credits and monthly budget and,
+ * when it fits, run `create` in the same transaction under the workspace's
+ * lock, as {@link reserveReviewBudget} holds a review's estimate. The row
+ * `create` writes is the hold: a `RUNNING` rewrite counts its `heldUsd`
+ * (the estimate it is handed) in every check after it, until it ends and is
+ * charged. Throws 402 `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED` as a review
+ * is refused, worded for a rewrite, and 429 `RATE_LIMIT_EXCEEDED` when a
+ * burst keeps it from the lock.
+ *
+ * Neither bound readable, or the history or what is in flight unreadable:
+ * nothing is refused, as for a review, and `create` runs with the estimate
+ * it could read (else `0`); the per-call gate in `streamAgent` applies.
+ */
+export async function reserveRewriteBudget<T>(
+  orgId: string,
+  create: (tx: Prisma.TransactionClient, estimate: ReviewEstimate) => Promise<T>
+): Promise<T> {
+  // A rate for the reviews in flight, which the check holds back too. No
+  // profile is a rewrite's, so `custom`: their judges at the workspace's rate.
+  const budget = await readBudget(orgId, 'custom');
+  let estimate: ReviewEstimate = { estimateUsd: 0, basis: 'none' };
+  try {
+    estimate = await estimateRewriteCost(orgId);
+  } catch (err) {
+    unreadable(orgId, err);
+  }
+  if (budget && usedUp(budget)) {
+    const spentUp = refusalForCost(
+      budget,
+      estimate.estimateUsd,
+      estimate.basis,
+      NONE_IN_FLIGHT,
+      REWRITE_WORDS
+    );
+    if (spentUp) refuse(spentUp);
+  }
+
+  // Nothing to check against: no lock to wait for.
+  if (!budget) return prisma.$transaction((tx) => create(tx, estimate));
+
+  let taken: { value: T } | { refusal: BudgetRefusal };
+  try {
+    taken = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey(orgId)}, 0))`;
+      const inFlight = await inFlightCost(tx, orgId, budget.rate, new Date());
+      const refusal = refusalForCost(
+        await withBalanceNow(budget, orgId, tx),
+        estimate.estimateUsd,
+        estimate.basis,
+        inFlight,
+        REWRITE_WORDS
+      );
+      if (refusal) return { refusal };
+      try {
+        return { value: await create(tx, estimate) };
+      } catch (err) {
+        throw new RewriteCreateError(err);
+      }
+    }, HOLD_TRANSACTION);
+  } catch (err) {
+    if (err instanceof RewriteCreateError) throw err.cause;
+    if (isTimeoutError(err)) {
+      logger.warn('Rewrite budget check timed out waiting for the lock or a connection; refusing', {
+        orgId,
+      });
+      throw new APIError(
+        'Too many reviews and rewrites were requested at once for this workspace to check them against its budget. Try again in a moment.',
+        ErrorCodes.RATE_LIMIT_EXCEEDED,
+        429
+      );
+    }
+    // The check could not be made (a failed read ends the transaction with
+    // it): nothing is refused, as for a review, and the row is written on
+    // its own.
+    unreadable(orgId, err);
+    return prisma.$transaction((tx) => create(tx, estimate));
+  }
+  if ('refusal' in taken) refuse(taken.refusal);
+  return taken.value;
+}
+
+/** `create`'s own failure inside the check's transaction: it is the caller's, and is not retried. */
+class RewriteCreateError extends Error {
+  constructor(readonly cause: unknown) {
+    super('The rewrite could not be created');
+    this.name = 'RewriteCreateError';
+  }
 }
