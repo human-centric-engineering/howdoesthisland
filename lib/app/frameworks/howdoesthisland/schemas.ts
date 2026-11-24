@@ -161,12 +161,21 @@ export const metaSchema = z.looseObject({
  * Checked here, where a version comes in, and not by the engine's read
  * (`engine/model.ts`), so a version stored before this check still opens.
  */
+/** The longest band label: the review list's `?band=` filter takes no more. */
+export const BAND_LABEL_MAX = 64;
+
 export function checkBands(
   bands: ReadonlyArray<{ label: string; min: number; max: number }>,
   ctx: z.RefinementCtx
 ): void {
   const fail = (message: string) => ctx.addIssue({ code: 'custom', message });
   if (bands.length === 0) return fail('Declare at least one band');
+  const unusable = bands.find((b) => b.label.trim() === '' || b.label.length > BAND_LABEL_MAX);
+  if (unusable) {
+    return fail(
+      `Band labels need 1 to ${BAND_LABEL_MAX} characters, as the band filter takes; '${unusable.label}' has ${unusable.label.length}`
+    );
+  }
   const labels = bands.map((b) => b.label);
   const twice = labels.find((label, i) => labels.indexOf(label) !== i);
   if (twice !== undefined) {

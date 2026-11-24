@@ -108,7 +108,7 @@ export function ReviewList({
     router.refresh();
   };
 
-  if (shown.length === 0) return null;
+  if (reviews.length === 0) return null;
 
   // Until the refresh lands, count without the rows just deleted, so the
   // status line (read out by screen readers) never describes a stale list.
@@ -121,76 +121,80 @@ export function ReviewList({
   return (
     <div className="space-y-3">
       <p className="text-muted-foreground text-sm" role="status">
-        {count === shown.length
-          ? `${count.toLocaleString('en-GB')} ${count === 1 ? WORDS.review : `${WORDS.review}s`}`
-          : `${first.toLocaleString('en-GB')}–${(first + shown.length - 1).toLocaleString('en-GB')} of ${count.toLocaleString('en-GB')} ${WORDS.review}s, newest first`}
+        {shown.length === 0
+          ? `No ${WORDS.review}s left on this page.`
+          : count === shown.length
+            ? `${count.toLocaleString('en-GB')} ${count === 1 ? WORDS.review : `${WORDS.review}s`}`
+            : `${first.toLocaleString('en-GB')}–${(first + shown.length - 1).toLocaleString('en-GB')} of ${count.toLocaleString('en-GB')} ${WORDS.review}s, newest first`}
       </p>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{WORDS.Review}</TableHead>
-            {showProject ? <TableHead className="hidden md:table-cell">Project</TableHead> : null}
-            <TableHead className="text-right">Score</TableHead>
-            <TableHead className="hidden sm:table-cell">Made</TableHead>
-            <TableHead>
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {shown.map((row) => (
-            <TableRow key={row.id}>
-              <TableCell className="max-w-[24rem]">
-                <Link
-                  href={reportPath(row.id)}
-                  className="block truncate font-medium underline-offset-4 hover:underline"
-                >
-                  {reviewName(row)}
-                </Link>
-                {row.status === 'completed' ? null : (
-                  <Badge variant="secondary" className="mt-1">
-                    {STATE_LABEL[row.status]}
-                  </Badge>
-                )}
-              </TableCell>
-              {showProject ? (
-                <TableCell className="hidden md:table-cell">
-                  {row.project ? (
-                    <Link
-                      href={`/projects/${encodeURIComponent(row.project.id)}`}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {row.project.name}
-                    </Link>
-                  ) : (
-                    <span className="text-muted-foreground">None</span>
+      {shown.length === 0 ? null : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{WORDS.Review}</TableHead>
+              {showProject ? <TableHead className="hidden md:table-cell">Project</TableHead> : null}
+              <TableHead className="text-right">Score</TableHead>
+              <TableHead className="hidden sm:table-cell">Made</TableHead>
+              <TableHead>
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {shown.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell className="max-w-[24rem]">
+                  <Link
+                    href={reportPath(row.id)}
+                    className="block truncate font-medium underline-offset-4 hover:underline"
+                  >
+                    {reviewName(row)}
+                  </Link>
+                  {row.status === 'completed' ? null : (
+                    <Badge variant="secondary" className="mt-1">
+                      {STATE_LABEL[row.status]}
+                    </Badge>
                   )}
                 </TableCell>
-              ) : null}
-              <TableCell className="text-right">
-                {row.overall === null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <span className="tabular-nums">
-                    <b>{Math.round(row.overall)}</b>
-                    {row.band ? (
-                      <span className="text-muted-foreground ml-2 font-mono text-xs uppercase">
-                        {row.band}
-                      </span>
-                    ) : null}
-                  </span>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground hidden sm:table-cell">
-                {dayName.format(new Date(row.createdAt))}
-              </TableCell>
-              <TableCell className="text-right">
-                <DeleteReview row={row} onDeleted={() => removed(row.id)} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                {showProject ? (
+                  <TableCell className="hidden md:table-cell">
+                    {row.project ? (
+                      <Link
+                        href={`/projects/${encodeURIComponent(row.project.id)}`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {row.project.name}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">None</span>
+                    )}
+                  </TableCell>
+                ) : null}
+                <TableCell className="text-right">
+                  {row.overall === null ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <span className="tabular-nums">
+                      <b>{Math.round(row.overall)}</b>
+                      {row.band ? (
+                        <span className="text-muted-foreground ml-2 font-mono text-xs uppercase">
+                          {row.band}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground hidden sm:table-cell">
+                  {dayName.format(new Date(row.createdAt))}
+                </TableCell>
+                <TableCell className="text-right">
+                  <DeleteReview row={row} onDeleted={() => removed(row.id)} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
       {page > 1 || hasOlder ? (
         <nav aria-label={`${WORDS.Review} pages`} className="flex gap-6 text-sm">
           {page > 1 ? (

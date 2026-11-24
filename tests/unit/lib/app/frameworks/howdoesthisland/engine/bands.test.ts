@@ -68,6 +68,19 @@ describe('checkBands', () => {
     ],
     ['no bands', [], 'Declare at least one band'],
     [
+      'an empty label',
+      [
+        { min: 0, max: 49, label: 'Weak' },
+        { min: 50, max: 100, label: ' ' },
+      ],
+      "Band labels need 1 to 64 characters, as the band filter takes; ' ' has 1",
+    ],
+    [
+      'a label the band filter would refuse',
+      [{ min: 0, max: 100, label: 'x'.repeat(65) }],
+      `Band labels need 1 to 64 characters, as the band filter takes; '${'x'.repeat(65)}' has 65`,
+    ],
+    [
       'two bands with one label',
       [
         { min: 0, max: 49, label: 'Weak' },

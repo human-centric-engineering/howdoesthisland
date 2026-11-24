@@ -174,6 +174,22 @@ describe('ReviewList', () => {
     await waitFor(() => expect(screen.queryByRole('link', { name: 'Older' })).toBeNull());
   });
 
+  it('keeps its status and page links when a delete empties the page', async () => {
+    const user = userEvent.setup();
+    list({ reviews: [two[0]], total: 41, page: 3 });
+
+    await user.click(screen.getByRole('button', { name: 'Delete Spring landing page' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' })
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('No reviews left on this page.')
+    );
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Newer' })).toHaveAttribute('href', '/home?page=2');
+  });
+
   it('says one review once the other is deleted', async () => {
     const user = userEvent.setup();
     list();

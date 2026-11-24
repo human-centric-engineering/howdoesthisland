@@ -340,6 +340,30 @@ describe('startCalibration() (t-38)', () => {
     expect(judges).not.toHaveBeenCalled();
   });
 
+  it('refuses, before it spends, a version that fails its framework’s checks', async () => {
+    const { store } = fakeStore();
+    const judges = stubJudges();
+    const scoring = z.looseObject({ bands: z.array(z.looseObject({ label: z.string() })) });
+    const parsed = scoring.parse(model.scoring);
+    // Stored before the band check: 40–59 is covered by no band.
+    const gapped = {
+      ...model,
+      scoring: { ...parsed, bands: parsed.bands.filter((b) => b.label !== 'Developing') },
+    };
+    const err: unknown = await startCalibration(
+      { version: VERSION, model: gapped, set, mode: 'ai' },
+      deps(store, judges).d
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(CalibrationError);
+    expect(err).toMatchObject({
+      code: 'INVALID_MODEL',
+      problems: [expect.stringContaining('No band covers 40–59')],
+    });
+    expect(store.startRun).not.toHaveBeenCalled();
+    expect(judges).not.toHaveBeenCalled();
+  });
+
   it('records what a failed run’s judges had cost', async () => {
     const { store, runs } = fakeStore();
     const answering = stubJudges();

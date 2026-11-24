@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
+import { BAND_LABEL_MAX } from '@/lib/app/frameworks/howdoesthisland/schemas';
 import { DEFAULT_INTAKE_LIMITS } from '@/lib/app/intake/extract-text';
 import { MAX_CONTENT_CHARS, MAX_URL_CHARS } from '@/lib/app/assessments/limits';
 import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
@@ -110,7 +111,7 @@ export const listAssessmentsQuerySchema = z.object({
   /** Only the reviews of this content type (t-79): an id of the version's catalogue. */
   contentType: z.string().min(1).max(64).optional(),
   /** Only the reviews in this band (t-79): its label, as `band` carries it. */
-  band: z.string().min(1).max(64).optional(),
+  band: z.string().min(1).max(BAND_LABEL_MAX).optional(),
 });
 
 /** `{id}` in `/api/v1/assessments/{id}`. */
