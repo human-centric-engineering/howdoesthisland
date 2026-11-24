@@ -58,6 +58,12 @@ All of it is reported in one run, and nothing is written:
   platform agent in every workspace ([`judges.md`](./judges.md)), so a version
   cannot add, drop or rename one without code;
 - `scoring.adjustment_bounds` that are malformed ([below](#adjustment-bounds-d5));
+- `scoring.bands` that leave a score without a band, or that a band filter cannot pick
+  (`checkBands`, t-79): limits must be whole numbers running from 0 to 100, each band
+  starting where the last ended, and labels unique and 1–64 characters, since the review
+  list filters by label. The engine rounds `overall` before it reads the band. The
+  engine's own read of a stored version does not check this, so a version stored before
+  the rule still opens; a calibration checks it again ([`calibration.md`](./calibration.md));
 - a file that is not JSON.
 
 The reference fields follow the model's own spec, `meta.reference_rules`, and are
@@ -157,7 +163,8 @@ caller building reviews reads the catalogue. In Sunrise's envelope, rate limited
 - **The catalogue is built field by field** (`lib/app/frameworks/howdoesthisland/catalogue.ts`),
   so a field a later version adds is not served until someone adds it there on purpose.
   A test checks it carries none of 0.5.1's rubrics, patterns, scoring text or reviewer
-  instructions.
+  instructions. `result.bands` (t-79) is the band labels, lowest first, for a list to
+  filter by: the labels only, never the score ranges behind them.
 - **A draft is not found.** A retired version is still served, marked `retired`, since
   assessments made with it cite it. `latestVersion` is the most recently published
   version that is not retired (by publish time, not version number), or `null`.

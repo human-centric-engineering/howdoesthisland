@@ -1,10 +1,11 @@
 /**
- * The empty desk: what `/home` shows before someone has assessed anything.
- *
- * `b2` replaces it with recent work and projects. Until the workbench exists
- * there is nowhere to send people, so it offers no action rather than a link
- * that 404s.
+ * The empty desk: what `/home` shows before someone has assessed anything
+ * (t-79 replaced the M1 stand-in's "no action": `/assess` exists now).
  */
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { WORDS } from '@/lib/app/reports/words';
+
 const LINES = 6;
 
 export function HomeEmptyState() {
@@ -25,9 +26,12 @@ export function HomeEmptyState() {
             Nothing on the desk yet.
           </h1>
           <p className="text-muted-foreground mt-5 max-w-prose text-lg leading-relaxed">
-            Your recent assessments and projects will appear here, each with its score and the
-            editor&rsquo;s marks, once you have run your first one.
+            Your recent {WORDS.review}s will appear here, each with its score and the editor&rsquo;s
+            marks, once you have run your first one.
           </p>
+          <Button asChild className="mt-6">
+            <Link href="/assess">Review some copy</Link>
+          </Button>
         </div>
         <aside
           className="hidden content-start gap-5 border-l px-5 py-10 md:grid"

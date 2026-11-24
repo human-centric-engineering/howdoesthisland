@@ -39,6 +39,8 @@ import {
   type HowDoesThisLandEngine,
   type JudgeOutputs,
 } from '@/lib/app/frameworks/howdoesthisland/engine';
+import { decompose } from '@/lib/app/frameworks/codec';
+import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import type { StoredVersion } from '@/lib/app/frameworks/repo';
 import type { JsonObject } from '@/lib/app/frameworks/types';
@@ -53,7 +55,12 @@ const roundUsd = (usd: number) => Math.round(usd * 1_000_000) / 1_000_000;
 export class CalibrationError extends Error {
   constructor(
     readonly code:
-      'RETIRED' | 'SET_MISMATCH' | 'DANGLING_REFERENCES' | 'INVALID_CONTEXT' | 'NO_JUDGES',
+      | 'RETIRED'
+      | 'INVALID_MODEL'
+      | 'SET_MISMATCH'
+      | 'DANGLING_REFERENCES'
+      | 'INVALID_CONTEXT'
+      | 'NO_JUDGES',
     message: string,
     readonly problems: readonly string[] = []
   ) {
@@ -247,6 +254,18 @@ export async function startCalibration(
   // only spend. Refused here, so the CLI and the page both refuse it.
   if (version.status === 'RETIRED') {
     throw new CalibrationError('RETIRED', `${version.version} is retired, so it is not run.`);
+  }
+  // The definition's checks again, as on import: a draft imported before a
+  // check it now fails (bands that leave a score with none, say) is refused
+  // before it spends, and so never publishes, since the publish gate needs a
+  // complete run of it. The engine's own read stays lenient for what is stored.
+  const invalid = decompose(howDoesThisLand, input.model).problems;
+  if (invalid.length > 0) {
+    throw new CalibrationError(
+      'INVALID_MODEL',
+      `${version.version} fails ${invalid.length} of its framework's checks; fix the file and re-import it.`,
+      invalid
+    );
   }
   if (set.meta.model !== version.version) {
     throw new CalibrationError(

@@ -281,6 +281,9 @@ export const engineModelSchema = z.object({
   /** Every kind of reference record; the prompts read only their names. */
   knowledge_refs: z.record(z.string(), z.array(z.object({ id: z.string(), name: z.string() }))),
   scoring: z.object({
+    // Read as stored: whether bands cover every score is checked where a
+    // version comes in (`checkBands` in `../schemas.ts`), so a version stored
+    // before that check still opens.
     bands: z.array(z.object({ min: z.number(), max: z.number(), label: z.string() })),
     integrity_caps: z
       .array(

@@ -83,8 +83,12 @@
  *   when the workspace is full on arrival. A quick-profile request is never
  *   refused this way.
  *
- * GET query: `page`, `limit` (≤ 100), `status`, `projectId`. GET errors: 400
- * `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (scope).
+ * GET query: `page`, `limit` (≤ 100), `status`, `projectId`, `contentType`
+ * (a content type id, read from the review's stored context) and `band` (a
+ * band's label, as `band` carries it) (t-79). Each item carries `project`,
+ * its project's `{ id, name }` or `null`, so a list row reads nothing more.
+ * An unknown content type or band matches nothing; it is not refused. GET
+ * errors: 400 `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (scope).
  */
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth/guards';

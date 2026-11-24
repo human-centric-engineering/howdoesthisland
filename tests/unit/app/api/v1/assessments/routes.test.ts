@@ -792,6 +792,7 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
     const row = {
       id: 'project-1',
       orgId: WS_A,
+      name: 'Spring launch',
       archivedAt: null,
       framework: { slug: 'howdoesthisland' },
       overlay: null,
@@ -1231,6 +1232,73 @@ describe('GET /api/v1/assessments', () => {
 
     const completed = await json(await getList('?status=completed'));
     expect((completed.data as unknown as Row[]).map((a) => a.id)).toEqual([mid.id]);
+  });
+
+  describe('its filters and each item’s project (t-79)', () => {
+    const ids = async (query: string) =>
+      ((await json(await getList(query))).data as unknown as Row[]).map((a) => a.id);
+
+    it('filters by project, content type and band, together or alone', async () => {
+      const landing = (over: Row) =>
+        fake.seed({ context: { contentType: 'landing_page', audience: {} }, ...over });
+      const strong = landing({ projectId: 'project-1', band: 'Strong' });
+      const weak = landing({ band: 'Weak' });
+      const cv = fake.seed({
+        context: { contentType: 'cv_resume', audience: {} },
+        projectId: 'project-1',
+        band: 'Strong',
+      });
+
+      expect(await ids('?contentType=landing_page')).toEqual([weak.id, strong.id]);
+      expect(await ids('?band=Strong')).toEqual([cv.id, strong.id]);
+      expect(await ids('?projectId=project-1')).toEqual([cv.id, strong.id]);
+      expect(await ids('?projectId=project-1&contentType=landing_page&band=Strong')).toEqual([
+        strong.id,
+      ]);
+      // Neither is refused for an id it does not know: it matches nothing.
+      expect(await ids('?contentType=haiku')).toEqual([]);
+      expect((await json(await getList('?band=Strong'))).meta).toMatchObject({ total: 2 });
+    });
+
+    it('names each item’s project, archived or not, and null outside one', async () => {
+      fake.projects.push({
+        id: 'project-1',
+        orgId: WS_A,
+        name: 'Spring launch',
+        archivedAt: new Date(),
+      });
+      const inProject = fake.seed({ projectId: 'project-1' });
+      const loose = fake.seed({ projectId: null });
+
+      const items = (await json(await getList())).data as unknown as Row[];
+      expect(items.find((a) => a.id === inProject.id)).toMatchObject({
+        projectId: 'project-1',
+        project: { id: 'project-1', name: 'Spring launch' },
+      });
+      expect(items.find((a) => a.id === loose.id)).toMatchObject({
+        projectId: null,
+        project: null,
+      });
+    });
+
+    it('never lists another workspace’s reviews, whatever the filters', async () => {
+      const context = { contentType: 'landing_page', audience: {} };
+      const mine = fake.seed({ context, band: 'Strong', projectId: 'project-1' });
+      fake.seed({ orgId: WS_B, context, band: 'Strong', projectId: 'project-1' });
+
+      expect(await ids('?contentType=landing_page&band=Strong&projectId=project-1')).toEqual([
+        mine.id,
+      ]);
+      signedIn(BOB, WS_B);
+      expect(await ids('?contentType=landing_page')).not.toContain(mine.id);
+      expect(await ids('?contentType=landing_page')).toHaveLength(1);
+    });
+
+    it('400 VALIDATION_ERROR for an empty or overlong filter', async () => {
+      for (const query of ['?band=', `?contentType=${'x'.repeat(65)}`]) {
+        expect(await code(await getList(query))).toEqual({ status: 400, code: 'VALIDATION_ERROR' });
+      }
+    });
   });
 
   it('400 VALIDATION_ERROR for a bad query, 403 for a key without the scope', async () => {
