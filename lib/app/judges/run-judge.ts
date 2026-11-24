@@ -556,14 +556,15 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
       outcome = {
         error: new JudgeRunError('truncated', `The ${name}'s reply was cut off at its limit.`),
       };
+    } else if (finishReason === null) {
+      // A stream that ended with no terminal chunk, with or without text:
+      // what it said may be cut short, and it is no refusal.
+      outcome = {
+        error: new JudgeRunError('provider_error', `The ${name}'s reply stopped part-way.`),
+      };
     } else if (finishReason === 'error' || text.trim() === '') {
       outcome = {
         error: new JudgeRunError('refused', `The provider declined to run the ${name}.`),
-      };
-    } else if (finishReason === null) {
-      // A stream that ended with no terminal chunk: what it said may be cut short.
-      outcome = {
-        error: new JudgeRunError('provider_error', `The ${name}'s reply stopped part-way.`),
       };
     } else {
       outcome = { finishReason };

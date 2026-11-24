@@ -127,15 +127,22 @@ The rewrite keeps `RUNNING` with its lease running out. The rewrite recovery
 job (`app:rewrite-recovery`, every 15 minutes per workspace,
 `lib/app/rewrites/recover.ts`) fails it (`errorCode: lost`), keeping its saved
 draft, and charges its cost rows in the same transaction. Until then it holds
-its estimate. A call that died before the provider answered wrote no cost row,
-so it is charged nothing. One whose process was alive after all charges itself
-as it ends (above).
+its estimate. One whose process was alive after all charges itself as it ends
+(above).
+
+**What it can miss.** A streamed call writes its cost row only as it ends, so
+one whose process died part-way through the stream (the platform cut it off,
+or the server stopped) left none: recovery charges it nothing, though the
+provider billed it. The monthly cap does not see it either. A review's judge
+call that dies with its process is missed the same way, but a rewrite is one
+large call, so this is the larger miss.
 
 ## Limits
 
 - `REWRITES_PER_MINUTE` (10) per user, across sessions and keys: a
   handler-level sub-cap, as for reviews that call judges.
-- The route's `maxDuration` is 310s, over the editor's longest timeout.
+- The route's `maxDuration` is 360s: the editor's longest timeout (300s), the
+  budget lock's wait (10s), and the setup and ending write.
 
 ## Data
 

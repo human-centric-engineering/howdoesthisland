@@ -29,8 +29,8 @@
  *   review's framework has (`details.focus` lists them).
  * - 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (an API key without `assess`).
  * - 402 `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` — as for a review: the
- *   rewrite's estimate (the median of the workspace's last completed
- *   rewrites, `basis: "rewrites"`, or `0` with none, `basis: "none"`) is more
+ *   rewrite's estimate (the median of the workspace's last billed rewrites,
+ *   failed ones too, `basis: "rewrites"`, or `0` with none, `basis: "none"`) is more
  *   than what is left once reviews and rewrites in flight are held back.
  * - 404 `NOT_FOUND` — no such review in this workspace.
  * - 409 `ASSESSMENT_NOT_REWRITABLE` — the review is not finished (`completed`
@@ -57,8 +57,13 @@ import { rewriteLimiter } from '@/lib/app/rewrites/limiter';
 import { listRewrites, startRewrite } from '@/lib/app/rewrites/service';
 import { createRewriteSchema, listRewritesQuerySchema } from '@/lib/app/rewrites/validations';
 
-/** Long enough for the longest rewrite (the editor's timeout) to finish under `after()`. */
-export const maxDuration = 310;
+/**
+ * Long enough for the longest rewrite to finish under `after()`: the editor's
+ * longest timeout (300s), the budget check's wait for its lock (up to 10s),
+ * and the call's setup and ending write, with room to spare. A rewrite the
+ * platform cuts off is ended and charged by recovery, for what its rows hold.
+ */
+export const maxDuration = 360;
 
 export const POST = withAuth(async (request: NextRequest, session) => {
   const body = await validateRequestBody(request, createRewriteSchema);

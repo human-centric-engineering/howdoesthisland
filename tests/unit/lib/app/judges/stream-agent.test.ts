@@ -299,6 +299,15 @@ describe('streamAgent failures after the call', () => {
     expect((await refusal(run())).code).toBe('truncated');
   });
 
+  it('stops part-way, not refused, when the stream ends with no terminal chunk and no text', async () => {
+    chatStream = scripted([]);
+    const err = await refusal(run());
+    expect(err).toMatchObject({
+      code: 'provider_error',
+      message: "The editor's reply stopped part-way.",
+    });
+  });
+
   it('is refused on an empty reply', async () => {
     chatStream = scripted([{ type: 'text', content: '   ' }, DONE]);
     expect((await refusal(run())).code).toBe('refused');

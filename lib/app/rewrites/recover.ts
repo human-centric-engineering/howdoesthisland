@@ -6,8 +6,11 @@
  * (`service.ts`), so one still `RUNNING` with its lease run out lost its
  * process: nothing will end it but this. It is ended `FAILED`, keeping what
  * it had saved, and charged for its cost rows in the same transaction, which
- * also stops it holding budget. A call that died before the provider
- * answered wrote no cost row, so it is charged nothing.
+ * also stops it holding budget. A streamed call writes its cost row only as
+ * it ends, so one whose process died part-way through the stream (the
+ * platform cut it off, or the server stopped) left none, and is charged
+ * nothing, though the provider billed it: see "What it can miss" in
+ * `.context/app/rewrites.md`.
  *
  * Idempotent: the write that ends it matches only a `RUNNING` row past its
  * lease, so a second pass, or a call that finished meanwhile, changes nothing.

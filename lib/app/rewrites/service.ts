@@ -87,6 +87,7 @@ function notRewritable(message: string): APIError {
  * gone keeps the brief it stored. `null` when there is nothing to read.
  */
 function rewriteContext(review: {
+  id: string;
   projectContext: Prisma.JsonValue;
   project: { brief: Prisma.JsonValue } | null;
 }): string | null {
@@ -99,7 +100,9 @@ function rewriteContext(review: {
   });
   if (!current) {
     // A stored brief this schema no longer reads: the passages still count.
-    logger.warn('Project brief unreadable for a rewrite; using what the review stored', {});
+    logger.warn('Project brief unreadable for a rewrite; using what the review stored', {
+      assessmentId: review.id,
+    });
     return renderProjectContext(stored);
   }
   return renderProjectContext(current);
@@ -133,11 +136,12 @@ export async function startRewrite(
     },
   });
   if (!review) throw new NotFoundError('Assessment not found');
-  if (!REWRITABLE.has(review.status) || review.result === null) {
+  if (!REWRITABLE.has(review.status)) {
     throw notRewritable(
       `This review is ${review.status.toLowerCase()}: only a finished review can be rewritten.`
     );
   }
+  if (review.result === null) throw notRewritable('This review has no result to rewrite from.');
   const loaded = await engineForVersion(review.frameworkVersionId);
   if (!loaded) throw notRewritable('This review’s framework version can no longer be run.');
   const { engine, label } = loaded;
@@ -359,33 +363,58 @@ function failedEnding(rewriteId: string, draft: string, err: unknown): Ending {
 }
 
 /**
+ * End the row and charge it ({@link endAndCharge}), trying once more on a
+ * failure. Twice failed, the row is left `RUNNING` with the whole draft saved
+ * if that much can be written, and answered as it is: the recovery job ends
+ * it and charges its cost rows once its lease runs out, so the answer agrees
+ * with what `GET` reads then.
+ */
+async function finish(d: Drive, end: Ending): Promise<RewriteView> {
+  const { orgId, rewriteId } = d;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await endAndCharge(d, end);
+    } catch (err) {
+      logger.error('A rewrite could not be ended', err, {
+        rewriteId,
+        status: end.status,
+        attempt,
+      });
+      if (attempt === 2) break;
+    }
+  }
+  try {
+    await prisma.rewrite.updateMany({
+      where: { id: rewriteId, orgId, OR: ALIVE },
+      data: { draft: end.draft },
+    });
+  } catch {
+    // The last periodic save stands: logged above.
+  }
+  return { ...missing(d, end), status: 'running', completedAt: null };
+}
+
+/**
  * End the row and charge it, in one transaction. The row is written while it
  * runs, or once recovery has ended it `lost` (this process is not lost: its
  * ending is the true one). It is charged whatever its state, or even with
  * the row gone (its review deleted): see "Charged by the call" above. A row
  * gone answers the ending it missed.
  */
-async function finish(d: Drive, end: Ending): Promise<RewriteView> {
+async function endAndCharge(d: Drive, end: Ending): Promise<RewriteView> {
   const { orgId, rewriteId } = d;
-  try {
-    return await prisma.$transaction(async (tx) => {
-      await tx.rewrite.updateMany({
-        where: { id: rewriteId, orgId, OR: ALIVE },
-        data: { ...end, completedAt: new Date(), leaseExpiresAt: null },
-      });
-      await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
-      const row = await tx.rewrite.findFirst({
-        where: { id: rewriteId, orgId },
-        select: REWRITE_VIEW_SELECT,
-      });
-      return row ? toRewriteView(row) : missing(d, end);
+  return prisma.$transaction(async (tx) => {
+    await tx.rewrite.updateMany({
+      where: { id: rewriteId, orgId, OR: ALIVE },
+      data: { ...end, completedAt: new Date(), leaseExpiresAt: null },
     });
-  } catch (err) {
-    // Billed already: the row keeps `RUNNING` until its lease runs out, and
-    // recovery then fails and charges it.
-    logger.error('A rewrite could not be ended', err, { rewriteId, status: end.status });
-    return missing(d, end);
-  }
+    await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
+    const row = await tx.rewrite.findFirst({
+      where: { id: rewriteId, orgId },
+      select: REWRITE_VIEW_SELECT,
+    });
+    return row ? toRewriteView(row) : missing(d, end);
+  });
 }
 
 /** The ending as the API would have answered it, for a row that is gone or could not be written. */

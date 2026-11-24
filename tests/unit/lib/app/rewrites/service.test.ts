@@ -326,6 +326,17 @@ describe('startRewrite refusals, before anything is written or spent', () => {
     expect(fake.rewrites).toEqual([]);
   });
 
+  it('409s a finished review with no result, saying so', async () => {
+    const review = finishedReview({ result: null });
+    const err = await refusal(
+      inOrg(() =>
+        startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+      )
+    );
+    expect(err).toMatchObject({ status: 409, code: 'ASSESSMENT_NOT_REWRITABLE' });
+    expect(err.message).toBe('This review has no result to rewrite from.');
+  });
+
   it('409s a review whose framework version can no longer be run', async () => {
     mocks.engineForVersion.mockResolvedValue(null);
     const review = finishedReview();
@@ -602,6 +613,57 @@ describe('a review that cannot be rewritten after all', () => {
     );
     expect(err.status).toBe(404);
     expect(mocks.streamAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe('an ending write that fails', () => {
+  /** Start a rewrite whose call waits, so the ending write can be made to fail first. */
+  async function startGated() {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await call.onText('The whole draft.');
+      await gate;
+      fake.addCost(ORG, 0.02, { ...call.costMetadata });
+      return {
+        text: 'The whole draft.',
+        provider: 'anthropic',
+        model: 'claude-sonnet-5-5',
+        usage: { input: 1, output: 1, attempts: 1 },
+        costUsd: 0.02,
+        costLogIds: [],
+        finishReason: 'stop',
+      } satisfies AgentStreamReply;
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    return { started, release };
+  }
+
+  it('is tried once more, and then ends and charges the rewrite', async () => {
+    const { started, release } = await startGated();
+    fake.db.$transaction.mockRejectedValueOnce(new Error('pool timeout'));
+    release();
+    expect(await started.done).toMatchObject({ status: 'completed', draft: 'The whole draft.' });
+    expect(fake.rewrites[0]).toMatchObject({ status: 'COMPLETED' });
+    expect(charges()).toHaveLength(1);
+  });
+
+  it('twice failed, answers the row as it is, running with the whole draft, for recovery to end', async () => {
+    const { started, release } = await startGated();
+    fake.db.$transaction
+      .mockRejectedValueOnce(new Error('pool timeout'))
+      .mockRejectedValueOnce(new Error('pool timeout'));
+    release();
+    expect(await started.done).toMatchObject({
+      status: 'running',
+      draft: 'The whole draft.',
+      completedAt: null,
+    });
+    expect(fake.rewrites[0]).toMatchObject({ status: 'RUNNING', draft: 'The whole draft.' });
+    expect(charges()).toEqual([]);
   });
 });
 
