@@ -93,6 +93,7 @@ export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment 
     judges,
     framework: { slug: 'howdoesthisland', version: '0.5.1' },
     projectId: null,
+    project: null,
     title: 'Q3 board briefing',
     source: { kind: 'text', url: null, fileName: null },
     wordCount: 312,
