@@ -98,7 +98,7 @@ under the reference `rewrite:<id>` (`chargeRewrite`). Its cost rows carry
 charged once, when it ends, and a rewrite comes after.
 
 **The estimate** the check holds is the median cost of the workspace's last 20
-completed rewrites (`basis: "rewrites"`), or `0` with none (`basis: "none"`),
+rewrites that ended and cost something, failed ones too (`basis: "rewrites"`), or `0` with none (`basis: "none"`),
 as for a workspace's first review. The editor's summary spend is no guide: a
 summary writes a few sentences, a rewrite the whole text. The refusals are a
 review's (402 `INSUFFICIENT_CREDITS`, `BUDGET_EXCEEDED`, `details` the same),
@@ -109,8 +109,9 @@ cost row only when it ends, so a charge made while it runs finds nothing and
 writes no entry: the delete of its review (which takes the rewrite, and stops
 the call at its next save), or recovery ending one whose saves failed past its
 lease. The call's own end charges again, after its cost row lands, under the
-same reference, so it is charged once whoever gets there first. Its ending
-also replaces recovery's `lost`, since it knows what happened. The retention
+same reference, so it is charged once whoever gets there first. A live call
+whose row recovery ended `lost` sets it `RUNNING` again at its next save, and
+its ending replaces recovery's. The retention
 purge leaves a review alone while one of its rewrites runs.
 
 **A call stopped part-way** (its signal, a save that failed, a dropped

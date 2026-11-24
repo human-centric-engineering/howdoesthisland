@@ -93,7 +93,11 @@ const matches = (row: Record<string, unknown>, where: Where): boolean =>
       const { not: _not, ...rest } = v as Where;
       return Object.keys(rest).length === 0 || matches({ [k]: value }, { [k]: rest });
     }
-    if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
+    if ('gt' in v) {
+      const gt = (v as { gt: Date | number }).gt;
+      if (typeof gt === 'number') return typeof value === 'number' && value > gt;
+      return value instanceof Date && value > gt;
+    }
     if ('lte' in v) return value instanceof Date && value <= (v as { lte: Date }).lte;
     if ('gte' in v) return value instanceof Date && value >= (v as { gte: Date }).gte;
     if ('lt' in v) {
@@ -499,7 +503,7 @@ describe('reserveReviewBudget: the check (t-49)', () => {
       inFlightUsd: 1.428571,
     });
     expect(err.message).toContain(
-      'once $1.43 is held for reviews already starting, queued, running or finishing'
+      'once $1.43 is held for reviews and rewrites already starting, queued, running or finishing'
     );
   });
 
@@ -548,7 +552,7 @@ describe('reserveReviewBudget: the check (t-49)', () => {
 
     expect(err.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 2 });
     expect(err.message).toContain(
-      "Reviews already starting, queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
+      "Reviews and rewrites already starting, queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
     );
     expect(err.message).not.toContain('more than the');
   });
@@ -1440,7 +1444,7 @@ describe('the credits (t-58)', () => {
       usagePage: '/usage',
     });
     expect(err.message).toContain(
-      "more than the 47 left of the workspace's 250 CopyCredits once 203 are held for reviews already starting"
+      "more than the 47 left of the workspace's 250 CopyCredits once 203 are held for reviews and rewrites already starting"
     );
   });
 
@@ -1616,7 +1620,7 @@ describe('rewrites (t-81)', () => {
     );
 
   describe('estimateRewriteCost', () => {
-    it(`is the median of the last ${REWRITE_HISTORY} completed rewrites`, async () => {
+    it(`is the median of the last ${REWRITE_HISTORY} ended rewrites that cost something`, async () => {
       // The oldest, at $9, is past the last 20 and does not count.
       pastRewrite(9);
       for (let i = 0; i < REWRITE_HISTORY - 1; i += 1) pastRewrite(0.1);
@@ -1624,12 +1628,22 @@ describe('rewrites (t-81)', () => {
       expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.1, basis: 'rewrites' });
     });
 
-    it('reads only completed rewrites of this workspace', async () => {
-      pastRewrite(5, { status: 'FAILED' });
+    it('reads only this workspace’s ended rewrites, not a running one', async () => {
       pastRewrite(5, { status: 'RUNNING' });
       pastRewrite(5, { orgId: OTHER });
       pastRewrite(0.2);
       expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.2, basis: 'rewrites' });
+    });
+
+    it('counts a failed rewrite that was billed, and not one that cost nothing', async () => {
+      // Cut off on long texts: each failed, and each was billed.
+      pastRewrite(0.8, { status: 'FAILED' });
+      pastRewrite(0.8, { status: 'FAILED' });
+      // Refused before the provider answered: no guide to what one costs.
+      pastRewrite(0, { status: 'FAILED' });
+      pastRewrite(0, { status: 'FAILED' });
+      pastRewrite(0, { status: 'FAILED' });
+      expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.8, basis: 'rewrites' });
     });
 
     it('is 0 with no history', async () => {

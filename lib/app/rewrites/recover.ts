@@ -14,7 +14,7 @@
  *
  * A lease can also run out while the call lives, if its saves fail for that
  * long. Its cost row lands only when it ends, so this charges nothing for it;
- * the call charges itself as it ends, and replaces this ending with its own.
+ * its next save sets it `RUNNING` again, and it charges itself as it ends.
  */
 import { RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
@@ -27,8 +27,8 @@ export const LOST_REWRITE = 'It stopped before finishing.';
 
 /**
  * The error code recovery ends a rewrite with. A process that was not lost
- * after all (its saves failed past the lease) ends it again with what really
- * happened, and charges what landed since (`service.ts`).
+ * after all (its saves failed past the lease) sets it running again, ends it
+ * with what really happened, and charges what landed since (`service.ts`).
  */
 export const LOST_REWRITE_CODE = 'lost';
 

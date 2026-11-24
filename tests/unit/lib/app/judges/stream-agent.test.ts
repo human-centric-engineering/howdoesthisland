@@ -294,6 +294,11 @@ describe('streamAgent failures after the call', () => {
     expect(mocks.logCost.mock.calls[0][0].metadata.error).toBe('refused');
   });
 
+  it('is truncated, not refused, when it reached its ceiling having written nothing', async () => {
+    chatStream = scripted([{ ...DONE, finishReason: 'length' }]);
+    expect((await refusal(run())).code).toBe('truncated');
+  });
+
   it('is refused on an empty reply', async () => {
     chatStream = scripted([{ type: 'text', content: '   ' }, DONE]);
     expect((await refusal(run())).code).toBe('refused');

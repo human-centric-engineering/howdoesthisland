@@ -146,7 +146,7 @@
  * too: no workspace admin can raise it.
  *
  * **Rewrites** (t-81). A running rewrite holds its estimate (`heldUsd`, the
- * median of the workspace's last completed rewrites) in every check, a
+ * median of the workspace's last billed rewrites) in every check, a
  * review's or a rewrite's, until it ends and is charged; its row is written
  * under the same lock ({@link reserveRewriteBudget}), so it is its own hold.
  *
@@ -621,9 +621,9 @@ function creditRefusal(
         ? `The workspace has no CopyCredits left: its balance is ${balance.toLocaleString('en-GB')}.`
         : 'The workspace has no CopyCredits left.';
   } else if (remaining <= 0) {
-    reason = `Reviews already starting, queued, running or finishing hold the workspace's ${credits(balance)}.`;
+    reason = `Reviews and rewrites already starting, queued, running or finishing hold the workspace's ${credits(balance)}.`;
   } else if (held > 0) {
-    reason = `This ${words.thing} would cost about ${credits(details.estimateCredits)}, more than the ${details.remainingCredits.toLocaleString('en-GB')} left of the workspace's ${credits(balance)} once ${details.heldCredits.toLocaleString('en-GB')} are held for reviews already starting, queued, running or finishing.`;
+    reason = `This ${words.thing} would cost about ${credits(details.estimateCredits)}, more than the ${details.remainingCredits.toLocaleString('en-GB')} left of the workspace's ${credits(balance)} once ${details.heldCredits.toLocaleString('en-GB')} are held for reviews and rewrites already starting, queued, running or finishing.`;
   } else {
     reason = `This ${words.thing} would cost about ${credits(details.estimateCredits)}, more than the workspace's ${credits(balance)}.`;
   }
@@ -685,12 +685,12 @@ function capRefusal(
   const workspaceBudget = `the workspace's ${dollars(limit)} monthly AI budget`;
   const held =
     inFlight > 0
-      ? ` once ${dollars(inFlight)} is held for reviews already starting, queued, running or finishing`
+      ? ` once ${dollars(inFlight)} is held for reviews and rewrites already starting, queued, running or finishing`
       : '';
   let message: string;
   if (capUsedUp) message = `The workspace has used its ${dollars(limit)} monthly AI budget.`;
   else if (remaining <= 0)
-    message = `Reviews already starting, queued, running or finishing are held the rest of ${workspaceBudget} (${dollars(inFlight)}).`;
+    message = `Reviews and rewrites already starting, queued, running or finishing are held the rest of ${workspaceBudget} (${dollars(inFlight)}).`;
   else
     message = `This ${words.thing} would cost about ${dollars(estimate)}, more than the ${dollars(remaining)} left${held} of ${workspaceBudget}.`;
   return {
@@ -939,13 +939,13 @@ export async function reserveReviewBudget(
   return keepHold(orgId, taken.id);
 }
 
-/** Completed rewrites the rewrite estimate reads, most recent first (t-81). */
+/** Ended rewrites the rewrite estimate reads, most recent first (t-81). */
 export const REWRITE_HISTORY = 20;
 
 /**
  * What a rewrite is likely to cost this workspace (t-81): the median cost of
- * its last {@link REWRITE_HISTORY} completed rewrites (`rewrites`), or `0`
- * with none (`none`), so any positive remainder is enough, as for a
+ * its last {@link REWRITE_HISTORY} ended rewrites that cost something,
+ * failed ones too (`rewrites`), or `0` with none (`none`), so any positive remainder is enough, as for a
  * workspace's first review. The editor's summary spend is no guide: a
  * rewrite writes the whole text, a summary a few sentences.
  */
@@ -953,8 +953,11 @@ export async function estimateRewriteCost(
   orgId: string,
   db: Pick<Prisma.TransactionClient, 'rewrite'> = prisma
 ): Promise<ReviewEstimate> {
+  // Every ended rewrite that was billed, failed ones too: a workspace whose
+  // rewrites keep failing (cut off on long texts) still pays for each, and
+  // would otherwise hold nothing for the next.
   const past = await db.rewrite.findMany({
-    where: { orgId, status: 'COMPLETED' },
+    where: { orgId, status: { in: ['COMPLETED', 'FAILED'] }, costUsd: { gt: 0 } },
     orderBy: { createdAt: 'desc' },
     take: REWRITE_HISTORY,
     select: { costUsd: true },

@@ -190,7 +190,8 @@ describe('POST /api/v1/rewrites', () => {
     expect(rewriteSchema.parse(body.data)).toEqual(view());
     expect(mocks.startRewrite).toHaveBeenCalledWith(
       { assessmentId: 'assessment-1', stream: false },
-      { userId: ALICE }
+      { userId: ALICE },
+      expect.any(AbortSignal)
     );
     expect(mocks.orgSeen).toEqual([WS_A]);
   });
@@ -209,7 +210,8 @@ describe('POST /api/v1/rewrites', () => {
     for (const frame of got) expect(rewriteEventSchema.safeParse(frame.data).success).toBe(true);
     expect(mocks.startRewrite).toHaveBeenCalledWith(
       { assessmentId: 'assessment-1', focus: 'pathos', stream: true },
-      { userId: ALICE }
+      { userId: ALICE },
+      expect.any(AbortSignal)
     );
   });
 

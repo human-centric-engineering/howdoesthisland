@@ -2016,7 +2016,7 @@ describe('POST /api/v1/assessments — budget held while a request is under way 
         inFlightUsd: 1,
         remainingUsd: 0.5,
       });
-      expect(body.error?.message).toContain('held for reviews already starting');
+      expect(body.error?.message).toContain('held for reviews and rewrites already starting');
       gate.resolve();
       expect((await pending).status).toBe(first ? 202 : 200);
       await settle();

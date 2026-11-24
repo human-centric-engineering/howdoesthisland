@@ -922,7 +922,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
         status: 402,
         code: 'INSUFFICIENT_CREDITS',
         description:
-          'The workspace\'s CopyCredits, less what its reviews and rewrites in flight hold, do not cover the rewrite\'s estimate (the median of its last completed rewrites, `basis: "rewrites"`, or `0` with none, `basis: "none"`), or none are left. Nothing was written or charged. `details` as for a review.',
+          'The workspace\'s CopyCredits, less what its reviews and rewrites in flight hold, do not cover the rewrite\'s estimate (the median of its last billed rewrites, failed ones too, `basis: "rewrites"`, or `0` with none, `basis: "none"`), or none are left. Nothing was written or charged. `details` as for a review.',
       },
       {
         status: 402,

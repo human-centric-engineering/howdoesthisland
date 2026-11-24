@@ -6,13 +6,30 @@
  * that goes away (the browser closed the stream) never stops it: the draft
  * is still saved and charged. Pushing to a channel whose reader has gone
  * keeps nothing, so a call that outlives its reader holds no events in
- * memory.
+ * memory. The reader is gone once it stops reading, or once `signal` (its
+ * request's) aborts, which covers a response that never began to read.
  */
 export class EventChannel<T> implements AsyncIterable<T> {
   private readonly queue: T[] = [];
   private waiting: ((result: IteratorResult<T>) => void) | null = null;
   private closed = false;
   private readerGone = false;
+
+  constructor(signal?: AbortSignal) {
+    if (signal?.aborted) this.leave();
+    else signal?.addEventListener('abort', () => this.leave(), { once: true });
+  }
+
+  /** The reader has gone: drop what is kept, and keep nothing more. */
+  private leave(): void {
+    this.readerGone = true;
+    this.queue.length = 0;
+    if (this.waiting) {
+      const resolve = this.waiting;
+      this.waiting = null;
+      resolve({ value: undefined, done: true });
+    }
+  }
 
   /** Hand `event` to the reader, or keep it until the reader asks. */
   push(event: T): void {
@@ -51,8 +68,7 @@ export class EventChannel<T> implements AsyncIterable<T> {
       },
       // The reader stopped early (`break`, or the response was cancelled).
       return: () => {
-        this.readerGone = true;
-        this.queue.length = 0;
+        this.leave();
         return Promise.resolve({ value: undefined, done: true });
       },
     };

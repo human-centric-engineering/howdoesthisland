@@ -513,7 +513,8 @@ describe('while it runs', () => {
     expect(charges()).toEqual([expect.objectContaining({ amount: -3 })]);
   });
 
-  it('replaces recovery’s `lost` with its own ending, and charges what landed after', async () => {
+  it('runs on from recovery’s `lost`, replaces it with its own ending, and charges what landed after', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
@@ -541,6 +542,10 @@ describe('while it runs', () => {
       error: 'It stopped before finishing.',
       leaseExpiresAt: null,
     });
+    // Its next save finds it: running again, not stopped.
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_MS);
+    expect(fake.rewrites[0]).toMatchObject({ status: 'RUNNING', errorCode: null, error: null });
+    expect(theCall().signal?.aborted).toBe(false);
     release();
 
     expect(await started.done).toMatchObject({ status: 'completed', draft: 'All of it.' });
@@ -571,6 +576,32 @@ describe('while it runs', () => {
     Object.assign(fake.rewrites[0], { status: 'COMPLETED', draft: 'Earlier.' });
     release();
     expect(await started.done).toMatchObject({ status: 'completed', draft: 'Earlier.' });
+  });
+});
+
+describe('a review that cannot be rewritten after all', () => {
+  it('refuses a stored result the engine cannot read with 409, holding nothing', async () => {
+    const review = finishedReview({ result: { scores: {} } });
+    const err = await refusal(
+      inOrg(() =>
+        startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+      )
+    );
+    expect(err).toMatchObject({ status: 409, code: 'ASSESSMENT_NOT_REWRITABLE' });
+    expect(err.message).toContain('stored result can no longer be read');
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for a review deleted between the read and the row’s write', async () => {
+    mocks.reserve.mockRejectedValue(Object.assign(new Error('fk'), { code: 'P2003' }));
+    const review = finishedReview();
+    const err = await refusal(
+      inOrg(() =>
+        startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+      )
+    );
+    expect(err.status).toBe(404);
+    expect(mocks.streamAgent).not.toHaveBeenCalled();
   });
 });
 

@@ -64,7 +64,7 @@ export const POST = withAuth(async (request: NextRequest, session) => {
   const body = await validateRequestBody(request, createRewriteSchema);
   const limit = rewriteLimiter.check(`user:${session.user.id}`);
   if (!limit.success) return createRateLimitResponse(limit);
-  const started = await startRewrite(body, { userId: session.user.id });
+  const started = await startRewrite(body, { userId: session.user.id }, request.signal);
   if (body.stream) {
     // The stream closes when the reader goes; the rewrite does not stop.
     return sseResponse(started.events, { signal: request.signal });

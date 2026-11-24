@@ -32,8 +32,9 @@
  * review deleted, or recovery ending a rewrite whose saves failed past its
  * lease) finds nothing to charge, and writes no entry. The call's own end
  * charges again, after its row is written, under the same reference: once
- * in all, whoever got there first. A live call's ending also replaces the
- * `lost` that recovery wrote for it, since it knows what happened.
+ * in all, whoever got there first. A live call whose row recovery ended
+ * `lost` is not lost: its next save sets it `RUNNING` again (holding budget
+ * again, since it is spending), and its ending replaces recovery's.
  *
  * Tenancy: every read and write names the org the guard entered.
  */
@@ -41,8 +42,10 @@ import type { Prisma } from '@prisma/client';
 import { APIError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { engineForVersion } from '@/lib/app/assessments/engine';
+import { isForeignKeyFailure } from '@/lib/app/assessments/prisma-errors';
 import { LEASE_MS } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
+import { RewriteFocusUnknownError } from '@/lib/app/frameworks/engine';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import { JudgeRunError, streamAgent } from '@/lib/app/judges/run-judge';
 import { parseProjectContext, renderProjectContext } from '@/lib/app/projects/context';
@@ -111,7 +114,9 @@ function rewriteContext(review: {
  */
 export async function startRewrite(
   body: CreateRewriteRequest,
-  who: { userId: string | null }
+  who: { userId: string | null },
+  /** The request's, for a streamed one: once it aborts, its events are not kept. */
+  signal?: AbortSignal
 ): Promise<StartedRewrite> {
   const orgId = requireOrgId();
   const review = await prisma.assessment.findFirst({
@@ -152,31 +157,50 @@ export async function startRewrite(
   // Built now, so a review the engine cannot read is refused before anything
   // is held or written. A published version never changes, so the call
   // builds the same request again.
-  const request = engine.buildRewriteRequest(
-    text,
-    review.context,
-    review.result,
-    focus,
-    projectContext
-  );
+  // The stored result is read as the engine wrote it; one stored in a shape
+  // it no longer reads is not rewritable, not a server error.
+  let request: ReturnType<typeof engine.buildRewriteRequest>;
+  try {
+    request = engine.buildRewriteRequest(
+      text,
+      review.context,
+      review.result,
+      focus,
+      projectContext
+    );
+  } catch (err) {
+    if (err instanceof RewriteFocusUnknownError) throw err;
+    logger.warn('A stored review could not be read for a rewrite', {
+      assessmentId: review.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw notRewritable('This review’s stored result can no longer be read for a rewrite.');
+  }
 
-  const row = await reserveRewriteBudget(orgId, (tx, estimate) =>
-    tx.rewrite.create({
-      data: {
-        orgId,
-        assessmentId: review.id,
-        focus,
-        heldUsd: estimate.estimateUsd,
-        leaseExpiresAt: new Date(Date.now() + LEASE_MS),
-        createdByUserId: who.userId,
-      },
-      select: REWRITE_VIEW_SELECT,
-    })
-  );
+  let row;
+  try {
+    row = await reserveRewriteBudget(orgId, (tx, estimate) =>
+      tx.rewrite.create({
+        data: {
+          orgId,
+          assessmentId: review.id,
+          focus,
+          heldUsd: estimate.estimateUsd,
+          leaseExpiresAt: new Date(Date.now() + LEASE_MS),
+          createdByUserId: who.userId,
+        },
+        select: REWRITE_VIEW_SELECT,
+      })
+    );
+  } catch (err) {
+    // The review was deleted (or purged) since it was read: nothing was held.
+    if (isForeignKeyFailure(err)) throw new NotFoundError('Assessment not found');
+    throw err;
+  }
   const rewrite = toRewriteView(row);
   // Only a streamed request has a reader: otherwise every piece of the draft
   // would be queued a second time for the whole call, and never read.
-  const channel = body.stream ? new EventChannel<RewriteEvent>() : null;
+  const channel = body.stream ? new EventChannel<RewriteEvent>(signal) : null;
   channel?.push({ type: 'rewrite', rewrite });
 
   const done = drive({
@@ -199,6 +223,15 @@ export async function startRewrite(
 const NO_EVENTS: AsyncIterable<RewriteEvent> = {
   async *[Symbol.asyncIterator]() {},
 };
+
+/**
+ * A row this process may still write: running, or ended `lost` by recovery
+ * while it lived. Anything else ended another way, and is not written over.
+ */
+const ALIVE: Prisma.RewriteWhereInput[] = [
+  { status: 'RUNNING' },
+  { status: 'FAILED', errorCode: LOST_REWRITE_CODE },
+];
 
 interface Drive {
   orgId: string;
@@ -223,10 +256,19 @@ async function drive(d: Drive): Promise<RewriteView> {
     saving = saving.then(async () => {
       try {
         const { count } = await prisma.rewrite.updateMany({
-          where: { id: rewriteId, status: 'RUNNING' },
-          data: { draft, leaseExpiresAt: new Date(Date.now() + LEASE_MS) },
+          where: { id: rewriteId, orgId: d.orgId, OR: ALIVE },
+          // A row recovery ended `lost` while this call lived (its saves failed
+          // past the lease) runs again, holding budget again: it is spending.
+          data: {
+            status: 'RUNNING',
+            error: null,
+            errorCode: null,
+            completedAt: null,
+            draft,
+            leaseExpiresAt: new Date(Date.now() + LEASE_MS),
+          },
         });
-        // Gone (its review was deleted) or ended elsewhere: stop paying for it.
+        // Gone (its review was deleted) or ended another way: stop paying for it.
         if (count === 0) stop.abort();
       } catch (err) {
         // Not fatal: the lease outlasts several saves, and the next may succeed.
@@ -328,16 +370,12 @@ async function finish(d: Drive, end: Ending): Promise<RewriteView> {
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.rewrite.updateMany({
-        where: {
-          id: rewriteId,
-          orgId,
-          OR: [{ status: 'RUNNING' }, { status: 'FAILED', errorCode: LOST_REWRITE_CODE }],
-        },
+        where: { id: rewriteId, orgId, OR: ALIVE },
         data: { ...end, completedAt: new Date(), leaseExpiresAt: null },
       });
       await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
-      const row = await tx.rewrite.findUnique({
-        where: { id: rewriteId },
+      const row = await tx.rewrite.findFirst({
+        where: { id: rewriteId, orgId },
         select: REWRITE_VIEW_SELECT,
       });
       return row ? toRewriteView(row) : missing(d, end);

@@ -53,4 +53,26 @@ describe('EventChannel', () => {
     const iterator = channel[Symbol.asyncIterator]();
     expect(await iterator.next()).toEqual({ value: undefined, done: true });
   });
+
+  it('keeps nothing from the start when its request was aborted before any reading', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const channel = new EventChannel<number>(controller.signal);
+    channel.push(1);
+    channel.close();
+    expect(await all(channel)).toEqual([]);
+  });
+
+  it('drops what it kept, and ends a waiting reader, once its request aborts', async () => {
+    const controller = new AbortController();
+    const channel = new EventChannel<number>(controller.signal);
+    channel.push(1);
+    const iterator = channel[Symbol.asyncIterator]();
+    expect(await iterator.next()).toEqual({ value: 1, done: false });
+    const waiting = iterator.next();
+    controller.abort();
+    expect(await waiting).toEqual({ value: undefined, done: true });
+    channel.push(2);
+    expect(await iterator.next()).toEqual({ value: undefined, done: true });
+  });
 });

@@ -550,13 +550,15 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
       }
       return finish;
     });
-    if (finishReason === 'error' || text.trim() === '') {
-      outcome = {
-        error: new JudgeRunError('refused', `The provider declined to run the ${name}.`),
-      };
-    } else if (finishReason === 'length') {
+    // A ceiling reached first: a reasoning model can think up to it and write
+    // nothing, which is a cut-off reply, not a refusal.
+    if (finishReason === 'length') {
       outcome = {
         error: new JudgeRunError('truncated', `The ${name}'s reply was cut off at its limit.`),
+      };
+    } else if (finishReason === 'error' || text.trim() === '') {
+      outcome = {
+        error: new JudgeRunError('refused', `The provider declined to run the ${name}.`),
       };
     } else if (finishReason === null) {
       // A stream that ended with no terminal chunk: what it said may be cut short.
