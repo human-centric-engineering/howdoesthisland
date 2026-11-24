@@ -113,6 +113,7 @@ export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment 
       judges: judges.map((s) => s.replace(/^judge_/, '')),
       editor: WRITTEN_EDITOR,
     }),
+    quickScan: null,
     judgeRuns: judges.map((judge) => ({
       judge,
       status: 'succeeded' as const,

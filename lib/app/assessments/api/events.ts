@@ -11,6 +11,10 @@
  *
  * - `assessment_status` — first, the state the stream found; then each change,
  *   after the judges that brought it about.
+ * - `assessment_quick_scan` — second, when the stream finds a review that
+ *   calls judges still queued or running (t-77): its quick scan, `overall`,
+ *   `band` and `result`, before any judge. Not sent for a `quick` review,
+ *   one already final, or text the engine cannot score.
  * - `assessment_judge` — a judge landed, or landed again on a re-drive.
  * - `assessment_done` — the run is final; the stream ends after it. A run
  *   cancelled with judges in flight is final once they have landed.
@@ -22,6 +26,7 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { EVENTS_MAX_MS, POLL_MS } from '@/lib/app/assessments/limits';
+import { earlyQuickScan, type EarlyQuickScan } from '@/lib/app/assessments/early-scan';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
 import {
   inJudgeOrder,
@@ -33,6 +38,7 @@ import {
 
 export type AssessmentEvent =
   | { type: 'assessment_status'; id: string; status: AssessmentState }
+  | ({ type: 'assessment_quick_scan'; id: string } & EarlyQuickScan)
   | ({ type: 'assessment_judge'; id: string } & JudgeRunView)
   | {
       type: 'assessment_done';
@@ -153,6 +159,12 @@ async function* pollEvents(
     if (lastState === null) {
       lastState = state;
       yield { type: 'assessment_status', id, status: state };
+      // Then, for a review whose judges are still to come, its quick scan
+      // (t-77): before any judge, whenever the stream was opened.
+      if (!isFinal(state) && row.judges.length > 0) {
+        const quick = await quickScanOf(id, orgId);
+        if (quick) yield { type: 'assessment_quick_scan', id, ...quick };
+      }
     }
     for (const run of inJudgeOrder(row.judges, row.judgeRuns)) {
       const written = run.updatedAt.getTime();
@@ -183,4 +195,43 @@ async function* pollEvents(
     }
     await pause(pollMs, options.signal);
   }
+}
+
+/**
+ * The quick scan of the review the stream follows, read once, as the stream
+ * opens: the text is not re-read on every poll. `null` when it is gone,
+ * cannot be scored (`early-scan.ts`), or could not be read.
+ */
+async function quickScanOf(id: string, orgId: string): Promise<EarlyQuickScan | null> {
+  // Something to show early, never a reason to lose the stream: a read that
+  // fails here skips the event, and the judges and the status still follow.
+  try {
+    return await readQuickScan(id, orgId);
+  } catch (err) {
+    logger.error('Could not read a running review’s quick scan for its stream', err, {
+      assessmentId: id,
+    });
+    return null;
+  }
+}
+
+async function readQuickScan(id: string, orgId: string): Promise<EarlyQuickScan | null> {
+  const row = await prisma.assessment.findUnique({
+    where: { id, orgId },
+    select: {
+      frameworkVersionId: true,
+      context: true,
+      overlay: true,
+      content: { select: { text: true, sourceUrl: true } },
+    },
+  });
+  if (!row) return null;
+  return earlyQuickScan({
+    id,
+    frameworkVersionId: row.frameworkVersionId,
+    context: row.context,
+    overlay: row.overlay,
+    text: row.content.text,
+    sourceUrl: row.content.sourceUrl,
+  });
 }

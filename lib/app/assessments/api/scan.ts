@@ -12,7 +12,7 @@ import { countWords } from '@/lib/app/intake/extract-text';
 import { assessableText } from '@/lib/app/assessments/text';
 import { versionToScore } from '@/lib/app/assessments/api/version';
 import { contextFor, notScorable, refusingAsApi } from '@/lib/app/assessments/api/service';
-import { scoresOf } from '@/lib/app/assessments/run';
+import { scoresOf } from '@/lib/app/assessments/scores';
 import type { QuickScanView } from '@/lib/app/assessments/api/views';
 import type { scanRequestSchema } from '@/lib/app/assessments/api/validations';
 

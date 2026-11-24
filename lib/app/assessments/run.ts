@@ -92,6 +92,7 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { engineForVersion } from '@/lib/app/assessments/engine';
+import { scoresOf } from '@/lib/app/assessments/scores';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { runJudges, type LandedJudge } from '@/lib/app/assessments/fan-out';
 import { editorCostUsd, runEditor, withEditor } from '@/lib/app/assessments/editor';
@@ -133,17 +134,6 @@ export type RunOutcome =
   | 'lease_lost'
   /** Stopped on an error that was not a judge's; queued again for the recovery job. */
   | 'requeued';
-
-/** The two numbers every framework's result carries for listing (§9 `overall`, `band`). */
-const resultScores = z.object({ scores: z.object({ overall: z.number(), band: z.string() }) });
-
-/** A result's `overall` and `band`, or nulls when it carries none. */
-export function scoresOf(result: unknown): { overall: number | null; band: string | null } {
-  const parsed = resultScores.safeParse(result);
-  return parsed.success
-    ? { overall: parsed.data.scores.overall, band: parsed.data.scores.band }
-    : { overall: null, band: null };
-}
 
 export async function runAssessment(assessmentId: string): Promise<RunOutcome> {
   const run = await beginAssessment(assessmentId);

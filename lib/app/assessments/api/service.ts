@@ -47,9 +47,9 @@ import {
   beginAssessment,
   cancelAssessment,
   NOT_SCORABLE,
-  scoresOf,
   startNextQueued,
 } from '@/lib/app/assessments/run';
+import { scoresOf } from '@/lib/app/assessments/scores';
 import { withPlace } from '@/lib/app/assessments/places';
 import {
   assertReviewFits,

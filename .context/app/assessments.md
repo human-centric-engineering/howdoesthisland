@@ -241,16 +241,16 @@ one says what purging an assessment does to it.
 
 ## The API
 
-| Route                                     | Who                                                                    | What                                                                                                     |
-| ----------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/scan`                       | anyone (scores only) or a session / `assess` key (full); 10/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.       |
-| `POST /api/v1/assessments`                | session, or key with `assess`                                          | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                            |
-| `GET /api/v1/assessments`                 | same                                                                   | The workspace's assessments, newest first; `page`, `limit`, `status`.                                    |
-| `GET /api/v1/assessments/{id}`            | same                                                                   | One assessment: its copy (`text`), its judges and, once final, its result.                               |
-| `GET /api/v1/assessments/{id}/events`     | same                                                                   | Progress as Server-Sent Events.                                                                          |
-| `POST /api/v1/assessments/{id}/cancel`    | same                                                                   | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                     |
-| `DELETE /api/v1/assessments/{id}`         | same                                                                   | Delete it, its judge runs and replies, and its text (unless another assessment shares it).               |
-| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                         | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`. |
+| Route                                     | Who                                                                    | What                                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/scan`                       | anyone (scores only) or a session / `assess` key (full); 10/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.        |
+| `POST /api/v1/assessments`                | session, or key with `assess`                                          | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                             |
+| `GET /api/v1/assessments`                 | same                                                                   | The workspace's assessments, newest first; `page`, `limit`, `status`.                                     |
+| `GET /api/v1/assessments/{id}`            | same                                                                   | One assessment: its copy (`text`), its judges, its `quickScan` while it runs and, once final, its result. |
+| `GET /api/v1/assessments/{id}/events`     | same                                                                   | Progress as Server-Sent Events.                                                                           |
+| `POST /api/v1/assessments/{id}/cancel`    | same                                                                   | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                      |
+| `DELETE /api/v1/assessments/{id}`         | same                                                                   | Delete it, its judge runs and replies, and its text (unless another assessment shares it).                |
+| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                         | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`.  |
 
 Each route's docblock lists its error codes. A few rules hold across them:
 
@@ -338,6 +338,18 @@ Each route's docblock lists its error codes. A few rules hold across them:
   workspace's oldest queued stored review starts. The quick scan calls no
   model and takes no place. Without this, the per-user cap was the only bound, and five
   members could have ~200 model calls in flight.
+- **The quick scan before the judges (t-77).** A stored review that calls
+  judges answers `quickScan` (`overall`, `band`, `result`) while it is
+  queued or running: in the 202, on `GET …/{id}`, and as the stream's
+  `assessment_quick_scan` event, so the workbench and API callers have
+  something to show at once. It is worked out from the stored text, context,
+  overlay and pinned version (`early-scan.ts`), not stored: those never
+  change once the review is, so it is the run's own answer, and each
+  process keeps the answer per review, so a polled review is scored once. `null` once
+  final (`result` says it all), for a `quick` review (its result, at once),
+  and for text the engine cannot score, which the run then fails. Rejected:
+  the browser calling `POST /api/v1/scan` beside the review, which takes
+  pasted text only, has its own switch, and leaves API callers with nothing.
 - **Another workspace's id** is 404, not 403, on every `{id}` route: every
   read names the org the guard entered, so an id is not confirmed to an
   outsider. Within a workspace, any member may read, cancel or delete.
@@ -361,13 +373,14 @@ request's `after()`, another instance, or the recovery job. A stream opened
 late first replays the judges already landed. Each event is the SSE
 `event:` name and the `data:` payload's `type`:
 
-| Event                | When                                                                          |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `assessment_status`  | First, the state found; then each change, after its judges.                   |
-| `assessment_judge`   | A judge landed, or landed again on a re-drive.                                |
-| `assessment_done`    | Final, with `overall`, `band`, `costUsd`, `error`, `errorCode`. Then it ends. |
-| `assessment_gone`    | Deleted while followed. Then it ends.                                         |
-| `assessment_timeout` | Still going after `EVENTS_MAX_MS` (5 min). Open it again.                     |
+| Event                   | When                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `assessment_status`     | First, the state found; then each change, after its judges.                                                               |
+| `assessment_quick_scan` | Second, for a review with judges still queued or running: its quick scan (`overall`, `band`, `result`), before any judge. |
+| `assessment_judge`      | A judge landed, or landed again on a re-drive.                                                                            |
+| `assessment_done`       | Final, with `overall`, `band`, `costUsd`, `error`, `errorCode`. Then it ends.                                             |
+| `assessment_gone`       | Deleted while followed. Then it ends.                                                                                     |
+| `assessment_timeout`    | Still going after `EVENTS_MAX_MS` (5 min). Open it again.                                                                 |
 
 A cancelled run's judges that were in flight land after `cancelled`. The
 stream waits for them, until the run gives up its lease (or the lease runs

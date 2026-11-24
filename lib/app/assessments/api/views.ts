@@ -16,6 +16,7 @@ import type { AssessmentState } from '@/lib/app/assessments/api/validations';
 import { contextUsedView } from '@/lib/app/projects/context';
 import type { ContextUsed } from '@/lib/app/projects/wire';
 import { reviewRefusalDetailsSchema, type ReviewRefusalDetails } from '@/lib/app/usage/wire';
+import { earlyQuickScan, type EarlyQuickScan } from '@/lib/app/assessments/early-scan';
 
 /** A credit or budget refusal's figures as stored, or `null` when there are none in either shape. */
 function budgetFigures(stored: Prisma.JsonValue): ReviewRefusalDetails | null {
@@ -90,6 +91,13 @@ export type AssessmentDetail = AssessmentSummary & {
   contextUsed: ContextUsed | null;
   /** The framework's assembled result, once final; `null` before. */
   result: unknown;
+  /**
+   * What the quick scan says, while a review that calls judges is queued or
+   * running (t-77): something to show before the judges land. `null` once
+   * it is final (`result` then says it all), for a `quick` review (whose
+   * result is the quick scan, at once), and for text the engine cannot score.
+   */
+  quickScan: EarlyQuickScan | null;
   judgeRuns: JudgeRunView[];
 };
 
@@ -174,6 +182,7 @@ const summarySelect = {
 
 const detailSelect = {
   ...summarySelect,
+  frameworkVersionId: true,
   content: { select: { ...summarySelect.content.select, text: true } },
   context: true,
   overlay: true,
@@ -259,7 +268,7 @@ function storedOverlay(value: unknown): Record<string, unknown> | null {
   return parsed.success ? parsed.data : null;
 }
 
-function detailView(row: DetailRow): AssessmentDetail {
+function detailView(row: DetailRow, quickScan: EarlyQuickScan | null): AssessmentDetail {
   return {
     ...summaryView(row),
     text: row.content.text,
@@ -267,8 +276,18 @@ function detailView(row: DetailRow): AssessmentDetail {
     overlay: storedOverlay(row.overlay),
     contextUsed: contextUsedView(row.projectContext),
     result: row.result,
+    quickScan,
     judgeRuns: inJudgeOrder(row.judges, row.judgeRuns).map(judgeRunView),
   };
+}
+
+/** Whether this workspace has an assessment with this id, read without its text. */
+export async function assessmentExists(id: string): Promise<boolean> {
+  const row = await prisma.assessment.findUnique({
+    where: { id, orgId: requireOrgId() },
+    select: { id: true },
+  });
+  return row !== null;
 }
 
 /** One of this workspace's assessments, or `null`. */
@@ -277,7 +296,25 @@ export async function readAssessment(id: string): Promise<AssessmentDetail | nul
     where: { id, orgId: requireOrgId() },
     select: detailSelect,
   });
-  return row ? detailView(row) : null;
+  if (!row) return null;
+  return detailView(row, await quickScanWhileRunning(row));
+}
+
+/**
+ * The quick scan of a review whose judges are still to land, or `null`: see
+ * {@link AssessmentDetail.quickScan}. Worked out from the row, not stored
+ * (`early-scan.ts`).
+ */
+async function quickScanWhileRunning(row: DetailRow): Promise<EarlyQuickScan | null> {
+  if (isFinal(stateOf(row.status)) || row.judges.length === 0) return null;
+  return earlyQuickScan({
+    id: row.id,
+    frameworkVersionId: row.frameworkVersionId,
+    context: row.context,
+    overlay: row.overlay,
+    text: row.content.text,
+    sourceUrl: row.content.sourceUrl,
+  });
 }
 
 /** A page of this workspace's assessments, newest first. */

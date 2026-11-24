@@ -435,6 +435,16 @@ export const assessmentOverlayField = z.record(z.string(), z.unknown()).nullable
  */
 export const contextUsedField = contextUsedSchema.nullable();
 
+/**
+ * `EarlyQuickScan` in `lib/app/assessments/early-scan.ts`: what the quick
+ * scan says of a review whose AI reviewers are still to answer (t-77).
+ */
+export const earlyQuickScanSchema = z.object({
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+  result: assessmentResultField,
+});
+
 /** `AssessmentDetail`. */
 export const assessmentDetailSchema = assessmentSummarySchema.extend({
   /** The copy assessed; the result's offsets point into it. */
@@ -443,6 +453,11 @@ export const assessmentDetailSchema = assessmentSummarySchema.extend({
   overlay: assessmentOverlayField,
   contextUsed: contextUsedField,
   result: storedResultField,
+  quickScan: earlyQuickScanSchema
+    .nullable()
+    .describe(
+      'What the quick scan says while a review that calls AI reviewers is queued or running, before they answer: something to show at once (t-77). `null` once the review is final (`result` then says it all), for a `quick` review, and for text that cannot be scored.'
+    ),
   judgeRuns: z.array(judgeRunViewSchema),
 });
 
@@ -543,6 +558,7 @@ export const paginationMetaSchema = z.object({
 /** `AssessmentEvent` in `lib/app/assessments/api/events.ts`. */
 export const assessmentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('assessment_status'), id: z.string(), status: assessmentStateSchema }),
+  earlyQuickScanSchema.extend({ type: z.literal('assessment_quick_scan'), id: z.string() }),
   judgeRunViewSchema.extend({ type: z.literal('assessment_judge'), id: z.string() }),
   z.object({
     type: z.literal('assessment_done'),
