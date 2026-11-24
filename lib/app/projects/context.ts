@@ -153,14 +153,25 @@ function copyPieces(content: string): string[] {
   let found: string[] = [];
   for (const separator of [/\n\s*\n/, /\n/, /(?<=[.!?])\s+/]) {
     found = pieces(separator);
-    if (found.length >= MAX_CONTEXT_QUERIES) return found;
+    if (found.length >= MAX_CONTEXT_QUERIES) break;
   }
-  const whole = found.join(' ');
-  if (whole.length <= MAX_QUERY_CHARS) return found;
-  const size = Math.ceil(whole.length / MAX_CONTEXT_QUERIES);
-  const runs: string[] = [];
-  for (let at = 0; at < whole.length; at += size) runs.push(whole.slice(at, at + size));
-  return runs;
+  if (found.length < MAX_CONTEXT_QUERIES) {
+    const whole = found.join(' ');
+    if (whole.length <= MAX_QUERY_CHARS) return found;
+    found = [whole];
+  }
+  // A piece longer than a query is cut into query-long runs, so its tail is
+  // searched too, not only its opening.
+  const size = Math.min(
+    MAX_QUERY_CHARS,
+    Math.ceil(found.reduce((sum, p) => sum + p.length, 0) / MAX_CONTEXT_QUERIES)
+  );
+  return found.flatMap((piece) => {
+    if (piece.length <= MAX_QUERY_CHARS) return [piece];
+    const runs: string[] = [];
+    for (let at = 0; at < piece.length; at += size) runs.push(piece.slice(at, at + size));
+    return runs;
+  });
 }
 
 /**
@@ -242,6 +253,8 @@ export async function buildProjectContext(
           select: { id: true },
         });
   const readyIds = new Set(ready.map((row) => row.id));
+  // One link per knowledge row: `ProjectDocument` is unique on
+  // `(projectId, knowledgeDocumentId)`.
   const linkOf = new Map(
     links.filter((l) => readyIds.has(l.knowledgeDocumentId)).map((l) => [l.knowledgeDocumentId, l])
   );

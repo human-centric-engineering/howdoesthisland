@@ -163,7 +163,8 @@ context: its brief, and passages from its background documents
   description, then at most 6 passages, each under its document's title. The
   engine's `projectBlock` fences the whole in `<project_context>` and frames it as
   background, not instructions; a fence tag inside a passage or the brief is
-  dropped, with attributes or self-closing too, so it cannot close the fence.
+  dropped (with attributes, self-closing, or formed by nesting one inside
+  another), so it cannot close the fence.
 - **Retrieval.** The copy is split into at most 4 sections (its paragraphs, in
   order, in runs of about equal length; copy with fewer paragraphs than that is
   split by lines, then sentences, then into runs of equal length, so text with no
@@ -181,7 +182,9 @@ context: its brief, and passages from its background documents
   it on `Assessment.projectContext` (`{ brief, documents: [{ id, title }],
 passages: [{ documentId, chunkId, text }] }`); a re-driven run reads it back, so
   its later judges read what the first ones did. A project that gives nothing is
-  stored as an empty record, so a re-drive does not search again. A `quick` review
+  stored as an empty record, so a re-drive does not search again. A re-drive whose
+  judges already ran with nothing stored (begun before t-75) stores an empty one
+  too, rather than give its later judges a block the first never read. A `quick` review
   calls no model and gathers nothing. A `store: false` review gathers it the same
   way and keeps nothing.
 - **The API** answers it as `contextUsed` on the assessment (and a `store: false`
@@ -205,7 +208,8 @@ passages: [{ documentId, chunkId, text }] }`); a re-driven run reads it back, so
     `PROJECT_CONTEXT_NOT_SET_UP`.
   - Otherwise (the embedding provider down) a stored review goes back to the
     queue, as for any error that is not a judge's, and a `store: false` one is 503
-    `PROJECT_CONTEXT_UNAVAILABLE`.
+    `PROJECT_CONTEXT_UNAVAILABLE`. Both carry `details.costUsd`, what the
+    searches that ran cost. Any other error is the ordinary 500.
 - **Kept** with the assessment, so in the org and subject exports with it, and
   purged with it at the content window.
 

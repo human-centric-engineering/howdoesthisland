@@ -938,7 +938,10 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
       });
 
       expect(res.status).toBe(409);
-      expect((await json(res)).error).toMatchObject({ code: 'PROJECT_CONTEXT_NOT_SET_UP' });
+      expect((await json(res)).error).toMatchObject({
+        code: 'PROJECT_CONTEXT_NOT_SET_UP',
+        details: { costUsd: 0 },
+      });
       expect(mocks.runJudge).not.toHaveBeenCalled();
     });
 

@@ -605,17 +605,23 @@ async function ephemeralProjectContext(
       metadata: { ephemeral: true, ephemeralRun: runId },
     });
   } catch (err) {
+    // Anything else (the database) is the ordinary 500.
+    if (!(err instanceof ProjectContextError)) throw err;
     logger.error('Project context could not be gathered for a store: false review', err, {
       projectId,
       runId,
     });
-    if (err instanceof ProjectContextError && err.permanent) {
-      throw new APIError(err.message, 'PROJECT_CONTEXT_NOT_SET_UP', 409);
+    // What the searches that ran cost, already charged with the run, as
+    // `NOT_SCORABLE` says what the judges had spent.
+    const details = { costUsd: err.costUsd };
+    if (err.permanent) {
+      throw new APIError(err.message, 'PROJECT_CONTEXT_NOT_SET_UP', 409, details);
     }
     throw new APIError(
       "The project's background documents could not be searched. Try again in a moment.",
       'PROJECT_CONTEXT_UNAVAILABLE',
-      503
+      503,
+      details
     );
   }
 }

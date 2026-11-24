@@ -685,6 +685,25 @@ describe('a project’s context (t-75)', () => {
     expect(a.projectContext).toBeUndefined();
   });
 
+  it('gathers nothing for a re-drive whose first judges ran with none stored', async () => {
+    const a = fake.seed({ projectId: 'project-1', judges: ['judge_a', 'judge_b'] });
+    // Begun before the context was gathered: judge_a read no block.
+    fake.judgeRuns.push({
+      id: 'earlier',
+      assessmentId: a.id,
+      judge: 'judge_a',
+      status: 'SUCCEEDED',
+      output: { from: 'earlier' },
+      costUsd: 0.01,
+    });
+
+    await inOrg(() => runAssessment(String(a.id)));
+
+    expect(mocks.search).not.toHaveBeenCalled();
+    expect(mocks.runJudge.mock.calls.map(contextOf)).toEqual([null]);
+    expect(a.projectContext).toEqual({ brief: null, documents: [], passages: [] });
+  });
+
   it('fails the run saying why, calling no judge, when the embedding setup stops the search', async () => {
     mocks.search.mockRejectedValue(new PrivacyRefusedError('embeddings_local_only', 'openai'));
     const a = fake.seed({ projectId: 'project-1' });

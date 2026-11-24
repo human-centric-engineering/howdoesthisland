@@ -504,7 +504,7 @@ async function drive(
 async function projectContextFor(
   row: Pick<
     AssessmentRow,
-    'id' | 'project' | 'projectContext' | 'judges' | 'createdByUserId' | 'content'
+    'id' | 'project' | 'projectContext' | 'judges' | 'judgeRuns' | 'createdByUserId' | 'content'
   >,
   token: string
 ): Promise<ProjectContextRecord | null | 'lost' | 'failed'> {
@@ -512,6 +512,9 @@ async function projectContextFor(
   if (stored) return stored;
   // The quick scan alone calls no model, so nothing would read it.
   if (!row.project || row.judges.length === 0) return null;
+  // Judges already ran with none stored (a run begun before the context was
+  // gathered): its later judges read what its first ones did, which was nothing.
+  if (row.judgeRuns.length > 0) return await storeContext(row.id, token, EMPTY_CONTEXT);
   let built: BuiltProjectContext;
   try {
     built = await buildProjectContext(row.project, row.content.text, {
@@ -534,9 +537,20 @@ async function projectContextFor(
     return written ? 'failed' : 'lost';
   }
   await addContextCost(row.id, token, built.costUsd);
-  const record: ProjectContextRecord = built.record ?? { brief: null, documents: [], passages: [] };
+  return await storeContext(row.id, token, built.record ?? EMPTY_CONTEXT);
+}
+
+/** What a project that gives the reviewers nothing is stored as. */
+const EMPTY_CONTEXT: ProjectContextRecord = { brief: null, documents: [], passages: [] };
+
+/** Store the run's context under its lease: the record, or `'lost'` when the store matched nothing. */
+async function storeContext(
+  assessmentId: string,
+  token: string,
+  record: ProjectContextRecord
+): Promise<ProjectContextRecord | 'lost'> {
   const { count } = await prisma.assessment.updateMany({
-    where: { id: row.id, leaseToken: token, status: 'RUNNING' },
+    where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
     // Plain data, checked by its schema.
     data: { projectContext: record },
   });
