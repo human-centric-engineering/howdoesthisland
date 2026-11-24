@@ -109,7 +109,7 @@ this site); `WORKSPACE_BUSY` and `RATE_LIMIT_EXCEEDED` say to wait. Every other
 refusal, the intake's among them (a file too large, a page that could not be
 fetched, too much text), shows the server's own message, which already says
 what to do. The page checks the obvious ones before sending: no text, an
-address that is not `https://…`, no file or one over `MAX_PAGE_FILE_BYTES`,
+address that is not `https://…`, no file or one over `MAX_REVIEW_FILE_BYTES`,
 and no reviewer ticked.
 
 **A review that started is never shown as refused.** Once the POST succeeds
@@ -118,11 +118,12 @@ read. A reply the page cannot read in full but that names the review opens
 its report; one that does not even do that says the review has started and
 need not be started again.
 
-**The page sends files of 3 MB at most** (`MAX_PAGE_FILE_BYTES`), though the
-API reads up to 10 MB (`MAX_REVIEW_FILE_BYTES`). The file goes as base64 in a
-JSON body, 4/3 its size: Vercel refuses a function body over 4.5 MB, and the
-proxy keeps only the first 10 MB of a body (`proxyClientMaxBodySize`), so a
-larger file would arrive cut short. A larger piece can be pasted as text.
+**The page sends files up to the 10 MB a review reads** (`MAX_REVIEW_FILE_BYTES`),
+as a multipart upload (`sendUpload`, t-80; see Uploads in
+[`intake.md`](./intake.md#uploads)), with the request's other fields as its `options`.
+Text and a page still go as JSON. On Vercel staging, any body over 4.5 MB is refused
+before the route runs: the page shows "This file is too large for this server to
+accept" and keeps the draft and the file. The production servers carry the whole 10 MB.
 
 ## Recent work
 

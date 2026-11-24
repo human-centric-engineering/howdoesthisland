@@ -241,16 +241,16 @@ one says what purging an assessment does to it.
 
 ## The API
 
-| Route                                     | Who                                                                    | What                                                                                                                                |
-| ----------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/scan`                       | anyone (scores only) or a session / `assess` key (full); 10/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.                                  |
-| `POST /api/v1/assessments`                | session, or key with `assess`                                          | Assess `{ text }`, `{ url }` or `{ file: { name, base64 } }`.                                                                       |
-| `GET /api/v1/assessments`                 | same                                                                   | The workspace's assessments, newest first; `page`, `limit`, `status`, `projectId`, `contentType`, `band`. Each names its `project`. |
-| `GET /api/v1/assessments/{id}`            | same                                                                   | One assessment: its copy (`text`), its judges, its `quickScan` while it runs and, once final, its result.                           |
-| `GET /api/v1/assessments/{id}/events`     | same                                                                   | Progress as Server-Sent Events.                                                                                                     |
-| `POST /api/v1/assessments/{id}/cancel`    | same                                                                   | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                                                |
-| `DELETE /api/v1/assessments/{id}`         | same                                                                   | Delete it, its judge runs and replies, and its text (unless another assessment shares it).                                          |
-| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                         | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`.                            |
+| Route                                     | Who                                                                    | What                                                                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/scan`                       | anyone (scores only) or a session / `assess` key (full); 10/min per IP | The quick scan of pasted text. Deterministic, no AI, nothing stored. Behind its switch; see below.                                       |
+| `POST /api/v1/assessments`                | session, or key with `assess`                                          | Assess `{ text }` or `{ url }` as JSON, or a file as `multipart/form-data` (`file` and `options` parts; [uploads](./intake.md#uploads)). |
+| `GET /api/v1/assessments`                 | same                                                                   | The workspace's assessments, newest first; `page`, `limit`, `status`, `projectId`, `contentType`, `band`. Each names its `project`.      |
+| `GET /api/v1/assessments/{id}`            | same                                                                   | One assessment: its copy (`text`), its judges, its `quickScan` while it runs and, once final, its result.                                |
+| `GET /api/v1/assessments/{id}/events`     | same                                                                   | Progress as Server-Sent Events.                                                                                                          |
+| `POST /api/v1/assessments/{id}/cancel`    | same                                                                   | Cancel a queued or running one; 409 `ASSESSMENT_FINAL` if it is not.                                                                     |
+| `DELETE /api/v1/assessments/{id}`         | same                                                                   | Delete it, its judge runs and replies, and its text (unless another assessment shares it).                                               |
+| `GET /api/v1/assessments/{id}/report.pdf` | session, or key with `reports`                                         | The report as a PDF, rendered once and then cached; 409 `REPORT_NOT_READY` without one. See `report.md`.                                 |
 
 **The list's filters (t-79).** `projectId` and `band` are columns; `band` is
 the label the review carries (the catalogue's `result.bands` lists them).

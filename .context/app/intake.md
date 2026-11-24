@@ -5,8 +5,8 @@ How an uploaded file, or a page at a URL, becomes the text an assessment reads. 
 
 ## `extractText(buffer, fileName, limits?)`
 
-Pure: no database, no network. The caller decodes `source.file_base64` and
-passes the bytes with the name the client gave. The extension picks the reader.
+Pure: no database, no network. The caller passes the bytes of an upload
+(`readUpload`, below) with the name the client gave. The extension picks the reader.
 
 Returns `{ text, wordCount, title, format, pageCount?, warnings }`.
 
@@ -109,9 +109,41 @@ of a document's first part reads as an assessment of all of it.
 | `maxChars`    | 40,000  | the pipeline's content limit, `MAX_TEXT_CHARS` (plan §8.2)                                                         |
 | `maxXmlBytes` | 20 MB   | a small PPTX can inflate to gigabytes; parts are streamed and the read stops here                                  |
 
-A route has its own request-body limit too. On Vercel that is 4.5 MB, which is
-about a 3.3 MB file once base64-encoded, so on that host the platform refuses a
-large upload before `maxBytes` is reached.
+A route has its own request-body limit too. On Vercel (staging only) that is
+4.5 MB for any body, multipart included, so there the platform refuses a file over
+about 4.4 MB before `maxBytes` is reached, with a 413 that is not the API's envelope.
+The production servers carry the whole 10 MB (see Uploads).
+
+## Uploads
+
+`readUpload(request, optionsSchema, maxFileBytes?)` in `lib/app/intake/upload.ts`
+reads a file sent as `multipart/form-data` (t-80). Both routes that take a file use it:
+`POST /api/v1/assessments` and `POST /api/v1/projects/{id}/documents`. Each still takes
+JSON for a text or a page, and refuses a file in JSON.
+
+- **Parts:** `file`, the file, by the name it was sent with; `options` (optional), the
+  JSON body's other fields as JSON, parsed by the route's `…UploadOptionsSchema`. Any
+  other part, a second file, or options over `MAX_OPTIONS_CHARS` is a 400.
+- **Why not base64 in JSON.** It is 4/3 the file's size, and the proxy keeps only the
+  first `proxyClientMaxBodySize` bytes of a body. The proxy passes a longer body on cut
+  short, with no error, so a 10 MB file arrived as invalid JSON.
+- **The body limit:** `MAX_UPLOAD_BODY_BYTES` is the largest file plus 64 KB. It is
+  the proxy's limit in `next.config.js` (divergence ledger row 29), and a test holds
+  the two equal. A body whose `Content-Length` is over it is answered 413
+  `FILE_TOO_LARGE` before it is parsed. One sent without a length and cut short fails
+  to parse, and is a 400.
+- **In the browser:** `sendUpload()` in `lib/app/intake/send-upload.ts` posts the parts
+  and reads the reply as `apiClient` does. A host's own 413, which is not the API's
+  envelope, comes back as `FILE_TOO_LARGE` in the words the page passes.
+
+From the command line:
+
+```bash
+curl -H "Authorization: Bearer $KEY" \
+  -F file=@deck.pdf \
+  -F 'options={"profile":"full","projectId":"…"}' \
+  https://…/api/v1/assessments
+```
 
 ## Tests and fixtures
 
