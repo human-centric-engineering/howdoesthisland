@@ -7,10 +7,11 @@
  *
  * Adding is `POST /api/v1/projects/{id}/documents`, which answers once the
  * document is read and indexed, so the row being added shows as being read
- * until then. A document someone else is adding (`processing`), or one an
- * admin is re-processing (`cleaning`), reads as such from the list; while any
- * does, the page refreshes every few seconds until it settles, for at most
- * five minutes. One waiting on an admin's review is not polled. Removing is `DELETE …/{docId}`
+ * until then. A document someone else is adding reads as `processing` from
+ * the list; while any does, the page refreshes every few seconds until it
+ * settles, for at most five minutes. One with an admin (`pending_review`,
+ * `cleaning`) is not polled: it waits on a person. Adding text the project
+ * already holds says so, since the list does not change. Removing is `DELETE …/{docId}`
  * and needs no confirmation: the document can be added again.
  */
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
@@ -46,10 +47,10 @@ export const DOCUMENT_MAX_POLLS = 75;
 type Status = ProjectDocumentWire['status'];
 
 /**
- * The statuses that settle without anyone acting: being read, or being
- * re-processed. `pending_review` waits on an admin, so it is not polled.
+ * The status that settles without anyone acting. `pending_review` and
+ * `cleaning` wait on an admin (a review, or a cleanup session), so are not polled.
  */
-const SETTLING: readonly Status[] = ['processing', 'cleaning'];
+const SETTLING: readonly Status[] = ['processing'];
 
 const STATUS_LABEL: Record<Status, string> = {
   processing: 'Being read',
@@ -105,6 +106,8 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
   /** What is being added: a file's name or a page's address, until the API answers. */
   const [adding, setAdding] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  /** The title of a document an add found the project already holds. */
+  const [alreadyHeld, setAlreadyHeld] = useState<string | null>(null);
   const add = useSaveFailure({
     fallback: 'The document could not be added. Try again in a moment.',
     fields: NO_SERVER_FIELDS,
@@ -127,9 +130,15 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
 
   const submit = async (label: string, source: Record<string, unknown>) => {
     add.clear();
+    setAlreadyHeld(null);
     setAdding(label);
     try {
-      await apiClient.post<unknown>(projectDocumentsEndpoint(projectId), { body: { source } });
+      const answered = await apiClient.post<ProjectDocumentWire>(
+        projectDocumentsEndpoint(projectId),
+        { body: { source } }
+      );
+      const held = documents.find((doc) => doc.id === answered.id);
+      if (held) setAlreadyHeld(held.title);
       router.refresh();
       return true;
     } catch (err) {
@@ -283,6 +292,11 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
             </div>
           </form>
         </div>
+        {alreadyHeld ? (
+          <p role="status" className="text-muted-foreground text-sm">
+            This project already holds that text, as {alreadyHeld}.
+          </p>
+        ) : null}
         <SaveError failure={add.failure} />
       </CardContent>
     </Card>

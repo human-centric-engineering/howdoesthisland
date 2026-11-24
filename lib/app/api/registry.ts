@@ -810,7 +810,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'DELETE',
     path: '/api/v1/projects/{id}/documents/{documentId}',
     summary:
-      "Remove a document from a project. It leaves the workspace's knowledge base too only when this app's upload put it there, no other project links it, and no agent is granted it.",
+      "Remove a document from a project. It leaves the workspace's knowledge base too only when this app's upload put it there, no other project links it, no agent is granted it, and it carries no tag.",
     auth: PROJECTS,
     request: { params: projectDocumentParamSchema },
     response: { status: 200, data: removedDocumentSchema },

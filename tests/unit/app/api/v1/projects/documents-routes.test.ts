@@ -86,7 +86,7 @@ vi.mock('@/lib/db/client', () => {
       }),
     },
     aiAgentKnowledgeDocument: { count: vi.fn(async () => 0) },
-    aiAgentKnowledgeTag: { count: vi.fn(async () => 0) },
+    aiKnowledgeDocumentTag: { count: vi.fn(async () => 0) },
     orgMembership: { findUnique: mocks.membership, findMany: vi.fn(async () => []) },
     orgSupportGrant: { findFirst: vi.fn(async () => null) },
     aiApiKey: { findFirst: mocks.apiKey, update: vi.fn(async () => ({})) },
@@ -108,6 +108,8 @@ vi.mock('@/lib/orchestration/knowledge/document-manager', () => ({
       uploadedBy: userId,
       status: 'ready',
       chunkCount: 2,
+      // Only workspace A's members add documents here.
+      orgId: 'org-a',
     };
     state.knowledge.push(row);
     return row;

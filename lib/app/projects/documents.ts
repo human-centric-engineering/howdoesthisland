@@ -30,8 +30,9 @@
  * the comparison counts as this app's.
  *
  * **Removing a link** deletes the knowledge row only when an upload by this
- * app created it, no other link to it remains, and no agent is granted it,
- * directly or through a tag. Otherwise only the link goes. A reused row is
+ * app created it, no other link to it remains, no agent is granted it
+ * directly, and it carries no tag (an admin's mark, and how agents are
+ * granted documents in bulk). Otherwise only the link goes. A reused row is
  * never deleted on the app's account: it may be another project's, or one an
  * admin put in the knowledge base. "Created by this app" is kept on the links
  * while any remains: a removed link that holds it hands it to another, so the
@@ -51,7 +52,11 @@ import { extractText, type IntakeLimits } from '@/lib/app/intake/extract-text';
 import { fetchPage } from '@/lib/app/intake/fetch-page';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
 import { sha256 } from '@/lib/app/frameworks/store';
-import { MAX_DOCUMENT_BYTES, type AddDocumentBody } from '@/lib/app/projects/validations';
+import {
+  MAX_DOCUMENT_BYTES,
+  MAX_DOCUMENT_TITLE,
+  type AddDocumentBody,
+} from '@/lib/app/projects/validations';
 import type { DocumentStatus, ProjectDocumentView } from '@/lib/app/projects/wire';
 
 /**
@@ -128,10 +133,10 @@ function documentView(link: LinkRow, knowledge: KnowledgeState | undefined): Pro
 }
 
 /** The knowledge rows behind `links`, in one read. */
-async function knowledgeStates(ids: string[]): Promise<Map<string, KnowledgeState>> {
+async function knowledgeStates(ids: string[], orgId: string): Promise<Map<string, KnowledgeState>> {
   if (ids.length === 0) return new Map();
   const rows = await prisma.aiKnowledgeDocument.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, orgId },
     select: { id: true, status: true, chunkCount: true },
   });
   return new Map(rows.map((row) => [row.id, { status: row.status, chunkCount: row.chunkCount }]));
@@ -163,7 +168,10 @@ export async function listProjectDocuments(projectId: string): Promise<ProjectDo
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: linkSelect,
   });
-  const states = await knowledgeStates(links.map((link) => link.knowledgeDocumentId));
+  const states = await knowledgeStates(
+    links.map((link) => link.knowledgeDocumentId),
+    orgId
+  );
   return links.map((link) => documentView(link, states.get(link.knowledgeDocumentId)));
 }
 
@@ -258,12 +266,16 @@ function notIndexed(): APIError {
 async function upload(
   doc: Intake,
   fileHash: string,
-  userId: string
+  userId: string,
+  orgId: string
 ): Promise<{ knowledgeDocumentId: string; created: boolean }> {
   const before = new Set(
-    (await prisma.aiKnowledgeDocument.findMany({ where: { fileHash }, select: { id: true } })).map(
-      (row) => row.id
-    )
+    (
+      await prisma.aiKnowledgeDocument.findMany({
+        where: { fileHash, orgId },
+        select: { id: true },
+      })
+    ).map((row) => row.id)
   );
   const madeByThisCall = (row: { id: string; uploadedBy: string | null; fileName: string }) =>
     !before.has(row.id) && row.uploadedBy === userId && row.fileName === doc.uploadName;
@@ -282,7 +294,7 @@ async function upload(
       error: err instanceof Error ? err.message : String(err),
     });
     const failed = await prisma.aiKnowledgeDocument.findMany({
-      where: { fileHash, status: 'failed' },
+      where: { fileHash, orgId, status: 'failed' },
       select: { id: true, uploadedBy: true, fileName: true },
     });
     // A row a racing add was handed and has linked is that add's to settle:
@@ -302,6 +314,17 @@ async function upload(
     if (ours.length > 0) {
       await prisma.aiKnowledgeDocument.deleteMany({ where: { id: { in: ours } } });
     }
+    throw notIndexed();
+  }
+  // Core's dedupe reads by hash alone, so where row isolation is off
+  // (`TENANCY_MODE=single`, with more than the install org) it can hand back
+  // another workspace's row. That row is never linked: the project would read
+  // its status and, at t-75, its passages. The refusal does not say why, as
+  // that would tell this workspace another holds the same text.
+  if (knowledge.orgId !== orgId) {
+    logger.warn("Project document upload returned another workspace's knowledge row", {
+      knowledgeDocumentId: knowledge.id,
+    });
     throw notIndexed();
   }
   // A row a racing upload won with is returned as it stands, which may still
@@ -336,14 +359,15 @@ export async function addProjectDocument(
   await requireProject(projectId, orgId);
 
   const doc = await intake(body.source);
-  const title = body.title ?? doc.title;
+  // A file's or page's own title is not bounded as a given one is.
+  const title = body.title ?? doc.title.slice(0, MAX_DOCUMENT_TITLE);
   const fileHash = await sha256(doc.text);
 
   // The same text already in this project answers with its link, before the
   // cap (re-adding one the project holds adds nothing) and without indexing
   // it again. A failed row is not reused: the upload below makes a new one.
   const sameText = await prisma.aiKnowledgeDocument.findMany({
-    where: { fileHash, status: { not: 'failed' } },
+    where: { fileHash, orgId, status: { not: 'failed' } },
     select: { id: true },
   });
   const held = sameText.length
@@ -355,7 +379,7 @@ export async function addProjectDocument(
     : null;
   if (held) {
     const link = await retitled(held, body.title, orgId);
-    const states = await knowledgeStates([link.knowledgeDocumentId]);
+    const states = await knowledgeStates([link.knowledgeDocumentId], orgId);
     return { document: documentView(link, states.get(link.knowledgeDocumentId)), added: false };
   }
 
@@ -372,7 +396,7 @@ export async function addProjectDocument(
     );
   }
 
-  const { knowledgeDocumentId, created } = await upload(doc, fileHash, userId);
+  const { knowledgeDocumentId, created } = await upload(doc, fileHash, userId, orgId);
 
   const existing = await prisma.projectDocument.findFirst({
     where: { projectId, orgId, knowledgeDocumentId },
@@ -426,7 +450,7 @@ export async function addProjectDocument(
       data: { createdByUpload: true },
     });
   }
-  const states = await knowledgeStates([knowledgeDocumentId]);
+  const states = await knowledgeStates([knowledgeDocumentId], orgId);
   return { document: documentView(link, states.get(knowledgeDocumentId)), added };
 }
 
@@ -470,13 +494,14 @@ async function removeOnce(
       }
       if (!createdByApp) return { id: link.id, knowledgeDocumentDeleted: false };
 
-      const [direct, viaTag] = await Promise.all([
+      // A tag is an admin's curation, whether or not an agent is granted it
+      // yet: core's dedupe hands an admin who uploads the same text this row,
+      // and a tag is the mark they leave on it.
+      const [direct, tagged] = await Promise.all([
         tx.aiAgentKnowledgeDocument.count({ where: { documentId: knowledgeDocumentId } }),
-        tx.aiAgentKnowledgeTag.count({
-          where: { tag: { documents: { some: { documentId: knowledgeDocumentId } } } },
-        }),
+        tx.aiKnowledgeDocumentTag.count({ where: { documentId: knowledgeDocumentId } }),
       ]);
-      if (direct + viaTag > 0) return { id: link.id, knowledgeDocumentDeleted: false };
+      if (direct + tagged > 0) return { id: link.id, knowledgeDocumentDeleted: false };
 
       // Chunks cascade with it, as core's `deleteDocument` relies on.
       await tx.aiKnowledgeDocument.deleteMany({ where: { id: knowledgeDocumentId } });
@@ -488,8 +513,8 @@ async function removeOnce(
 
 /**
  * Remove a document from the project. The knowledge document goes too only
- * when the app's upload made it, nothing else links it, and no agent is
- * granted it (see the module header).
+ * when the app's upload made it, nothing else links it, no agent is granted
+ * it, and it carries no tag (see the module header).
  */
 export async function removeProjectDocument(
   projectId: string,

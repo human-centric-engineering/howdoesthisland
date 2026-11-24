@@ -118,14 +118,17 @@ documents**; the code and API say `documents`.
   `DOCUMENT_NOT_INDEXED`, and the failed knowledge row this call made is deleted,
   since nobody here can see or retry it, unless a racing add has already linked it.
   Text the project already holds is answered from its link before the cap and
-  without embedding again.
+  without embedding again. A row core's dedupe hands back from another workspace (it reads by
+  hash alone, and row isolation is off at `single`) is never linked: the add is
+  refused as `DOCUMENT_NOT_INDEXED`, without saying why. A file's or page's own
+  title is cut to 200 characters, as a given one is bounded.
 - **Status is not stored on the link.** It is the knowledge row's
   (`processing`, `ready`, `failed`, `pending_review`, `cleaning`), read with the
   list in one query, so a document core re-processes later reads as such. A stored
   copy would only ever have said `ready`, because the link is made once indexing
-  is done. The page re-reads the list every few seconds while any is `processing`
-  or `cleaning` (they settle on their own; `pending_review` waits on an admin),
-  for at most five minutes.
+  is done. The page re-reads the list every few seconds while any is `processing`,
+  for at most five minutes; `pending_review` and `cleaning` wait on an admin, so
+  are not polled. Re-adding text the project holds says so on the page.
 - **Whether this app's upload made the knowledge row** (`createdByUpload`).
   `uploadDocument` deduplicates by content hash and returns an existing ready row,
   or a racing upload's, without saying which. The service reads the ids with the
@@ -135,8 +138,9 @@ documents**; the code and API say `documents`.
   project. What is left is the same person uploading the same file through core's
   page and this app at once, counted as the app's.
 - **Removing a link** deletes the knowledge row only when an upload by the app
-  made it, no other link to it remains, and no agent is granted it, directly or
-  through a tag it carries. Otherwise only the link goes. When the link holding
+  made it, no other link to it remains, no agent is granted it directly, and it
+  carries no tag (an admin's mark on it, and how agents are granted documents in
+  bulk). Otherwise only the link goes. When the link holding
   `createdByUpload` goes while others remain, the flag moves to one of them, so
   the last link out still knows. One serializable transaction, retried on a clash.
 - `knowledgeDocumentId` has a hand-written FK to `ai_knowledge_document`,

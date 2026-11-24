@@ -194,19 +194,44 @@ describe('ProjectDocuments', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('re-reads the list while an admin re-processes a document, but not while one waits on review', () => {
+  it('does not re-read the list while a document is with an admin', () => {
     vi.useFakeTimers();
-    const { rerender } = render(
-      <ProjectDocuments projectId="proj-1" documents={[aDocument({ status: 'cleaning' })]} />
-    );
-    vi.advanceTimersByTime(DOCUMENT_POLL_MS);
-    expect(refresh).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <ProjectDocuments projectId="proj-1" documents={[aDocument({ status: 'pending_review' })]} />
+    render(
+      <ProjectDocuments
+        projectId="proj-1"
+        documents={[
+          aDocument({ id: 'doc-1', status: 'cleaning' }),
+          aDocument({ id: 'doc-2', status: 'pending_review' }),
+        ]}
+      />
     );
     vi.advanceTimersByTime(DOCUMENT_POLL_MS * 3);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('says so when the project already holds the text it was given', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(aDocument());
+    const user = userEvent.setup();
+    render(<ProjectDocuments projectId="proj-1" documents={[aDocument()]} />);
+
+    const file = new File(['Our voice is plain.'], 'copy.txt', { type: 'text/plain' });
+    await user.upload(screen.getByLabelText(/Add a file/, { selector: 'input' }), file);
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'This project already holds that text, as Brand guide.'
+    );
+  });
+
+  it('says nothing more when the text is new to the project', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(aDocument({ id: 'doc-new' }));
+    const user = userEvent.setup();
+    render(<ProjectDocuments projectId="proj-1" documents={[aDocument()]} />);
+
+    const file = new File(['Something new.'], 'new.txt', { type: 'text/plain' });
+    await user.upload(screen.getByLabelText(/Add a file/, { selector: 'input' }), file);
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('stops re-reading after the most polls, even if the document never settles', () => {

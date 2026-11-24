@@ -41,9 +41,9 @@ const db = vi.hoisted(() => ({
     projects: [] as Record<string, unknown>[],
     links: [] as Record<string, unknown>[],
     knowledge: [] as Record<string, unknown>[],
-    /** Agent grants: direct ones by document id, and tags by the documents they carry. */
+    /** Direct agent grants, and the documents that carry a tag, by document id. */
     directGrants: [] as string[],
-    tagGrants: [] as string[][],
+    taggedDocs: [] as string[],
     seq: 0,
   },
 }));
@@ -229,7 +229,7 @@ beforeEach(() => {
   db.state.links = [];
   db.state.knowledge = [];
   db.state.directGrants = [];
-  db.state.tagGrants = [];
+  db.state.taggedDocs = [];
   db.state.seq = 0;
   upload.during = null;
   upload.fail = false;
@@ -250,11 +250,10 @@ beforeEach(() => {
           db.state.directGrants.filter((id) => id === where.documentId).length
       ),
     },
-    aiAgentKnowledgeTag: {
+    aiKnowledgeDocumentTag: {
       count: vi.fn(
-        async ({ where }: { where: { tag: { documents: { some: { documentId: string } } } } }) =>
-          db.state.tagGrants.filter((docs) => docs.includes(where.tag.documents.some.documentId))
-            .length
+        async ({ where }: { where: { documentId: string } }) =>
+          db.state.taggedDocs.filter((id) => id === where.documentId).length
       ),
     },
   };
@@ -485,6 +484,28 @@ describe('addProjectDocument', () => {
     expect(linkOf('link-b')).toBeDefined();
   });
 
+  it("never links another workspace's knowledge row that core's dedupe hands back", async () => {
+    coreUpload(TEXT, { orgId: 'org-b' });
+
+    await expect(addProjectDocument('p1', fileSource(), ALICE)).rejects.toMatchObject({
+      code: 'DOCUMENT_NOT_INDEXED',
+      status: 502,
+    });
+    expect(db.state.links).toEqual([]);
+    expect(db.state.knowledge).toHaveLength(1);
+  });
+
+  it("cuts a document's own title to the length a given one may be", async () => {
+    const long = 'T'.repeat(500);
+    const { document } = await addProjectDocument(
+      'p1',
+      fileSource(`# ${long}\n\n${TEXT}`, 'long.md'),
+      ALICE
+    );
+
+    expect(document.title).toBe('T'.repeat(200));
+  });
+
   it('refuses a document longer than a background document may be, in its own words', async () => {
     await expect(
       addProjectDocument('p1', fileSource('word '.repeat(50_000)), ALICE)
@@ -594,9 +615,9 @@ describe('removeProjectDocument', () => {
     expect(db.state.links).toEqual([]);
   });
 
-  it('keeps a document the app made when an agent is granted a tag it carries', async () => {
+  it('keeps a document the app made once it carries a tag, granted to an agent or not', async () => {
     const { document } = await addProjectDocument('p1', fileSource(), ALICE);
-    db.state.tagGrants.push([String(linkOf(document.id)?.knowledgeDocumentId)]);
+    db.state.taggedDocs.push(String(linkOf(document.id)?.knowledgeDocumentId));
 
     const removed = await removeProjectDocument('p1', document.id);
 

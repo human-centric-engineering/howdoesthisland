@@ -3,8 +3,8 @@
  *
  * DELETE /api/v1/projects/{id}/documents/{documentId} — remove it from the
  *   project. The document leaves the workspace's knowledge base too only when
- *   this app's upload put it there, no other project links it, and no agent is
- *   granted it; otherwise only the link goes. The answer says which
+ *   this app's upload put it there, no other project links it, no agent is
+ *   granted it, and it carries no tag; otherwise only the link goes. The answer says which
  *   (`knowledgeDocumentDeleted`).
  *
  * Authentication: a browser session, or an API key with the `projects` scope.
