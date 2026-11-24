@@ -163,10 +163,14 @@ context: its brief, and passages from its background documents
   description, then at most 6 passages, each under its document's title. The
   engine's `projectBlock` fences the whole in `<project_context>` and frames it as
   background, not instructions; a fence tag inside a passage or the brief is
-  dropped, so it cannot close the fence.
+  dropped, with attributes or self-closing too, so it cannot close the fence.
 - **Retrieval.** The copy is split into at most 4 sections (its paragraphs, in
-  order, in runs of about equal length), each cut at 2,000 characters and
-  deduplicated, and each is one `searchKnowledgeWithEmbedding` query. The search
+  order, in runs of about equal length; copy with fewer paragraphs than that is
+  split by lines, then sentences, then into runs of equal length, so text with no
+  blank lines is searched across its length), each cut at 2,000 characters and
+  deduplicated, and each is one `searchKnowledgeWithEmbedding` query. The searches
+  log each query's length, not its text (`logQuery: false`, divergence row 28),
+  since the queries are the copy. The search
   is restricted to the knowledge rows the project's links point at, in this
   workspace and `ready` (`documentIds`), and each passage returned is checked
   against that set again. Passages are deduplicated across queries and taken best
@@ -186,13 +190,22 @@ passages: [{ documentId, chunkId, text }] }`); a re-driven run reads it back, so
   link ids; titles are the titles at the time, so a later rename or removal does
   not change an old report.
 - **Spend.** Each query is one embedding call, logged by core with the review's
-  `assessmentId` (or a `store: false` run's `ephemeralRun`) and `kind:
-'project_context'`, so it is charged CopyCredits with the review and added to its
-  `costUsd`.
-- **A search that fails** (the embedding provider down) is not reviewed as if the
-  project had no documents: a stored review goes back to the queue, as for any
-  error that is not a judge's, and a `store: false` one is 503
-  `PROJECT_CONTEXT_UNAVAILABLE`. No judge is called either way.
+  `assessmentId` (or a `store: false` run's `ephemeralRun` and `ephemeral: true`)
+  and `kind: 'project_context'`, so it is charged CopyCredits with the review,
+  added to its `costUsd`, and counted on the usage page with the reviews it
+  belongs to. A `store: false` review's searches run in its privacy scope, as the
+  stored run's do. When one search fails, what the others cost is still added.
+- **A search that fails** is not reviewed as if the project had no documents. No
+  judge is called either way.
+  - When the workspace's embedding setup stops it (no embedding model, an
+    embeddings policy of `local_only` with none local, or an active model that no
+    longer matches the stored vectors), asking again cannot work: a stored review
+    is finished `FAILED`, `errorCode` `PROJECT_CONTEXT_NOT_SET_UP`, saying an admin
+    must fix the knowledge base's embedding setup, and a `store: false` one is 409
+    `PROJECT_CONTEXT_NOT_SET_UP`.
+  - Otherwise (the embedding provider down) a stored review goes back to the
+    queue, as for any error that is not a judge's, and a `store: false` one is 503
+    `PROJECT_CONTEXT_UNAVAILABLE`.
 - **Kept** with the assessment, so in the org and subject exports with it, and
   purged with it at the content window.
 

@@ -95,9 +95,22 @@ export const removedDocumentSchema = z.object({
  * `lib/app/projects/context.ts`), as the assessment records it and the API
  * answers it.
  */
+/**
+ * A brief as a record holds it: the request's parts, with no limits, so a
+ * record kept from before a limit changed still reads (`briefSchema` is what
+ * a request is checked against).
+ */
+export const storedBriefSchema = z.object({
+  offer: z.string().optional(),
+  audience: z.string().optional(),
+  voice: z.string().optional(),
+  markets: z.string().optional(),
+  goals: z.string().optional(),
+});
+
 export const contextUsedSchema = z.object({
   /** The brief as given, or `null` when the project had none. */
-  brief: briefSchema.nullable(),
+  brief: storedBriefSchema.nullable(),
   /** The documents a passage came from: the project's document id and its title at the time. */
   documents: z.array(z.object({ id: z.string(), title: z.string() })),
   /** The passages, in the order the reviewers read them, best match first. */

@@ -144,6 +144,7 @@ import { resetKicksForTests } from '@/lib/app/assessments/kick';
 import { runAssessment } from '@/lib/app/assessments/run';
 import { runAsOrg } from '@/lib/tenancy/context';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
+import { PrivacyRefusedError } from '@/lib/orchestration/llm/privacy-stage';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { assessmentDetailSchema, ephemeralAssessmentSchema } from '@/lib/app/api/registry';
@@ -902,9 +903,43 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
       expect(data.contextUsed?.documents).toEqual([{ id: 'link-guide', title: 'Brand guide' }]);
       for (const block of sentToJudges()) expect(block).toContain('Our voice is plain.');
       // Its searches' cost rows are the run's, so its charge includes them.
+      // Its searches' cost rows are the run's, so its charge includes them,
+      // and `ephemeral`, so usage counts them with the reviews kept nowhere.
       expect(mocks.search.mock.calls[0]?.[4]).toMatchObject({
-        metadata: { ephemeralRun: expect.any(String), kind: 'project_context' },
+        metadata: { ephemeral: true, ephemeralRun: expect.any(String), kind: 'project_context' },
       });
+    });
+
+    it('searches a review kept nowhere in the run’s own privacy scope', async () => {
+      project();
+      let scopeId: string | undefined;
+      mocks.search.mockImplementation(async () => {
+        scopeId = currentPrivacyScope()?.scopeId;
+        return {
+          results: [],
+          embedding: { model: 'e', provider: 'p', inputTokens: 1, costUsd: 0 },
+        };
+      });
+
+      await post({ source: { text: TEXT }, projectId: 'project-1', profile: 'full', store: false });
+
+      expect(scopeId).toMatch(/^assessment:ephemeral:/);
+    });
+
+    it('refuses a review kept nowhere with 409 when the embedding setup stops the search', async () => {
+      project();
+      mocks.search.mockRejectedValue(new PrivacyRefusedError('embeddings_local_only', 'openai'));
+
+      const res = await post({
+        source: { text: TEXT },
+        projectId: 'project-1',
+        profile: 'full',
+        store: false,
+      });
+
+      expect(res.status).toBe(409);
+      expect((await json(res)).error).toMatchObject({ code: 'PROJECT_CONTEXT_NOT_SET_UP' });
+      expect(mocks.runJudge).not.toHaveBeenCalled();
     });
 
     it('refuses a review kept nowhere with 503 when the documents cannot be searched, calling no judge', async () => {

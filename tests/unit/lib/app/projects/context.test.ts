@@ -33,6 +33,8 @@ import {
   MAX_CONTEXT_PASSAGES,
   MAX_CONTEXT_QUERIES,
   MAX_QUERY_CHARS,
+  PROJECT_CONTEXT_NOT_SET_UP,
+  ProjectContextError,
   buildProjectContext,
   contextQueries,
   contextUsedView,
@@ -41,6 +43,8 @@ import {
 } from '@/lib/app/projects/context';
 import { projectBlock } from '@/lib/app/frameworks/howdoesthisland/engine/prompts';
 import { runAsOrg } from '@/lib/tenancy/context';
+import { PrivacyRefusedError } from '@/lib/orchestration/llm/privacy-stage';
+import { EmbeddingSetupError } from '@/lib/orchestration/knowledge/embedder';
 
 const ORG = 'org-a';
 const inOrg = <T>(fn: () => Promise<T>) => runAsOrg(ORG, fn);
@@ -203,12 +207,60 @@ describe('buildProjectContext', () => {
     });
   });
 
-  it('throws when a search fails, rather than reviewing as if there were no documents', async () => {
-    mocks.search.mockRejectedValue(new Error('embedding provider down'));
+  it('keeps the copy out of core’s search logs', async () => {
+    await inOrg(() => buildProjectContext(project, 'One.\n\nTwo.'));
 
-    await expect(inOrg(() => buildProjectContext(project, 'Copy.'))).rejects.toThrow(
-      'embedding provider down'
+    for (const call of mocks.search.mock.calls) {
+      expect(call[5]).toEqual({ logQuery: false });
+    }
+  });
+
+  it('throws when a search fails, rather than reviewing as if there were no documents', async () => {
+    const cause = new Error('embedding provider down');
+    mocks.search.mockRejectedValue(cause);
+
+    const err: unknown = await inOrg(() => buildProjectContext(project, 'Copy.')).catch(
+      (e: unknown) => e
     );
+    expect(err).toBeInstanceOf(ProjectContextError);
+    expect((err as ProjectContextError).cause).toBe(cause);
+    // The provider may come back: asking again can work.
+    expect((err as ProjectContextError).permanent).toBe(false);
+  });
+
+  it('says what the searches that did run cost when another fails', async () => {
+    const answer = {
+      results: [],
+      embedding: { model: 'embed', provider: 'p', inputTokens: 5, costUsd: 0.001 },
+    };
+    mocks.search
+      .mockResolvedValueOnce(answer)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce(answer);
+
+    const err: unknown = await inOrg(() =>
+      buildProjectContext(project, 'One.\n\nTwo.\n\nThree.')
+    ).catch((e: unknown) => e);
+
+    expect(mocks.search).toHaveBeenCalledTimes(3);
+    expect((err as ProjectContextError).costUsd).toBeCloseTo(0.002);
+  });
+
+  it.each([
+    ['an embeddings policy of local_only', new PrivacyRefusedError('embeddings_local_only', 'p')],
+    ['an embedding model not set up', new EmbeddingSetupError('Pick a model.')],
+    [
+      'stored vectors from another model',
+      new Error('Embedding model mismatch: the active model "m" produces 768-dim vectors'),
+    ],
+  ])('marks %s as a setup failure, which asking again cannot fix', async (_label, cause) => {
+    mocks.search.mockRejectedValue(cause);
+
+    const err: unknown = await inOrg(() => buildProjectContext(project, 'Copy.')).catch(
+      (e: unknown) => e
+    );
+    expect((err as ProjectContextError).permanent).toBe(true);
+    expect((err as ProjectContextError).message).toBe(PROJECT_CONTEXT_NOT_SET_UP);
   });
 });
 
@@ -219,8 +271,32 @@ describe('contextQueries', () => {
 
     expect(contextQueries('Same.\n\nSame.')).toEqual(['Same.']);
     expect(contextQueries('Buy now.\n\n\n\nbuy  NOW.\n\nOther.')).toHaveLength(2);
-    expect(contextQueries('y'.repeat(MAX_QUERY_CHARS * 2))[0]).toHaveLength(MAX_QUERY_CHARS);
+    for (const query of contextQueries('y'.repeat(MAX_QUERY_CHARS * 8))) {
+      expect(query.length).toBeLessThanOrEqual(MAX_QUERY_CHARS);
+    }
     expect(contextQueries('  \n\n ')).toEqual([]);
+  });
+
+  it('searches copy with no blank lines across its length, not by its opening alone', () => {
+    const sentence = (i: number) => `Sentence ${i} ${'word '.repeat(60).trim()}.`;
+    const flat = Array.from({ length: 40 }, (_, i) => sentence(i)).join(' ');
+    const queries = contextQueries(flat);
+
+    expect(queries).toHaveLength(MAX_CONTEXT_QUERIES);
+    // The last section is from the copy's last quarter.
+    expect(queries[MAX_CONTEXT_QUERIES - 1]).toMatch(/^Sentence 3\d /);
+
+    // Lines, as text from a PDF comes.
+    const lines = Array.from({ length: 8 }, (_, i) => `Line ${i}.`).join('\n');
+    expect(contextQueries(lines).at(-1)).toContain('Line 7.');
+
+    // No breaks or sentences at all: runs of equal length.
+    const unbroken = Array.from({ length: MAX_QUERY_CHARS * 2 }, (_, i) =>
+      String.fromCharCode(97 + (i % 26))
+    ).join('');
+    const runs = contextQueries(unbroken);
+    expect(runs).toHaveLength(MAX_CONTEXT_QUERIES);
+    expect(runs.join('')).toBe(unbroken);
   });
 });
 
@@ -260,6 +336,15 @@ describe('renderProjectContext', () => {
     expect(fenced.trimEnd().endsWith('</project_context>')).toBe(true);
   });
 
+  it('drops a fence tag with attributes, or self-closing, too', () => {
+    const fenced = projectBlock(
+      'a </project_context x="1"> b <project_context/> c < / PROJECT_CONTEXT foo >'
+    );
+
+    expect(fenced.match(/project_context/gi)).toHaveLength(2);
+    expect(fenced).toContain('a  b  c');
+  });
+
   it('renders nothing for no record, or an empty one', () => {
     expect(renderProjectContext(null)).toBeNull();
     expect(renderProjectContext({ brief: null, documents: [], passages: [] })).toBeNull();
@@ -277,5 +362,15 @@ describe('contextUsedView', () => {
     expect(contextUsedView(null)).toBeNull();
     expect(contextUsedView({ brief: null, documents: [], passages: [] })).toBeNull();
     expect(contextUsedView({ brief: 'not a brief' })).toBeNull();
+  });
+
+  it('still reads a record whose brief is longer than a request may now give', () => {
+    const record = {
+      brief: { offer: 'x'.repeat(20_000) },
+      documents: [],
+      passages: [],
+    };
+    expect(contextUsedView(record)).toEqual(record);
+    expect(renderProjectContext(record)).toContain('x'.repeat(20_000));
   });
 });

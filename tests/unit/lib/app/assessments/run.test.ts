@@ -66,6 +66,8 @@ import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import type { OverlayParse } from '@/lib/app/frameworks/engine';
 import { logger } from '@/lib/logging';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
+import { PrivacyRefusedError } from '@/lib/orchestration/llm/privacy-stage';
+import { PROJECT_CONTEXT_NOT_SET_UP } from '@/lib/app/projects/context';
 import { runAsOrg } from '@/lib/tenancy/context';
 
 const ORG = 'org-a';
@@ -681,6 +683,18 @@ describe('a project’s context (t-75)', () => {
     expect(mocks.runJudge).not.toHaveBeenCalled();
     expect(a.status).toBe('QUEUED');
     expect(a.projectContext).toBeUndefined();
+  });
+
+  it('fails the run saying why, calling no judge, when the embedding setup stops the search', async () => {
+    mocks.search.mockRejectedValue(new PrivacyRefusedError('embeddings_local_only', 'openai'));
+    const a = fake.seed({ projectId: 'project-1' });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('failed');
+
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+    expect(a.status).toBe('FAILED');
+    expect(a.error).toBe(PROJECT_CONTEXT_NOT_SET_UP);
+    expect(a.errorCode).toBe('PROJECT_CONTEXT_NOT_SET_UP');
   });
 });
 

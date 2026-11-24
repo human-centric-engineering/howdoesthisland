@@ -31,15 +31,21 @@
  * `store: false` run's (`ephemeralRun`) include it. The cost is returned for
  * the caller to add to the review's own total.
  *
- * A search that throws (the embedding provider down) throws here: the copy
- * is not reviewed as if the project had no documents.
+ * **Its logs.** The searches log each query's length, not its text: the
+ * queries are the copy, which a `store: false` review keeps nowhere.
+ *
+ * A search that throws throws here, as a {@link ProjectContextError}: the
+ * copy is not reviewed as if the project had no documents. The error carries
+ * what the searches that did run cost, and whether asking again can work.
  */
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { searchKnowledgeWithEmbedding } from '@/lib/orchestration/knowledge/search';
 import type { EmbeddingAttribution } from '@/lib/orchestration/knowledge/embedder';
-import { briefSchema, type Brief } from '@/lib/app/projects/validations';
-import { contextUsedSchema, type ContextUsed } from '@/lib/app/projects/wire';
+import { NoProviderConfiguredError } from '@/lib/orchestration/llm/agent-resolver';
+import { isLocalOnlyEmbeddingRefusal } from '@/lib/orchestration/llm/privacy-stage';
+import type { Brief } from '@/lib/app/projects/validations';
+import { contextUsedSchema, storedBriefSchema, type ContextUsed } from '@/lib/app/projects/wire';
 
 /** The most passages one review reads. */
 export const MAX_CONTEXT_PASSAGES = 6;
@@ -81,9 +87,13 @@ const BRIEF_PARTS: ReadonlyArray<readonly [keyof Brief, string]> = [
   ['goals', 'What the copy must achieve'],
 ];
 
-/** The brief's parts that say something, or `null` when none does. */
+/**
+ * The brief's parts that say something, or `null` when none does. Read with
+ * the stored schema, which holds no limits, so a record kept from before a
+ * limit changed still reads as it was given.
+ */
 function givenBrief(brief: unknown): Brief | null {
-  const parsed = briefSchema.safeParse(brief);
+  const parsed = storedBriefSchema.safeParse(brief);
   if (!parsed.success) return null;
   const given: Brief = {};
   for (const [key] of BRIEF_PARTS) {
@@ -128,15 +138,38 @@ export function renderProjectContext(record: ProjectContextRecord | null): strin
 }
 
 /**
- * The copy's sections, as search queries: its paragraphs gathered in order
- * into at most {@link MAX_CONTEXT_QUERIES} runs of about equal length, each
- * cut at {@link MAX_QUERY_CHARS}, with repeats dropped.
+ * The copy's pieces, as {@link contextQueries} gathers them: its paragraphs;
+ * when there are fewer than {@link MAX_CONTEXT_QUERIES}, its lines; then its
+ * sentences; then, for text with none of these, runs of equal length. So
+ * copy with no blank lines (text from a PDF or a page) is searched across
+ * its length, not by its opening alone.
+ */
+function copyPieces(content: string): string[] {
+  const pieces = (separator: RegExp) =>
+    content
+      .split(separator)
+      .map((p) => p.replace(/\s+/g, ' ').trim())
+      .filter((p) => p !== '');
+  let found: string[] = [];
+  for (const separator of [/\n\s*\n/, /\n/, /(?<=[.!?])\s+/]) {
+    found = pieces(separator);
+    if (found.length >= MAX_CONTEXT_QUERIES) return found;
+  }
+  const whole = found.join(' ');
+  if (whole.length <= MAX_QUERY_CHARS) return found;
+  const size = Math.ceil(whole.length / MAX_CONTEXT_QUERIES);
+  const runs: string[] = [];
+  for (let at = 0; at < whole.length; at += size) runs.push(whole.slice(at, at + size));
+  return runs;
+}
+
+/**
+ * The copy's sections, as search queries: its pieces ({@link copyPieces})
+ * gathered in order into at most {@link MAX_CONTEXT_QUERIES} runs of about
+ * equal length, each cut at {@link MAX_QUERY_CHARS}, with repeats dropped.
  */
 export function contextQueries(content: string): string[] {
-  const paragraphs = content
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/\s+/g, ' ').trim())
-    .filter((p) => p !== '');
+  const paragraphs = copyPieces(content);
   if (paragraphs.length === 0) return [];
   const total = paragraphs.reduce((sum, p) => sum + p.length, 0);
   const target = total / MAX_CONTEXT_QUERIES;
@@ -215,18 +248,24 @@ export async function buildProjectContext(
 
   const queries = linkOf.size > 0 ? contextQueries(content) : [];
   const documentIds = [...linkOf.keys()];
-  const answers = await Promise.all(
+  // Settled, not raced: when one fails, the others are already billed, and
+  // the caller is told what they cost.
+  const settled = await Promise.allSettled(
     queries.map((query) =>
       searchKnowledgeWithEmbedding(
         query,
         { documentIds },
         MAX_CONTEXT_PASSAGES,
         undefined,
-        withKind(attribution)
+        withKind(attribution),
+        { logQuery: false }
       )
     )
   );
+  const answers = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
   const costUsd = answers.reduce((sum, a) => sum + a.embedding.costUsd, 0);
+  const failed = settled.find((s) => s.status === 'rejected');
+  if (failed) throw new ProjectContextError(failed.reason, costUsd);
 
   // Each chunk once, at its best match across the queries.
   const best = new Map<string, { similarity: number; documentId: string; text: string }>();
@@ -267,6 +306,45 @@ export async function buildProjectContext(
 
   if (!brief && passages.length === 0) return { record: null, costUsd };
   return { record: { brief, documents: [...used.values()], passages }, costUsd };
+}
+
+/** What a review is told when the workspace's setup stops the search (see {@link ProjectContextError}). */
+export const PROJECT_CONTEXT_NOT_SET_UP =
+  "The project's background documents cannot be searched until an admin fixes the knowledge base's embedding setup.";
+
+/**
+ * The project's documents could not be searched. `permanent` when asking
+ * again cannot work until the workspace's setup changes: no embedding model,
+ * an embeddings policy of `local_only` with none local, or an active model
+ * that no longer matches the stored vectors. Otherwise (the provider down)
+ * it may. `costUsd` is what the searches that did run cost, already billed.
+ */
+export class ProjectContextError extends Error {
+  readonly permanent: boolean;
+  readonly costUsd: number;
+  constructor(cause: unknown, costUsd: number) {
+    const permanent = isSetupFailure(cause);
+    super(
+      permanent
+        ? PROJECT_CONTEXT_NOT_SET_UP
+        : "The project's background documents could not be searched.",
+      { cause }
+    );
+    this.name = 'ProjectContextError';
+    this.permanent = permanent;
+    this.costUsd = costUsd;
+  }
+}
+
+function isSetupFailure(err: unknown): boolean {
+  return (
+    isLocalOnlyEmbeddingRefusal(err) ||
+    // `EmbeddingSetupError` is one of these.
+    err instanceof NoProviderConfiguredError ||
+    // Core's vector check (`embedding-dimensions.ts`) throws a plain Error
+    // with this opening.
+    (err instanceof Error && err.message.startsWith('Embedding model mismatch:'))
+  );
 }
 
 /** The caller's attribution, with the cost rows marked as this search's. */

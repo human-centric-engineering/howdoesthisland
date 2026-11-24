@@ -31,6 +31,7 @@ import { countWords, extractText } from '@/lib/app/intake/extract-text';
 import { fetchPage } from '@/lib/app/intake/fetch-page';
 import {
   buildProjectContext,
+  ProjectContextError,
   contextUsedView,
   renderProjectContext,
   type BuiltProjectContext,
@@ -510,22 +511,21 @@ async function runEphemeral(
     orgId: requireOrgId(),
     userId: caller.userId,
   });
-  // The project's context (t-75), as the stored run gathers it, for the
-  // judges to read. None for the quick scan alone, which calls no model.
-  const gathered =
-    projectId && judges.length > 0
-      ? await ephemeralProjectContext(projectId, text, caller, runId)
-      : { record: null, costUsd: 0 };
-  const contextUsed = contextUsedView(gathered.record);
-  const projectContext = renderProjectContext(gathered.record);
-  const fan = await runInPrivacyScope(scope, () =>
-    runJudges({
+  const { gathered, fan } = await runInPrivacyScope(scope, async () => {
+    // The project's context (t-75), as the stored run gathers it, in the
+    // run's privacy scope, for the judges to read. None for the quick scan
+    // alone, which calls no model.
+    const gathered =
+      projectId && judges.length > 0
+        ? await ephemeralProjectContext(projectId, text, caller, runId)
+        : { record: null, costUsd: 0 };
+    const fan = await runJudges({
       engine,
       frameworkVersion: label,
       text,
       ctx,
       slots: judges,
-      projectContext,
+      projectContext: renderProjectContext(gathered.record),
       userId: caller.userId,
       ephemeral: true,
       // Tells this run's cost rows apart, so usage can count the reviews
@@ -533,8 +533,10 @@ async function runEphemeral(
       costTags: { ephemeralRun: runId },
       // A caller gone away starts no further judge: nobody is left to answer.
       shouldContinue: () => Promise.resolve(!signal?.aborted),
-    })
-  );
+    });
+    return { gathered, fan };
+  });
+  const contextUsed = contextUsedView(gathered.record);
   if (fan.stopped) {
     throw new APIError('The request was closed before the judges ran.', 'REQUEST_CLOSED', 499);
   }
@@ -578,9 +580,12 @@ async function runEphemeral(
 
 /**
  * A `store: false` review's project context (t-75), its searches' cost rows
- * tagged with the run, so its charge includes them. A search that fails is
- * 503 `PROJECT_CONTEXT_UNAVAILABLE` before any judge is called, rather than a
- * review that reads as if the project had no documents.
+ * tagged with the run, so its charge includes them, and `ephemeral`, so usage
+ * counts them with the reviews kept nowhere. A search that fails is refused
+ * before any judge is called, rather than a review that reads as if the
+ * project had no documents: 409 `PROJECT_CONTEXT_NOT_SET_UP` when the
+ * workspace's embedding setup stops it, which asking again cannot change;
+ * otherwise 503 `PROJECT_CONTEXT_UNAVAILABLE`.
  */
 async function ephemeralProjectContext(
   projectId: string,
@@ -597,13 +602,16 @@ async function ephemeralProjectContext(
   try {
     return await buildProjectContext(project, text, {
       userId: caller.userId,
-      metadata: { ephemeralRun: runId },
+      metadata: { ephemeral: true, ephemeralRun: runId },
     });
   } catch (err) {
     logger.error('Project context could not be gathered for a store: false review', err, {
       projectId,
       runId,
     });
+    if (err instanceof ProjectContextError && err.permanent) {
+      throw new APIError(err.message, 'PROJECT_CONTEXT_NOT_SET_UP', 409);
+    }
     throw new APIError(
       "The project's background documents could not be searched. Try again in a moment.",
       'PROJECT_CONTEXT_UNAVAILABLE',

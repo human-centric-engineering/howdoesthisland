@@ -114,7 +114,9 @@ import { chargeEndedReview } from '@/lib/app/credits/charge';
 import {
   buildProjectContext,
   parseProjectContext,
+  ProjectContextError,
   renderProjectContext,
+  type BuiltProjectContext,
   type ProjectContextRecord,
 } from '@/lib/app/projects/context';
 
@@ -366,6 +368,7 @@ async function drive(
   // the same block.
   const gathered = await projectContextFor(row, token);
   if (gathered === 'lost') return await lostTo(row.id);
+  if (gathered === 'failed') return 'failed';
   const projectContext = renderProjectContext(gathered);
 
   const outputs: Record<string, unknown> = {};
@@ -491,8 +494,12 @@ async function drive(
  * that gives the reviewers nothing is stored as an empty record, so a
  * re-drive does not search again and find what the first judges never read.
  *
- * A search that throws throws on: the run is handed back to the queue, as
- * for any error that is not a judge's, rather than reviewed without context.
+ * A search that fails is never reviewed past as if the project had no
+ * documents. When the workspace's embedding setup stops it, which asking
+ * again cannot change, the run is finished `FAILED` saying so (`'failed'`,
+ * or `'lost'`); otherwise it throws on, and the run is handed back to the
+ * queue, as for any error that is not a judge's. Either way what the searches
+ * that ran cost is added first.
  */
 async function projectContextFor(
   row: Pick<
@@ -500,25 +507,33 @@ async function projectContextFor(
     'id' | 'project' | 'projectContext' | 'judges' | 'createdByUserId' | 'content'
   >,
   token: string
-): Promise<ProjectContextRecord | null | 'lost'> {
+): Promise<ProjectContextRecord | null | 'lost' | 'failed'> {
   const stored = parseProjectContext(row.projectContext);
   if (stored) return stored;
   // The quick scan alone calls no model, so nothing would read it.
   if (!row.project || row.judges.length === 0) return null;
-  const built = await buildProjectContext(row.project, row.content.text, {
-    ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
-    // Charged with the review (`charge.ts` reads `assessmentId`).
-    metadata: { assessmentId: row.id },
-  });
-  // Already billed: logged, not thrown, as the editor's cost is.
+  let built: BuiltProjectContext;
   try {
-    await addCost(row.id, token, built.costUsd);
-  } catch (err) {
-    logger.error('Could not add the project context’s cost to the assessment', err, {
-      assessmentId: row.id,
-      costUsd: built.costUsd,
+    built = await buildProjectContext(row.project, row.content.text, {
+      ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
+      // Charged with the review (`charge.ts` reads `assessmentId`).
+      metadata: { assessmentId: row.id },
     });
+  } catch (err) {
+    if (!(err instanceof ProjectContextError)) throw err;
+    await addContextCost(row.id, token, err.costUsd);
+    if (!err.permanent) throw err;
+    logger.error('Project context cannot be gathered: the embedding setup stops it', err, {
+      assessmentId: row.id,
+    });
+    const written = await finish(row.id, token, {
+      status: 'FAILED',
+      error: err.message,
+      errorCode: 'PROJECT_CONTEXT_NOT_SET_UP',
+    });
+    return written ? 'failed' : 'lost';
   }
+  await addContextCost(row.id, token, built.costUsd);
   const record: ProjectContextRecord = built.record ?? { brief: null, documents: [], passages: [] };
   const { count } = await prisma.assessment.updateMany({
     where: { id: row.id, leaseToken: token, status: 'RUNNING' },
@@ -526,6 +541,18 @@ async function projectContextFor(
     data: { projectContext: record },
   });
   return count === 1 ? record : 'lost';
+}
+
+/** Add the project context's cost. Already billed: logged, not thrown, as the editor's cost is. */
+async function addContextCost(assessmentId: string, token: string, costUsd: number) {
+  try {
+    await addCost(assessmentId, token, costUsd);
+  } catch (err) {
+    logger.error('Could not add the project context’s cost to the assessment', err, {
+      assessmentId,
+      costUsd,
+    });
+  }
 }
 
 /**
