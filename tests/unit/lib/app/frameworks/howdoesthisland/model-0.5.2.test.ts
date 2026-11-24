@@ -22,6 +22,9 @@ const SHA256_0_5_2 = '49ed3c8fdb2a9f94ebd5250195eb5d17fe0f98a7c08935b2b7db9a6176
 const read = (file: string): JsonObject =>
   z.looseObject({}).parse(JSON.parse(readFileSync(file, 'utf8')));
 
+/** A top-level section of the model, as an object. */
+const section = z.record(z.string(), z.unknown());
+
 const v051 = read(`${DATA}/model-0.5.1.json`);
 const v052 = read(FILE_0_5_2);
 const model = indexModel(v052);
@@ -37,15 +40,15 @@ describe('model-0.5.2.json', () => {
   });
 
   it('is 0.5.1 with a new version, a change note and the bounds, and nothing else', () => {
-    const meta = v052.meta as JsonObject;
-    const scoring = v052.scoring as JsonObject;
+    const meta = section.parse(v052.meta);
+    const scoring = section.parse(v052.scoring);
     expect(meta.version).toBe('0.5.2');
     expect(meta.changes_from_0_5_1).toEqual([expect.stringContaining('adjustment_bounds')]);
     expect(scoring.adjustment_bounds).toEqual(BOUNDS);
 
     const { version: _v, changes_from_0_5_1: _c, ...restMeta } = meta;
     const { adjustment_bounds: _b, ...restScoring } = scoring;
-    const old = v051.meta as JsonObject;
+    const old = section.parse(v051.meta);
     expect({ ...v052, meta: restMeta, scoring: restScoring }).toEqual({
       ...v051,
       meta: { ...old, version: undefined },
