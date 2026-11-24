@@ -43,12 +43,16 @@ const page = (search: Record<string, string> = {}) =>
 
 const LIST = '/api/v1/assessments?limit=20';
 
-function answer(reviews = [aReview()], total = reviews.length) {
+function answer(
+  reviews = [aReview()],
+  total = reviews.length,
+  latestVersion: string | null = '0.5.2'
+) {
   requireServerData.mockImplementation(async (path: string) => {
     if (path.startsWith('/api/v1/assessments?'))
       return { data: reviews, meta: { page: 1, limit: 20, total, totalPages: 1 } };
     if (path === '/api/v1/frameworks/howdoesthisland')
-      return { data: { name: 'HowDoesThisLand', latestVersion: '0.5.2' }, meta: null };
+      return { data: { name: 'HowDoesThisLand', latestVersion }, meta: null };
     if (path === '/api/v1/frameworks/howdoesthisland/versions/0.5.2/catalogue')
       return {
         data: {
@@ -124,6 +128,37 @@ describe('/home', () => {
     expect(screen.getByText('No reviews match these filters')).toBeInTheDocument();
     expect(screen.queryByText('Nothing on the desk yet.')).toBeNull();
     expect(screen.getByRole('link', { name: 'Clear filters' })).toHaveAttribute('href', '/home');
+  });
+
+  it('offers a way back to the newest from a page past the last', async () => {
+    answer([], 3);
+    render(await page({ page: '5' }));
+
+    expect(screen.getByText('No reviews here')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to the newest' })).toHaveAttribute(
+      'href',
+      '/home'
+    );
+  });
+
+  it('still lists the reviews when no version is in use, offering no type or band', async () => {
+    answer([aReview()], 1, null);
+    render(await page());
+
+    expect(screen.getByRole('link', { name: 'Spring landing page' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Type of copy').querySelectorAll('option')).toHaveLength(1);
+    expect(screen.getByLabelText('Band').querySelectorAll('option')).toHaveLength(1);
+  });
+
+  it('counts what it shows when the list carries no pagination meta', async () => {
+    requireServerData.mockImplementation(async (path: string) => {
+      if (path.startsWith('/api/v1/assessments?')) return { data: [aReview()], meta: null };
+      if (path === '/api/v1/frameworks/howdoesthisland')
+        return { data: { name: 'HowDoesThisLand', latestVersion: null }, meta: null };
+      throw new Error(`unexpected ${path}`);
+    });
+    render(await page());
+    expect(screen.getByRole('status')).toHaveTextContent('1 review');
   });
 
   it('ignores what the address carries that is not a filter', async () => {
