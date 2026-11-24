@@ -239,7 +239,7 @@ beforeEach(() => {
     project: {
       findFirst: vi.fn(async ({ where }: { where: Row }) => {
         const row = db.state.projects.find((r) => matches(r, where));
-        return row ? { id: row.id } : null;
+        return row ? { id: row.id, archivedAt: row.archivedAt ?? null } : null;
       }),
     },
     projectDocument,
@@ -529,6 +529,16 @@ describe('addProjectDocument', () => {
     expect(uploadDocument).not.toHaveBeenCalled();
   });
 
+  it('refuses an archived project before reading anything', async () => {
+    db.state.projects[0].archivedAt = new Date();
+
+    await expect(addProjectDocument('p1', fileSource(), ALICE)).rejects.toMatchObject({
+      code: 'PROJECT_ARCHIVED',
+      status: 409,
+    });
+    expect(uploadDocument).not.toHaveBeenCalled();
+  });
+
   it("is not found for another workspace's project, and reads nothing", async () => {
     await expect(addProjectDocument('p-other', fileSource(), ALICE)).rejects.toMatchObject({
       status: 404,
@@ -623,6 +633,18 @@ describe('removeProjectDocument', () => {
 
     expect(removed.knowledgeDocumentDeleted).toBe(false);
     expect(db.state.knowledge).toHaveLength(1);
+  });
+
+  it('keeps a row the app made while it is still being embedded, for the add that may hold it', async () => {
+    const { document } = await addProjectDocument('p1', fileSource(), ALICE);
+    const row = db.state.knowledge.find((k) => k.id === linkOf(document.id)?.knowledgeDocumentId);
+    if (row) row.status = 'processing';
+
+    const removed = await removeProjectDocument('p1', document.id);
+
+    expect(removed.knowledgeDocumentDeleted).toBe(false);
+    expect(db.state.knowledge).toHaveLength(1);
+    expect(db.state.links).toEqual([]);
   });
 
   it('runs as one serializable transaction, and tries again when it clashes', async () => {

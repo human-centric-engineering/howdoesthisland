@@ -628,8 +628,8 @@ model Project {
 /// knowledge row can back several projects' links, or one first uploaded
 /// through core's knowledge page. Removing a link deletes the knowledge row
 /// only when an upload by this app created it (`createdByUpload` on some link
-/// to it), no other link remains, and no agent is granted it
-/// (lib/app/projects/documents.ts).
+/// to it), no other link remains, no agent is granted it, it carries no tag,
+/// and it is not still being embedded (lib/app/projects/documents.ts).
 ///
 /// `knowledgeDocumentId` and `addedByUserId` are plain strings with
 /// hand-written FKs in the migration, so core's schema is not edited (§9).

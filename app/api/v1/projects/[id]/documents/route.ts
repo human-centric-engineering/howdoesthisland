@@ -18,6 +18,7 @@
  * - 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (scope).
  * - 404 `NOT_FOUND` — no such project in this workspace. Another workspace's
  *   id reads the same.
+ * - 409 `PROJECT_ARCHIVED` — POST: the project is archived; restore it first.
  * - 409 `TOO_MANY_DOCUMENTS` — POST: the project holds the most it may.
  * - 409 `DOCUMENT_CHANGED` — POST: the knowledge document was deleted while
  *   it was being added; try again.

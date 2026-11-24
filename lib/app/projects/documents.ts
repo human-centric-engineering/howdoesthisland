@@ -32,7 +32,8 @@
  * **Removing a link** deletes the knowledge row only when an upload by this
  * app created it, no other link to it remains, no agent is granted it
  * directly, and it carries no tag (an admin's mark, and how agents are
- * granted documents in bulk). Otherwise only the link goes. A reused row is
+ * granted documents in bulk), and it is not still being embedded (another
+ * add may hold it). Otherwise only the link goes. A reused row is
  * never deleted on the app's account: it may be another project's, or one an
  * admin put in the knowledge base. "Created by this app" is kept on the links
  * while any remains: a removed link that holds it hands it to another, so the
@@ -150,13 +151,14 @@ function isForeignKeyFailure(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2003';
 }
 
-/** 404 unless the project is in this workspace. */
-async function requireProject(projectId: string, orgId: string): Promise<void> {
+/** 404 unless the project is in this workspace; says whether it is archived. */
+async function requireProject(projectId: string, orgId: string): Promise<{ archived: boolean }> {
   const project = await prisma.project.findFirst({
     where: { id: projectId, orgId },
-    select: { id: true },
+    select: { id: true, archivedAt: true },
   });
   if (!project) throw new NotFoundError('Project not found');
+  return { archived: project.archivedAt != null };
 }
 
 /** The project's documents, oldest first, each with its knowledge row's status. */
@@ -356,7 +358,17 @@ export async function addProjectDocument(
   userId: string
 ): Promise<{ document: ProjectDocumentView; added: boolean }> {
   const orgId = requireOrgId();
-  await requireProject(projectId, orgId);
+  const { archived } = await requireProject(projectId, orgId);
+  // As a review is refused (PROJECT_ARCHIVED): nothing reads an archived
+  // project's documents, so none is fetched or embedded for it. Removing one
+  // stays allowed.
+  if (archived) {
+    throw new APIError(
+      'This project is archived. Restore it to add documents.',
+      'PROJECT_ARCHIVED',
+      409
+    );
+  }
 
   const doc = await intake(body.source);
   // A file's or page's own title is not bounded as a given one is.
@@ -493,6 +505,17 @@ async function removeOnce(
         return { id: link.id, knowledgeDocumentDeleted: false };
       }
       if (!createdByApp) return { id: link.id, knowledgeDocumentDeleted: false };
+
+      // A row still being embedded may be another add's, handed it by core's
+      // slug race; deleting it would fail that add. It stays, as any row does
+      // that this rule keeps.
+      const row = await tx.aiKnowledgeDocument.findMany({
+        where: { id: knowledgeDocumentId, orgId },
+        select: { status: true },
+      });
+      if (row[0]?.status === 'processing') {
+        return { id: link.id, knowledgeDocumentDeleted: false };
+      }
 
       // A tag is an admin's curation, whether or not an agent is granted it
       // yet: core's dedupe hands an admin who uploads the same text this row,

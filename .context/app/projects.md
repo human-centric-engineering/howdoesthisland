@@ -114,7 +114,8 @@ documents**; the code and API say `documents`.
   (`lib/app/intake/`, with a 200,000-character cap rather than a review's 40,000),
   then `uploadDocument` chunks and embeds it before the answer. The route allows
   300 seconds. A per-user sub-cap of 20 adds in ten minutes applies, since each
-  add embeds. A project holds at most 50. A read that cannot be embedded is 502
+  add embeds. A project holds at most 50, and an archived one takes none (409
+  `PROJECT_ARCHIVED`, as a review is refused). A read that cannot be embedded is 502
   `DOCUMENT_NOT_INDEXED`, and the failed knowledge row this call made is deleted,
   since nobody here can see or retry it, unless a racing add has already linked it.
   Text the project already holds is answered from its link before the cap and
@@ -140,7 +141,8 @@ documents**; the code and API say `documents`.
 - **Removing a link** deletes the knowledge row only when an upload by the app
   made it, no other link to it remains, no agent is granted it directly, and it
   carries no tag (an admin's mark on it, and how agents are granted documents in
-  bulk). Otherwise only the link goes. When the link holding
+  bulk), and it is not still `processing` (another add may be embedding it).
+  Otherwise only the link goes. When the link holding
   `createdByUpload` goes while others remain, the flag moves to one of them, so
   the last link out still knows. One serializable transaction, retried on a clash.
 - `knowledgeDocumentId` has a hand-written FK to `ai_knowledge_document`,
