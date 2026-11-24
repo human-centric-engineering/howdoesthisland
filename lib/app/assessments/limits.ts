@@ -69,18 +69,9 @@ export const MAX_CONTENT_CHARS = 40_000;
  * The largest file a review reads: intake's `DEFAULT_INTAKE_LIMITS.maxBytes`,
  * repeated here so the `/assess` page can check a file before sending it
  * without carrying intake's parsers to the browser. A test holds the two equal.
+ * The page sends up to this, as a multipart upload (t-80).
  */
 export const MAX_REVIEW_FILE_BYTES = 10 * 1024 * 1024;
-
-/**
- * The largest file `/assess` sends: less than the API reads
- * ({@link MAX_REVIEW_FILE_BYTES}), because the file goes as base64 in a JSON
- * body, 4/3 its size, and the hosts carry less than that body. Vercel takes a
- * function body of 4.5 MB at most (about 3.3 MB of file), and the proxy keeps
- * only the first 10 MB of any body (`proxyClientMaxBodySize`), cutting the
- * JSON short. Raised when files are uploaded another way.
- */
-export const MAX_PAGE_FILE_BYTES = 3 * 1024 * 1024;
 
 /** The longest page address a review fetches. The API refuses longer; `/assess` says so first. */
 export const MAX_URL_CHARS = 2048;

@@ -16,6 +16,7 @@
  */
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { z } from 'zod';
 import { FileText, Globe, Loader2, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +35,10 @@ import {
   type ProjectDocumentWire,
 } from '@/components/app/projects/schemas';
 import { MAX_DOCUMENT_BYTES } from '@/lib/app/projects/validations';
-import { readAsBase64 } from '@/lib/app/intake/read-as-base64';
+import { sendUpload } from '@/lib/app/intake/send-upload';
+
+/** What the page reads of an added document: its id, to tell one the project already held. */
+const answeredIdSchema = z.object({ id: z.string() });
 
 /** How often the list is re-read while a document is still being read. */
 export const DOCUMENT_POLL_MS = 4000;
@@ -116,16 +120,13 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
     return () => clearInterval(timer);
   }, [settling, router]);
 
-  const submit = async (label: string, source: Record<string, unknown>) => {
+  const submit = async (label: string, send: () => Promise<unknown>) => {
     add.clear();
     setAlreadyHeld(null);
     setAdding(label);
     try {
-      const answered = await apiClient.post<ProjectDocumentWire>(
-        projectDocumentsEndpoint(projectId),
-        { body: { source } }
-      );
-      const held = documents.find((doc) => doc.id === answered.id);
+      const answered = answeredIdSchema.safeParse(await send());
+      const held = answered.success && documents.find((doc) => doc.id === answered.data.id);
       if (held) setAlreadyHeld(held.title);
       router.refresh();
       return true;
@@ -147,21 +148,25 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
       );
       return;
     }
-    let base64: string;
-    try {
-      base64 = await readAsBase64(file);
-    } catch {
-      add.show(`${file.name} could not be opened. Try choosing it again.`);
-      return;
-    }
-    await submit(file.name, { file: { name: file.name, base64 } });
+    await submit(file.name, () =>
+      sendUpload(
+        projectDocumentsEndpoint(projectId),
+        file,
+        {},
+        `${file.name} is too large for this server to accept. Try a smaller file, or add the page it came from by its address.`
+      )
+    );
   };
 
   const onUrl = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const address = url.trim();
     if (!address) return;
-    if (await submit(address, { url: address })) setUrl('');
+    const send = () =>
+      apiClient.post<unknown>(projectDocumentsEndpoint(projectId), {
+        body: { source: { url: address } },
+      });
+    if (await submit(address, send)) setUrl('');
   };
 
   const onRemove = async (doc: ProjectDocumentWire) => {

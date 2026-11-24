@@ -24,6 +24,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/client')>()),
   apiClient: { patch: vi.fn(), post: vi.fn(), get: vi.fn(), delete: vi.fn() },
 }));
+vi.mock('@/lib/app/intake/send-upload', () => ({ sendUpload: vi.fn() }));
 vi.mock('@/components/ui/select', async () => {
   const { selectMock } = await import('@/tests/unit/components/app/projects/select-mock');
   return selectMock;
@@ -32,7 +33,8 @@ vi.mock('@/components/ui/select', async () => {
 import { AssessWorkbench } from '@/components/app/workbench/assess-workbench';
 import { DRAFT_KEY, EMPTY_DRAFT } from '@/components/app/workbench/assess-draft';
 import { apiClient, APIClientError } from '@/lib/api/client';
-import { MAX_PAGE_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { sendUpload } from '@/lib/app/intake/send-upload';
 import { aProject } from '@/tests/unit/components/app/projects/fixtures';
 import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 import { QUICK_RESULT, anAssessCatalogue } from '@/tests/unit/components/app/workbench/fixtures';
@@ -239,24 +241,41 @@ describe('AssessWorkbench sources', () => {
     expect(sentBody()).toEqual({ source: { url: 'https://example.com/pricing' }, profile: 'full' });
   });
 
-  it('sends a file as base64, by its name', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue(created());
+  it('sends a file as a multipart upload, with the rest of the request as its options', async () => {
+    vi.mocked(sendUpload).mockResolvedValue(created());
     renderWorkbench();
     await userEvent.click(screen.getByRole('tab', { name: 'File' }));
-    await userEvent.upload(
-      field(/^A file to review/),
-      new File(['Hello'], 'brief.txt', { type: 'text/plain' })
-    );
+    const brief = new File(['Hello'], 'brief.txt', { type: 'text/plain' });
+    await userEvent.upload(field(/^A file to review/), brief);
     await start();
 
-    expect(sentBody()).toEqual({
-      source: { file: { name: 'brief.txt', base64: btoa('Hello') } },
-      profile: 'full',
-    });
+    expect(sendUpload).toHaveBeenCalledWith(
+      '/api/v1/assessments',
+      brief,
+      expect.objectContaining({ profile: 'full', framework: 'howdoesthisland' }),
+      expect.stringContaining('too large for this server')
+    );
+    expect(vi.mocked(sendUpload).mock.calls[0]?.[2]).not.toHaveProperty('source');
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('shows a host’s refusal of a file too large for it, and keeps the draft', async () => {
+    vi.mocked(sendUpload).mockRejectedValue(
+      new APIClientError('This file is too large for this server.', 'FILE_TOO_LARGE', 413)
+    );
+    renderWorkbench();
+    await userEvent.click(screen.getByRole('tab', { name: 'File' }));
+    await userEvent.upload(field(/^A file to review/), new File(['Hello'], 'brief.txt'));
+    await start();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This file is too large for this server.'
+    );
+    expect(field<HTMLInputElement>(/^A file to review/).files?.[0]?.name).toBe('brief.txt');
   });
 
   it('keeps the chosen file in its input across a change of tab, as the one Start sends', async () => {
-    vi.mocked(apiClient.post).mockResolvedValue(created());
+    vi.mocked(sendUpload).mockResolvedValue(created());
     renderWorkbench();
     await userEvent.click(screen.getByRole('tab', { name: 'File' }));
     await userEvent.upload(
@@ -268,19 +287,31 @@ describe('AssessWorkbench sources', () => {
 
     expect(field<HTMLInputElement>(/^A file to review/).files?.[0]?.name).toBe('brief.txt');
     await start();
-    expect(sentBody()).toMatchObject({ source: { file: { name: 'brief.txt' } } });
+    expect(vi.mocked(sendUpload).mock.calls[0]?.[1]).toMatchObject({ name: 'brief.txt' });
   });
 
   it('refuses a file over the limit before sending it', async () => {
     renderWorkbench();
     await userEvent.click(screen.getByRole('tab', { name: 'File' }));
     const big = new File(['x'], 'huge.pdf', { type: 'application/pdf' });
-    Object.defineProperty(big, 'size', { value: MAX_PAGE_FILE_BYTES + 1 });
+    Object.defineProperty(big, 'size', { value: MAX_REVIEW_FILE_BYTES + 1 });
     await userEvent.upload(field(/^A file to review/), big);
     await start();
 
-    expect(apiClient.post).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(/huge\.pdf is 3\.0 MB/);
+    expect(sendUpload).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/huge\.pdf is 10\.0 MB/);
+  });
+
+  it('sends a file of the largest a review reads (t-80)', async () => {
+    vi.mocked(sendUpload).mockResolvedValue(created());
+    renderWorkbench();
+    await userEvent.click(screen.getByRole('tab', { name: 'File' }));
+    const largest = new File(['x'], 'deck.pdf', { type: 'application/pdf' });
+    Object.defineProperty(largest, 'size', { value: MAX_REVIEW_FILE_BYTES });
+    await userEvent.upload(field(/^A file to review/), largest);
+    await start();
+
+    expect(sendUpload).toHaveBeenCalledTimes(1);
   });
 
   it('asks for copy, or an address, before sending', async () => {

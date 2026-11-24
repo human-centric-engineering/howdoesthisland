@@ -45,6 +45,7 @@ import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges
 import {
   ASSESSMENT_STATES,
   assessmentIdParamSchema,
+  assessmentUploadOptionsSchema,
   createAssessmentSchema,
   listAssessmentsQuerySchema,
   scanRequestSchema,
@@ -53,6 +54,7 @@ import { ASSESS_SCOPE, REPORTS_SCOPE } from '@/lib/app/assessments/api/route-aut
 import { PROJECTS_SCOPE } from '@/lib/app/projects/route-auth';
 import {
   addDocumentSchema,
+  documentUploadOptionsSchema,
   createProjectSchema,
   listProjectsQuerySchema,
   projectDocumentParamSchema,
@@ -163,6 +165,11 @@ export interface RouteContract {
     invalidParamsStatus?: 404;
     query?: z.ZodType;
     body?: z.ZodType;
+    /**
+     * The route also takes a file as `multipart/form-data` (t-80,
+     * `readUpload`): a `file` part, and an `options` part in this schema.
+     */
+    upload?: z.ZodType;
   };
   /** Refusals declared beyond the codes every route answers; see the module docblock. */
   errors?: readonly RouteError[];
@@ -722,7 +729,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary:
       'Assess a text, a page or a file with a profile or a list of judges: queued, waited for, or kept nowhere.',
     auth: ASSESS,
-    request: { body: createAssessmentSchema },
+    request: { body: createAssessmentSchema, upload: assessmentUploadOptionsSchema },
     errors: [
       {
         status: 402,
@@ -843,7 +850,11 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary:
       "Add a context document to a project, from a file or a page: its text is read, then chunked and embedded into the workspace's knowledge base before the answer. The same text already in the project answers 200 with its existing link, renamed to the given title if there is one.",
     auth: PROJECTS,
-    request: { params: projectIdParamSchema, body: addDocumentSchema },
+    request: {
+      params: projectIdParamSchema,
+      body: addDocumentSchema,
+      upload: documentUploadOptionsSchema,
+    },
     response: { status: 201, data: projectDocumentSchema },
   },
   {

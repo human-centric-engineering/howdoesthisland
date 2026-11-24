@@ -150,6 +150,8 @@ import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { assessmentDetailSchema, ephemeralAssessmentSchema } from '@/lib/app/api/registry';
 import { forgetSpendCaps } from '@/lib/orchestration/llm/spend-caps';
+import { MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { MAX_UPLOAD_BODY_BYTES } from '@/lib/app/intake/upload';
 
 const WS_A = 'org-a';
 const WS_B = 'org-b';
@@ -243,6 +245,13 @@ function post(body: unknown, headers: Record<string, string> = {}) {
       body: JSON.stringify(body),
     })
   );
+}
+/** A file as `multipart/form-data` (t-80): a `file` part and, given options, an `options` part. */
+function upload(name: string, content: string | Buffer, options?: unknown) {
+  const form = new FormData();
+  form.append('file', new File([content], name));
+  if (options !== undefined) form.append('options', JSON.stringify(options));
+  return create(new NextRequest(BASE, { method: 'POST', body: form }));
 }
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const getList = (query = '', headers: Record<string, string> = {}) =>
@@ -415,9 +424,8 @@ describe('POST /api/v1/assessments — stored', () => {
   });
 
   it('reads a file, and fetches a page, as the source', async () => {
-    const file = Buffer.from('# Launch\n\nWe cut onboarding to two days.').toString('base64');
     const fromFile = await json(
-      await post({ source: { file: { name: 'launch.md', base64: file } }, profile: 'quick' })
+      await upload('launch.md', '# Launch\n\nWe cut onboarding to two days.', { profile: 'quick' })
     );
     expect(fromFile.data).toMatchObject({
       title: 'Launch',
@@ -511,11 +519,10 @@ describe('a review’s quick scan, before its judges (t-77)', () => {
       'https://example.com/pricing'
     );
 
-    const file = Buffer.from('# Launch\n\nWe cut onboarding to two days.').toString('base64');
     const fromFile = assessmentDetailSchema.parse(
       (
         await json(
-          await post({ source: { file: { name: 'launch.md', base64: file } }, judges: TWO })
+          await upload('launch.md', '# Launch\n\nWe cut onboarding to two days.', { judges: TWO })
         )
       ).data
     );
@@ -711,7 +718,8 @@ describe('POST /api/v1/assessments — refusals', () => {
     ['no source', { source: undefined }],
     ['two sources', { source: { text: TEXT, url: 'https://example.com' } }],
     ['a URL that is not http(s)', { source: { url: 'file:///etc/passwd' } }],
-    ['a file that is not base64', { source: { file: { name: 'a.txt', base64: '***' } } }],
+    // A file goes as multipart (t-80): base64 in JSON is what the proxy cut short.
+    ['a file in JSON', { source: { file: { name: 'a.txt', base64: 'SGk=' } } }],
     ['an unknown key', { source: { text: TEXT }, mode: 'full' }],
   ])('400 VALIDATION_ERROR for %s', async (_case, body) => {
     expect(await code(await post({ source: { text: TEXT }, ...body }))).toEqual({
@@ -729,17 +737,107 @@ describe('POST /api/v1/assessments — refusals', () => {
     // A retired version stays readable but runs nothing new.
     ['FRAMEWORK_VERSION_NOT_FOUND', 404, { source: { text: TEXT }, version: '0.4.0' }],
     ['TEXT_TOO_LONG', 422, { source: { text: '🙂'.repeat(40_001) } }],
-    [
-      'INVALID_FILE_TYPE',
-      415,
-      { source: { file: { name: 'a.exe', base64: Buffer.from('MZ').toString('base64') } } },
-    ],
   ])('%s (%i)', async (expected, status, body) => {
     expect(await code(await post({ profile: 'quick', ...body }))).toEqual({
       status,
       code: expected,
     });
     expect(fake.assessments).toEqual([]);
+  });
+
+  describe('a file, as multipart/form-data (t-80)', () => {
+    it('reviews a 10 MB file whole: the text after the padding is the text reviewed', async () => {
+      // An HTML page padded to the largest a review reads with a comment its
+      // reader drops; the copy is the last thing in the file, so a body cut
+      // short anywhere would lose it.
+      const tail = `<h1>Launch</h1><p>${TEXT}</p></body></html>`;
+      const head = '<html><body><!--';
+      const pad = 'x'.repeat(MAX_REVIEW_FILE_BYTES - head.length - '-->'.length - tail.length);
+      const page = Buffer.from(`${head}${pad}-->${tail}`);
+      expect(page.length).toBe(MAX_REVIEW_FILE_BYTES);
+
+      const form = new FormData();
+      form.append('file', new File([page], 'launch.html'));
+      form.append('options', JSON.stringify({ profile: 'quick', wait: true }));
+      const request = new NextRequest(BASE, { method: 'POST', body: form });
+      // What the proxy would keep of it: the whole body.
+      const sent = await request.clone().arrayBuffer();
+      expect(sent.byteLength).toBeLessThanOrEqual(MAX_UPLOAD_BODY_BYTES);
+
+      const res = await create(request);
+      expect(res.status).toBe(200);
+      expect((await json(res)).data).toMatchObject({
+        title: 'Launch',
+        source: { kind: 'file', fileName: 'launch.html' },
+      });
+      expect(fake.contents[0]?.text).toContain(TEXT);
+    });
+
+    it('413 FILE_TOO_LARGE for a body over the proxy limit, before it is read', async () => {
+      const form = new FormData();
+      form.append('file', new File(['# Launch'], 'launch.md'));
+      const request = new NextRequest(BASE, {
+        method: 'POST',
+        body: form,
+        headers: { 'content-length': String(MAX_UPLOAD_BODY_BYTES + 1) },
+      });
+      const formData = vi.spyOn(request, 'formData');
+      expect(await code(await create(request))).toEqual({ status: 413, code: 'FILE_TOO_LARGE' });
+      expect(formData).not.toHaveBeenCalled();
+      expect(fake.assessments).toEqual([]);
+    });
+
+    it('413 FILE_TOO_LARGE for a file over the largest a review reads', async () => {
+      const big = Buffer.alloc(MAX_REVIEW_FILE_BYTES + 1, 0x61);
+      expect(await code(await upload('big.txt', big, { profile: 'quick' }))).toEqual({
+        status: 413,
+        code: 'FILE_TOO_LARGE',
+      });
+    });
+
+    it('415 INVALID_FILE_TYPE for a format intake does not read', async () => {
+      expect(await code(await upload('a.exe', 'MZ', { profile: 'quick' }))).toEqual({
+        status: 415,
+        code: 'INVALID_FILE_TYPE',
+      });
+      expect(fake.assessments).toEqual([]);
+    });
+
+    it('400 VALIDATION_ERROR for a body cut short', async () => {
+      const form = new FormData();
+      form.append('file', new File(['# Launch\n\nWe cut onboarding.'], 'launch.md'));
+      const whole = new Request(BASE, { method: 'POST', body: form });
+      const bytes = new Uint8Array(await whole.arrayBuffer());
+      const request = new NextRequest(BASE, {
+        method: 'POST',
+        body: bytes.slice(0, bytes.length - 20),
+        headers: { 'content-type': whole.headers.get('content-type') ?? '' },
+      });
+      expect(await code(await create(request))).toEqual({ status: 400, code: 'VALIDATION_ERROR' });
+      expect(fake.assessments).toEqual([]);
+    });
+
+    it.each([
+      ['options that break a rule', { profile: 'full', judges: TWO }],
+      ['a source in the options', { source: { text: TEXT } }],
+    ])('400 VALIDATION_ERROR for %s', async (_case, options) => {
+      expect(await code(await upload('launch.md', '# Launch', options))).toEqual({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('400 VALIDATION_ERROR for no file, or a part it does not take', async () => {
+      const noFile = new FormData();
+      noFile.append('options', '{}');
+      const extra = new FormData();
+      extra.append('file', new File(['# Launch'], 'launch.md'));
+      extra.append('profile', 'quick');
+      for (const form of [noFile, extra]) {
+        const res = await create(new NextRequest(BASE, { method: 'POST', body: form }));
+        expect(await code(res)).toEqual({ status: 400, code: 'VALIDATION_ERROR' });
+      }
+    });
   });
 
   it('422 with the intake code for a page that cannot be fetched', async () => {

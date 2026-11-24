@@ -13,7 +13,8 @@ import {
   problemsOf,
   readDraft,
   refusalOf,
-  requestBodyOf,
+  jsonSourceOf,
+  requestOptionsOf,
   reviewerName,
   settingsInProject,
   staleDefaultsOf,
@@ -164,7 +165,7 @@ describe('problemsOf for the reviewer set', () => {
   });
 });
 
-describe('requestBodyOf', () => {
+describe('requestOptionsOf', () => {
   it('sends only the ticked AI reviewers the version still offers', () => {
     const draft = {
       ...EMPTY_DRAFT,
@@ -173,12 +174,24 @@ describe('requestBodyOf', () => {
       judges: ['judge_culture', 'judge_retired', 'judge_ethos'],
     };
     const catalogue = anAssessCatalogue({ culture: false });
-    expect(requestBodyOf(draft, null, catalogue, '0.5.2')).toMatchObject({
+    expect(requestOptionsOf(draft, catalogue, '0.5.2')).toMatchObject({
       judges: ['judge_ethos'],
     });
     expect(
       problemsOf({ ...draft, judges: ['judge_culture'] }, null, catalogue, null).map((p) => p.field)
     ).toEqual(['assess-reviewers']);
+  });
+});
+
+describe('jsonSourceOf', () => {
+  it('gives text and a page as the JSON body takes them, and nothing for a file (t-80)', () => {
+    expect(jsonSourceOf({ ...EMPTY_DRAFT, source: 'text', text: ' Copy ' })).toEqual({
+      text: ' Copy ',
+    });
+    expect(jsonSourceOf({ ...EMPTY_DRAFT, source: 'url', url: ' https://example.com/p ' })).toEqual(
+      { url: 'https://example.com/p' }
+    );
+    expect(jsonSourceOf({ ...EMPTY_DRAFT, source: 'file' })).toBeNull();
   });
 });
 

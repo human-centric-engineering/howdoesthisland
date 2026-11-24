@@ -64,7 +64,7 @@ import { assessableText } from '@/lib/app/assessments/text';
 import { CANCEL_GRACE_MS, POLL_MS, WAIT_BOUND_MS } from '@/lib/app/assessments/limits';
 import { versionToScore, type VersionToScore } from '@/lib/app/assessments/api/version';
 import { deleteReportPdfs, sweepReportPdfs } from '@/lib/app/reports/pdf/cache';
-import type { CreateAssessmentBody } from '@/lib/app/assessments/api/validations';
+import type { AssessmentRequest } from '@/lib/app/assessments/api/validations';
 import { mergeContext, projectForReview, type ReviewProject } from '@/lib/app/projects/service';
 import { overlayForReview, type StoredOverlay } from '@/lib/app/projects/overlay';
 import {
@@ -145,7 +145,7 @@ interface Source {
 }
 
 /** Turn the request's source into text: pasted, fetched (D14) or read from a file. */
-async function intake(source: CreateAssessmentBody['source']): Promise<Source> {
+async function intake(source: AssessmentRequest['source']): Promise<Source> {
   if ('text' in source) {
     return { text: source.text, title: null, sourceKind: 'TEXT', sourceUrl: null, fileName: null };
   }
@@ -159,7 +159,7 @@ async function intake(source: CreateAssessmentBody['source']): Promise<Source> {
       fileName: null,
     };
   }
-  const file = await extractText(Buffer.from(source.file.base64, 'base64'), source.file.name);
+  const file = await extractText(source.file.bytes, source.file.name);
   return {
     text: file.text,
     title: file.title,
@@ -205,7 +205,7 @@ export interface PreparedAssessment {
  * request the route then refuses (no place free, the per-user cap) never
  * held budget another request was refused for.
  */
-export async function prepareAssessment(body: CreateAssessmentBody): Promise<PreparedAssessment> {
+export async function prepareAssessment(body: AssessmentRequest): Promise<PreparedAssessment> {
   const project = body.projectId ? await projectForReview(body.projectId) : null;
   const version = await versionToScore(frameworkChoice(body, project));
   // The project's defaults under the request's own fields (t-70), checked
@@ -305,7 +305,7 @@ function issuesFromDefaults(
  * are that framework's ids.
  */
 function frameworkChoice(
-  body: CreateAssessmentBody,
+  body: AssessmentRequest,
   project: ReviewProject | null
 ): { framework?: string; version?: string } {
   if (!project) return body;
@@ -326,7 +326,7 @@ function frameworkChoice(
  * `BUDGET_EXCEEDED` when requests checked before it took what was left.
  */
 export async function holdReviewBudget(
-  body: CreateAssessmentBody,
+  body: AssessmentRequest,
   prepared: PreparedAssessment
 ): Promise<void> {
   prepared.hold = await reserveReviewBudget(
@@ -339,7 +339,7 @@ export async function holdReviewBudget(
 }
 
 export async function createAssessment(
-  body: CreateAssessmentBody,
+  body: AssessmentRequest,
   prepared: PreparedAssessment,
   caller: Caller,
   options: { boundMs?: number; signal?: AbortSignal } = {}
@@ -396,7 +396,7 @@ export async function createAssessment(
 
 /** A `store: false` review: intake, then the run, holding one of the workspace's places. */
 async function createEphemeral(
-  body: CreateAssessmentBody,
+  body: AssessmentRequest,
   prepared: PreparedAssessment,
   caller: Caller,
   signal?: AbortSignal

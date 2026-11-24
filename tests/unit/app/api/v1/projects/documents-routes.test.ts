@@ -128,6 +128,7 @@ import { createMockAuthSession } from '@/tests/helpers/auth';
 import { uploadDocument } from '@/lib/orchestration/knowledge/document-manager';
 import { APP_ROUTES } from '@/lib/app/api/registry';
 import { projectDocumentSchema } from '@/lib/app/projects/wire';
+import { MAX_DOCUMENT_BYTES } from '@/lib/app/projects/validations';
 
 const WS_A = 'org-a';
 const WS_B = 'org-b';
@@ -170,10 +171,19 @@ function withKey(scopes: string[]) {
 const KEY_HEADERS = { authorization: 'Bearer sk_deadbeefdeadbeefdeadbeefdeadbeef' };
 
 const BASE = 'http://localhost/api/v1/projects';
-const FILE_BODY = {
-  source: {
-    file: { name: 'voice.txt', base64: Buffer.from('Plain and warm.').toString('base64') },
-  },
+/** A file as `multipart/form-data` (t-80): a `file` part and, given options, an `options` part. */
+const postFile = (
+  id: string,
+  headers: Record<string, string> = {},
+  options?: unknown,
+  file: File = new File(['Plain and warm.'], 'voice.txt')
+) => {
+  const form = new FormData();
+  form.append('file', file);
+  if (options !== undefined) form.append('options', JSON.stringify(options));
+  return add(new NextRequest(`${BASE}/${id}/documents`, { method: 'POST', headers, body: form }), {
+    params: Promise.resolve({ id }),
+  });
 };
 
 const post = (id: string, body: unknown, headers: Record<string, string> = {}) =>
@@ -219,7 +229,7 @@ beforeEach(() => {
 
 describe('POST /api/v1/projects/{id}/documents', () => {
   it('adds a file and answers 201 with the document as the registry declares it', async () => {
-    const res = await post('proj-a', FILE_BODY);
+    const res = await postFile('proj-a');
     const body = await json(res);
 
     expect(res.status).toBe(201);
@@ -232,22 +242,52 @@ describe('POST /api/v1/projects/{id}/documents', () => {
   });
 
   it('answers 200 with the existing link when the project already holds the text', async () => {
-    await post('proj-a', FILE_BODY);
+    await postFile('proj-a');
     vi.mocked(uploadDocument).mockResolvedValueOnce(
       state.knowledge[0] as unknown as Awaited<ReturnType<typeof uploadDocument>>
     );
 
-    const res = await post('proj-a', FILE_BODY);
+    const res = await postFile('proj-a');
 
     expect(res.status).toBe(200);
     expect(state.links).toHaveLength(1);
   });
 
   it("is 404 for another workspace's project, and reads nothing", async () => {
-    const res = await post('proj-b', FILE_BODY);
+    const res = await postFile('proj-b');
 
     expect(res.status).toBe(404);
     expect((await json(res)).error?.code).toBe('NOT_FOUND');
+    expect(uploadDocument).not.toHaveBeenCalled();
+  });
+
+  it('names the document by the title in its options', async () => {
+    const res = await postFile('proj-a', {}, { title: 'Our voice' });
+
+    expect(res.status).toBe(201);
+    expect(projectDocumentSchema.parse((await json(res)).data)).toMatchObject({
+      title: 'Our voice',
+      fileName: 'voice.txt',
+    });
+  });
+
+  it('refuses a file as base64 in JSON, which the proxy would cut short (t-80)', async () => {
+    const res = await post('proj-a', {
+      source: { file: { name: 'voice.txt', base64: Buffer.from('Plain.').toString('base64') } },
+    });
+
+    expect(res.status).toBe(400);
+    expect((await json(res)).error?.code).toBe('VALIDATION_ERROR');
+    expect(uploadDocument).not.toHaveBeenCalled();
+  });
+
+  it('is 413 for a file over the largest it reads, before anything is indexed', async () => {
+    const big = new File([Buffer.alloc(MAX_DOCUMENT_BYTES + 1, 0x61)], 'big.txt');
+
+    const res = await postFile('proj-a', {}, undefined, big);
+
+    expect(res.status).toBe(413);
+    expect((await json(res)).error?.code).toBe('FILE_TOO_LARGE');
     expect(uploadDocument).not.toHaveBeenCalled();
   });
 
@@ -261,7 +301,7 @@ describe('POST /api/v1/projects/{id}/documents', () => {
   it('is 429 once the person has used their adds, before anything is read', async () => {
     mocks.limit.mockReturnValue({ success: false, limit: 20, remaining: 0, reset: Date.now() });
 
-    const res = await post('proj-a', FILE_BODY);
+    const res = await postFile('proj-a');
 
     expect(res.status).toBe(429);
     expect(uploadDocument).not.toHaveBeenCalled();
@@ -270,7 +310,7 @@ describe('POST /api/v1/projects/{id}/documents', () => {
   it('takes an API key with the projects scope', async () => {
     withKey(['projects']);
 
-    const res = await post('proj-a', FILE_BODY, KEY_HEADERS);
+    const res = await postFile('proj-a', KEY_HEADERS);
 
     expect(res.status).toBe(201);
   });
@@ -278,7 +318,7 @@ describe('POST /api/v1/projects/{id}/documents', () => {
   it('refuses an API key without the projects scope', async () => {
     withKey(['assess']);
 
-    const res = await post('proj-a', FILE_BODY, KEY_HEADERS);
+    const res = await postFile('proj-a', KEY_HEADERS);
 
     expect(res.status).toBe(403);
     expect(uploadDocument).not.toHaveBeenCalled();
@@ -287,7 +327,7 @@ describe('POST /api/v1/projects/{id}/documents', () => {
 
 describe('GET /api/v1/projects/{id}/documents', () => {
   it("lists the project's documents", async () => {
-    await post('proj-a', FILE_BODY);
+    await postFile('proj-a');
 
     const res = await getList('proj-a');
     const body = await json(res);
@@ -309,7 +349,7 @@ describe('GET /api/v1/projects/{id}/documents', () => {
 
 describe('DELETE /api/v1/projects/{id}/documents/{documentId}', () => {
   it('removes the link and says the knowledge document went with it', async () => {
-    const added = projectDocumentSchema.parse((await json(await post('proj-a', FILE_BODY))).data);
+    const added = projectDocumentSchema.parse((await json(await postFile('proj-a'))).data);
 
     const res = await del('proj-a', added.id);
 
@@ -319,7 +359,7 @@ describe('DELETE /api/v1/projects/{id}/documents/{documentId}', () => {
   });
 
   it("is 404 for another workspace's project, and for a document not in the project", async () => {
-    const added = projectDocumentSchema.parse((await json(await post('proj-a', FILE_BODY))).data);
+    const added = projectDocumentSchema.parse((await json(await postFile('proj-a'))).data);
 
     expect((await del('proj-b', added.id)).status).toBe(404);
     expect((await del('proj-a', 'no-such-doc')).status).toBe(404);

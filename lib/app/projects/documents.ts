@@ -56,7 +56,7 @@ import { sha256 } from '@/lib/app/frameworks/store';
 import {
   MAX_DOCUMENT_BYTES,
   MAX_DOCUMENT_TITLE,
-  type AddDocumentBody,
+  type AddDocumentRequest,
 } from '@/lib/app/projects/validations';
 import type { DocumentStatus, ProjectDocumentView } from '@/lib/app/projects/wire';
 
@@ -218,7 +218,7 @@ function asDocumentRefusal(err: unknown): unknown {
   return err;
 }
 
-async function intake(source: AddDocumentBody['source']): Promise<Intake> {
+async function intake(source: AddDocumentRequest['source']): Promise<Intake> {
   try {
     return await readSource(source);
   } catch (err) {
@@ -226,7 +226,7 @@ async function intake(source: AddDocumentBody['source']): Promise<Intake> {
   }
 }
 
-async function readSource(source: AddDocumentBody['source']): Promise<Intake> {
+async function readSource(source: AddDocumentRequest['source']): Promise<Intake> {
   if ('url' in source) {
     const page = await fetchPage(source.url, { limits: DOCUMENT_LIMITS });
     return {
@@ -237,11 +237,7 @@ async function readSource(source: AddDocumentBody['source']): Promise<Intake> {
       sourceUrl: page.url,
     };
   }
-  const file = await extractText(
-    Buffer.from(source.file.base64, 'base64'),
-    source.file.name,
-    DOCUMENT_LIMITS
-  );
+  const file = await extractText(source.file.bytes, source.file.name, DOCUMENT_LIMITS);
   return {
     text: file.text,
     title: file.title,
@@ -354,7 +350,7 @@ async function retitled(link: LinkRow, title: string | undefined, orgId: string)
  */
 export async function addProjectDocument(
   projectId: string,
-  body: AddDocumentBody,
+  body: AddDocumentRequest,
   userId: string
 ): Promise<{ document: ProjectDocumentView; added: boolean }> {
   const orgId = requireOrgId();

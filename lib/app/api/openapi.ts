@@ -18,6 +18,8 @@
  *   answers a key with 403. `orSignedOut` adds the empty requirement `{}`:
  *   a caller with no credential may call too, and gets less.
  * - `enabled` → a route whose switch is off is left out of the document.
+ * - `upload` → a `multipart/form-data` request body beside the JSON one: a
+ *   `file` part, and an `options` part in that schema, as JSON (t-80).
  * - `params` / `query` / `body` → parameters and the request body, with a
  *   400 `VALIDATION_ERROR`; `invalidParamsStatus: 404` answers a bad path
  *   with a 404 instead.
@@ -274,7 +276,10 @@ function operation(route: RouteContract): JsonObject {
 
   const paramsFail404 = request.params !== undefined && request.invalidParamsStatus === 404;
   const validated =
-    (request.params !== undefined && !paramsFail404) || request.query || request.body;
+    (request.params !== undefined && !paramsFail404) ||
+    request.query ||
+    request.body ||
+    request.upload;
   if (validated) responses['400'] = errorRef('`VALIDATION_ERROR`: the request does not parse.');
   if (auth.who !== 'anyone') {
     responses['401'] = errorRef(
@@ -304,15 +309,42 @@ function operation(route: RouteContract): JsonObject {
     tags: [tagOf(route.path)],
     security: security(auth),
     ...(params.length > 0 ? { parameters: params } : {}),
-    ...(request.body
+    ...(request.body || request.upload
+      ? { requestBody: { required: true, content: requestContent(request) } }
+      : {}),
+    responses,
+  };
+}
+
+/**
+ * The request body's media types: the JSON body, and a file upload
+ * (`multipart/form-data`, t-80) whose `options` part is JSON.
+ */
+function requestContent(request: RouteContract['request']): JsonObject {
+  return {
+    ...(request.body ? { 'application/json': { schema: toSchema(request.body, 'input') } } : {}),
+    ...(request.upload
       ? {
-          requestBody: {
-            required: true,
-            content: { 'application/json': { schema: toSchema(request.body, 'input') } },
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              properties: {
+                file: {
+                  type: 'string',
+                  contentMediaType: 'application/octet-stream',
+                  description: "The file; its name's extension picks the reader.",
+                },
+                options: {
+                  ...toSchema(request.upload, 'input'),
+                  description: "The JSON body's other fields, as JSON.",
+                },
+              },
+              required: ['file'],
+            },
+            encoding: { options: { contentType: 'application/json' } },
           },
         }
       : {}),
-    responses,
   };
 }
 

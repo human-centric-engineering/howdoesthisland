@@ -251,6 +251,55 @@ describe('what each registry property becomes', () => {
     });
   });
 
+  it('upload: a multipart body beside the JSON one, its options part as JSON (t-80)', () => {
+    const r = route({
+      method: 'POST',
+      path: '/api/v1/things',
+      request: {
+        body: z.object({ source: z.object({ text: z.string() }), title: z.string().optional() }),
+        upload: z.object({ title: z.string().optional() }),
+      },
+    });
+    const body = z
+      .object({ required: z.literal(true), content: z.record(z.string(), z.unknown()) })
+      .parse(opOf(r).requestBody);
+
+    expect(Object.keys(body.content)).toEqual(['application/json', 'multipart/form-data']);
+    expect(body.content['multipart/form-data']).toEqual({
+      schema: {
+        type: 'object',
+        properties: {
+          file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            description: expect.any(String),
+          },
+          options: {
+            type: 'object',
+            properties: { title: { type: 'string' } },
+            description: expect.any(String),
+          },
+        },
+        required: ['file'],
+      },
+      encoding: { options: { contentType: 'application/json' } },
+    });
+    expect(responsesOf(r)['400']).toBeDefined();
+  });
+
+  it('the two file routes declare their uploads', () => {
+    const doc = openApiDocument();
+    for (const [path, method] of [
+      ['/api/v1/assessments', 'post'],
+      ['/api/v1/projects/{id}/documents', 'post'],
+    ] as const) {
+      const content = z
+        .object({ requestBody: z.object({ content: z.record(z.string(), z.unknown()) }) })
+        .parse(doc.paths[path]?.[method]).requestBody.content;
+      expect(Object.keys(content)).toEqual(['application/json', 'multipart/form-data']);
+    }
+  });
+
   it('data and meta: the success envelope', () => {
     const r = route({ response: { ...ok, meta: z.object({ total: z.number() }) } });
     expect(responsesOf(r)['200']).toMatchObject({
