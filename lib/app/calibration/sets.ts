@@ -15,6 +15,8 @@ import { calibrationSetSchema, type CalibrationSet } from '@/lib/app/calibration
 const LOADERS: Readonly<Record<string, () => Promise<unknown>>> = {
   '0.5.1': async () =>
     (await import('@/lib/app/frameworks/howdoesthisland/data/eval-0.5.1.json')).default,
+  '0.5.2': async () =>
+    (await import('@/lib/app/frameworks/howdoesthisland/data/eval-0.5.2.json')).default,
 };
 
 /** The versions a bundled set is written for. */

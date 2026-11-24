@@ -40,7 +40,11 @@ before it publishes there. 0.5.1, published before the gate, needs none
   write from inside a customer's workspace cannot change it.
 - **A new version is a new file.** Copy the reviewed model to
   `lib/app/frameworks/howdoesthisland/data/model-<version>.json` byte for byte (the
-  folder is kept out of Prettier for this), and keep `prototype/` as delivered.
+  folder is kept out of Prettier for this), and keep `prototype/` as delivered. A version
+  made here rather than delivered (0.5.2) is the last file with only its changes, each
+  listed in `meta.changes_from_<previous>`; a test pins that nothing else moved.
+- **A new version needs its calibration set**, `data/eval-<version>.json`, listed in
+  `lib/app/calibration/sets.ts`, or it cannot be calibrated and so cannot publish.
 
 ## What the import refuses
 
@@ -84,8 +88,11 @@ recorded stays checkable against the limits it was made under.
   dimensions (`dimensions[]`, never a lens or an extra dimension) a project may add to,
   or take off, a content type's priority dimensions. Left out, none.
 - **A version without the block, or with bounds that are all zero, allows no adjustment**
-  (the engine and the catalogue read both as none). 0.5.1 declares none, so projects
-  can adjust nothing until a later version publishes bounds (t-73).
+  (the engine and the catalogue read both as none). 0.5.1 declares none. **0.5.2** (t-73)
+  is 0.5.1 with bounds and nothing else: ethos, pathos and logos may move 10 points,
+  kairos 5, and a project may add 2 core dimensions and remove 1 (owner ruling,
+  2026-11-24). Projects can adjust only once 0.5.2 is calibrated and published in that
+  database.
 - **The import checks it strictly**: a misspelt appeal or key, a negative or fractional
   bound, a weight bound over 1, or an empty block is refused. The engine reads it with
   the same schema (`adjustmentBoundsSchema` in `engine/model.ts`).
