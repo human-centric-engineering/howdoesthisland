@@ -344,7 +344,8 @@ Each route's docblock lists its error codes. A few rules hold across them:
   `assessment_quick_scan` event, so the workbench and API callers have
   something to show at once. It is worked out from the stored text, context,
   overlay and pinned version (`early-scan.ts`), not stored: those never
-  change once the review is, so it is the run's own answer. `null` once
+  change once the review is, so it is the run's own answer, and each
+  process keeps the answer per review, so a polled review is scored once. `null` once
   final (`result` says it all), for a `quick` review (its result, at once),
   and for text the engine cannot score, which the run then fails. Rejected:
   the browser calling `POST /api/v1/scan` beside the review, which takes

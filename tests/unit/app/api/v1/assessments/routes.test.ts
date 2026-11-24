@@ -141,6 +141,7 @@ import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engin
 import { createMockAuthSession } from '@/tests/helpers/auth';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import { resetKicksForTests } from '@/lib/app/assessments/kick';
+import { forgetEarlyScansForTests } from '@/lib/app/assessments/early-scan';
 import { runAssessment } from '@/lib/app/assessments/run';
 import { runAsOrg } from '@/lib/tenancy/context';
 import { currentPrivacyScope } from '@/lib/orchestration/privacy/scope';
@@ -313,6 +314,7 @@ beforeEach(() => {
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   aiAssessmentLimiter.reset(`user:${BOB}`);
   resetKicksForTests();
+  forgetEarlyScansForTests();
   signedIn(ALICE, WS_A);
   // Credits to spare unless a test sets them (t-58), so the cap is what t-49's tests measure.
   fake.grant(WS_A, 1_000_000);
@@ -1375,6 +1377,25 @@ describe('GET /api/v1/assessments/{id}/events', () => {
     // The poll found the review, so the stream did open on it.
     expect(fromUnscorable[0]?.event).toBe('assessment_status');
     expect(fromUnscorable.map((f) => f.event)).not.toContain('assessment_quick_scan');
+  });
+
+  it('skips the quick scan, and carries on, when it cannot be read (t-77)', async () => {
+    const a = fake.seed({ status: 'RUNNING', judges: TWO }, [
+      { judge: 'judge_ethos', status: 'SUCCEEDED' },
+    ]);
+    mocks.engineForVersion.mockRejectedValueOnce(new Error('connection reset'));
+    const ac = new AbortController();
+    const received = frames(await stream(String(a.id), ac.signal));
+    await settle();
+    ac.abort();
+    const all = await received;
+
+    expect(all.slice(0, 2).map((f) => f.event)).toEqual(['assessment_status', 'assessment_judge']);
+    expect(log.error).toHaveBeenCalledWith(
+      'Could not read a running review’s quick scan for its stream',
+      expect.any(Error),
+      { assessmentId: a.id }
+    );
   });
 
   it('logs a read that fails mid-stream, and ends it with the error frame', async () => {

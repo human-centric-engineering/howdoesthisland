@@ -14,7 +14,11 @@ vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineF
 const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
 vi.mock('@/lib/logging', () => ({ logger: log }));
 
-import { earlyQuickScan } from '@/lib/app/assessments/early-scan';
+import {
+  earlyQuickScan,
+  forgetEarlyScansForTests,
+  MEMO_LIMIT,
+} from '@/lib/app/assessments/early-scan';
 
 const INPUTS = {
   id: 'assessment-1',
@@ -39,6 +43,7 @@ function scriptedEngine(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  forgetEarlyScansForTests();
 });
 
 describe('earlyQuickScan', () => {
@@ -110,5 +115,44 @@ describe('earlyQuickScan', () => {
       assessmentId: 'assessment-1',
       error: 'cannot score',
     });
+  });
+
+  it('throws when the version cannot be read, rather than calling the text unscorable', async () => {
+    mocks.engineForVersion.mockRejectedValue(new Error('connection reset'));
+    await expect(earlyQuickScan(INPUTS)).rejects.toThrow('connection reset');
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('works each review out once: a second read scores nothing', async () => {
+    const engine = scriptedEngine();
+    const first = await earlyQuickScan(INPUTS);
+    const second = await earlyQuickScan(INPUTS);
+    expect(second).toEqual(first);
+    expect(engine.quickScan).toHaveBeenCalledTimes(1);
+    expect(mocks.engineForVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an unscorable answer too, so a polled review is not re-scored', async () => {
+    const engine = scriptedEngine({
+      quickScan: vi.fn(() => {
+        throw new Error('cannot score');
+      }),
+    });
+    expect(await earlyQuickScan(INPUTS)).toBeNull();
+    expect(await earlyQuickScan(INPUTS)).toBeNull();
+    expect(engine.quickScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the oldest answer once it holds its limit', async () => {
+    const engine = scriptedEngine();
+    for (let i = 0; i < MEMO_LIMIT; i += 1) await earlyQuickScan({ ...INPUTS, id: `a-${i}` });
+    await earlyQuickScan({ ...INPUTS, id: 'one-more' });
+    expect(engine.quickScan).toHaveBeenCalledTimes(MEMO_LIMIT + 1);
+
+    // The newest are still kept; the first was dropped and is scored again.
+    await earlyQuickScan({ ...INPUTS, id: `a-${MEMO_LIMIT - 1}` });
+    expect(engine.quickScan).toHaveBeenCalledTimes(MEMO_LIMIT + 1);
+    await earlyQuickScan({ ...INPUTS, id: 'a-0' });
+    expect(engine.quickScan).toHaveBeenCalledTimes(MEMO_LIMIT + 2);
   });
 });

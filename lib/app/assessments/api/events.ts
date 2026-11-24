@@ -199,10 +199,23 @@ async function* pollEvents(
 
 /**
  * The quick scan of the review the stream follows, read once, as the stream
- * opens: the text is not re-read on every poll. `null` when it is gone or
- * cannot be scored (`early-scan.ts`).
+ * opens: the text is not re-read on every poll. `null` when it is gone,
+ * cannot be scored (`early-scan.ts`), or could not be read.
  */
 async function quickScanOf(id: string, orgId: string): Promise<EarlyQuickScan | null> {
+  // Something to show early, never a reason to lose the stream: a read that
+  // fails here skips the event, and the judges and the status still follow.
+  try {
+    return await readQuickScan(id, orgId);
+  } catch (err) {
+    logger.error('Could not read a running review’s quick scan for its stream', err, {
+      assessmentId: id,
+    });
+    return null;
+  }
+}
+
+async function readQuickScan(id: string, orgId: string): Promise<EarlyQuickScan | null> {
   const row = await prisma.assessment.findUnique({
     where: { id, orgId },
     select: {
