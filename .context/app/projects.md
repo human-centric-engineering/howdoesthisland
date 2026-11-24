@@ -62,7 +62,7 @@ A team writing for one client often knows the reader better than the framework's
 averages, so a project may shift the appeal mix and the priority dimensions. **How far is
 the version's**: its `scoring.adjustment_bounds`
 ([`frameworks.md`](./frameworks.md#adjustment-bounds-d5)). **A version without bounds
-allows no adjustment**, and 0.5.1 declares none.
+allows no adjustment**: 0.5.1 declares none, and 0.5.2 is the first that does.
 
 ```json
 {
