@@ -148,6 +148,40 @@ export function formValuesOf(
 
 const picked = (value: string): string | undefined => (value === NO_DEFAULT ? undefined : value);
 
+/** The reader settings' pickers: what a project's defaults and a review's request both hold. */
+export type ReaderSettings = Pick<
+  ProjectFormValues,
+  'contentType' | 'archetype' | 'role' | 'modifiers' | 'cultureReader' | 'cultureWriter'
+>;
+
+/**
+ * The context the reader settings' pickers name, in the engine's shape, with
+ * every picker left on {@link NO_DEFAULT} left out. A project saves it as
+ * its default context; a review sends it as its own (the workbench, t-78).
+ */
+export function contextOf(values: ReaderSettings): Record<string, unknown> {
+  const audience = Object.fromEntries(
+    Object.entries(values.modifiers).flatMap(([id, option]) => {
+      const chosen = picked(option);
+      return chosen ? [[id, chosen]] : [];
+    })
+  );
+  const reader = picked(values.cultureReader);
+  const writer = picked(values.cultureWriter);
+  const contentType = picked(values.contentType);
+  const archetype = picked(values.archetype);
+  const role = picked(values.role);
+  return {
+    ...(contentType ? { contentType } : {}),
+    ...(archetype ? { archetype } : {}),
+    ...(role ? { role } : {}),
+    ...(Object.keys(audience).length ? { audience } : {}),
+    ...(reader || writer
+      ? { culture: { ...(reader ? { reader } : {}), ...(writer ? { writer } : {}) } }
+      : {}),
+  };
+}
+
 /**
  * What `PATCH /api/v1/projects/{id}` is sent: the brief and defaults, each
  * whole. Culture is sent as the form holds it, switch or no: with the switch
@@ -163,27 +197,7 @@ export function patchBodyOf(
       return text ? [[key, text]] : [];
     })
   );
-
-  const audience = Object.fromEntries(
-    Object.entries(values.modifiers).flatMap(([id, option]) => {
-      const chosen = picked(option);
-      return chosen ? [[id, chosen]] : [];
-    })
-  );
-  const reader = picked(values.cultureReader);
-  const writer = picked(values.cultureWriter);
-  const contentType = picked(values.contentType);
-  const archetype = picked(values.archetype);
-  const role = picked(values.role);
-  const context = {
-    ...(contentType ? { contentType } : {}),
-    ...(archetype ? { archetype } : {}),
-    ...(role ? { role } : {}),
-    ...(Object.keys(audience).length ? { audience } : {}),
-    ...(reader || writer
-      ? { culture: { ...(reader ? { reader } : {}), ...(writer ? { writer } : {}) } }
-      : {}),
-  };
+  const context = contextOf(values);
   const profile = picked(values.profile);
 
   return {

@@ -65,6 +65,13 @@ export const CHARGE_SWEEP_MS = CANCEL_GRACE_MS + 24 * 60 * 60 * 1000;
 /** The longest text accepted (§8.2). Longer is refused, never truncated. */
 export const MAX_CONTENT_CHARS = 40_000;
 
+/**
+ * The largest file a review reads: intake's `DEFAULT_INTAKE_LIMITS.maxBytes`,
+ * repeated here so the `/assess` page can check a file before sending it
+ * without carrying intake's parsers to the browser. A test holds the two equal.
+ */
+export const MAX_REVIEW_FILE_BYTES = 10 * 1024 * 1024;
+
 /** Assessments the recovery job re-drives in one workspace per tick. */
 export const RECOVERY_BATCH = RUNNING_PER_WORKSPACE;
 

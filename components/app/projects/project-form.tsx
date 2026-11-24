@@ -25,13 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FieldHelp } from '@/components/ui/field-help';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SettingPicker } from '@/components/app/projects/setting-picker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormError, SaveError } from '@/components/forms/form-error';
 import { apiClient, APIClientError } from '@/lib/api/client';
@@ -130,37 +124,25 @@ function Picker({
   noDefaultLabel = 'No default',
 }: PickerProps) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id} className="flex items-center gap-1">
-        {label}
-        <FieldHelp title={label}>{help}</FieldHelp>
-      </Label>
-      <Controller
-        control={control}
-        name={name}
-        render={({ field, fieldState }) => {
-          const value = typeof field.value === 'string' ? field.value : NO_DEFAULT;
-          return (
-            <>
-              <Select value={value} onValueChange={field.onChange} disabled={disabled}>
-                <SelectTrigger id={id} onBlur={field.onBlur}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_DEFAULT}>{noDefaultLabel}</SelectItem>
-                  {withStored(options, stored).map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormError message={fieldState.error?.message} />
-            </>
-          );
-        }}
-      />
-    </div>
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <SettingPicker
+          id={id}
+          label={label}
+          help={help}
+          options={withStored(options, stored)}
+          value={typeof field.value === 'string' ? field.value : NO_DEFAULT}
+          onChange={field.onChange}
+          onBlur={field.onBlur}
+          disabled={disabled}
+          noneLabel={noDefaultLabel}
+        >
+          <FormError message={fieldState.error?.message} />
+        </SettingPicker>
+      )}
+    />
   );
 }
 
