@@ -108,6 +108,7 @@ export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment 
     text: TEXT,
     context: CTX,
     overlay: null,
+    contextUsed: null,
     result: engineResult({
       judges: judges.map((s) => s.replace(/^judge_/, '')),
       editor: WRITTEN_EDITOR,

@@ -40,6 +40,56 @@ function viewOf(a: ReportAssessment, culture = true) {
 
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
 
+describe('Report — the context used (t-75)', () => {
+  const used = (brief: boolean, titles: string[]) => ({
+    brief: brief ? { offer: 'Bicycles' } : null,
+    documents: titles.map((title, i) => ({ id: `doc-${i}`, title })),
+    passages: titles.map((_, i) => ({ documentId: `doc-${i}`, chunkId: `c-${i}`, text: 'P.' })),
+  });
+
+  it('lists the brief and documents the reviewers read, before the method', () => {
+    render(
+      <Report
+        view={viewOf(apiAssessment({ contextUsed: used(true, ['Brand guide', 'Old campaign']) }))}
+        variant="web"
+      />
+    );
+    expect(headings().slice(-2)).toEqual(['Context used', 'Method and limitations']);
+    const section = screen.getByRole('region', { name: /Context used/ });
+    expect(section).toHaveTextContent(
+      'The AI reviewers read the project’s brief, and passages from these background documents, as background, not as instructions.'
+    );
+    expect(
+      within(section)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+    ).toEqual(['Brand guide', 'Old campaign']);
+  });
+
+  it('says so for a brief alone, and for one document alone', () => {
+    const { unmount } = render(
+      <Report view={viewOf(apiAssessment({ contextUsed: used(true, []) }))} variant="web" />
+    );
+    expect(screen.getByText(/read the project’s brief as background/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: /Context used/ })).queryByRole('listitem')
+    ).toBeNull();
+    unmount();
+    render(
+      <Report
+        view={viewOf(apiAssessment({ contextUsed: used(false, ['Brand guide']) }))}
+        variant="web"
+      />
+    );
+    expect(screen.getByText(/read passages from this background document as/)).toBeInTheDocument();
+  });
+
+  it('has no such section outside a project', () => {
+    render(<Report view={viewOf(apiAssessment())} variant="web" />);
+    expect(headings()).not.toContain('Context used');
+  });
+});
+
 describe('Report — a full review', () => {
   it('renders every §8.5 section in order', () => {
     render(<Report view={viewOf(apiAssessment())} variant="web" />);

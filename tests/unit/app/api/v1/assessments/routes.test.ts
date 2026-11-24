@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => ({
   costRows: vi.fn(),
   // The workspaces' projects (t-70): none unless a test adds some.
   projects: [] as Record<string, unknown>[],
+  // Core's knowledge search (t-75), standing in for the embeddings.
+  search: vi.fn(),
 }));
 vi.mock('@/lib/auth/config', () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock('next/headers', () => ({ headers: vi.fn(() => Promise.resolve(new Headers())) }));
@@ -99,6 +101,9 @@ vi.mock('@/lib/tenancy/org-settings', async (importOriginal) => ({
   loadOrgQuotas: mocks.loadOrgQuotas,
 }));
 vi.mock('@/lib/app/intake/fetch-page', () => ({ fetchPage: mocks.fetchPage }));
+vi.mock('@/lib/orchestration/knowledge/search', () => ({
+  searchKnowledgeWithEmbedding: mocks.search,
+}));
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
 // Short bounds, so a test can pass them; a small cap, so a test can reach it.
 vi.mock('@/lib/app/assessments/limits', async (importOriginal) => ({
@@ -831,6 +836,107 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
       const data = ephemeralAssessmentSchema.parse((await json(res)).data);
       expect(data.overlay).toEqual({ weights: { ethos: 0.1 } });
       expect(fake.assessments).toHaveLength(0);
+    });
+  });
+
+  describe('with background documents (t-75)', () => {
+    beforeEach(() => {
+      fake.projectDocuments.push({
+        id: 'link-guide',
+        orgId: WS_A,
+        projectId: 'project-1',
+        knowledgeDocumentId: 'k-guide',
+        title: 'Brand guide',
+        createdAt: new Date(1),
+      });
+      fake.knowledgeDocuments.push({ id: 'k-guide', orgId: WS_A, status: 'ready' });
+      mocks.search.mockResolvedValue({
+        results: [
+          {
+            chunk: { id: 'c-guide', documentId: 'k-guide', content: 'Our voice is plain.' },
+            similarity: 0.7,
+          },
+        ],
+        embedding: { model: 'embed', provider: 'p', inputTokens: 5, costUsd: 0 },
+      });
+    });
+
+    const sentToJudges = () =>
+      mocks.runJudge.mock.calls.map(
+        (c) => (c[1] as { projectContext?: string | null }).projectContext
+      );
+
+    it('answers the context used on the stored assessment, documents by id and title', async () => {
+      project({ brief: { offer: 'Bicycles' } });
+
+      const res = await post({
+        source: { text: TEXT },
+        projectId: 'project-1',
+        profile: 'full',
+        wait: true,
+      });
+
+      expect(res.status).toBe(200);
+      const data = assessmentDetailSchema.parse((await json(res)).data);
+      expect(data.contextUsed).toEqual({
+        brief: { offer: 'Bicycles' },
+        documents: [{ id: 'link-guide', title: 'Brand guide' }],
+        passages: [{ documentId: 'link-guide', chunkId: 'c-guide', text: 'Our voice is plain.' }],
+      });
+      expect(sentToJudges().length).toBeGreaterThan(0);
+      for (const block of sentToJudges()) expect(block).toContain('Our voice is plain.');
+    });
+
+    it('gives a review kept nowhere the context too, and says what it used', async () => {
+      project({ brief: {} });
+
+      const res = await post({
+        source: { text: TEXT },
+        projectId: 'project-1',
+        profile: 'full',
+        store: false,
+      });
+
+      expect(res.status).toBe(200);
+      const data = ephemeralAssessmentSchema.parse((await json(res)).data);
+      expect(data.contextUsed?.documents).toEqual([{ id: 'link-guide', title: 'Brand guide' }]);
+      for (const block of sentToJudges()) expect(block).toContain('Our voice is plain.');
+      // Its searches' cost rows are the run's, so its charge includes them.
+      expect(mocks.search.mock.calls[0]?.[4]).toMatchObject({
+        metadata: { ephemeralRun: expect.any(String), kind: 'project_context' },
+      });
+    });
+
+    it('refuses a review kept nowhere with 503 when the documents cannot be searched, calling no judge', async () => {
+      project();
+      mocks.search.mockRejectedValue(new Error('embedding provider down'));
+
+      const res = await post({
+        source: { text: TEXT },
+        projectId: 'project-1',
+        profile: 'full',
+        store: false,
+      });
+
+      expect(res.status).toBe(503);
+      expect((await json(res)).error).toMatchObject({ code: 'PROJECT_CONTEXT_UNAVAILABLE' });
+      expect(mocks.runJudge).not.toHaveBeenCalled();
+    });
+
+    it('searches nothing for a quick review, which calls no model', async () => {
+      project({ brief: { offer: 'Bicycles' } });
+
+      const res = await post({ source: { text: TEXT }, projectId: 'project-1', wait: true });
+
+      expect(assessmentDetailSchema.parse((await json(res)).data).contextUsed).toBeNull();
+      expect(mocks.search).not.toHaveBeenCalled();
+    });
+
+    it('answers no context used outside a project', async () => {
+      const res = await post({ source: { text: TEXT }, wait: true });
+
+      expect(assessmentDetailSchema.parse((await json(res)).data).contextUsed).toBeNull();
+      expect(mocks.search).not.toHaveBeenCalled();
     });
   });
 

@@ -12,7 +12,11 @@
  * `profile` (`quick`, `full` — the default — or a catalogue group) or a
  * `judges` list, `framework`, `version`, `context`, `title`, `wait`, `store`,
  * and `projectId` (t-70): the workspace's project, whose defaults fill what
- * `context` and the profile leave out, and which the review records.
+ * `context` and the profile leave out, and which the review records. A
+ * review in a project that calls a judge gives the AI reviewers its brief
+ * and passages from its background documents (t-75), and answers them as
+ * `contextUsed`: the brief, the documents used (id and title) and the
+ * passages, or `null`.
  *
  * - Default: stored and queued; 202 with the assessment. Follow it with
  *   `GET …/{id}` or `GET …/{id}/events`.
@@ -54,6 +58,9 @@
  * - 422 `TEXT_TOO_LONG` — over 40,000 characters.
  * - 422 `TOO_MANY_PAGES`, `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE` — the file.
  * - 422 `URL_NOT_ALLOWED`, `FETCH_FAILED`, `FETCH_TIMEOUT` — the page.
+ * - 503 `PROJECT_CONTEXT_UNAVAILABLE` — `store: false` only: the project's
+ *   background documents could not be searched (the embedding provider);
+ *   no judge was called. A stored review is queued again instead (t-75).
  * - 422 `NOT_SCORABLE` — `store: false` only: the framework could not score
  *   the text (a stored run records it as `failed`). `details.costUsd` is what
  *   the judges had already spent.

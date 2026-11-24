@@ -29,6 +29,12 @@ import { requireOrgId } from '@/lib/tenancy/context';
 import { JudgeProfileError, type JudgeProfile } from '@/lib/app/frameworks/engine';
 import { countWords, extractText } from '@/lib/app/intake/extract-text';
 import { fetchPage } from '@/lib/app/intake/fetch-page';
+import {
+  buildProjectContext,
+  contextUsedView,
+  renderProjectContext,
+  type BuiltProjectContext,
+} from '@/lib/app/projects/context';
 import { runJudges } from '@/lib/app/assessments/fan-out';
 import { AssessmentInputError, type AssessmentInputErrorCode } from '@/lib/app/assessments/errors';
 import {
@@ -399,7 +405,18 @@ async function createEphemeral(
   const runId = crypto.randomUUID();
   const run = () =>
     refusingAsApi(() =>
-      runEphemeral(resolved, source, ctx, prepared.overlay, profile, judges, caller, runId, signal)
+      runEphemeral(
+        resolved,
+        source,
+        ctx,
+        prepared.overlay,
+        prepared.projectId,
+        profile,
+        judges,
+        caller,
+        runId,
+        signal
+      )
     );
   // A run that calls judges takes one of the workspace's places, or is
   // refused with `WorkspaceBusyError` (t-28). The quick scan calls no model.
@@ -475,6 +492,7 @@ async function runEphemeral(
   source: Source,
   ctx: unknown,
   overlay: StoredOverlay | null,
+  projectId: string | null,
   profile: JudgeProfile,
   judges: readonly string[],
   caller: Caller,
@@ -492,6 +510,14 @@ async function runEphemeral(
     orgId: requireOrgId(),
     userId: caller.userId,
   });
+  // The project's context (t-75), as the stored run gathers it, for the
+  // judges to read. None for the quick scan alone, which calls no model.
+  const gathered =
+    projectId && judges.length > 0
+      ? await ephemeralProjectContext(projectId, text, caller, runId)
+      : { record: null, costUsd: 0 };
+  const contextUsed = contextUsedView(gathered.record);
+  const projectContext = renderProjectContext(gathered.record);
   const fan = await runInPrivacyScope(scope, () =>
     runJudges({
       engine,
@@ -499,6 +525,7 @@ async function runEphemeral(
       text,
       ctx,
       slots: judges,
+      projectContext,
       userId: caller.userId,
       ephemeral: true,
       // Tells this run's cost rows apart, so usage can count the reviews
@@ -513,7 +540,7 @@ async function runEphemeral(
   }
   const outputs: Record<string, unknown> = {};
   const runs = new Map<string, JudgeRunView>();
-  let costUsd = 0;
+  let costUsd = gathered.costUsd;
   for (const landed of fan.landed) {
     const spend = landed.ok ? landed.reply : landed.spend;
     costUsd += spend?.costUsd ?? 0;
@@ -543,9 +570,46 @@ async function runEphemeral(
     costUsd,
     context: ctx,
     overlay,
+    contextUsed,
     result,
     judgeRuns: judges.flatMap((slot) => runs.get(slot) ?? []),
   };
+}
+
+/**
+ * A `store: false` review's project context (t-75), its searches' cost rows
+ * tagged with the run, so its charge includes them. A search that fails is
+ * 503 `PROJECT_CONTEXT_UNAVAILABLE` before any judge is called, rather than a
+ * review that reads as if the project had no documents.
+ */
+async function ephemeralProjectContext(
+  projectId: string,
+  text: string,
+  caller: Caller,
+  runId: string
+): Promise<BuiltProjectContext> {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, orgId: requireOrgId() },
+    select: { id: true, brief: true },
+  });
+  // Deleted since the request was checked: reviewed as outside a project.
+  if (!project) return { record: null, costUsd: 0 };
+  try {
+    return await buildProjectContext(project, text, {
+      userId: caller.userId,
+      metadata: { ephemeralRun: runId },
+    });
+  } catch (err) {
+    logger.error('Project context could not be gathered for a store: false review', err, {
+      projectId,
+      runId,
+    });
+    throw new APIError(
+      "The project's background documents could not be searched. Try again in a moment.",
+      'PROJECT_CONTEXT_UNAVAILABLE',
+      503
+    );
+  }
 }
 
 /**

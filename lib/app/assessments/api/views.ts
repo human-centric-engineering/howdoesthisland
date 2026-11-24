@@ -13,6 +13,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import type { AssessmentState } from '@/lib/app/assessments/api/validations';
+import { contextUsedView } from '@/lib/app/projects/context';
+import type { ContextUsed } from '@/lib/app/projects/wire';
 import { reviewRefusalDetailsSchema, type ReviewRefusalDetails } from '@/lib/app/usage/wire';
 
 /** A credit or budget refusal's figures as stored, or `null` when there are none in either shape. */
@@ -80,6 +82,12 @@ export type AssessmentDetail = AssessmentSummary & {
    * framework's.
    */
   overlay: Record<string, unknown> | null;
+  /**
+   * What the AI reviewers were given of its project (t-75): the brief, the
+   * documents used and the passages, or `null` outside a project or when it
+   * gave them nothing. `null` too until the run has gathered it.
+   */
+  contextUsed: ContextUsed | null;
   /** The framework's assembled result, once final; `null` before. */
   result: unknown;
   judgeRuns: JudgeRunView[];
@@ -99,6 +107,8 @@ export type EphemeralAssessment = {
   context: unknown;
   /** The project's adjustment to the weights it was scored with (t-72), or `null`. */
   overlay: Record<string, unknown> | null;
+  /** What the AI reviewers were given of its project (t-75), or `null`. */
+  contextUsed: ContextUsed | null;
   result: unknown;
   judgeRuns: JudgeRunView[];
 };
@@ -167,6 +177,7 @@ const detailSelect = {
   content: { select: { ...summarySelect.content.select, text: true } },
   context: true,
   overlay: true,
+  projectContext: true,
   result: true,
   judgeRuns: {
     select: {
@@ -254,6 +265,7 @@ function detailView(row: DetailRow): AssessmentDetail {
     text: row.content.text,
     context: row.context,
     overlay: storedOverlay(row.overlay),
+    contextUsed: contextUsedView(row.projectContext),
     result: row.result,
     judgeRuns: inJudgeOrder(row.judges, row.judgeRuns).map(judgeRunView),
   };

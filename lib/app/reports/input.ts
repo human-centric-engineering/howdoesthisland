@@ -19,6 +19,7 @@
  */
 import { z } from 'zod';
 import { sharedAssessmentSchema } from '@/lib/app/api/registry';
+import { contextUsedSchema, sharedContextUsedSchema } from '@/lib/app/projects/wire';
 
 // ─── The assessment ─────────────────────────────────────────────────────────
 
@@ -181,6 +182,13 @@ export type ReportRedFlag = z.infer<typeof redFlagSchema>;
  * fields (its id, source, timings, each run's cost) are stripped.
  */
 export const reportAssessmentSchema = sharedAssessmentSchema.extend({
+  /**
+   * The context used (t-75): the assessment's whole record on the web report
+   * and the PDF, or what a share link serves of it. The report shows only
+   * what both carry (`sharedContextUsed`). Absent on an answer from before it
+   * was served.
+   */
+  contextUsed: z.union([contextUsedSchema, sharedContextUsedSchema]).nullish(),
   /** What the run cost. Shown on the web report only. */
   costUsd: z.number().optional(),
   /** Why it failed, for a failed run's panel. */

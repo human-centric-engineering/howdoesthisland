@@ -206,6 +206,12 @@ const detail = {
   text: 'The copy.',
   context: { audience: 'exec', brief: 'internal pricing notes' },
   overlay: null,
+  // The brief's words, the passages and the ids stay in the workspace (t-75).
+  contextUsed: {
+    brief: { offer: 'internal positioning' },
+    documents: [{ id: 'doc-1', title: 'Brand guide' }],
+    passages: [{ documentId: 'doc-1', chunkId: 'chunk-1', text: 'secret passage' }],
+  },
   result: storedResult(),
   judgeRuns: [
     {
@@ -382,6 +388,7 @@ describe('readSharedReport', () => {
         overlay: null,
         result: reportResultSchema.parse(detail.result),
         judgeRuns: [{ judge: 'judge_ethos', status: 'succeeded', model: 'gpt-x' }],
+        contextUsed: { brief: true, documents: [{ title: 'Brand guide' }] },
       },
       // Only what the report shows of the model (t-67): a link is public, the model IP.
       model: reportModelSchema.parse(modelDocument(false)),
@@ -389,6 +396,10 @@ describe('readSharedReport', () => {
       expiresAt,
     });
     const wire = JSON.stringify(read.report);
+    // The context used is named, never quoted (t-75).
+    for (const kept of ['internal positioning', 'secret passage', 'doc-1', 'chunk-1']) {
+      expect(wire).not.toContain(kept);
+    }
     for (const field of ['rubric', 'heuristic', 'pattern', 'instruction', 'persona', 'weights']) {
       expect(wire).not.toContain(`"${field}"`);
     }

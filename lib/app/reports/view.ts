@@ -23,6 +23,7 @@ import type {
 } from '@/lib/app/reports/input';
 import { sharesOf } from '@/lib/app/reports/shares';
 import { overlayShapeSchema } from '@/lib/app/frameworks/howdoesthisland/engine/overlay';
+import { sharedContextUsed } from '@/lib/app/projects/wire';
 
 export const APPEAL_IDS = ['ethos', 'pathos', 'logos', 'kairos'] as const;
 
@@ -177,6 +178,12 @@ export interface ReportView {
       target: number;
     }[];
   } | null;
+  /**
+   * What the AI reviewers were given of the review's project (t-75): whether
+   * its brief was, and the titles of the background documents a passage came
+   * from. `null` outside a project, or when it gave them nothing.
+   */
+  contextUsed: { brief: boolean; documents: string[] } | null;
   method: {
     reviewers: ReviewerView[];
     fellBack: string[];
@@ -261,6 +268,12 @@ function signedPoints(share: number): string {
   const p = Math.abs(+(share * 100).toFixed(1));
   if (p === 0) return `${sign}under 0.1 points`;
   return `${sign}${p} point${p === 1 ? '' : 's'}`;
+}
+
+/** The context used as the report lists it: the same from the whole record or a share link's. */
+function contextUsedOf(used: ReportAssessment['contextUsed']): ReportView['contextUsed'] {
+  const shown = sharedContextUsed(used);
+  return shown ? { brief: shown.brief, documents: shown.documents.map((d) => d.title) } : null;
 }
 
 /**
@@ -564,6 +577,7 @@ export function buildReportView({ assessment, result, model }: BuildReportInput)
     perspectives,
     craft,
     culture,
+    contextUsed: contextUsedOf(assessment.contextUsed),
     method: {
       reviewers,
       fellBack: reviewers.filter((r) => r.status !== 'succeeded').map((r) => r.name),
