@@ -378,6 +378,7 @@ a new term is added here in the same PR.
 | **project**                                       | One client's, product's or campaign's work: its brief and the defaults its reviews take       | job, account, folder                                 |
 | **reader**                                        | Who the copy is written for, as the model describes them (its archetype)                      | archetype, persona, target                           |
 | **archive**, **archived**, **restore**            | Put a project aside, keeping its reviews; restore brings it back                              | delete, deactivate, disable                          |
+| **background documents**                          | A project's files and pages that explain its work: a positioning paper, a brand guide (t-74)  | context documents, knowledge base, attachments       |
 
 **Settled by the owner on 2026-11-15** (open question 5): _assessment_ is **review**, the
 _judges_ are **AI reviewers**, _content type_ is **type of copy**, and the _report_ stays

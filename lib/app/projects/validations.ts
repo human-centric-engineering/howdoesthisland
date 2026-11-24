@@ -108,3 +108,44 @@ export const listProjectsQuerySchema = z.object({
 
 /** `{id}` in `/api/v1/projects/{id}`. */
 export const projectIdParamSchema = z.object({ id: z.string().min(1).max(64) });
+
+/**
+ * The largest context document file, in bytes: intake's own default. Named
+ * here rather than imported from intake, because this module reaches client
+ * components (through `wire.ts`) and intake carries the file parsers.
+ */
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
+/** The longest a document's title may be. */
+export const MAX_DOCUMENT_TITLE = 200;
+
+/**
+ * Where a context document comes from (t-74): a file in the intake formats
+ * or a page by URL, as a review's source is (`assessmentSourceSchema`),
+ * without pasted text.
+ */
+export const documentSourceSchema = z.union([
+  z.strictObject({ url: z.url({ protocol: /^https?$/ }).max(2048) }),
+  z.strictObject({
+    file: z.strictObject({
+      /** The file's name; its extension picks the reader (`extractText`). */
+      name: z.string().trim().min(1).max(255),
+      base64: z.base64().max(Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4),
+    }),
+  }),
+]);
+
+/** POST /api/v1/projects/{id}/documents. */
+export const addDocumentSchema = z.strictObject({
+  source: documentSourceSchema,
+  /** The name the project shows it by; the document's own title when left out. */
+  title: z.string().trim().min(1).max(MAX_DOCUMENT_TITLE).optional(),
+});
+
+export type AddDocumentBody = z.infer<typeof addDocumentSchema>;
+
+/** `{id}` and `{documentId}` in `/api/v1/projects/{id}/documents/{documentId}`. */
+export const projectDocumentParamSchema = z.object({
+  id: z.string().min(1).max(64),
+  documentId: z.string().min(1).max(64),
+});

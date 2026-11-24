@@ -24,6 +24,7 @@ vi.mock('@/lib/db/client', () => ({
     calibrationRun: { findMany: vi.fn() },
     creditEntry: { findMany: vi.fn() },
     project: { findMany: vi.fn() },
+    projectDocument: { findMany: vi.fn() },
     reviewCode: { findMany: vi.fn() },
     reviewCodeRedemption: { findMany: vi.fn() },
   },
@@ -43,6 +44,7 @@ describe('collectAppSubjectData', () => {
     vi.mocked(prisma.calibrationRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.creditEntry.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.project.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.projectDocument.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCode.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCodeRedemption.findMany).mockResolvedValue([] as never);
   });
@@ -85,6 +87,7 @@ describe('collectAppSubjectData', () => {
       calibrationRuns: [],
       creditEntries: [],
       projects: [],
+      projectDocuments: [],
       reviewCodes: [],
       codeRedemptions: [],
     });
@@ -121,6 +124,7 @@ describe('collectAppSubjectData', () => {
       calibrationRuns: [],
       creditEntries: [],
       projects: [],
+      projectDocuments: [],
       reviewCodes: [],
       codeRedemptions: [],
     });
@@ -178,6 +182,19 @@ describe('collectAppSubjectData', () => {
       orderBy: { createdAt: 'asc' },
     });
     expect(data.projects).toEqual([{ id: 'project-1' }]);
+  });
+
+  it('reads the documents they added to projects, by who added them', async () => {
+    vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.projectDocument.findMany).mockResolvedValue([{ id: 'doc-1' }] as never);
+
+    const data = await collectAppSubjectData(SUBJECT);
+
+    expect(vi.mocked(prisma.projectDocument.findMany)).toHaveBeenCalledWith({
+      where: { addedByUserId: 'user-1' },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(data.projectDocuments).toEqual([{ id: 'doc-1' }]);
   });
 
   it('reads the review codes they made, without the codes or their idempotency keys', async () => {

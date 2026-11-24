@@ -41,3 +41,51 @@ export interface ProjectView {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/**
+ * A context document's status (t-74): its knowledge row's, read live.
+ * `processing` while it is chunked and embedded; `ready` once searchable;
+ * `failed` when indexing failed; `pending_review` and `cleaning` when an
+ * admin is working on it in core's knowledge base.
+ */
+export const documentStatusSchema = z.enum([
+  'processing',
+  'ready',
+  'failed',
+  'pending_review',
+  'cleaning',
+]);
+
+export type DocumentStatus = z.infer<typeof documentStatusSchema>;
+
+/** One of a project's context documents. Times are ISO strings on the wire. */
+export const projectDocumentSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  /** The file it was read from, or null for a page. */
+  fileName: z.string().nullable(),
+  /** The page it was fetched from, after redirects, or null for a file. */
+  sourceUrl: z.string().nullable(),
+  status: documentStatusSchema,
+  /** How many passages it was split into for search. */
+  chunkCount: z.number().int(),
+  addedAt: z.iso.datetime(),
+});
+
+/** What the service returns: as {@link projectDocumentSchema}, with a `Date`. */
+export interface ProjectDocumentView {
+  id: string;
+  title: string;
+  fileName: string | null;
+  sourceUrl: string | null;
+  status: DocumentStatus;
+  chunkCount: number;
+  addedAt: Date;
+}
+
+/** DELETE …/documents/{documentId}. */
+export const removedDocumentSchema = z.object({
+  id: z.string(),
+  /** True when the document left the workspace's knowledge base too; false when only the link went. */
+  knowledgeDocumentDeleted: z.boolean(),
+});

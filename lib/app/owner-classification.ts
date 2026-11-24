@@ -105,6 +105,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A project the workspace keeps for a client or campaign; `createdByUserId` is who made it.',
       },
+      // t-74: a project's link to a knowledge document, the workspace's.
+      ProjectDocument: {
+        kind: 'not-personal',
+        because:
+          "A project's link to one of the workspace's knowledge documents; `addedByUserId` is who added it.",
+      },
       // t-59: install-level config, made and read by platform admins.
       ReviewCode: {
         kind: 'not-personal',

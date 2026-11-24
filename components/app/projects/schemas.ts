@@ -5,7 +5,7 @@
  * filled from.
  */
 import { z } from 'zod';
-import { projectSchema } from '@/lib/app/projects/wire';
+import { projectDocumentSchema, projectSchema } from '@/lib/app/projects/wire';
 
 export const PROJECTS_ENDPOINT = '/api/v1/projects';
 
@@ -17,6 +17,30 @@ export const frameworkEndpoint = (slug: string): string =>
 
 export const catalogueEndpoint = (slug: string, version: string): string =>
   `${frameworkEndpoint(slug)}/versions/${encodeURIComponent(version)}/catalogue`;
+
+export const projectDocumentsEndpoint = (id: string): string => `${projectEndpoint(id)}/documents`;
+
+export const projectDocumentEndpoint = (id: string, documentId: string): string =>
+  `${projectDocumentsEndpoint(id)}/${encodeURIComponent(documentId)}`;
+
+export { projectDocumentSchema };
+export type ProjectDocumentWire = z.infer<typeof projectDocumentSchema>;
+export const projectDocumentListSchema = z.array(projectDocumentSchema);
+
+/**
+ * The file types a background document may be (t-74): intake's, listed here
+ * rather than imported, since intake carries the file parsers. A test holds
+ * the two lists together.
+ */
+export const DOCUMENT_EXTENSIONS: readonly string[] = [
+  '.pdf',
+  '.docx',
+  '.pptx',
+  '.html',
+  '.htm',
+  '.md',
+  '.txt',
+];
 
 /** The most a list page asks for in its one call. */
 export const PROJECT_LIST_LIMIT = 100;

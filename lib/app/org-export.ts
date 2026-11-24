@@ -173,6 +173,18 @@ export function initAppOrgSources(): void {
           prisma.project.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
       },
       {
+        model: 'ProjectDocument',
+        section: 'projectDocuments',
+        disposition: 'export',
+        description:
+          'Which context documents each project holds: the name it shows each by, the file or page it came from, and who added it. The documents’ text is in the knowledge base’s own section.',
+        fetch: ({ orgId }) =>
+          prisma.projectDocument.findMany({
+            where: ownedBy(orgId),
+            orderBy: { createdAt: 'asc' },
+          }),
+      },
+      {
         model: 'CreditEntry',
         section: 'creditEntries',
         disposition: 'export',
