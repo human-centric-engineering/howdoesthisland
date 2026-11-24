@@ -160,6 +160,14 @@ describe('AssessWorkbench settings', () => {
     expect(pickers).toHaveLength(6);
     for (const picker of pickers) expect(helpIn(picker.id)).toBeTruthy();
 
+    expect(helpIn('assess-text')).toBeTruthy();
+    await userEvent.selectOptions(field(/^AI reviewers/), '__choose__');
+    expect(
+      screen
+        .getByRole('group', { name: /Tick the AI reviewers/ })
+        .querySelector('legend button[aria-label="More information"]')
+    ).toBeTruthy();
+
     await userEvent.click(screen.getByRole('tab', { name: 'File' }));
     expect(helpIn('assess-file')).toBeTruthy();
     await userEvent.click(screen.getByRole('tab', { name: 'Web page' }));
@@ -395,7 +403,41 @@ describe('AssessWorkbench refusals', () => {
   });
 });
 
+describe('AssessWorkbench with a project whose defaults this version refuses', () => {
+  const STALE = aProject({
+    id: 'proj-stale',
+    name: 'Old launch',
+    defaults: { context: { audience: { old_setting: 'x' } } },
+  });
+
+  it('names them, links to the project to fix them, and starts nothing', async () => {
+    renderWorkbench([STALE]);
+    await userEvent.selectOptions(field(/^Project/), 'proj-stale');
+    await userEvent.type(field(/^The copy to review/), 'Copy');
+
+    const note = screen.getByRole('note');
+    expect(note).toHaveTextContent(/old_setting/);
+    expect(within(note).getByRole('link', { name: /Fix the project’s defaults/ })).toHaveAttribute(
+      'href',
+      '/projects/proj-stale'
+    );
+    await start();
+    expect(apiClient.post).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/defaults need fixing/);
+  });
+});
+
 describe('AssessWorkbench draft', () => {
+  it('shows the project’s value for a setting it fixes that a kept draft left to the model', async () => {
+    window.localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ ...EMPTY_DRAFT, projectId: 'proj-1', text: 'Kept' })
+    );
+    renderWorkbench();
+    await waitFor(() => expect(field(/^The copy to review/)).toHaveValue('Kept'));
+    expect(field(/^Type of copy/)).toHaveValue('landing_page');
+  });
+
   it('restores the text, the project and the settings after a reload, and not a file', async () => {
     const first = renderWorkbench();
     await userEvent.selectOptions(field(/^Project/), 'proj-1');

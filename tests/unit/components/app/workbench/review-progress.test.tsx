@@ -18,7 +18,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ReviewProgress } from '@/components/app/workbench/review-progress';
-import { MAX_RETRIES, RETRY_MS } from '@/components/app/workbench/use-review-events';
+import { MAX_RETRIES, RETRY_MS, STABLE_MS } from '@/components/app/workbench/use-review-events';
 import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 import { QUICK_RESULT } from '@/tests/unit/components/app/workbench/fixtures';
 
@@ -249,6 +249,49 @@ describe('ReviewProgress', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(FakeEventSource.opened).toHaveLength(MAX_RETRIES + 2);
     expect(FakeEventSource.latest().closed).toBe(false);
+  });
+
+  it('runs out of retries on a stream that fails each time just after replaying its status', () => {
+    vi.useFakeTimers();
+    renderProgress();
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const stream = FakeEventSource.latest();
+      act(() => stream.open());
+      act(() => stream.emit({ type: 'assessment_status', id: 'a-1', status: 'running' }));
+      act(() => stream.fail('closed'));
+      act(() => {
+        vi.advanceTimersByTime(RETRY_MS * attempt);
+      });
+    }
+    const last = FakeEventSource.latest();
+    act(() => last.open());
+    act(() => last.emit({ type: 'assessment_status', id: 'a-1', status: 'running' }));
+    act(() => last.fail('closed'));
+
+    expect(screen.getByRole('status')).toHaveTextContent(/lost touch with the review/);
+    expect(FakeEventSource.opened).toHaveLength(MAX_RETRIES + 1);
+    vi.useRealTimers();
+  });
+
+  it('starts its retries over once a stream has stayed open a while', () => {
+    vi.useFakeTimers();
+    renderProgress();
+
+    for (let attempt = 1; attempt <= MAX_RETRIES + 2; attempt++) {
+      const stream = FakeEventSource.latest();
+      act(() => stream.open());
+      act(() => {
+        vi.advanceTimersByTime(STABLE_MS);
+      });
+      act(() => stream.fail('closed'));
+      expect(screen.getByRole('status')).toHaveTextContent(/Reconnecting/);
+      act(() => {
+        vi.advanceTimersByTime(RETRY_MS);
+      });
+    }
+    expect(FakeEventSource.opened).toHaveLength(MAX_RETRIES + 3);
+    vi.useRealTimers();
   });
 
   it('closes its stream when it is taken off the page', () => {

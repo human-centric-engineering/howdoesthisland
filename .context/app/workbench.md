@@ -27,7 +27,16 @@ and each can be changed. **A setting the project fixes offers no "model's
 default" choice.** The API merges a request's context over the project's field
 by field (`mergeContext`), so leaving that field out of the request does not
 give the model's default: it gives the project's again. Offering the choice
-would mean offering something the API will not do.
+would mean offering something the API will not do. For the same reason a
+kept draft that leaves such a setting to the model shows, and sends, the
+project's value (`settingsInProject`).
+
+**A project default this version refuses can only be fixed on the project.**
+A value the version no longer offers, an audience setting it no longer has,
+or a culture with the culture switch off goes into every review in the project
+by the same merge, and nothing sent can take it out. `staleDefaultsOf` names
+them; the page says so under the project picker, links to the project, and
+does not start the review.
 
 The reviewers are a profile (the project form's list: the quick scan only, a
 reviewer set, all of them) or the reviewers ticked one by one, sent as
@@ -38,7 +47,9 @@ reviewer set, all of them) or the reviewers ticked one by one, sent as
 The text, the address, the project and the settings are kept in the browser
 (`useLocalStorage`, key `howdoesthisland.assess.draft.v1`) until a review
 starts, and read back through `draftSchema`: anything that does not parse
-starts a fresh draft. A file is never kept. A project that is no longer offered
+starts a fresh draft. The text and address are not capped there: one over
+the limit would read back as empty. Their limits (40,000 characters, an
+address of 2,048) are what the page checks before sending. A file is never kept. A project that is no longer offered
 is dropped from a restored draft.
 
 ## Live progress
@@ -58,7 +69,10 @@ the hook closes it on every event that ends one:
 
 A stream the browser gives up on (or the server's own error frame) is retried
 three times (`MAX_RETRIES`), a little later each time, then shown as lost with
-**Try again**. One the browser is recovering from itself shows "Reconnecting…".
+**Try again**. The count starts over only after a stream has stayed open for
+`STABLE_MS`, not on an event: each new stream replays its status, so a stream
+that fails just after would otherwise be retried forever. One the browser is
+recovering from itself shows "Reconnecting…".
 
 A review with no AI reviewer is final in its 200 answer, so the page opens
 the report straight away and opens no stream.
@@ -68,7 +82,9 @@ the report straight away and opens no stream.
 `/assessments/{id}` renders `ReportPending` for a queued or running review: the
 same live progress (`LiveReportPending`), named from the catalogue of the
 version the review runs on, and `router.refresh()` once it is final, so the
-report takes its place without a reload.
+report takes its place without a reload. The catalogue only names things: if
+it cannot be read, the progress shows the reviewers' slots and appeal ids
+instead of failing the page.
 
 ## Refusals
 
@@ -81,3 +97,9 @@ fetched, too much text), shows the server's own message, which already says
 what to do. The page checks the obvious ones before sending: no text, an
 address that is not `https://…`, no file or one over `MAX_REVIEW_FILE_BYTES`,
 and no reviewer ticked.
+
+**A review that started is never shown as refused.** Once the POST succeeds
+the review exists and is charged, so the draft is cleared before the reply is
+read. A reply the page cannot read in full but that names the review opens
+its report; one that does not even do that says the review has started and
+need not be started again.

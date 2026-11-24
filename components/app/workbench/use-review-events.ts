@@ -34,6 +34,13 @@ import {
 export const MAX_RETRIES = 3;
 /** The wait before the first retry; each later one waits as many times longer. */
 export const RETRY_MS = 2_000;
+/**
+ * How long a stream must stay open before its failure counts as a fresh
+ * one, and the retries start over. Not on an event: each new stream replays
+ * the status and the reviewers already landed, so a stream that fails just
+ * after its replay would otherwise never run out of retries.
+ */
+export const STABLE_MS = 30_000;
 
 export type Connection = 'live' | 'reconnecting' | 'lost';
 
@@ -122,6 +129,7 @@ export function useReviewEvents(
     let source: EventSource | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let retries = 0;
+    let openedAt: number | null = null;
     let stopped = false;
 
     const close = () => {
@@ -132,6 +140,8 @@ export function useReviewEvents(
     const retry = () => {
       close();
       if (stopped) return;
+      if (openedAt !== null && Date.now() - openedAt >= STABLE_MS) retries = 0;
+      openedAt = null;
       if (retries >= MAX_RETRIES) {
         dispatch({ kind: 'connection', connection: 'lost' });
         return;
@@ -164,8 +174,6 @@ export function useReviewEvents(
           retries = 0;
           open();
           return;
-        default:
-          retries = 0;
       }
     };
 
@@ -173,7 +181,10 @@ export function useReviewEvents(
       if (stopped) return;
       const es = new EventSource(assessmentEventsEndpoint(id));
       source = es;
-      es.addEventListener('open', () => dispatch({ kind: 'connection', connection: 'live' }));
+      es.addEventListener('open', () => {
+        openedAt = Date.now();
+        dispatch({ kind: 'connection', connection: 'live' });
+      });
       for (const type of REVIEW_EVENT_TYPES) es.addEventListener(type, onEvent);
       es.addEventListener('error', (e) => {
         if (source !== es) return;

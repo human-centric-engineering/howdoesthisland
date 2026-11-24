@@ -72,6 +72,9 @@ export const MAX_CONTENT_CHARS = 40_000;
  */
 export const MAX_REVIEW_FILE_BYTES = 10 * 1024 * 1024;
 
+/** The longest page address a review fetches. The API refuses longer; `/assess` says so first. */
+export const MAX_URL_CHARS = 2048;
+
 /** Assessments the recovery job re-drives in one workspace per tick. */
 export const RECOVERY_BATCH = RUNNING_PER_WORKSPACE;
 

@@ -33,7 +33,7 @@ import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useLocalStorage } from '@/lib/hooks/use-local-storage';
 import { readAsBase64 } from '@/lib/app/intake/read-as-base64';
-import { MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
 import { WORDS } from '@/lib/app/reports/words';
 import { SettingPicker } from '@/components/app/projects/setting-picker';
 import { DOCUMENT_EXTENSIONS, type ProjectWire } from '@/components/app/projects/schemas';
@@ -59,6 +59,8 @@ import {
   requestBodyOf,
   reviewerName,
   reviewerSetOptions,
+  settingsInProject,
+  staleDefaultsOf,
   type Draft,
   type SettingKey,
 } from '@/components/app/workbench/assess-draft';
@@ -92,7 +94,9 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
   const read = readDraft(stored);
   // A project archived or deleted since the draft was kept is dropped.
   const project = projects.find((p) => p.id === read.projectId) ?? null;
-  const draft: Draft = project ? read : { ...read, projectId: NO_PROJECT };
+  const draft: Draft = project
+    ? { ...read, settings: settingsInProject(read.settings, project, catalogue) }
+    : { ...read, projectId: NO_PROJECT };
   const update = (patch: Partial<Draft>) =>
     setStored((prev: unknown) => ({ ...readDraft(prev), ...patch }));
   const setSetting = (key: Exclude<SettingKey, `modifiers.${string}`>, value: string) =>
@@ -105,6 +109,8 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
   };
 
   const [file, setFile] = useState<File | null>(null);
+  // Bumped to empty the file input, which holds its own file.
+  const [fileInput, setFileInput] = useState(0);
   const [sending, setSending] = useState(false);
   const [started, setStarted] = useState<CreatedReview | null>(null);
   const [usagePage, setUsagePage] = useState<string | null>(null);
@@ -122,12 +128,14 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
   const countries = cultureOptions(catalogue);
   const audience = audiencePickers(catalogue, s.modifiers);
   const reviewers = choosableReviewers(catalogue);
+  const stale = staleDefaultsOf(project, catalogue);
+  const offeredAudience = new Set(catalogue.request.audience.map((m) => m.id));
   const appealNames = Object.fromEntries(catalogue.result.appeals.map((a) => [a.id, a.name]));
 
   const onSubmit = async (e?: BaseSyntheticEvent) => {
     e?.preventDefault();
     setUsagePage(null);
-    if (save.block(problemsOf(draft, file, catalogue))) return;
+    if (save.block(problemsOf(draft, file, catalogue, project))) return;
     setSending(true);
     try {
       const chosen =
@@ -141,6 +149,7 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
       // the draft is spent, and nothing may invite starting it again.
       clearStored();
       setFile(null);
+      setFileInput((n) => n + 1);
       const review = createdReviewSchema.safeParse(data);
       if (review.success) {
         if (FINAL_STATES.has(review.data.status)) router.push(reportPath(review.data.id));
@@ -210,7 +219,14 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
           </TabsList>
 
           <TabsContent value="text" className="mt-4 space-y-2">
-            <Label htmlFor="assess-text">The copy to review</Label>
+            <Label htmlFor="assess-text" className="flex items-center gap-1">
+              The copy to review
+              <FieldHelp title="The copy to review">
+                Up to {MAX_CONTENT_CHARS.toLocaleString('en-GB')} characters, pasted as it reads:
+                the words are reviewed, not the layout. This text is kept in this browser&rsquo;s
+                draft until the {WORDS.review} starts.
+              </FieldHelp>
+            </Label>
             <Textarea
               id="assess-text"
               value={draft.text}
@@ -240,6 +256,7 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
               </FieldHelp>
             </Label>
             <Input
+              key={fileInput}
               id="assess-file"
               type="file"
               accept={DOCUMENT_EXTENSIONS.join(',')}
@@ -287,6 +304,17 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
             noneLabel="No project"
             disabled={sending}
           />
+        ) : null}
+        {project && stale.length > 0 ? (
+          <div role="note" className="space-y-1 text-sm">
+            <p>
+              This project&rsquo;s defaults name settings this version of the model does not have:{' '}
+              {stale.join(', ')}. Each {WORDS.review} in it is refused until they are fixed.
+            </p>
+            <Link href={`/projects/${encodeURIComponent(project.id)}`} className="underline">
+              Fix the project&rsquo;s defaults
+            </Link>
+          </div>
         ) : null}
 
         <SettingPicker
@@ -349,7 +377,11 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
                 key={m.id}
                 id={`assess-audience-${m.id}`}
                 label={m.name}
-                help={m.help ?? `${m.name}. It changes what the AI reviewers expect of the copy.`}
+                help={
+                  offeredAudience.has(m.id) && m.options.length > 0
+                    ? (m.help ?? `${m.name}. It changes what the AI reviewers expect of the copy.`)
+                    : 'A default this project holds for a setting this version does not take. It can only be changed on the project’s page.'
+                }
                 options={withStored(m.options, s.modifiers[m.id] ?? NO_DEFAULT)}
                 value={s.modifiers[m.id] ?? NO_DEFAULT}
                 onChange={(v) => setModifier(m.id, v)}
@@ -384,7 +416,13 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
         />
         {draft.profile === CHOOSE_REVIEWERS ? (
           <fieldset id="assess-reviewers" className="space-y-2">
-            <legend className="text-sm font-medium">Tick the {WORDS.aiReviewers} to run</legend>
+            <legend className="flex items-center gap-1 text-sm font-medium">
+              Tick the {WORDS.aiReviewers} to run
+              <FieldHelp title={`Tick the ${WORDS.aiReviewers} to run`}>
+                Each one ticked reads the copy for what it covers and adds what it finds to the
+                report. More {WORDS.aiReviewers} take longer and cost more.
+              </FieldHelp>
+            </legend>
             {reviewers.map((r) => (
               <label key={r.slot} className="flex items-center gap-2 text-sm">
                 <input

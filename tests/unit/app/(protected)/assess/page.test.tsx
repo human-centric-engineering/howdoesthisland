@@ -9,17 +9,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 
-const { getServerSession, clearInvalidSession, requireServerData } = vi.hoisted(() => ({
-  getServerSession: vi.fn(),
-  clearInvalidSession: vi.fn((returnUrl: string) => {
-    throw new Error(`NEXT_REDIRECT ${returnUrl}`);
-  }),
-  requireServerData: vi.fn(),
-}));
+const { getServerSession, clearInvalidSession, requireServerData, requireAllServerData } =
+  vi.hoisted(() => ({
+    getServerSession: vi.fn(),
+    clearInvalidSession: vi.fn((returnUrl: string) => {
+      throw new Error(`NEXT_REDIRECT ${returnUrl}`);
+    }),
+    requireServerData: vi.fn(),
+    requireAllServerData: vi.fn(),
+  }));
 
 vi.mock('@/lib/auth/utils', () => ({ getServerSession }));
 vi.mock('@/lib/auth/clear-session', () => ({ clearInvalidSession }));
-vi.mock('@/lib/api/server-load', () => ({ requireServerData }));
+vi.mock('@/lib/api/server-load', () => ({ requireServerData, requireAllServerData }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/components/ui/select', async () => {
   const { selectMock } = await import('@/tests/unit/components/app/projects/select-mock');
@@ -42,9 +44,14 @@ function answer(latestVersion: string | null = '0.5.2') {
       return Promise.resolve({ data: { name: 'HowDoesThisLand', latestVersion } });
     }
     if (path.endsWith('/catalogue')) return Promise.resolve({ data: anAssessCatalogue() });
-    if (path.startsWith('/api/v1/projects')) return Promise.resolve({ data: PROJECTS });
     return Promise.reject(new Error(`unexpected ${path}`));
   });
+  // Every page of the projects, as one list.
+  requireAllServerData.mockImplementation((path: string) =>
+    path === '/api/v1/projects'
+      ? Promise.resolve(PROJECTS)
+      : Promise.reject(new Error(`unexpected ${path}`))
+  );
 }
 
 beforeEach(() => {
@@ -59,14 +66,14 @@ describe('/assess', () => {
     expect(metadata.title).toBe('Assess');
   });
 
-  it('reads the latest version’s catalogue and the projects, in three calls', async () => {
+  it('reads the latest version’s catalogue, then every page of the projects', async () => {
     render(await AssessPage());
 
     expect(requireServerData.mock.calls.map(([path]) => path)).toEqual([
       '/api/v1/frameworks/howdoesthisland',
       '/api/v1/frameworks/howdoesthisland/versions/0.5.2/catalogue',
-      '/api/v1/projects?limit=100',
     ]);
+    expect(requireAllServerData).toHaveBeenCalledWith('/api/v1/projects');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('How will this land?');
   });
 

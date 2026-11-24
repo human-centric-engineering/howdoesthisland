@@ -15,8 +15,12 @@ import {
   refusalOf,
   requestBodyOf,
   reviewerName,
+  settingsInProject,
+  staleDefaultsOf,
 } from '@/components/app/workbench/assess-draft';
-import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
+import { NO_DEFAULT } from '@/components/app/projects/project-defaults';
+import { MAX_CONTENT_CHARS, MAX_URL_CHARS } from '@/lib/app/assessments/limits';
+import { aProject } from '@/tests/unit/components/app/projects/fixtures';
 import { APIClientError } from '@/lib/api/client';
 import { anAssessCatalogue } from '@/tests/unit/components/app/workbench/fixtures';
 
@@ -66,17 +70,87 @@ describe('readDraft and problemsOf', () => {
       url: `https://example.com/${'p'.repeat(3000)}`,
     });
     expect(draft.text).toBe(text);
-    expect(problemsOf(draft, null, catalogue)).toEqual([
+    expect(problemsOf(draft, null, catalogue, null)).toEqual([
       { field: 'assess-text', message: expect.stringMatching(/over 40,000 characters/) },
     ]);
   });
 
   it('counts the text as the API does, trailing space and all', () => {
     const draft = { ...EMPTY_DRAFT, text: `${'x'.repeat(MAX_CONTENT_CHARS - 5)}\n\n\n\n\n\n` };
-    expect(problemsOf(draft, null, catalogue)).toHaveLength(1);
-    expect(problemsOf({ ...draft, text: '  \n ' }, null, catalogue)).toEqual([
+    expect(problemsOf(draft, null, catalogue, null)).toHaveLength(1);
+    expect(problemsOf({ ...draft, text: '  \n ' }, null, catalogue, null)).toEqual([
       { field: 'assess-text', message: 'Paste some copy to review.' },
     ]);
+  });
+});
+
+describe('staleDefaultsOf', () => {
+  it('finds none in a project whose defaults this version takes', () => {
+    const project = aProject({
+      defaults: { context: { contentType: 'landing_page', audience: { relationship: 'warm' } } },
+    });
+    expect(staleDefaultsOf(project, anAssessCatalogue())).toEqual([]);
+    expect(staleDefaultsOf(null, anAssessCatalogue())).toEqual([]);
+  });
+
+  it('names each default the version refuses, which only the project’s page can take out', () => {
+    const project = aProject({
+      defaults: {
+        context: {
+          contentType: 'press_release',
+          audience: { relationship: 'lukewarm', old_setting: 'x', archetype: 'general' },
+          culture: { reader: 'gb' },
+        },
+      },
+    });
+    expect(staleDefaultsOf(project, anAssessCatalogue({ culture: false }))).toEqual([
+      'Type of copy',
+      'Relationship with the reader',
+      'old_setting',
+      'archetype',
+      'Reader’s culture',
+    ]);
+    // With the culture switch on, a country it serves is fine.
+    expect(staleDefaultsOf(project, anAssessCatalogue({ culture: true }))).not.toContain(
+      'Reader’s culture'
+    );
+  });
+
+  it('stops a review in that project before it is sent', () => {
+    const project = aProject({ defaults: { context: { audience: { old_setting: 'x' } } } });
+    const draft = { ...EMPTY_DRAFT, text: 'Copy' };
+    expect(problemsOf(draft, null, anAssessCatalogue(), project).map((p) => p.field)).toEqual([
+      'assess-project',
+    ]);
+  });
+});
+
+describe('settingsInProject', () => {
+  it('shows the project’s value for a setting it fixes that a kept draft leaves to the model', () => {
+    const project = aProject({
+      defaults: { context: { contentType: 'landing_page', audience: { relationship: 'warm' } } },
+    });
+    const settings = settingsInProject(EMPTY_DRAFT.settings, project, anAssessCatalogue());
+    expect(settings.contentType).toBe('landing_page');
+    expect(settings.modifiers).toEqual({ relationship: 'warm' });
+    expect(settings.archetype).toBe(NO_DEFAULT);
+    // A value chosen in the draft stays chosen.
+    expect(
+      settingsInProject(
+        { ...EMPTY_DRAFT.settings, contentType: 'general', modifiers: { relationship: 'cold' } },
+        project,
+        anAssessCatalogue()
+      )
+    ).toMatchObject({ contentType: 'general', modifiers: { relationship: 'cold' } });
+  });
+});
+
+describe('problemsOf for a page’s address', () => {
+  it('refuses an address longer than the API takes, beside its field', () => {
+    const url = `https://example.com/?${'q'.repeat(MAX_URL_CHARS)}`;
+    expect(
+      problemsOf({ ...EMPTY_DRAFT, source: 'url', url }, null, anAssessCatalogue(), null)
+    ).toEqual([{ field: 'assess-url', message: expect.stringMatching(/over 2,048 characters/) }]);
   });
 });
 
@@ -91,7 +165,7 @@ describe('requestBodyOf', () => {
     const catalogue = anAssessCatalogue({ culture: false });
     expect(requestBodyOf(draft, null, catalogue)).toMatchObject({ judges: ['judge_ethos'] });
     expect(
-      problemsOf({ ...draft, judges: ['judge_culture'] }, null, catalogue).map((p) => p.field)
+      problemsOf({ ...draft, judges: ['judge_culture'] }, null, catalogue, null).map((p) => p.field)
     ).toEqual(['assess-reviewers']);
   });
 });

@@ -11,10 +11,9 @@
 import type { Metadata } from 'next';
 import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
-import { requireServerData } from '@/lib/api/server-load';
+import { requireAllServerData, requireServerData } from '@/lib/api/server-load';
 import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import {
-  PROJECT_LIST_LIMIT,
   PROJECTS_ENDPOINT,
   catalogueEndpoint,
   frameworkEndpoint,
@@ -48,14 +47,10 @@ export default async function AssessPage() {
       )
     ).data
   );
+  // Every page of them: a workspace past one page still sees each of its
+  // projects, and a draft naming one keeps it.
   const projects = projectListSchema
-    .parse(
-      (
-        await requireServerData<unknown>(
-          `${PROJECTS_ENDPOINT}?${new URLSearchParams({ limit: String(PROJECT_LIST_LIMIT) })}`
-        )
-      ).data
-    )
+    .parse(await requireAllServerData<{ id: string }>(PROJECTS_ENDPOINT))
     .filter((p) => !p.archived && p.framework === HOWDOESTHISLAND_SLUG);
 
   return (

@@ -17,14 +17,20 @@
  */
 import { z } from 'zod';
 import { APIClientError } from '@/lib/api/client';
-import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import {
+  MAX_CONTENT_CHARS,
+  MAX_REVIEW_FILE_BYTES,
+  MAX_URL_CHARS,
+} from '@/lib/app/assessments/limits';
 import { USAGE_PAGE } from '@/lib/app/usage/wire';
 import { WORDS } from '@/lib/app/reports/words';
 import {
   CULTURE_PROFILE,
   FULL_PROFILE,
   NO_DEFAULT,
+  audienceSettings,
   contextOf,
+  cultureOptions,
   formValuesOf,
   profileOptions,
   type PickerOption,
@@ -145,6 +151,62 @@ export function fixedByProject(
   return fixed;
 }
 
+/**
+ * The draft's settings as a review in the project runs them: a setting the
+ * project fixes that the draft leaves to the model's default is the
+ * project's, since the API fills it from the project (`mergeContext`). A
+ * draft kept from before the project's defaults changed can hold one.
+ */
+export function settingsInProject(
+  settings: ReaderSettings,
+  project: ProjectWire | null,
+  catalogue: AssessCatalogue
+): ReaderSettings {
+  if (!project) return settings;
+  const own = defaultsOf(project, catalogue).settings;
+  const pick = (key: Exclude<keyof ReaderSettings, 'modifiers'>) =>
+    settings[key] === NO_DEFAULT ? own[key] : settings[key];
+  return {
+    contentType: pick('contentType'),
+    archetype: pick('archetype'),
+    role: pick('role'),
+    modifiers: { ...own.modifiers, ...settings.modifiers },
+    cultureReader: pick('cultureReader'),
+    cultureWriter: pick('cultureWriter'),
+  };
+}
+
+/**
+ * The project's defaults this version refuses: a value it no longer offers,
+ * an audience setting it no longer has (or the one the reader sets), or a
+ * culture with the culture switch off. The API fills each into every review
+ * in the project (`mergeContext`), and nothing sent can take it out, so the
+ * project's own page is the only place to fix them. By picker label.
+ */
+export function staleDefaultsOf(project: ProjectWire | null, catalogue: AssessCatalogue): string[] {
+  if (!project) return [];
+  const { settings } = defaultsOf(project, catalogue);
+  const { request } = catalogue;
+  const stale: string[] = [];
+  const offered = (value: string, ids: Array<{ id: string }>) =>
+    value === NO_DEFAULT || ids.some((x) => x.id === value);
+  if (!offered(settings.contentType, request.contentTypes)) stale.push(WORDS.TypeOfCopy);
+  if (!offered(settings.archetype, request.archetypes)) stale.push('Reader');
+  if (!offered(settings.role, request.roles)) stale.push('Reader’s role');
+  const audience = audienceSettings(catalogue);
+  for (const [id, option] of Object.entries(settings.modifiers)) {
+    const setting = audience.find((m) => m.id === id);
+    if (!setting?.options.some((o) => o.id === option)) stale.push(setting?.name ?? id);
+  }
+  const countries = cultureOptions(catalogue);
+  const cultureOk = (value: string) =>
+    value === NO_DEFAULT ||
+    (request.countries !== undefined && countries.some((c) => c.value === value));
+  if (!cultureOk(settings.cultureReader)) stale.push('Reader’s culture');
+  if (!cultureOk(settings.cultureWriter)) stale.push('Writer’s culture');
+  return stale;
+}
+
 /** The profile picker's choices: the project form's, then choosing the AI reviewers one by one. */
 export function reviewerSetOptions(catalogue: AssessCatalogue): PickerOption[] {
   return [
@@ -202,9 +264,16 @@ export function tickedReviewers(draft: Draft, catalogue: AssessCatalogue): strin
 export function problemsOf(
   draft: Draft,
   file: File | null,
-  catalogue: AssessCatalogue
+  catalogue: AssessCatalogue,
+  project: ProjectWire | null
 ): Array<{ field: string; message: string }> {
   const problems: Array<{ field: string; message: string }> = [];
+  if (staleDefaultsOf(project, catalogue).length > 0) {
+    problems.push({
+      field: 'assess-project',
+      message: `This project’s defaults need fixing on its own page before a ${WORDS.review} in it can start.`,
+    });
+  }
   if (draft.source === 'text') {
     // Counted as the API counts it: the text as sent, untrimmed, in code points.
     const length = [...draft.text].length;
@@ -218,8 +287,13 @@ export function problemsOf(
     }
   }
   if (draft.source === 'url') {
-    const ok = z.url({ protocol: /^https?$/ }).safeParse(draft.url.trim()).success;
-    if (!ok) {
+    const url = draft.url.trim();
+    if (url.length > MAX_URL_CHARS) {
+      problems.push({
+        field: 'assess-url',
+        message: `That address is over ${MAX_URL_CHARS.toLocaleString('en-GB')} characters. Leave off what follows the page’s own address, such as tracking after a ?`,
+      });
+    } else if (!z.url({ protocol: /^https?$/ }).safeParse(url).success) {
       problems.push({
         field: 'assess-url',
         message: 'Give the page’s full address, starting https://',
