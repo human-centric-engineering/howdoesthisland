@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   runEditor: vi.fn(),
   engineForVersion: vi.fn(),
   budgetRefusal: vi.fn(),
+  search: vi.fn(),
 }));
 
 let fake: FakeDb;
@@ -42,6 +43,10 @@ vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
 // The check itself is `budget.test.ts`'s; here, what the run does with its answer (t-53).
 vi.mock('@/lib/app/usage/budget', () => ({ budgetRefusal: mocks.budgetRefusal }));
+// The embeddings (t-75): core's search, over the fake's knowledge rows.
+vi.mock('@/lib/orchestration/knowledge/search', () => ({
+  searchKnowledgeWithEmbedding: mocks.search,
+}));
 vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/assessments/editor')>()),
   runEditor: mocks.runEditor,
@@ -540,6 +545,142 @@ describe('a project’s weight adjustment (t-72)', () => {
       error: 'Its weight adjustment does not fit its framework version.',
     });
     expect(mocks.runJudge).not.toHaveBeenCalled();
+  });
+});
+
+describe('a project’s context (t-75)', () => {
+  /** A chunk in the knowledge base, as core's search answers with it. */
+  type Chunk = { id: string; documentId: string; content: string; similarity: number };
+  let corpus: Chunk[];
+
+  beforeEach(() => {
+    fake.projects.push(
+      { id: 'project-1', orgId: ORG, brief: { offer: 'Bicycles for commuters' } },
+      { id: 'project-2', orgId: ORG, brief: {} }
+    );
+    fake.projectDocuments.push(
+      {
+        id: 'link-guide',
+        orgId: ORG,
+        projectId: 'project-1',
+        knowledgeDocumentId: 'k-guide',
+        title: 'Brand guide',
+        createdAt: new Date(1),
+      },
+      {
+        id: 'link-rival',
+        orgId: ORG,
+        projectId: 'project-2',
+        knowledgeDocumentId: 'k-rival',
+        title: 'Rival notes',
+        createdAt: new Date(2),
+      }
+    );
+    fake.knowledgeDocuments.push(
+      { id: 'k-guide', orgId: ORG, status: 'ready' },
+      { id: 'k-rival', orgId: ORG, status: 'ready' }
+    );
+    corpus = [
+      { id: 'c-guide', documentId: 'k-guide', content: 'Our voice is plain.', similarity: 0.6 },
+      // The other project's document matches the copy best.
+      { id: 'c-rival', documentId: 'k-rival', content: 'Rival pricing notes.', similarity: 0.95 },
+    ];
+    // As the SQL does: only chunks in `documentIds`, best first.
+    mocks.search.mockImplementation(async (_query: string, filters: { documentIds: string[] }) => ({
+      results: corpus
+        .filter((c) => filters.documentIds.includes(c.documentId))
+        .sort((a, b) => b.similarity - a.similarity)
+        .map((c) => ({ chunk: c, similarity: c.similarity })),
+      embedding: { model: 'embed', provider: 'p', inputTokens: 5, costUsd: 0.001 },
+    }));
+  });
+
+  const contextOf = (call: unknown[] | undefined) =>
+    (call?.[1] as { projectContext?: string | null } | undefined)?.projectContext;
+
+  it('gives every judge and the editor a passage from the project’s own document, and records it', async () => {
+    const a = fake.seed({ projectId: 'project-1', judges: ['judge_a', 'judge_b'] });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.runJudge).toHaveBeenCalledTimes(2);
+    const sent = mocks.runJudge.mock.calls.map(contextOf);
+    const editorSent = (mocks.runEditor.mock.calls[0]?.[0] as { projectContext?: string })
+      .projectContext;
+    for (const block of [...sent, editorSent]) {
+      expect(block).toContain('Our voice is plain.');
+      expect(block).toContain('[From "Brand guide"]');
+      expect(block).toContain('Bicycles for commuters');
+      // The other project's document matched best, and is never used.
+      expect(block).not.toContain('Rival pricing notes.');
+    }
+    // One block for the whole review.
+    expect(new Set([...sent, editorSent]).size).toBe(1);
+    // The search was the project's documents alone.
+    expect(mocks.search.mock.calls[0]?.[1]).toEqual({ documentIds: ['k-guide'] });
+    expect(mocks.search.mock.calls[0]?.[4]).toEqual({
+      userId: 'user-1',
+      metadata: { assessmentId: a.id, kind: 'project_context' },
+    });
+    expect(a.projectContext).toEqual({
+      brief: { offer: 'Bicycles for commuters' },
+      documents: [{ id: 'link-guide', title: 'Brand guide' }],
+      passages: [{ documentId: 'link-guide', chunkId: 'c-guide', text: 'Our voice is plain.' }],
+    });
+    // The search's embedding is part of what the review cost.
+    expect(a.costUsd).toBeCloseTo(0.021);
+  });
+
+  it('reads the stored context back on a re-drive, searching nothing', async () => {
+    const stored = {
+      brief: null,
+      documents: [{ id: 'link-guide', title: 'Brand guide' }],
+      passages: [
+        { documentId: 'link-guide', chunkId: 'c-guide', text: 'What the first judges read.' },
+      ],
+    };
+    const a = fake.seed({ projectId: 'project-1', projectContext: stored, judges: ['judge_a'] });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.search).not.toHaveBeenCalled();
+    expect(contextOf(mocks.runJudge.mock.calls[0])).toContain('What the first judges read.');
+    expect(a.projectContext).toEqual(stored);
+  });
+
+  it('stores an empty record for a project that gives nothing, so a re-drive does not search again', async () => {
+    fake.projects[0].brief = {};
+    fake.projectDocuments.splice(0, 1);
+    const a = fake.seed({ projectId: 'project-1', judges: ['judge_a'] });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(contextOf(mocks.runJudge.mock.calls[0])).toBeNull();
+    expect(a.projectContext).toEqual({ brief: null, documents: [], passages: [] });
+  });
+
+  it('sends no block, and records none, for an assessment outside a project', async () => {
+    const a = fake.seed({ judges: ['judge_a', 'judge_b'] });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('completed');
+
+    expect(mocks.search).not.toHaveBeenCalled();
+    expect(mocks.runJudge.mock.calls.map(contextOf)).toEqual([null, null]);
+    expect(
+      (mocks.runEditor.mock.calls[0]?.[0] as { projectContext?: string | null }).projectContext
+    ).toBeNull();
+    expect(a.projectContext ?? null).toBeNull();
+  });
+
+  it('hands the run back to the queue, calling no judge, when the search fails', async () => {
+    mocks.search.mockRejectedValue(new Error('embedding provider down'));
+    const a = fake.seed({ projectId: 'project-1' });
+
+    expect(await inOrg(() => runAssessment(String(a.id)))).toBe('requeued');
+
+    expect(mocks.runJudge).not.toHaveBeenCalled();
+    expect(a.status).toBe('QUEUED');
+    expect(a.projectContext).toBeUndefined();
   });
 });
 

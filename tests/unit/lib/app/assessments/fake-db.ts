@@ -39,6 +39,10 @@
  * `findMany`, `aggregate` summing `amount` and `createMany` honouring the `(kind,
  * reference)` unique index under `skipDuplicates`, as Postgres's ON CONFLICT
  * DO NOTHING does. `addCost()` writes a cost row as `run-judge.ts` would.
+ *
+ * For a project's context (t-75): `projects` (an assessment's `project`
+ * relation reads it), `projectDocument` links in `projectDocuments` and
+ * knowledge rows in `knowledgeDocuments`, each with `findMany`.
  */
 import { vi } from 'vitest';
 
@@ -113,6 +117,8 @@ export function createFakeDb() {
   const costRows: Row[] = [];
   const credits: Row[] = [];
   const projects: Row[] = [];
+  const projectDocuments: Row[] = [];
+  const knowledgeDocuments: Row[] = [];
   let seq = 0;
   /** The tail of the transaction queue: each waits for the one before. */
   let txQueue: Promise<unknown> = Promise.resolve();
@@ -136,6 +142,7 @@ export function createFakeDb() {
       .filter((r) => r.assessmentId === row.id)
       .map((r) => ({ ...r, reply: replies.find((p) => p.judgeRunId === r.id) ?? null })),
     frameworkVersion: { version: '0.5.1', framework: { slug: 'howdoesthisland' } },
+    project: projects.find((p) => p.id === row.projectId) ?? null,
   });
 
   type Order = { createdAt?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }[];
@@ -405,6 +412,16 @@ export function createFakeDb() {
         async ({ where }: { where?: Row }) => projects.find((r) => matches(r, where)) ?? null
       ),
     },
+    projectDocument: {
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        projectDocuments.filter((r) => matches(r, where)).map((r) => ({ ...r }))
+      ),
+    },
+    aiKnowledgeDocument: {
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        knowledgeDocuments.filter((r) => matches(r, where)).map((r) => ({ ...r }))
+      ),
+    },
     $executeRaw: vi.fn(async () => 0),
     $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => {
       const run = txQueue.then(() => fn(db));
@@ -516,6 +533,8 @@ export function createFakeDb() {
     costRows,
     credits,
     projects,
+    projectDocuments,
+    knowledgeDocuments,
     withReply,
     seed,
     addCost,
