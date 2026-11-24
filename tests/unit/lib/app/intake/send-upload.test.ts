@@ -91,6 +91,20 @@ describe('sendUpload', () => {
     expect(err).toMatchObject({ code: 'FILE_TOO_LARGE', message: 'Over 10 MB.' });
   });
 
+  it('FILE_UNREADABLE, sending nothing, when the chosen file can no longer be read', async () => {
+    stubFetch(envelope({ success: true, data: {} }));
+    const gone = new File(['x'], 'brief.pdf');
+    vi.spyOn(gone, 'slice').mockReturnValue({
+      arrayBuffer: () => Promise.reject(new DOMException('gone', 'NotReadableError')),
+    } as unknown as Blob);
+    const err = await refusal(sendUpload('/x', gone, {}, TOO_LARGE));
+    expect(err).toMatchObject({
+      code: 'FILE_UNREADABLE',
+      message: 'brief.pdf could not be opened. Try choosing it again.',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('NETWORK_ERROR when the request never lands', async () => {
     stubFetch(new TypeError('Failed to fetch'));
     const err = await refusal(sendUpload('/x', new File(['x'], 'a.pdf'), {}, TOO_LARGE));

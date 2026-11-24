@@ -92,6 +92,38 @@ describe('readUpload', () => {
     expect(parsed).toEqual({ title: 'Launch' });
   });
 
+  it('reads options sent as a JSON-typed part, as the OpenAPI encoding asks', async () => {
+    const { options: parsed } = await readUpload(
+      formRequest((form) => {
+        form.append('file', new File(['x'], 'a.txt'));
+        form.append(
+          'options',
+          new Blob([JSON.stringify({ title: 'Launch' })], { type: 'application/json' })
+        );
+      }),
+      options
+    );
+    expect(parsed).toEqual({ title: 'Launch' });
+  });
+
+  it('refuses a JSON-typed options part over the length limit', async () => {
+    const request = formRequest((form) => {
+      form.append('file', new File(['x'], 'a.txt'));
+      form.append('options', new Blob(['x'.repeat(MAX_OPTIONS_CHARS + 1)]));
+    });
+    expect(await refusal(readUpload(request, options))).toEqual({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('says a name is too long, not missing', async () => {
+    const request = formRequest((form) =>
+      form.append('file', new File(['a'], `${'a'.repeat(252)}.txt`))
+    );
+    await expect(readUpload(request, options)).rejects.toThrow('The file name is too long');
+  });
+
   it('reads no options part as {}', async () => {
     const { options: parsed } = await readUpload(
       formRequest((form) => form.append('file', new File(['x'], 'a.txt'))),
@@ -166,13 +198,6 @@ describe('readUpload', () => {
       (form) => {
         form.append('file', new File(['a'], 'a.txt'));
         form.append('options', '{title:');
-      },
-    ],
-    [
-      'options sent as a file',
-      (form) => {
-        form.append('file', new File(['a'], 'a.txt'));
-        form.append('options', new File(['{}'], 'options.json'));
       },
     ],
     [

@@ -21,7 +21,8 @@ import type { APIResponse } from '@/types/api';
  * `FILE_TOO_LARGE` with `tooLargeMessage`, as the route's own refusal of a
  * file too large would be.
  *
- * @throws APIClientError — the route's refusal, the host's, or a network failure
+ * @throws APIClientError — `FILE_UNREADABLE` when the chosen file can no
+ *   longer be read; the route's refusal, the host's, or a network failure
  */
 export async function sendUpload(
   endpoint: string,
@@ -29,6 +30,17 @@ export async function sendUpload(
   options: Record<string, unknown>,
   tooLargeMessage: string
 ): Promise<unknown> {
+  // A file moved, deleted or unshared since it was chosen fails only when
+  // read. Read its first byte, so that says "choose it again" rather than
+  // coming back as a network failure from inside `fetch`.
+  try {
+    await file.slice(0, 1).arrayBuffer();
+  } catch {
+    throw new APIClientError(
+      `${file.name} could not be opened. Try choosing it again.`,
+      'FILE_UNREADABLE'
+    );
+  }
   const form = new FormData();
   form.append('file', file, file.name);
   form.append('options', JSON.stringify(options));

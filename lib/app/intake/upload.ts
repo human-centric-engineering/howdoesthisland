@@ -99,9 +99,10 @@ export async function readUpload<T>(
   }
   const name = file.name.trim();
   if (name.length === 0 || name.length > MAX_FILE_NAME) {
-    throw new ValidationError('The file needs a name', {
-      file: [`Give the file a name of 1 to ${MAX_FILE_NAME} characters`],
-    });
+    throw new ValidationError(
+      name.length === 0 ? 'The file needs a name' : 'The file name is too long',
+      { file: [`Give the file a name of 1 to ${MAX_FILE_NAME} characters`] }
+    );
   }
   if (file.size > maxFileBytes) {
     throw new APIError(tooLarge.errorMessage, tooLarge.errorCode, 413, tooLarge.details);
@@ -109,7 +110,7 @@ export async function readUpload<T>(
 
   return {
     file: { name, bytes: Buffer.from(await file.arrayBuffer()) },
-    options: parseOptions(form.getAll('options'), optionsSchema),
+    options: parseOptions(await optionsText(form.getAll('options')), optionsSchema),
   };
 }
 
@@ -121,23 +122,32 @@ function tooLargeError(maxFileBytes: number) {
   };
 }
 
-function parseOptions<T>(parts: FormDataEntryValue[], schema: z.ZodType<T>): T {
+/**
+ * The `options` part's text, or `undefined` when there is none. A client
+ * following the OpenAPI document's `encoding` sends it as a JSON-typed part,
+ * which arrives as a file; a form field arrives as text. Both are read.
+ */
+async function optionsText(parts: FormDataEntryValue[]): Promise<string | undefined> {
   if (parts.length > 1) {
     throw new ValidationError('Send at most one options part', {
       options: ['Send at most one options part'],
     });
   }
   const [part] = parts;
-  if (part !== undefined && typeof part !== 'string') {
-    throw new ValidationError('The options part is JSON text, not a file', {
-      options: ['Send options as JSON text, not a file'],
-    });
-  }
-  if (part !== undefined && part.length > MAX_OPTIONS_CHARS) {
+  if (part === undefined) return undefined;
+  // A file's size is in bytes, at least its length in characters, so one
+  // under the limit is never too long once read.
+  const tooLong =
+    typeof part === 'string' ? part.length > MAX_OPTIONS_CHARS : part.size > MAX_OPTIONS_CHARS;
+  if (tooLong) {
     throw new ValidationError('The options part is too long', {
       options: [`${MAX_OPTIONS_CHARS} characters at most`],
     });
   }
+  return typeof part === 'string' ? part : part.text();
+}
+
+function parseOptions<T>(part: string | undefined, schema: z.ZodType<T>): T {
   let raw: unknown = {};
   if (part !== undefined) {
     try {
