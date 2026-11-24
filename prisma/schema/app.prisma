@@ -249,6 +249,7 @@ model Assessment {
   updatedAt          DateTime         @updatedAt
   judgeRuns          JudgeRun[]
   shares             ReportShare[]
+  rewrites           Rewrite[]
 
   /// The budget check's history and in-flight reads (t-54, lib/app/usage/budget.ts).
   @@index([orgId, status, createdAt])
@@ -669,4 +670,54 @@ model ProjectDocument {
   @@index([knowledgeDocumentId])
   @@index([orgId])
   @@map("app_project_document")
+}
+
+// ─── Rewrites (t-81, f-rewrite) ──────────────────────────────────────────────
+
+/// A draft the editor rewrote from a finished review (app-plan §8.2,
+/// .context/app/rewrites.md): streamed while it runs, then kept. Tenant-owned
+/// (`orgId`, cascade, `org_isolation`). The FK to its assessment cascades, so
+/// deleting or purging a review (t-26) takes its rewrites. `createdByUserId`
+/// is a plain string with a hand-written FK to "user" in the migration, SET
+/// NULL: the rewrite is the workspace's and outlives its maker's erasure.
+model Rewrite {
+  id              String        @id @default(cuid())
+  orgId           String?
+  org             Org?          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assessmentId    String
+  assessment      Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  /// `balanced`, or the appeal the rewrite raises (the engine's `rewriteFocuses()`).
+  focus           String
+  status          RewriteStatus @default(RUNNING)
+  /// The draft as written so far while `RUNNING` (saved as it streams), then whole.
+  draft           String        @default("")
+  /// What the budget check holds back for it while `RUNNING`, in USD
+  /// (lib/app/usage/budget.ts): its estimate when it was asked for.
+  heldUsd         Float         @default(0)
+  provider        String?
+  modelName       String?
+  /// What its call cost, from its cost rows (tagged `rewriteId`).
+  costUsd         Float         @default(0)
+  /// Why it failed, for `FAILED`.
+  error           String?
+  errorCode       String?
+  /// Renewed while its call runs. A `RUNNING` rewrite whose lease has run
+  /// out lost its process: the recovery job fails and charges it.
+  leaseExpiresAt  DateTime?
+  /// Who asked for it. FK → user, ON DELETE SET NULL (the workspace keeps it).
+  createdByUserId String?
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([assessmentId, createdAt])
+  /// The budget check's in-flight and history reads, and recovery's sweep.
+  @@index([orgId, status, createdAt])
+  @@map("app_rewrite")
+}
+
+enum RewriteStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }

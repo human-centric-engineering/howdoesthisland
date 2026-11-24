@@ -123,6 +123,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A code redeemed into the workspace, as its `REDEEM` credit entry is; `userId` is the member who redeemed it.',
       },
+      // t-81: a draft rewritten from one of the workspace's reviews, read by every member.
+      Rewrite: {
+        kind: 'not-personal',
+        because:
+          'A draft the editor rewrote from one of the workspace’s reviews; `createdByUserId` is who asked for it.',
+      },
     },
   });
 }

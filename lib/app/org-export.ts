@@ -206,6 +206,20 @@ export function initAppOrgSources(): void {
             orderBy: { createdAt: 'asc' },
           }),
       },
+      {
+        model: 'Rewrite',
+        section: 'rewrites',
+        disposition: 'export',
+        description:
+          'Drafts the editor rewrote from the workspace’s reviews: the draft, its focus and what it cost.',
+        fetch: ({ orgId }) =>
+          prisma.rewrite.findMany({
+            where: ownedBy(orgId),
+            // The lease and the budget hold are the call's bookkeeping.
+            omit: { leaseExpiresAt: true, heldUsd: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+      },
     ],
     excluded: [
       {
