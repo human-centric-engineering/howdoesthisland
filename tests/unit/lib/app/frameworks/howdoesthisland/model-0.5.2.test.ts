@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { calibrationSetSchema, danglingReferences } from '@/lib/app/calibration/schema';
 import { decompose } from '@/lib/app/frameworks/codec';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
@@ -70,6 +71,24 @@ describe('model-0.5.2.json', () => {
         effectiveWeights(before, ctx, { culture: false })
       );
     }
+  });
+});
+
+describe('eval-0.5.2.json', () => {
+  const set051 = calibrationSetSchema.parse(read(`${DATA}/eval-0.5.1.json`));
+  const set052 = calibrationSetSchema.parse(read(`${DATA}/eval-0.5.2.json`));
+
+  it('is the 0.5.1 set with a new version, model and change note, and nothing else', () => {
+    const { version, model: forModel, changes_from_0_5_1: changes, ...restMeta } = set052.meta;
+    expect(version).toBe('0.5.2');
+    expect(forModel).toBe('0.5.2');
+    expect(changes).toEqual([expect.stringContaining('no case or expectation changed')]);
+    const { version: _v, model: _m, ...oldMeta } = set051.meta;
+    expect({ ...set052, meta: restMeta }).toEqual({ ...set051, meta: oldMeta });
+  });
+
+  it('names only ids model 0.5.2 has', () => {
+    expect(danglingReferences(set052, model)).toEqual([]);
   });
 });
 

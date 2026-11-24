@@ -9,9 +9,10 @@ covers the set (t-36), the runner and the publish gate (t-37).
 ## The set
 
 `lib/app/frameworks/howdoesthisland/data/eval-0.5.1.json`, written against model 0.5.1.
-`eval-0.5.2.json` is the same set with only its `version` and `model` changed: 0.5.2 adds
-adjustment bounds and nothing else, and the set runs with no project adjustment, so every
-expectation holds.
+`eval-0.5.2.json` is the same set with its `version` and `model` changed and a
+`meta.changes_from_0_5_1` note saying so: 0.5.2 adds adjustment bounds and nothing else, and
+the set runs with no project adjustment, so every expectation holds. A test pins that no
+case or expectation moved.
 It was brought up from the prototype's 0.4.0 set (`prototype/howdoesthisland_eval_set.json`,
 left as it was), and `meta.changes_from_0_4_0` lists what changed. Read it through
 `calibrationSetSchema` in `lib/app/calibration/schema.ts`. Never import it from `prototype/`,

@@ -19,6 +19,9 @@
       "New cases ev19 and ev20 (the same pension facts for an expert and a novice reader), ev21 (inclusive language), ev22 to ev24 (culture: one text read in Japan and the US, and a well-fitted letter to Japan).",
       "New cases ev25 and ev26: prompt injection, inline and through imitated delimiters.",
       "The two-reviewer note is dropped: expectations are reviewed in the pull request (D9)."
+    ],
+    "changes_from_0_5_1": [
+      "Version and model set to 0.5.2, which only adds adjustment bounds; no case or expectation changed."
     ]
   },
   "cases": [
