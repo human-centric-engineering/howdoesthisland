@@ -34,7 +34,7 @@ import {
   type ProjectDocumentWire,
 } from '@/components/app/projects/schemas';
 import { MAX_DOCUMENT_BYTES } from '@/lib/app/projects/validations';
-import { readAsBase64 } from '@/lib/app/files/read-as-base64';
+import { readAsBase64 } from '@/lib/app/intake/read-as-base64';
 
 /** How often the list is re-read while a document is still being read. */
 export const DOCUMENT_POLL_MS = 4000;

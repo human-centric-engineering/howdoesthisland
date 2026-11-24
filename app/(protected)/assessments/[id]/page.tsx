@@ -2,6 +2,10 @@ import type { Metadata } from 'next';
 import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
 import { apiReportSource, loadReport } from '@/lib/app/reports/load';
+import { requireServerData } from '@/lib/api/server-load';
+import { catalogueEndpoint } from '@/components/app/projects/schemas';
+import { assessCatalogueSchema } from '@/components/app/workbench/schemas';
+import { reviewerName } from '@/components/app/workbench/assess-draft';
 import { Report } from '@/components/app/report/report';
 import { ReportActions } from '@/components/app/report/report-actions';
 import {
@@ -19,7 +23,8 @@ export const metadata: Metadata = { title: 'Report' };
  * model version it ran on. Another workspace's id is a 404 from the API, so it
  * renders the not-found page, the same as an id that does not exist.
  *
- * A ready report offers its PDF (t-31).
+ * A ready report offers its PDF (t-31). One still running shows its live
+ * progress, then the report once it is final (t-78).
  */
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -36,8 +41,24 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           <Report view={load.view} variant="web" />
         </>
       );
-    case 'pending':
-      return <ReportPending assessment={load.assessment} />;
+    case 'pending': {
+      // Its version's catalogue names the AI reviewers and the appeals the
+      // live progress shows (t-78).
+      const { slug, version } = load.assessment.framework;
+      const catalogue = assessCatalogueSchema.parse(
+        (await requireServerData<unknown>(catalogueEndpoint(slug, version))).data
+      );
+      return (
+        <ReportPending
+          assessmentId={id}
+          assessment={load.assessment}
+          reviewerNames={Object.fromEntries(
+            load.assessment.judges.map((slot) => [slot, reviewerName(catalogue, slot)])
+          )}
+          appealNames={Object.fromEntries(catalogue.result.appeals.map((a) => [a.id, a.name]))}
+        />
+      );
+    }
     case 'no_result':
       return <ReportNoResult assessment={load.assessment} />;
     case 'unreadable':

@@ -1,6 +1,8 @@
 /**
  * A file the person chose, read in the browser for an API that takes files as
  * base64: a project's background document (t-74), a file to review (t-78).
+ * Browser-only, and apart from intake's parsers, so a page that imports it
+ * carries none of them.
  */
 
 /** A file's bytes as base64, without the `data:` prefix `readAsDataURL` adds. */

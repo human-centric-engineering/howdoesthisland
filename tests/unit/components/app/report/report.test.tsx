@@ -8,8 +8,11 @@
  * @see components/app/report/marked-up-copy.tsx
  * @see components/app/report/report-states.tsx
  */
-import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, within } from '@testing-library/react';
+
+const refresh = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
 import { Report } from '@/components/app/report/report';
 import {
   ReportNoResult,
@@ -29,6 +32,7 @@ import {
   engineResult,
   modelDocument,
 } from '@/tests/unit/lib/app/reports/fixtures';
+import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 
 function viewOf(a: ReportAssessment, culture = true) {
   return buildReportView({
@@ -216,9 +220,56 @@ describe('Report — names and fields the model or result lacks', () => {
 });
 
 describe('report states', () => {
-  it('pending asks for a reload', () => {
-    render(<ReportPending assessment={apiAssessment({ status: 'running', result: null })} />);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Still reviewing');
+  describe('pending', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      refresh.mockClear();
+    });
+
+    function renderPending() {
+      FakeEventSource.reset();
+      vi.stubGlobal('EventSource', FakeEventSource);
+      const assessment = apiAssessment({ status: 'running', result: null });
+      render(
+        <ReportPending
+          assessmentId="a-1"
+          assessment={assessment}
+          reviewerNames={Object.fromEntries(
+            assessment.judges.map((slot) => [slot, `Name of ${slot}`])
+          )}
+          appealNames={{ ethos: 'Ethos' }}
+        />
+      );
+      return assessment;
+    }
+
+    it('shows the review’s live progress in place of a reload message (t-78)', () => {
+      const assessment = renderPending();
+
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Still reviewing');
+      expect(screen.queryByText(/Reload the page/)).not.toBeInTheDocument();
+      expect(FakeEventSource.latest().url).toBe('/api/v1/assessments/a-1/events');
+      for (const slot of assessment.judges) {
+        expect(screen.getByText(`Name of ${slot}`)).toBeInTheDocument();
+      }
+    });
+
+    it('reads the page again once the review is final, so the report takes its place', () => {
+      renderPending();
+      act(() =>
+        FakeEventSource.latest().emit({
+          type: 'assessment_done',
+          id: 'a-1',
+          status: 'completed',
+          overall: 60,
+          band: 'Good',
+          costUsd: 0.1,
+          error: null,
+          errorCode: null,
+        })
+      );
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('a failed run shows its error; a cancelled one does not', () => {

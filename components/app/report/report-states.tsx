@@ -2,11 +2,12 @@ import Link from 'next/link';
 import type { ReportAssessment } from '@/lib/app/reports/input';
 import { WORDS } from '@/lib/app/reports/words';
 import { USAGE_PAGE } from '@/lib/app/usage/wire';
+import { LiveReportPending } from '@/components/app/workbench/live-report-pending';
 
 /**
  * What `/assessments/[id]` shows when there is no report to show yet, or
- * none at all. Live progress is the workbench's (f-workbench b1); until then
- * a run still going says so and asks for a reload.
+ * none at all. A run still going shows its live progress, the workbench's
+ * (t-78), and the report replaces it once the run is final.
  */
 function Panel({
   slug,
@@ -31,14 +32,44 @@ function Panel({
   );
 }
 
-export function ReportPending({ assessment }: { assessment: ReportAssessment }) {
+export interface ReportPendingProps {
+  /** The review's id: the stream it follows. */
+  assessmentId: string;
+  assessment: ReportAssessment;
+  /** Judge slot → the name its AI reviewer goes by. */
+  reviewerNames: Record<string, string>;
+  /** Appeal id → name, for the quick scan. */
+  appealNames: Record<string, string>;
+}
+
+export function ReportPending({
+  assessmentId,
+  assessment,
+  reviewerNames,
+  appealNames,
+}: ReportPendingProps) {
   return (
-    <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="Still reviewing">
-      <p>
-        The {WORDS.aiReviewers} are still reading this copy. Reload the page in a minute to see the
-        report.
-      </p>
-    </Panel>
+    <div className="hd-sheet mx-auto max-w-3xl px-6 py-10 md:px-10">
+      <LiveReportPending
+        assessmentId={assessmentId}
+        reviewers={assessment.judges.map((slot) => ({
+          slot,
+          name: reviewerNames[slot] ?? slot,
+        }))}
+        appealNames={appealNames}
+        headingLevel={1}
+        initial={{
+          status: assessment.status,
+          // The stream sends the quick scan as it opens.
+          quickScan: null,
+          runs: assessment.judgeRuns.map((r) => ({
+            judge: r.judge,
+            status: r.status,
+            errorCode: null,
+          })),
+        }}
+      />
+    </div>
   );
 }
 

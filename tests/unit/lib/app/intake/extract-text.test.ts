@@ -15,6 +15,7 @@ import { join } from 'path';
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_INTAKE_LIMITS, MAX_TEXT_CHARS, extractText } from '@/lib/app/intake/extract-text';
+import { MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
 import { IntakeError, IntakeErrorCodes, type IntakeErrorCode } from '@/lib/app/intake/errors';
 
 const FIXTURES = join(process.cwd(), 'tests/fixtures/app/intake');
@@ -167,6 +168,8 @@ describe('extractText — refusals', () => {
 
   it('defaults the byte cap to 10 MB', async () => {
     expect(DEFAULT_INTAKE_LIMITS.maxBytes).toBe(10 * 1024 * 1024);
+    // The /assess page checks a file against its own copy before sending it (t-78).
+    expect(MAX_REVIEW_FILE_BYTES).toBe(DEFAULT_INTAKE_LIMITS.maxBytes);
     const justOver = Buffer.alloc(DEFAULT_INTAKE_LIMITS.maxBytes + 1, 0x41);
     await expectRefused(extractText(justOver, 'big.txt'), IntakeErrorCodes.TOO_LARGE, 413);
   });
