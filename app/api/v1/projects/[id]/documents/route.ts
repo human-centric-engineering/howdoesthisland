@@ -8,7 +8,8 @@
  *   intake formats, and an optional `title`. The text is chunked and embedded
  *   into the workspace's knowledge base before the answer, which is 201 with
  *   the document; the same text already in this project answers 200 with its
- *   existing link.
+ *   existing link, without indexing it again, renamed to `title` when one is
+ *   given.
  *
  * Authentication: a browser session, or an API key with the `projects` scope.
  *
@@ -25,7 +26,9 @@
  *   `FILE_UNREADABLE` — POST: the file.
  * - 422 `URL_NOT_ALLOWED`, `FETCH_FAILED`, `FETCH_TIMEOUT` — POST: the page.
  * - 429 `RATE_LIMIT_EXCEEDED` — POST: more than
- *   `DOCUMENT_ADDS_PER_INTERVAL` adds in ten minutes, per user.
+ *   `DOCUMENT_ADDS_PER_INTERVAL` adds in ten minutes, per user. Every valid
+ *   add counts, including one refused or answered from an existing link:
+ *   each still reads its file or fetches its page.
  * - 502 `DOCUMENT_NOT_INDEXED` — POST: read, but could not be embedded.
  */
 import type { NextRequest } from 'next/server';

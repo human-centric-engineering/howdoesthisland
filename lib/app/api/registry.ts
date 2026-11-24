@@ -801,7 +801,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'POST',
     path: '/api/v1/projects/{id}/documents',
     summary:
-      "Add a context document to a project, from a file or a page: its text is read, then chunked and embedded into the workspace's knowledge base before the answer. The same text already in the project answers 200 with its existing link.",
+      "Add a context document to a project, from a file or a page: its text is read, then chunked and embedded into the workspace's knowledge base before the answer. The same text already in the project answers 200 with its existing link, renamed to the given title if there is one.",
     auth: PROJECTS,
     request: { params: projectIdParamSchema, body: addDocumentSchema },
     response: { status: 201, data: projectDocumentSchema },

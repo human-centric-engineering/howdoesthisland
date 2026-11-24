@@ -257,9 +257,9 @@ function notIndexed(): APIError {
  */
 async function upload(
   doc: Intake,
+  fileHash: string,
   userId: string
 ): Promise<{ knowledgeDocumentId: string; created: boolean }> {
-  const fileHash = await sha256(doc.text);
   const before = new Set(
     (await prisma.aiKnowledgeDocument.findMany({ where: { fileHash }, select: { id: true } })).map(
       (row) => row.id
@@ -285,7 +285,20 @@ async function upload(
       where: { fileHash, status: 'failed' },
       select: { id: true, uploadedBy: true, fileName: true },
     });
-    const ours = failed.filter(madeByThisCall).map((row) => row.id);
+    // A row a racing add was handed and has linked is that add's to settle:
+    // deleting it would cascade its link away unseen.
+    const candidates = failed.filter(madeByThisCall).map((row) => row.id);
+    const linked = new Set(
+      candidates.length === 0
+        ? []
+        : (
+            await prisma.projectDocument.findMany({
+              where: { knowledgeDocumentId: { in: candidates } },
+              select: { knowledgeDocumentId: true },
+            })
+          ).map((row) => row.knowledgeDocumentId)
+    );
+    const ours = candidates.filter((id) => !linked.has(id));
     if (ours.length > 0) {
       await prisma.aiKnowledgeDocument.deleteMany({ where: { id: { in: ours } } });
     }
@@ -297,11 +310,22 @@ async function upload(
 }
 
 /**
+ * A link the project already holds, renamed when the caller gave a title: a
+ * re-add with a title is how a document is renamed, rather than one dropped.
+ */
+async function retitled(link: LinkRow, title: string | undefined, orgId: string): Promise<LinkRow> {
+  if (title === undefined || title === link.title) return link;
+  await prisma.projectDocument.updateMany({ where: { id: link.id, orgId }, data: { title } });
+  return { ...link, title };
+}
+
+/**
  * Add a document to the project: read it (a file in the intake formats, or a
  * page by URL), index it in the workspace's knowledge base, and link it.
  *
  * @returns the link, and whether it is new: a document the project already
- *   holds (the same text) answers with its existing link.
+ *   holds (the same text) answers with its existing link, renamed to `title`
+ *   when one is given.
  */
 export async function addProjectDocument(
   projectId: string,
@@ -310,8 +334,36 @@ export async function addProjectDocument(
 ): Promise<{ document: ProjectDocumentView; added: boolean }> {
   const orgId = requireOrgId();
   await requireProject(projectId, orgId);
-  const held = await prisma.projectDocument.count({ where: { projectId, orgId } });
-  if (held >= MAX_PROJECT_DOCUMENTS) {
+
+  const doc = await intake(body.source);
+  const title = body.title ?? doc.title;
+  const fileHash = await sha256(doc.text);
+
+  // The same text already in this project answers with its link, before the
+  // cap (re-adding one the project holds adds nothing) and without indexing
+  // it again. A failed row is not reused: the upload below makes a new one.
+  const sameText = await prisma.aiKnowledgeDocument.findMany({
+    where: { fileHash, status: { not: 'failed' } },
+    select: { id: true },
+  });
+  const held = sameText.length
+    ? await prisma.projectDocument.findFirst({
+        where: { projectId, orgId, knowledgeDocumentId: { in: sameText.map((row) => row.id) } },
+        orderBy: { createdAt: 'asc' },
+        select: linkSelect,
+      })
+    : null;
+  if (held) {
+    const link = await retitled(held, body.title, orgId);
+    const states = await knowledgeStates([link.knowledgeDocumentId]);
+    return { document: documentView(link, states.get(link.knowledgeDocumentId)), added: false };
+  }
+
+  // Read before the slow indexing, so two adds at once at 49 can both pass:
+  // the cap bounds a project's size, not an exact count, and one over it
+  // under a race is harmless.
+  const count = await prisma.projectDocument.count({ where: { projectId, orgId } });
+  if (count >= MAX_PROJECT_DOCUMENTS) {
     throw new APIError(
       `A project holds at most ${MAX_PROJECT_DOCUMENTS} background documents. Remove one to add another.`,
       'TOO_MANY_DOCUMENTS',
@@ -320,9 +372,7 @@ export async function addProjectDocument(
     );
   }
 
-  const doc = await intake(body.source);
-  const title = body.title ?? doc.title;
-  const { knowledgeDocumentId, created } = await upload(doc, userId);
+  const { knowledgeDocumentId, created } = await upload(doc, fileHash, userId);
 
   const existing = await prisma.projectDocument.findFirst({
     where: { projectId, orgId, knowledgeDocumentId },
@@ -331,7 +381,7 @@ export async function addProjectDocument(
   let link: LinkRow;
   let added = true;
   if (existing) {
-    link = existing;
+    link = await retitled(existing, body.title, orgId);
     added = false;
   } else {
     try {
@@ -366,7 +416,7 @@ export async function addProjectDocument(
         select: linkSelect,
       });
       if (!raced) throw err;
-      link = raced;
+      link = await retitled(raced, body.title, orgId);
       added = false;
     }
   }

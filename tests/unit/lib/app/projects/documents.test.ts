@@ -17,11 +17,14 @@ import { uniqueViolationError } from '@/tests/helpers/prisma-errors';
 
 type Row = Record<string, unknown>;
 
-/** Equality, and `{ in: [...] }`, which is all of `where` the service uses on these tables. */
+/** Equality, `{ in: [...] }` and `{ not }`, which is all of `where` the service uses on these tables. */
 function matches(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([key, value]) => {
     if (value && typeof value === 'object' && 'in' in value) {
       return (value as { in: unknown[] }).in.includes(row[key]);
+    }
+    if (value && typeof value === 'object' && 'not' in value) {
+      return row[key] !== value.not;
     }
     return row[key] === value;
   });
@@ -362,7 +365,49 @@ describe('addProjectDocument', () => {
 
     expect(second.added).toBe(false);
     expect(second.document.id).toBe(first.document.id);
+    expect(second.document.title).toBe(first.document.title);
     expect(db.state.links).toHaveLength(1);
+    // Answered from the link: the text is not indexed again.
+    expect(uploadDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('renames the existing link when the same text is added again with a title', async () => {
+    const first = await addProjectDocument('p1', fileSource(), ALICE);
+    const second = await addProjectDocument(
+      'p1',
+      { ...fileSource(), title: 'Brand voice 2026' },
+      ALICE
+    );
+
+    expect(second).toMatchObject({
+      added: false,
+      document: { id: first.document.id, title: 'Brand voice 2026' },
+    });
+    expect(linkOf(first.document.id)?.title).toBe('Brand voice 2026');
+  });
+
+  it('answers the existing link, not the cap, when a full project is given text it holds', async () => {
+    const first = await addProjectDocument('p1', fileSource(), ALICE);
+    for (let i = 1; i < MAX_PROJECT_DOCUMENTS; i++) {
+      db.state.links.push({ id: `l${i}`, orgId: 'org-a', projectId: 'p1' });
+    }
+
+    const again = await addProjectDocument('p1', fileSource(), ALICE);
+
+    expect(again).toMatchObject({ added: false, document: { id: first.document.id } });
+    expect(uploadDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('indexes the text again when the row the project links to has failed', async () => {
+    const first = await addProjectDocument('p1', fileSource(), ALICE);
+    const row = db.state.knowledge.find(
+      (k) => k.id === linkOf(first.document.id)?.knowledgeDocumentId
+    );
+    if (row) row.status = 'failed';
+
+    await addProjectDocument('p1', fileSource(), ALICE);
+
+    expect(uploadDocument).toHaveBeenCalledTimes(2);
   });
 
   it('keeps that it made the row when a racing add to the same project linked it first', async () => {
@@ -416,6 +461,28 @@ describe('addProjectDocument', () => {
     });
     expect(db.state.knowledge.map((r) => r.id)).toEqual([someoneElses.id]);
     expect(db.state.links).toEqual([]);
+  });
+
+  it('keeps a failed row a racing add has already linked, so its link is not cascaded away', async () => {
+    upload.fail = true;
+    const projectDocument = (tables.current as { projectDocument: ReturnType<typeof linkTable> })
+      .projectDocument;
+    // Another project's add was handed this row by core's slug race and linked it.
+    projectDocument.findMany.mockImplementationOnce(async ({ where }: { where: Row }) => {
+      db.state.links.push({
+        id: 'link-b',
+        orgId: 'org-a',
+        projectId: 'p2',
+        knowledgeDocumentId: db.state.knowledge[0].id,
+      });
+      return db.state.links.filter((r) => matches(r, where));
+    });
+
+    await expect(addProjectDocument('p1', fileSource(), ALICE)).rejects.toMatchObject({
+      code: 'DOCUMENT_NOT_INDEXED',
+    });
+    expect(db.state.knowledge).toHaveLength(1);
+    expect(linkOf('link-b')).toBeDefined();
   });
 
   it('refuses a document longer than a background document may be, in its own words', async () => {

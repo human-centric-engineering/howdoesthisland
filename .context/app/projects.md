@@ -104,11 +104,11 @@ chunks and embeds them; `ProjectDocument` links each to the project
 (`lib/app/projects/documents.ts`). The visible words are **background
 documents**; the code and API say `documents`.
 
-| Route                                                 | Does                                                                                                                                                   |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/v1/projects/{id}/documents`                 | List, oldest first, each with its knowledge row's `status`, read live.                                                                                 |
-| `POST /api/v1/projects/{id}/documents`                | Add one from `{ url }` or `{ file: { name, base64 } }`, with an optional `title`. 201; the same text already in the project answers 200 with its link. |
-| `DELETE /api/v1/projects/{id}/documents/{documentId}` | Remove it. `knowledgeDocumentDeleted` says whether the knowledge row went too.                                                                         |
+| Route                                                 | Does                                                                                                                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/projects/{id}/documents`                 | List, oldest first, each with its knowledge row's `status`, read live.                                                                                                                     |
+| `POST /api/v1/projects/{id}/documents`                | Add one from `{ url }` or `{ file: { name, base64 } }`, with an optional `title`. 201; the same text already in the project answers 200 with its link, renamed to `title` if one is given. |
+| `DELETE /api/v1/projects/{id}/documents/{documentId}` | Remove it. `knowledgeDocumentDeleted` says whether the knowledge row went too.                                                                                                             |
 
 - **Adding is synchronous**, as core's upload is: intake reads the file or page
   (`lib/app/intake/`, with a 200,000-character cap rather than a review's 40,000),
@@ -116,12 +116,16 @@ documents**; the code and API say `documents`.
   300 seconds. A per-user sub-cap of 20 adds in ten minutes applies, since each
   add embeds. A project holds at most 50. A read that cannot be embedded is 502
   `DOCUMENT_NOT_INDEXED`, and the failed knowledge row this call made is deleted,
-  since nobody here can see or retry it.
+  since nobody here can see or retry it, unless a racing add has already linked it.
+  Text the project already holds is answered from its link before the cap and
+  without embedding again.
 - **Status is not stored on the link.** It is the knowledge row's
   (`processing`, `ready`, `failed`, `pending_review`, `cleaning`), read with the
   list in one query, so a document core re-processes later reads as such. A stored
   copy would only ever have said `ready`, because the link is made once indexing
-  is done. The page re-reads the list every few seconds while any is `processing`.
+  is done. The page re-reads the list every few seconds while any is `processing`
+  or `cleaning` (they settle on their own; `pending_review` waits on an admin),
+  for at most five minutes.
 - **Whether this app's upload made the knowledge row** (`createdByUpload`).
   `uploadDocument` deduplicates by content hash and returns an existing ready row,
   or a racing upload's, without saying which. The service reads the ids with the
