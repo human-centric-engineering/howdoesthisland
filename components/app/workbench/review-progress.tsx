@@ -75,6 +75,7 @@ export function ReviewProgress({
   const { progress, reconnect } = useReviewEvents(assessmentId, initial, onDone);
   const landed = reviewers.filter((r) => progress.runs[r.slot]).length;
   const finished = progress.ended === 'done';
+  const gone = progress.ended === 'gone';
 
   return (
     <section aria-labelledby="review-progress-heading" className="space-y-8">
@@ -83,12 +84,18 @@ export function ReviewProgress({
           {WORDS.Review} · {progress.status}
         </p>
         <Heading id="review-progress-heading" className="text-3xl font-bold">
-          {finished ? 'Opening the report…' : 'Still reviewing'}
+          {finished
+            ? 'Opening the report…'
+            : gone
+              ? `This ${WORDS.review} was deleted`
+              : 'Still reviewing'}
         </Heading>
-        <p className="text-(--hd-muted)">
-          {landed} of {reviewers.length} {WORDS.aiReviewers} have finished. This page fills in as
-          each one does, and opens the report when they all have.
-        </p>
+        {gone ? null : (
+          <p className="text-(--hd-muted)">
+            {landed} of {reviewers.length} {WORDS.aiReviewers} have finished. This page fills in as
+            each one does, and opens the report when they all have.
+          </p>
+        )}
       </div>
 
       <ConnectionNote progress={progress} reconnect={reconnect} />
@@ -118,7 +125,9 @@ export function ReviewProgress({
                   className="flex items-center gap-3 border-b border-(--hd-rule) pb-2"
                   data-state={run ? run.status : 'waiting'}
                 >
-                  {!run ? (
+                  {!run && gone ? (
+                    <CircleAlert className="h-4 w-4 text-(--hd-muted)" aria-hidden />
+                  ) : !run ? (
                     <Loader2 className="h-4 w-4 animate-spin text-(--hd-muted)" aria-hidden />
                   ) : run.status === 'succeeded' ? (
                     <CheckCircle
@@ -130,11 +139,13 @@ export function ReviewProgress({
                   )}
                   <span className="font-semibold">{r.name}</span>
                   <span className="ml-auto text-sm text-(--hd-muted)">
-                    {!run
-                      ? 'Reading…'
-                      : run.status === 'succeeded'
-                        ? 'Done'
-                        : 'Could not finish: its scores come from the quick scan'}
+                    {!run && gone
+                      ? 'Stopped'
+                      : !run
+                        ? 'Reading…'
+                        : run.status === 'succeeded'
+                          ? 'Done'
+                          : 'Could not finish: its scores come from the quick scan'}
                   </span>
                 </li>
               );

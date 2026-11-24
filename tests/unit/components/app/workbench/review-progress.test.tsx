@@ -204,6 +204,9 @@ describe('ReviewProgress', () => {
     expect(onDone).not.toHaveBeenCalled();
     expect(screen.getByRole('status')).toHaveTextContent(/has been deleted/);
     expect(FakeEventSource.opened).toHaveLength(1);
+    // Nothing goes on saying it is reviewing.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('This review was deleted');
+    expect(screen.queryByText('Reading…')).toBeNull();
   });
 
   it('ignores a frame it cannot read', () => {

@@ -29,8 +29,8 @@ vi.mock('@/lib/auth/clear-session', () => ({ clearInvalidSession }));
 const apiReportSource = vi.hoisted(() => ({ assessment: vi.fn(), model: vi.fn() }));
 vi.mock('@/lib/app/reports/load', () => ({ loadReport, apiReportSource }));
 // A review still running reads its version's catalogue, to name its AI reviewers (t-78).
-const requireServerData = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/api/server-load', () => ({ requireServerData }));
+const loadServerData = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/api/server-load', () => ({ loadServerData }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 import ReportPage, { metadata } from '@/app/(protected)/assessments/[id]/page';
@@ -42,7 +42,9 @@ beforeEach(() => {
   getServerSession.mockReset().mockResolvedValue({ user: { id: 'u1' }, session: { id: 's1' } });
   clearInvalidSession.mockClear();
   loadReport.mockReset();
-  requireServerData.mockReset().mockResolvedValue({ success: true, data: anAssessCatalogue() });
+  loadServerData
+    .mockReset()
+    .mockResolvedValue({ ok: true, data: anAssessCatalogue(), meta: undefined });
   FakeEventSource.reset();
   vi.stubGlobal('EventSource', FakeEventSource);
 });
@@ -123,7 +125,7 @@ describe('/assessments/[id]', () => {
     render(await ReportPage({ params }));
 
     const { slug, version } = assessment.framework;
-    expect(requireServerData).toHaveBeenCalledWith(
+    expect(loadServerData).toHaveBeenCalledWith(
       `/api/v1/frameworks/${slug}/versions/${version}/catalogue`
     );
     expect(FakeEventSource.latest().url).toBe('/api/v1/assessments/asm_1/events');
@@ -131,6 +133,20 @@ describe('/assessments/[id]', () => {
     // The fixture runs every judge; judge_ethos covers the Ethos appeal.
     expect(assessment.judges).toContain('judge_ethos');
     expect(screen.getByText('Ethos', { selector: 'li span' })).toBeInTheDocument();
+  });
+
+  it('still shows a running review live when its catalogue cannot be read, naming each AI reviewer by its slot', async () => {
+    loadServerData.mockResolvedValue({
+      ok: false,
+      failure: { kind: 'failed', status: 503, code: null },
+    });
+    const assessment = apiAssessment({ status: 'running', result: null });
+    loadReport.mockResolvedValue({ kind: 'pending', assessment });
+    render(await ReportPage({ params }));
+
+    expect(h1()).toMatch('Still reviewing');
+    expect(FakeEventSource.latest().url).toBe('/api/v1/assessments/asm_1/events');
+    expect(screen.getByText('judge_ethos', { selector: 'li span' })).toBeInTheDocument();
   });
 
   it('reads no catalogue for a report that is ready', async () => {
@@ -142,7 +158,7 @@ describe('/assessments/[id]', () => {
     });
     loadReport.mockResolvedValue({ kind: 'ready', view });
     render(await ReportPage({ params }));
-    expect(requireServerData).not.toHaveBeenCalled();
+    expect(loadServerData).not.toHaveBeenCalled();
   });
 
   it('clears a cookie whose session is gone, returning to this report after login', async () => {

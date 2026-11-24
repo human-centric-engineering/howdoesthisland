@@ -7,10 +7,16 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  CHOOSE_REVIEWERS,
+  EMPTY_DRAFT,
   choosableReviewers,
+  problemsOf,
+  readDraft,
   refusalOf,
+  requestBodyOf,
   reviewerName,
 } from '@/components/app/workbench/assess-draft';
+import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
 import { APIClientError } from '@/lib/api/client';
 import { anAssessCatalogue } from '@/tests/unit/components/app/workbench/fixtures';
 
@@ -46,6 +52,47 @@ describe('choosableReviewers', () => {
     expect(choosableReviewers(anAssessCatalogue({ culture: true })).map((r) => r.slot)).toContain(
       'judge_culture'
     );
+  });
+});
+
+describe('readDraft and problemsOf', () => {
+  const catalogue = anAssessCatalogue();
+
+  it('reads back text over the limit, so the field keeps it and the limit is what is reported', () => {
+    const text = 'x'.repeat(MAX_CONTENT_CHARS * 3);
+    const draft = readDraft({
+      ...EMPTY_DRAFT,
+      text,
+      url: `https://example.com/${'p'.repeat(3000)}`,
+    });
+    expect(draft.text).toBe(text);
+    expect(problemsOf(draft, null, catalogue)).toEqual([
+      { field: 'assess-text', message: expect.stringMatching(/over 40,000 characters/) },
+    ]);
+  });
+
+  it('counts the text as the API does, trailing space and all', () => {
+    const draft = { ...EMPTY_DRAFT, text: `${'x'.repeat(MAX_CONTENT_CHARS - 5)}\n\n\n\n\n\n` };
+    expect(problemsOf(draft, null, catalogue)).toHaveLength(1);
+    expect(problemsOf({ ...draft, text: '  \n ' }, null, catalogue)).toEqual([
+      { field: 'assess-text', message: 'Paste some copy to review.' },
+    ]);
+  });
+});
+
+describe('requestBodyOf', () => {
+  it('sends only the ticked AI reviewers the version still offers', () => {
+    const draft = {
+      ...EMPTY_DRAFT,
+      text: 'Copy',
+      profile: CHOOSE_REVIEWERS,
+      judges: ['judge_culture', 'judge_retired', 'judge_ethos'],
+    };
+    const catalogue = anAssessCatalogue({ culture: false });
+    expect(requestBodyOf(draft, null, catalogue)).toMatchObject({ judges: ['judge_ethos'] });
+    expect(
+      problemsOf({ ...draft, judges: ['judge_culture'] }, null, catalogue).map((p) => p.field)
+    ).toEqual(['assess-reviewers']);
   });
 });
 

@@ -216,6 +216,22 @@ describe('AssessWorkbench sources', () => {
     });
   });
 
+  it('keeps the chosen file in its input across a change of tab, as the one Start sends', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(created());
+    renderWorkbench();
+    await userEvent.click(screen.getByRole('tab', { name: 'File' }));
+    await userEvent.upload(
+      field(/^A file to review/),
+      new File(['Hello'], 'brief.txt', { type: 'text/plain' })
+    );
+    await userEvent.click(screen.getByRole('tab', { name: 'Text' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'File' }));
+
+    expect(field<HTMLInputElement>(/^A file to review/).files?.[0]?.name).toBe('brief.txt');
+    await start();
+    expect(sentBody()).toMatchObject({ source: { file: { name: 'brief.txt' } } });
+  });
+
   it('refuses a file over the limit before sending it', async () => {
     renderWorkbench();
     await userEvent.click(screen.getByRole('tab', { name: 'File' }));
@@ -292,6 +308,32 @@ describe('AssessWorkbench once started', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/assessments/a-9'));
     expect(FakeEventSource.opened).toHaveLength(0);
+  });
+});
+
+describe('AssessWorkbench with a reply it cannot read', () => {
+  it('opens the report of a review started with a reply it cannot read in full, and keeps no draft to start again', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(created({ status: 'paused_for_lunch' }));
+    renderWorkbench();
+    await userEvent.type(field(/^The copy to review/), 'Copy');
+    await start();
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/assessments/a-9'));
+    expect(window.localStorage.getItem(DRAFT_KEY)).toBeNull();
+    expect(screen.queryByText(/could not be started/)).toBeNull();
+  });
+
+  it('says a review with no readable id has started, rather than that it failed', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ stored: true });
+    renderWorkbench();
+    await userEvent.type(field(/^The copy to review/), 'Copy');
+    await start();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /has started.*no need to start it again/
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 });
 

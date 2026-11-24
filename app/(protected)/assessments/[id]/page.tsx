@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
 import { apiReportSource, loadReport } from '@/lib/app/reports/load';
-import { requireServerData } from '@/lib/api/server-load';
+import { loadServerData } from '@/lib/api/server-load';
 import { catalogueEndpoint } from '@/components/app/projects/schemas';
 import { assessCatalogueSchema } from '@/components/app/workbench/schemas';
 import { reviewerName } from '@/components/app/workbench/assess-draft';
@@ -43,19 +43,26 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       );
     case 'pending': {
       // Its version's catalogue names the AI reviewers and the appeals the
-      // live progress shows (t-78).
+      // live progress shows (t-78). Only names: one that cannot be read leaves
+      // the progress showing slots and appeal ids, never an error page.
       const { slug, version } = load.assessment.framework;
-      const catalogue = assessCatalogueSchema.parse(
-        (await requireServerData<unknown>(catalogueEndpoint(slug, version))).data
-      );
+      const read = await loadServerData<unknown>(catalogueEndpoint(slug, version));
+      const parsed = read.ok ? assessCatalogueSchema.safeParse(read.data) : null;
+      const catalogue = parsed?.success ? parsed.data : null;
       return (
         <ReportPending
           assessmentId={id}
           assessment={load.assessment}
-          reviewerNames={Object.fromEntries(
-            load.assessment.judges.map((slot) => [slot, reviewerName(catalogue, slot)])
-          )}
-          appealNames={Object.fromEntries(catalogue.result.appeals.map((a) => [a.id, a.name]))}
+          reviewerNames={
+            catalogue
+              ? Object.fromEntries(
+                  load.assessment.judges.map((slot) => [slot, reviewerName(catalogue, slot)])
+                )
+              : {}
+          }
+          appealNames={
+            catalogue ? Object.fromEntries(catalogue.result.appeals.map((a) => [a.id, a.name])) : {}
+          }
         />
       );
     }

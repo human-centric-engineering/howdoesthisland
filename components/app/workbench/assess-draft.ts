@@ -56,8 +56,10 @@ const settingsSchema = z.object({
 
 export const draftSchema = z.object({
   source: z.enum(SOURCES),
-  text: z.string().max(MAX_CONTENT_CHARS * 2),
-  url: z.string().max(2048),
+  // Not capped: a draft over a cap would fail to read back and empty the
+  // field. Too long is what `problemsOf` reports, before anything is sent.
+  text: z.string(),
+  url: z.string(),
   projectId: z.string().max(64),
   settings: settingsSchema,
   /** A profile id, or {@link CHOOSE_REVIEWERS}. */
@@ -186,15 +188,27 @@ export interface ChosenFile {
   base64: string;
 }
 
+/**
+ * The ticked AI reviewers the version still offers. A restored draft can name
+ * one it no longer does (a slot dropped, or culture switched off), which has
+ * no box to untick and which the API refuses.
+ */
+export function tickedReviewers(draft: Draft, catalogue: AssessCatalogue): string[] {
+  const offered = new Set(choosableReviewers(catalogue).map((r) => r.slot));
+  return draft.judges.filter((slot) => offered.has(slot));
+}
+
 /** What the page checks before sending: each problem, by the input it is about. */
 export function problemsOf(
   draft: Draft,
-  file: File | null
+  file: File | null,
+  catalogue: AssessCatalogue
 ): Array<{ field: string; message: string }> {
   const problems: Array<{ field: string; message: string }> = [];
   if (draft.source === 'text') {
-    const length = [...draft.text.trim()].length;
-    if (length === 0)
+    // Counted as the API counts it: the text as sent, untrimmed, in code points.
+    const length = [...draft.text].length;
+    if (draft.text.trim() === '')
       problems.push({ field: 'assess-text', message: 'Paste some copy to review.' });
     else if (length > MAX_CONTENT_CHARS) {
       problems.push({
@@ -221,7 +235,7 @@ export function problemsOf(
       });
     }
   }
-  if (draft.profile === CHOOSE_REVIEWERS && draft.judges.length === 0) {
+  if (draft.profile === CHOOSE_REVIEWERS && tickedReviewers(draft, catalogue).length === 0) {
     problems.push({
       field: 'assess-reviewers',
       message: 'Tick at least one AI reviewer, or pick a set of them.',
@@ -231,7 +245,11 @@ export function problemsOf(
 }
 
 /** `POST /api/v1/assessments`'s body for the draft, once {@link problemsOf} finds none. */
-export function requestBodyOf(draft: Draft, file: ChosenFile | null): Record<string, unknown> {
+export function requestBodyOf(
+  draft: Draft,
+  file: ChosenFile | null,
+  catalogue: AssessCatalogue
+): Record<string, unknown> {
   const source =
     draft.source === 'text'
       ? { text: draft.text }
@@ -243,7 +261,9 @@ export function requestBodyOf(draft: Draft, file: ChosenFile | null): Record<str
     source,
     ...(Object.keys(context).length ? { context } : {}),
     ...(draft.projectId !== NO_PROJECT ? { projectId: draft.projectId } : {}),
-    ...(draft.profile === CHOOSE_REVIEWERS ? { judges: draft.judges } : { profile: draft.profile }),
+    ...(draft.profile === CHOOSE_REVIEWERS
+      ? { judges: tickedReviewers(draft, catalogue) }
+      : { profile: draft.profile }),
   };
 }
 

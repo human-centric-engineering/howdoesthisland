@@ -21,6 +21,7 @@ import { useState, type BaseSyntheticEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,6 +74,10 @@ import { ReviewProgress } from '@/components/app/workbench/review-progress';
 
 const MODEL_DEFAULT = 'The model’s default';
 
+const createdIdSchema = z.object({ id: z.string().min(1) });
+
+const STARTED_UNREADABLE = `The ${WORDS.review} has started, but this page could not read the reply, so it cannot show its progress. There is no need to start it again.`;
+
 export interface AssessWorkbenchProps {
   catalogue: AssessCatalogue;
   /** The workspace's live projects on this framework. */
@@ -122,7 +127,7 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
   const onSubmit = async (e?: BaseSyntheticEvent) => {
     e?.preventDefault();
     setUsagePage(null);
-    if (save.block(problemsOf(draft, file))) return;
+    if (save.block(problemsOf(draft, file, catalogue))) return;
     setSending(true);
     try {
       const chosen =
@@ -130,13 +135,23 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
           ? { name: file.name, base64: await readAsBase64(file) }
           : null;
       const data = await apiClient.post<unknown>(ASSESSMENTS_ENDPOINT, {
-        body: requestBodyOf(draft, chosen),
+        body: requestBodyOf(draft, chosen, catalogue),
       });
-      const review = createdReviewSchema.parse(data);
+      // From here the review exists and is charged: whatever the reply holds,
+      // the draft is spent, and nothing may invite starting it again.
       clearStored();
       setFile(null);
-      if (FINAL_STATES.has(review.status)) router.push(reportPath(review.id));
-      else setStarted(review);
+      const review = createdReviewSchema.safeParse(data);
+      if (review.success) {
+        if (FINAL_STATES.has(review.data.status)) router.push(reportPath(review.data.id));
+        else setStarted(review.data);
+        return;
+      }
+      // A reply this page cannot read in full still names the review: its
+      // report page shows it, running or done.
+      const created = createdIdSchema.safeParse(data);
+      if (created.success) router.push(reportPath(created.data.id));
+      else save.show(STARTED_UNREADABLE);
     } catch (err) {
       const refusal = refusalOf(err);
       if (refusal) {
@@ -209,7 +224,13 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
             </p>
           </TabsContent>
 
-          <TabsContent value="file" className="mt-4 space-y-2">
+          {/* Kept mounted while hidden: remounting would empty the file input
+              while the file chosen in it is still the one Start sends. */}
+          <TabsContent
+            value="file"
+            forceMount
+            className="mt-4 space-y-2 data-[state=inactive]:hidden"
+          >
             <Label htmlFor="assess-file" className="flex items-center gap-1">
               A file to review
               <FieldHelp title="A file to review">
