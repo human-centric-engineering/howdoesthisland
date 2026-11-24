@@ -5,6 +5,7 @@
  * @see lib/app/frameworks/howdoesthisland/engine/rewrite.ts
  */
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { RewriteFocusUnknownError } from '@/lib/app/frameworks/engine';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import {
@@ -99,9 +100,10 @@ describe('buildRewriteRequest', () => {
   });
 
   it('counts an influence recommendation towards the appeal its dimension belongs to', () => {
-    const ethosDim = loadModel().dimensions.find(
-      (d: { appeal?: string }) => d.appeal === 'ethos'
-    ) as { id: string } | undefined;
+    const dims = z
+      .array(z.looseObject({ id: z.string(), appeal: z.string().optional() }))
+      .parse(loadModel().dimensions);
+    const ethosDim = dims.find((d) => d.appeal === 'ethos');
     if (!ethosDim) throw new Error('the model has no ethos dimension');
     const recs = [rec({ appeal: 'influence', dimension: ethosDim.id, issue: 'Influence issue.' })];
     expect(prompt({ ...RESULT, recommendations: recs }, 'ethos')).toContain('Influence issue.');
