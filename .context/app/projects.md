@@ -196,7 +196,8 @@ passages: [{ documentId, chunkId, text }] }`); a re-driven run reads it back, so
   `assessmentId` (or a `store: false` run's `ephemeralRun` and `ephemeral: true`)
   and `kind: 'project_context'`, so it is charged CopyCredits with the review,
   added to its `costUsd`, and counted on the usage page with the reviews it
-  belongs to. A `store: false` review's searches run in its privacy scope, as the
+  belongs to (a `store: false` run refused after its searches counts no review
+  there, though its spend does). A `store: false` review's searches run in its privacy scope, as the
   stored run's do. When one search fails, what the others cost is still added.
 - **A search that fails** is not reviewed as if the project had no documents. No
   judge is called either way.
@@ -204,8 +205,8 @@ passages: [{ documentId, chunkId, text }] }`); a re-driven run reads it back, so
     embeddings policy of `local_only` with none local, or an active model that no
     longer matches the stored vectors), asking again cannot work: a stored review
     is finished `FAILED`, `errorCode` `PROJECT_CONTEXT_NOT_SET_UP`, saying an admin
-    must fix the knowledge base's embedding setup, and a `store: false` one is 409
-    `PROJECT_CONTEXT_NOT_SET_UP`.
+    must fix the knowledge base's embedding setup (its report page says so, not
+    "run it again"), and a `store: false` one is 409 `PROJECT_CONTEXT_NOT_SET_UP`.
   - Otherwise (the embedding provider down) a stored review goes back to the
     queue, as for any error that is not a judge's, and a `store: false` one is 503
     `PROJECT_CONTEXT_UNAVAILABLE`. Both carry `details.costUsd`, what the

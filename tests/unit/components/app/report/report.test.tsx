@@ -281,6 +281,24 @@ describe('report states', () => {
     expect(screen.getByRole('link', { name: /usage/ })).toHaveAttribute('href', '/usage');
   });
 
+  it('a review whose project context the embedding setup stopped says an admin must fix it (t-75)', () => {
+    render(
+      <ReportNoResult
+        assessment={apiAssessment({
+          status: 'failed',
+          result: null,
+          error: 'The project’s background documents cannot be searched.',
+          errorCode: 'PROJECT_CONTEXT_NOT_SET_UP',
+        })}
+      />
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'This review was not started'
+    );
+    expect(screen.getByText(/until an admin fixes/)).toBeInTheDocument();
+    expect(screen.queryByText(/Run the review again/)).not.toBeInTheDocument();
+  });
+
   it('unreadable says it was logged', () => {
     render(<ReportUnreadable />);
     expect(screen.getByText(/logged/)).toBeInTheDocument();

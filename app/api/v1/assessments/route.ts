@@ -61,6 +61,12 @@
  * - 503 `PROJECT_CONTEXT_UNAVAILABLE` — `store: false` only: the project's
  *   background documents could not be searched (the embedding provider);
  *   no judge was called. A stored review is queued again instead (t-75).
+ *   `details.costUsd` is what the searches that ran cost.
+ * - 409 `PROJECT_CONTEXT_NOT_SET_UP` — `store: false` only: the knowledge
+ *   base's embedding setup stops the search (no embedding model, `local_only`
+ *   with none local, or a model that does not match the stored documents),
+ *   which asking again cannot change; no judge was called. A stored review
+ *   is finished `failed` with this `errorCode` (t-75).
  * - 422 `NOT_SCORABLE` — `store: false` only: the framework could not score
  *   the text (a stored run records it as `failed`). `details.costUsd` is what
  *   the judges had already spent.

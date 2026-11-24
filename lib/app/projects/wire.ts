@@ -91,11 +91,6 @@ export const removedDocumentSchema = z.object({
 });
 
 /**
- * What the AI reviewers were given of an assessment's project (t-75,
- * `lib/app/projects/context.ts`), as the assessment records it and the API
- * answers it.
- */
-/**
  * A brief as a record holds it: the request's parts, with no limits, so a
  * record kept from before a limit changed still reads (`briefSchema` is what
  * a request is checked against).
@@ -108,6 +103,11 @@ export const storedBriefSchema = z.object({
   goals: z.string().optional(),
 });
 
+/**
+ * What the AI reviewers were given of an assessment's project (t-75,
+ * `lib/app/projects/context.ts`), as the assessment records it and the API
+ * answers it.
+ */
 export const contextUsedSchema = z.object({
   /** The brief as given, or `null` when the project had none. */
   brief: storedBriefSchema.nullable(),

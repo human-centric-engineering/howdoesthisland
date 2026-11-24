@@ -396,7 +396,7 @@ export const assessmentSummarySchema = z.object({
     .string()
     .nullable()
     .describe(
-      "For a failed one that has one: `INSUFFICIENT_CREDITS` (the workspace's CopyCredits no longer covered it) or `BUDGET_EXCEEDED` (its monthly AI budget no longer did) when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started and nothing was charged. `null` otherwise."
+      "For a failed one that has one: `INSUFFICIENT_CREDITS` (the workspace's CopyCredits no longer covered it) or `BUDGET_EXCEEDED` (its monthly AI budget no longer did) when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started and nothing was charged. `PROJECT_CONTEXT_NOT_SET_UP` when the knowledge base's embedding setup stopped the search of its project's background documents, which running it again cannot change until an admin fixes it; no AI reviewer was started (t-75). `null` otherwise."
     ),
   errorDetails: reviewRefusalDetailsSchema
     .nullable()

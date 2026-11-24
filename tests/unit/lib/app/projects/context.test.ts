@@ -290,6 +290,13 @@ describe('contextQueries', () => {
     const lines = Array.from({ length: 8 }, (_, i) => `Line ${i}.`).join('\n');
     expect(contextQueries(lines).at(-1)).toContain('Line 7.');
 
+    // Lines with no full stops: one query a line, not one for the whole.
+    expect(contextQueries('Fast bikes\nCheap rides\nNo waiting')).toEqual([
+      'Fast bikes',
+      'Cheap rides',
+      'No waiting',
+    ]);
+
     // Short headings and one long body: the body is searched beyond its opening.
     const body = Array.from({ length: 3000 }, (_, i) => `w${i}`).join(' ');
     const headed = ['Heading one.', 'Heading two.', 'Heading three.', body].join('\n\n');

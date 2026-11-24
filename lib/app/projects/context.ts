@@ -141,8 +141,8 @@ export function renderProjectContext(record: ProjectContextRecord | null): strin
  * The copy's pieces, as {@link contextQueries} gathers them: its paragraphs;
  * when there are fewer than {@link MAX_CONTEXT_QUERIES}, its lines; then its
  * sentences; then, for text with none of these, runs of equal length. So
- * copy with no blank lines (text from a PDF or a page) is searched across
- * its length, not by its opening alone.
+ * the queries of copy with no blank lines (text from a PDF or a page) are
+ * drawn from across its length, not from its opening alone.
  */
 function copyPieces(content: string): string[] {
   const pieces = (separator: RegExp) =>
@@ -150,9 +150,11 @@ function copyPieces(content: string): string[] {
       .split(separator)
       .map((p) => p.replace(/\s+/g, ' ').trim())
       .filter((p) => p !== '');
+  // The split with the most pieces, stopping at the first that gives enough.
   let found: string[] = [];
   for (const separator of [/\n\s*\n/, /\n/, /(?<=[.!?])\s+/]) {
-    found = pieces(separator);
+    const split = pieces(separator);
+    if (split.length > found.length) found = split;
     if (found.length >= MAX_CONTEXT_QUERIES) break;
   }
   if (found.length < MAX_CONTEXT_QUERIES) {
@@ -178,6 +180,9 @@ function copyPieces(content: string): string[] {
  * The copy's sections, as search queries: its pieces ({@link copyPieces})
  * gathered in order into at most {@link MAX_CONTEXT_QUERIES} runs of about
  * equal length, each cut at {@link MAX_QUERY_CHARS}, with repeats dropped.
+ * So the queries sample the copy, the opening of each quarter: copy longer
+ * than four queries is not searched in full, which bounds a review's
+ * searches whatever its length.
  */
 export function contextQueries(content: string): string[] {
   const paragraphs = copyPieces(content);
