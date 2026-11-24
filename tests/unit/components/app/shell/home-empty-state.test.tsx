@@ -2,7 +2,7 @@
 
 /**
  * The empty desk on /home: a labelled section that says what will appear, and
- * no link, because nothing it could link to exists yet.
+ * a way to `/assess` (t-79), now that there is one.
  *
  * @see components/app/shell/home-empty-state.tsx
  */
@@ -22,14 +22,16 @@ describe('HomeEmptyState', () => {
 
   it('says what will appear here', () => {
     render(<HomeEmptyState />);
-    expect(
-      screen.getByText(/recent assessments and projects will appear here/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/recent reviews will appear here/)).toBeInTheDocument();
   });
 
-  it('offers no link, so nothing on it can 404', () => {
+  it('offers one way on: to /assess', () => {
     render(<HomeEmptyState />);
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Review some copy' })).toHaveAttribute(
+      'href',
+      '/assess'
+    );
   });
 
   it('keeps the line numbers out of the accessibility tree', () => {

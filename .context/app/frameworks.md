@@ -157,7 +157,8 @@ caller building reviews reads the catalogue. In Sunrise's envelope, rate limited
 - **The catalogue is built field by field** (`lib/app/frameworks/howdoesthisland/catalogue.ts`),
   so a field a later version adds is not served until someone adds it there on purpose.
   A test checks it carries none of 0.5.1's rubrics, patterns, scoring text or reviewer
-  instructions.
+  instructions. `result.bands` (t-79) is the band labels, lowest first, for a list to
+  filter by: the labels only, never the score ranges behind them.
 - **A draft is not found.** A retired version is still served, marked `retired`, since
   assessments made with it cite it. `latestVersion` is the most recently published
   version that is not retired (by publish time, not version number), or `null`.

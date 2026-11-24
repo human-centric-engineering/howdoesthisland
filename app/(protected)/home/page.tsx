@@ -1,24 +1,132 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
+import { requireAllServerData, requireServerData } from '@/lib/api/server-load';
+import { parsePaginationMeta } from '@/lib/validations/common';
+import { Button } from '@/components/ui/button';
+import { WORDS } from '@/lib/app/reports/words';
+import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 import { HomeEmptyState } from '@/components/app/shell/home-empty-state';
+import {
+  PROJECTS_ENDPOINT,
+  catalogueEndpoint,
+  frameworkEndpoint,
+  frameworkLatestSchema,
+  projectListSchema,
+} from '@/components/app/projects/schemas';
+import {
+  FILTER_KEYS,
+  filterCatalogueSchema,
+  filterFromSearch,
+  filterHref,
+  pageFromSearch,
+  reviewListEndpoint,
+  reviewListSchema,
+  type FilterCatalogue,
+} from '@/components/app/history/schemas';
+import { ReviewFilters } from '@/components/app/history/review-filters';
+import { ReviewList } from '@/components/app/history/review-list';
 
 export const metadata: Metadata = { title: 'Home' };
 
+/** A version to offer filters from is missing: offer none rather than fail the page. */
+const NO_FILTERS: FilterCatalogue = { request: { contentTypes: [] }, result: { bands: [] } };
+
 /**
- * `/home` — where a signed-in person lands (D22, through `lib/app/auth-landing.ts`).
- * For now an empty desk; `b2` fills it with recent work and projects.
+ * `/home` — where a signed-in person lands (D22, through `lib/app/auth-landing.ts`):
+ * the workspace's recent reviews (t-79), newest first, filtered by project,
+ * type of copy and band through the address, with a way to `/assess`. The
+ * empty desk shows only when the workspace has no review at all.
+ *
+ * Read through the API (API-first). The list is one call,
+ * `GET /api/v1/assessments`, whose rows carry their project's name, so no row
+ * fetches its own. The filters' choices are the workspace's projects and the
+ * framework's latest catalogue (its types of copy and bands).
  *
  * The proxy only checks that a session cookie exists, and it sends anyone with
  * one away from the login page to here. So a cookie whose session has expired
  * or been revoked must be cleared here, as `/dashboard` does, or that person
  * can never reach the login form.
  */
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const search = await searchParams;
   const session = await getServerSession();
   if (!session) {
     clearInvalidSession('/home');
   }
 
-  return <HomeEmptyState />;
+  const filter = filterFromSearch(search);
+  const page = pageFromSearch(search.page);
+  const filtered = FILTER_KEYS.some((key) => filter[key]);
+
+  const loaded = await requireServerData<unknown>(reviewListEndpoint(filter, page));
+  const reviews = reviewListSchema.parse(loaded.data);
+  const total = parsePaginationMeta(loaded.meta)?.total ?? reviews.length;
+  if (total === 0 && !filtered) return <HomeEmptyState />;
+
+  const [catalogue, projects] = await Promise.all([
+    loadFilterCatalogue(),
+    requireAllServerData<{ id: string }>(PROJECTS_ENDPOINT).then((rows) =>
+      projectListSchema.parse(rows).map(({ id, name }) => ({ id, name }))
+    ),
+  ]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="hd-slug">Home</p>
+          <h1 className="text-2xl font-bold">Recent {WORDS.review}s</h1>
+        </div>
+        <Button asChild>
+          <Link href="/assess">Review some copy</Link>
+        </Button>
+      </div>
+      <ReviewFilters basePath="/home" filter={filter} catalogue={catalogue} projects={projects} />
+      {reviews.length === 0 ? (
+        <div className="rounded-md border p-8 text-center">
+          <p className="font-semibold">
+            {filtered ? `No ${WORDS.review}s match these filters` : `No ${WORDS.review}s here`}
+          </p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {filtered ? 'Change or clear the filters to see more. ' : null}
+            {page > 1 ? (
+              <Link href={filterHref('/home', filter)} className="underline underline-offset-4">
+                Back to the newest
+              </Link>
+            ) : null}
+          </p>
+        </div>
+      ) : (
+        <ReviewList
+          reviews={reviews}
+          total={total}
+          showProject
+          basePath="/home"
+          filter={filter}
+          page={page}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The framework's latest catalogue, as far as the filters read it. */
+async function loadFilterCatalogue(): Promise<FilterCatalogue> {
+  const framework = frameworkLatestSchema.parse(
+    (await requireServerData<unknown>(frameworkEndpoint(HOWDOESTHISLAND_SLUG))).data
+  );
+  if (!framework.latestVersion) return NO_FILTERS;
+  return filterCatalogueSchema.parse(
+    (
+      await requireServerData<unknown>(
+        catalogueEndpoint(HOWDOESTHISLAND_SLUG, framework.latestVersion)
+      )
+    ).data
+  );
 }

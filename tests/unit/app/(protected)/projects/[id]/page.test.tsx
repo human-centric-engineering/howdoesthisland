@@ -25,13 +25,20 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 
 import ProjectPage from '@/app/(protected)/projects/[id]/page';
 import { aCatalogue, aProject } from '@/tests/unit/components/app/projects/fixtures';
+import { aReview } from '@/tests/unit/components/app/history/fixtures';
 
-const page = (id = 'proj-1') => ProjectPage({ params: Promise.resolve({ id }) });
+const page = (id = 'proj-1', search: Record<string, string> = {}) =>
+  ProjectPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve(search) });
 
 function answer({
   latestVersion = '0.5.1',
   archived = false,
-}: { latestVersion?: string | null; archived?: boolean } = {}) {
+  reviews = [aReview({ project: { id: 'proj-1', name: 'Spring launch' } })],
+}: {
+  latestVersion?: string | null;
+  archived?: boolean;
+  reviews?: ReturnType<typeof aReview>[];
+} = {}) {
   requireServerData.mockImplementation(async (path: string) => {
     if (path === '/api/v1/projects/proj-1') return { data: aProject({ archived }), meta: null };
     if (path === '/api/v1/frameworks/howdoesthisland')
@@ -53,6 +60,11 @@ function answer({
       };
     if (path === '/api/v1/frameworks/howdoesthisland/versions/0.5.1/catalogue')
       return { data: aCatalogue(), meta: null };
+    if (path.startsWith('/api/v1/assessments?'))
+      return {
+        data: reviews,
+        meta: { page: 1, limit: 20, total: reviews.length, totalPages: 1 },
+      };
     throw new Error(`unexpected ${path}`);
   });
 }
@@ -64,6 +76,26 @@ beforeEach(() => {
 });
 
 describe('/projects/[id]', () => {
+  it('lists its own reviews from one list call, without a project column (t-79)', async () => {
+    render(await page('proj-1', { page: '2' }));
+
+    const listCalls = requireServerData.mock.calls.filter(([path]) =>
+      String(path).startsWith('/api/v1/assessments')
+    );
+    expect(listCalls).toEqual([['/api/v1/assessments?limit=20&page=2&projectId=proj-1']]);
+    const section = screen.getByRole('region', { name: 'Its reviews' });
+    expect(section).toHaveTextContent('Spring landing page');
+    expect(screen.queryByRole('columnheader', { name: 'Project' })).toBeNull();
+  });
+
+  it('says when it has no reviews yet', async () => {
+    answer({ reviews: [] });
+    render(await page());
+    expect(screen.getByRole('region', { name: 'Its reviews' })).toHaveTextContent(
+      'No reviews in this project yet'
+    );
+  });
+
   it('reads the project as a 404-able page, its documents, then the latest version’s catalogue', async () => {
     render(await page());
 

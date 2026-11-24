@@ -123,3 +123,25 @@ API reads up to 10 MB (`MAX_REVIEW_FILE_BYTES`). The file goes as base64 in a
 JSON body, 4/3 its size: Vercel refuses a function body over 4.5 MB, and the
 proxy keeps only the first 10 MB of a body (`proxyClientMaxBodySize`), so a
 larger file would arrive cut short. A larger piece can be pasted as text.
+
+## Recent work
+
+`/home` and a project's page (t-79) list the workspace's reviews, newest first,
+each linking to its report. Code: `components/app/history/`.
+
+- **One list call.** Each page makes one `GET /api/v1/assessments` call for its
+  list (`reviewListEndpoint`, 20 a page); a row names its project from the
+  row's own `project`, so no row fetches anything. A project's page passes
+  `projectId` and leaves the project column out.
+- **The filters live in the address** (`?projectId=`, `?contentType=`,
+  `?band=`, `?page=`), so a filtered list can be linked to; a change goes back
+  to the first page. `/home` offers them from the workspace's projects and the
+  latest catalogue's `contentTypes` and `bands`. A value the choices lack (an
+  older version's type) is still shown as chosen.
+- **The empty desk** (`HomeEmptyState`, linking to `/assess`) shows only when
+  the workspace has no review at all. A filter matching nothing says so and
+  offers to clear the filters instead. With no reviews, `/home` reads neither
+  the catalogue nor the projects.
+- **Delete asks first**: it takes the copy, the result and any share link, and
+  cannot be undone. Confirmed, it calls `DELETE /api/v1/assessments/{id}`,
+  drops the row and refreshes, so the count and pages follow.
