@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Send a file the person chose to an API route that reads uploads (t-80,
  * `lib/app/intake/upload.ts`): a project's background document, a file to

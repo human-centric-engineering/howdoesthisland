@@ -247,7 +247,7 @@ function post(body: unknown, headers: Record<string, string> = {}) {
   );
 }
 /** A file as `multipart/form-data` (t-80): a `file` part and, given options, an `options` part. */
-function upload(name: string, content: string | Buffer, options?: unknown) {
+function upload(name: string, content: string | Buffer<ArrayBuffer>, options?: unknown) {
   const form = new FormData();
   form.append('file', new File([content], name));
   if (options !== undefined) form.append('options', JSON.stringify(options));
