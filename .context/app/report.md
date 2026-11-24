@@ -46,8 +46,15 @@ in the components:
   single AI reviewer has no editor's verdict. With the culture switch off there
   is no culture section. With nothing to score there are no influence
   perspectives, and with no notes there is no marked-up copy.
-- **Context used** and the version's **calibration status** (§8.5 items 9 and 10) have no data until f-projects and f-calibration ship, so they are not
-  sections yet. There is no stub.
+- **Context used** (§8.5 item 9, t-75) is a section, just before the method, when the
+  review's project gave the AI reviewers anything (`assessment.contextUsed`): it says
+  whether they read the brief and lists the background documents a passage came from,
+  by their titles at the time. Outside a project, or when the project gave nothing,
+  there is no section. A share link serves whether a brief was read and the titles,
+  never the brief's words, the passages or the ids (`sharedContextUsed`,
+  `lib/app/projects/wire.ts`).
+- The version's **calibration status** (§8.5 item 10) has no data until f-calibration
+  ships, so it is not a section yet. There is no stub.
 - **A project's weighting** (t-72) is named on the cover when the review used one
   (`assessment.overlay`), in the model's names ("Ethos +10 points", "Call to action made a
   priority"), so a reader knows the scores were weighted for that project. A share link

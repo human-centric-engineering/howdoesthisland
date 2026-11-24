@@ -153,6 +153,49 @@ documents**; the code and API say `documents`.
 - **Not here:** embedding spend is recorded in core's cost log against the
   workspace but is not charged CopyCredits or held against the monthly budget.
 
+## Context for the AI reviewers (t-75, D21)
+
+A review in a project gives every AI reviewer and the editor the project's
+context: its brief, and passages from its background documents
+(`buildProjectContext`, `lib/app/projects/context.ts`).
+
+- **What it holds.** The brief, under a heading saying it is the author's own
+  description, then at most 6 passages, each under its document's title. The
+  engine's `projectBlock` fences the whole in `<project_context>` and frames it as
+  background, not instructions; a fence tag inside a passage or the brief is
+  dropped, so it cannot close the fence.
+- **Retrieval.** The copy is split into at most 4 sections (its paragraphs, in
+  order, in runs of about equal length), each cut at 2,000 characters and
+  deduplicated, and each is one `searchKnowledgeWithEmbedding` query. The search
+  is restricted to the knowledge rows the project's links point at, in this
+  workspace and `ready` (`documentIds`), and each passage returned is checked
+  against that set again. Passages are deduplicated across queries and taken best
+  match first while they fit: the brief and the passages stay under 4,000
+  estimated tokens (four characters a token). Core's default distance threshold
+  applies.
+- **Once per review.** The stored run gathers it before its first judge and stores
+  it on `Assessment.projectContext` (`{ brief, documents: [{ id, title }],
+passages: [{ documentId, chunkId, text }] }`); a re-driven run reads it back, so
+  its later judges read what the first ones did. A project that gives nothing is
+  stored as an empty record, so a re-drive does not search again. A `quick` review
+  calls no model and gathers nothing. A `store: false` review gathers it the same
+  way and keeps nothing.
+- **The API** answers it as `contextUsed` on the assessment (and a `store: false`
+  answer): `null` outside a project or when it gave nothing. The report lists it
+  as **Context used** (`.context/app/report.md`). Document ids are the project's
+  link ids; titles are the titles at the time, so a later rename or removal does
+  not change an old report.
+- **Spend.** Each query is one embedding call, logged by core with the review's
+  `assessmentId` (or a `store: false` run's `ephemeralRun`) and `kind:
+'project_context'`, so it is charged CopyCredits with the review and added to its
+  `costUsd`.
+- **A search that fails** (the embedding provider down) is not reviewed as if the
+  project had no documents: a stored review goes back to the queue, as for any
+  error that is not a judge's, and a `store: false` one is 503
+  `PROJECT_CONTEXT_UNAVAILABLE`. No judge is called either way.
+- **Kept** with the assessment, so in the org and subject exports with it, and
+  purged with it at the content window.
+
 ## The pages
 
 `/projects` and `/projects/[id]` (t-71), protected through `lib/app/protected-routes.ts`
