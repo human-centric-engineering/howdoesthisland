@@ -18,6 +18,7 @@ import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
 import { REDEEM_PATH } from '@/lib/app/credits/codes/wire';
 import { asQuickScanSummary, type QuickScanSummary } from '@/lib/app/quick-scan/summary';
 import { QUICK_SCAN_COPY as C } from '@/components/app/quick-scan/quick-scan-copy';
+import { QuickScanScores } from '@/components/app/quick-scan/quick-scan-scores';
 
 /**
  * The free quick scan's form and its answer (t-68). Posts to
@@ -161,39 +162,14 @@ export function QuickScanForm({ contentTypes, appeals }: Props) {
             <h2 id="quick-scan-result" className="text-3xl font-bold">
               {C.resultH}
             </h2>
-            {result.overall !== null && (
-              <p className="flex items-baseline gap-3">
-                <span className="text-6xl font-extrabold tabular-nums">{result.overall}</span>
-                <span className="text-(--hd-muted)">{C.outOf}</span>
-                {result.band && <span className="text-xl font-semibold">{result.band}</span>}
-              </p>
-            )}
-            {result.appeals.length > 0 && (
-              <ul className="grid max-w-xl gap-3">
-                {result.appeals.map((a) => (
-                  <li key={a.id} className="grid grid-cols-[7rem_1fr_3rem] items-center gap-3">
-                    <span className="font-semibold">{nameOf(a.id)}</span>
-                    <span
-                      className="h-2 overflow-hidden rounded-full bg-(--hd-rule)"
-                      aria-hidden="true"
-                    >
-                      <span
-                        className="block h-full rounded-full bg-(--hd-ink)"
-                        style={{ width: `${Math.max(0, Math.min(100, a.score))}%` }}
-                      />
-                    </span>
-                    <span className="text-right tabular-nums">{a.score}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p
-              className="max-w-[64ch] border-l-4 border-(--hd-red) pl-4 leading-relaxed"
-              data-testid="quick-scan-caveat"
-            >
-              {/* The server's own words, beside the score it gave. */}
-              {result.caveat}
-            </p>
+            {/* The server's own caveat, beside the score it gave. */}
+            <QuickScanScores
+              overall={result.overall}
+              band={result.band}
+              appeals={result.appeals}
+              nameOf={nameOf}
+              caveat={result.caveat}
+            />
             <div className="space-y-4 bg-(--hd-ink) p-6 text-(--hd-paper) sm:p-8">
               <h3 className="text-2xl font-bold">{C.fullH}</h3>
               <p className="max-w-[60ch] leading-relaxed opacity-80">{C.full}</p>

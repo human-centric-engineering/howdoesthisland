@@ -9,7 +9,7 @@
 import { z } from 'zod';
 import { slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
 import { DEFAULT_INTAKE_LIMITS } from '@/lib/app/intake/extract-text';
-import { MAX_CONTENT_CHARS } from '@/lib/app/assessments/limits';
+import { MAX_CONTENT_CHARS, MAX_URL_CHARS } from '@/lib/app/assessments/limits';
 import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
 
 /**
@@ -46,7 +46,7 @@ const MAX_FILE_BASE64 = Math.ceil(DEFAULT_INTAKE_LIMITS.maxBytes / 3) * 4;
 /** Exactly one of: pasted text, a page by URL (D14), or a file to read. */
 export const assessmentSourceSchema = z.union([
   z.strictObject({ text: textField }),
-  z.strictObject({ url: z.url({ protocol: /^https?$/ }).max(2048) }),
+  z.strictObject({ url: z.url({ protocol: /^https?$/ }).max(MAX_URL_CHARS) }),
   z.strictObject({
     file: z.strictObject({
       /** The file's name; its extension picks the reader (`extractText`). */

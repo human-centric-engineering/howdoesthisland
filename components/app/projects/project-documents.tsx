@@ -34,6 +34,7 @@ import {
   type ProjectDocumentWire,
 } from '@/components/app/projects/schemas';
 import { MAX_DOCUMENT_BYTES } from '@/lib/app/projects/validations';
+import { readAsBase64 } from '@/lib/app/intake/read-as-base64';
 
 /** How often the list is re-read while a document is still being read. */
 export const DOCUMENT_POLL_MS = 4000;
@@ -69,19 +70,6 @@ function StatusBadge({ status }: { status: Status }) {
       {STATUS_LABEL[status]}
     </Badge>
   );
-}
-
-/** A file's bytes as base64, without the `data:` prefix `readAsDataURL` adds. */
-function readAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      resolve(result.slice(result.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('The file could not be read.'));
-    reader.readAsDataURL(file);
-  });
 }
 
 function sourceOf(doc: ProjectDocumentWire): string {

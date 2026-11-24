@@ -32,9 +32,10 @@ import type { ProtectedNavItem } from '@/lib/protected-nav/types';
 /** Authenticated header nav. `null` = platform default; a non-null array replaces it. */
 export const protectedNavItems: ProtectedNavItem[] | null = [
   // HowDoesThisLand: /home replaces Sunrise's dashboard as the landing (D22).
-  // Only routes that exist: /assess adds its own item when it lands. Text
-  // only: the Galley Proof nav has no icons.
+  // Text only: the Galley Proof nav has no icons.
   { href: '/home', label: 'Home', exact: true },
+  // Start a review and watch it come in (t-78).
+  { href: '/assess', label: 'Assess' },
   // The workspace's projects: each one's brief and defaults (t-71).
   { href: '/projects', label: 'Projects' },
   // The workspace's usage this month against its budget (t-48).

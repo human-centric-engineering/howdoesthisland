@@ -67,14 +67,19 @@ const appealScores = z.object({
   scores: z.record(z.string(), z.unknown()),
 });
 
-export function summariseQuickScan(view: QuickScanView): QuickScanSummary {
-  const parsed = appealScores.safeParse(view.result);
-  const appeals = parsed.success
+/** Each appeal's score in a quick-scan result, in the version's order; empty when it has none. */
+export function appealScoresOf(result: unknown): QuickScanSummary['appeals'] {
+  const parsed = appealScores.safeParse(result);
+  return parsed.success
     ? Object.keys(parsed.data.effective_weights).flatMap((id) => {
         const score = parsed.data.scores[id];
         return typeof score === 'number' ? [{ id, score }] : [];
       })
     : [];
+}
+
+export function summariseQuickScan(view: QuickScanView): QuickScanSummary {
+  const appeals = appealScoresOf(view.result);
   return {
     framework: view.framework,
     wordCount: view.wordCount,
