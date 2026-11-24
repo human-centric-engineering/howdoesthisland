@@ -57,7 +57,12 @@ import {
   type BudgetHold,
   type ReviewRate,
 } from '@/lib/app/usage/budget';
-import { chargeEphemeralRun, chargeStoredReview, uncharged } from '@/lib/app/credits/charge';
+import {
+  chargeEphemeralRun,
+  chargeRewrite,
+  chargeStoredReview,
+  uncharged,
+} from '@/lib/app/credits/charge';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -721,6 +726,17 @@ export async function remove(id: string): Promise<{ deleted: true }> {
       },
     });
     if (!row) throw new NotFoundError('Assessment not found');
+    // Its rewrites go with it (FK cascade), so they are read first (t-81). One
+    // still running is charged now for what its rows record, as an open
+    // review is: its call stops at its next save, which finds the row gone,
+    // and what lands after is missed. A finished one was charged as it ended.
+    const running = await tx.rewrite.findMany({
+      where: { assessmentId: id, orgId, status: 'RUNNING' },
+      select: { id: true, createdAt: true },
+    });
+    for (const rewrite of running) {
+      await chargeRewrite(tx, orgId, rewrite.id, rewrite.createdAt);
+    }
     // A delete that lost a race with another one has nothing left: 404.
     const { count } = await tx.assessment.deleteMany({ where: { id, orgId } });
     if (count === 0) throw new NotFoundError('Assessment not found');

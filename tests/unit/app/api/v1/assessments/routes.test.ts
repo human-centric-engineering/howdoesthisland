@@ -2326,6 +2326,25 @@ describe('POST /api/v1/assessments — CopyCredits (t-58)', () => {
     ]);
   });
 
+  it('a delete charges a rewrite still running for what its rows record, and takes its rewrites (t-81)', async () => {
+    const review = fake.seed({ status: 'COMPLETED', completedAt: new Date() });
+    const createdAt = new Date(Date.now() - 30_000);
+    fake.rewrites.push(
+      { id: 'rw-running', orgId: WS_A, assessmentId: review.id, status: 'RUNNING', createdAt },
+      { id: 'rw-done', orgId: WS_A, assessmentId: review.id, status: 'COMPLETED', createdAt }
+    );
+    fake.addCost(WS_A, 0.05, { rewriteId: 'rw-running' });
+    // Charged as it ended: not charged again.
+    fake.addCost(WS_A, 0.09, { rewriteId: 'rw-done' });
+
+    expect((await del(String(review.id))).status).toBe(200);
+
+    expect(charges()).toEqual([
+      expect.objectContaining({ amount: -5, reference: 'rewrite:rw-running' }),
+    ]);
+    expect(fake.rewrites).toEqual([]);
+  });
+
   it('a delete charges a review a live run holds, since that run may be gone', async () => {
     const running = fake.seed({
       status: 'RUNNING',

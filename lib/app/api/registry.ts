@@ -88,6 +88,12 @@ import {
   inviteToWorkspaceSchema,
 } from '@/lib/app/workspaces/validations';
 import { monthUsageSchema, reviewRefusalDetailsSchema } from '@/lib/app/usage/wire';
+import { rewriteEventSchema, rewriteSchema } from '@/lib/app/rewrites/wire';
+import {
+  createRewriteSchema,
+  listRewritesQuerySchema,
+  rewriteIdParamSchema,
+} from '@/lib/app/rewrites/validations';
 import {
   adminCreditsListSchema,
   adminCreditsQuerySchema,
@@ -518,6 +524,8 @@ export const sharedAssessmentSchema = assessmentDetailSchema
 // `reportShareSchema` and `createdReportShareSchema` live with the share
 // routes' request schemas, which the share panel imports in the browser.
 export { createdReportShareSchema, reportShareSchema };
+// `rewriteSchema` and `rewriteEventSchema` live with the rewrites (t-81).
+export { rewriteEventSchema, rewriteSchema };
 
 /**
  * `SharedReport`, less its model, plus the version's catalogue: what
@@ -900,6 +908,53 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: { who: 'anyone' },
     request: { params: shareTokenParamSchema },
     response: { status: 200, data: sharedReportSchema },
+  },
+  // Rewrites (t-81).
+  {
+    method: 'POST',
+    path: '/api/v1/rewrites',
+    summary:
+      "Have the editor rewrite a finished review's text, balanced or raising one appeal, reading the project's brief and the passages its AI reviewers read. Answered once it ends, or streamed as Server-Sent Events with `stream: true` (`rewrite`, `rewrite_text` for each piece, `rewrite_done`). A rewrite is kept and charged however the stream ends.",
+    auth: ASSESS,
+    request: { body: createRewriteSchema },
+    errors: [
+      {
+        status: 402,
+        code: 'INSUFFICIENT_CREDITS',
+        description:
+          'The workspace\'s CopyCredits, less what its reviews and rewrites in flight hold, do not cover the rewrite\'s estimate (the median of its last completed rewrites, `basis: "rewrites"`, or `0` with none, `basis: "none"`), or none are left. Nothing was written or charged. `details` as for a review.',
+      },
+      {
+        status: 402,
+        code: 'BUDGET_EXCEEDED',
+        description:
+          "The rewrite's estimate is more than what is left of the workspace's monthly AI budget. Nothing was written. `details` as for a review.",
+      },
+      {
+        status: 409,
+        code: 'ASSESSMENT_NOT_REWRITABLE',
+        description:
+          'The review is not finished (`completed` or `partial`), or its framework version can no longer be run.',
+      },
+    ],
+    response: { status: 200, data: z.union([rewriteSchema, rewriteEventSchema]) },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/rewrites',
+    summary: "List a review's rewrites, newest first.",
+    auth: ASSESS,
+    request: { query: listRewritesQuerySchema },
+    response: { status: 200, data: z.array(rewriteSchema) },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/rewrites/{id}',
+    summary:
+      'Get one rewrite: while it runs, the draft as last saved (every few seconds); then the whole draft, or why it failed.',
+    auth: ASSESS,
+    request: { params: rewriteIdParamSchema },
+    response: { status: 200, data: rewriteSchema },
   },
   {
     method: 'POST',

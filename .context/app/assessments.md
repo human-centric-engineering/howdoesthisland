@@ -236,8 +236,10 @@ An assessment's cached report PDFs (t-31) go before its row, and the row stays
 for the next pass if storage refuses (`report.md`, "A PDF must not outlive its
 review").
 
-Shares, rewrites and comparison sets do not exist yet. Each task that adds
-one says what purging an assessment does to it.
+Share links (t-32) and rewrites (t-81) go with their assessment (FK cascade),
+so purging or deleting one takes them. A rewrite still running when its review
+is deleted is charged first (`rewrites.md`). Comparison sets do not exist yet;
+the task that adds them says what purging an assessment does to one.
 
 ## The API
 
