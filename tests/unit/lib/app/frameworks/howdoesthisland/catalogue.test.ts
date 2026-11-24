@@ -47,3 +47,20 @@ describe('the catalogue’s adjustment', () => {
     }
   });
 });
+
+describe('the catalogue’s bands (t-79)', () => {
+  const result = z.object({ result: z.object({ bands: z.array(z.string()) }) });
+
+  it('serves the labels a review’s band takes, lowest first, and no score range', () => {
+    const model = structuredClone(loadModel()) as JsonObject;
+    const scoring = model.scoring as { bands: Array<{ label: string; min: number; max: number }> };
+    const labels = [...scoring.bands].sort((a, b) => a.min - b.min).map((b) => b.label);
+    // Served lowest first whatever order the model lists them in.
+    scoring.bands.reverse();
+
+    const catalogue = howDoesThisLandCatalogue(model);
+    expect(result.parse(catalogue).result.bands).toEqual(labels);
+    expect(labels.length).toBeGreaterThan(1);
+    expect(JSON.stringify(catalogue)).not.toContain('"min"');
+  });
+});

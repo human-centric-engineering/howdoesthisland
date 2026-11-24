@@ -107,6 +107,10 @@ export const listAssessmentsQuerySchema = z.object({
   status: z.enum(ASSESSMENT_STATES).optional(),
   /** Only the reviews in this project (t-70). */
   projectId: z.string().min(1).max(64).optional(),
+  /** Only the reviews of this content type (t-79): an id of the version's catalogue. */
+  contentType: z.string().min(1).max(64).optional(),
+  /** Only the reviews in this band (t-79): its label, as `band` carries it. */
+  band: z.string().min(1).max(64).optional(),
 });
 
 /** `{id}` in `/api/v1/assessments/{id}`. */

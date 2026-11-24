@@ -277,6 +277,8 @@ export const frameworkCatalogueSchema = z.object({
     perspectives: z.array(idNameSchema.extend({ levers: z.array(idNameSchema) })),
     cultureScales: z.array(idNameSchema).optional(),
     profiles: z.array(idNameSchema),
+    /** The labels a review's `band` takes, lowest first (t-79). */
+    bands: z.array(z.string()),
     reviewers: z.array(z.object({ id: z.string(), covers: z.string() })),
   }),
 });
@@ -381,6 +383,12 @@ export const assessmentSummarySchema = z.object({
     .string()
     .nullable()
     .describe("The workspace's project it was reviewed in, or `null`."),
+  project: z
+    .object({ id: z.string(), name: z.string() })
+    .nullable()
+    .describe(
+      "That project's id and name, so a list can name it without reading the project; `null` outside a project. An archived project is still named."
+    ),
   title: z.string().nullable(),
   source: z.object({
     kind: z.enum(['text', 'file', 'url']),
@@ -737,7 +745,8 @@ export const APP_ROUTES: readonly RouteContract[] = [
   {
     method: 'GET',
     path: '/api/v1/assessments',
-    summary: "List the workspace's assessments, newest first.",
+    summary:
+      "List the workspace's assessments, newest first. Filter by `status`, `projectId`, `contentType` (a content type id of the catalogue) and `band` (a band's label, as `band` carries it). Each names its project.",
     auth: ASSESS,
     request: { query: listAssessmentsQuerySchema },
     response: { status: 200, data: z.array(assessmentSummarySchema), meta: paginationMetaSchema },

@@ -47,7 +47,10 @@ const modelSchema = z.object({
   perspectives: z.array(named.extend({ levers: z.array(named) })),
   judge_catalogue: z.array(named),
   judges: z.array(z.object({ id: z.string(), appeal: z.string() })),
-  scoring: z.object({ adjustment_bounds: adjustmentBoundsSchema.optional() }),
+  scoring: z.object({
+    bands: z.array(z.object({ label: z.string(), min: z.number() })),
+    adjustment_bounds: adjustmentBoundsSchema.optional(),
+  }),
   culture: z
     .object({
       countries: z.array(named.extend({ region: z.string() })),
@@ -65,7 +68,7 @@ type IdName = { id: string; name: string };
  * Bump when the catalogue's fields change, so a caller holding an old ETag
  * for a version does not keep the old catalogue (`versionETagSource`).
  */
-export const CATALOGUE_SHAPE = 3;
+export const CATALOGUE_SHAPE = 4;
 
 /**
  * How far a project may adjust this version's weights (t-72), or `null`: no
@@ -111,6 +114,11 @@ export type HowDoesThisLandCatalogue = {
     cultureScales?: IdName[];
     /** The reviewer sets a review's `profile` names. */
     profiles: IdName[];
+    /**
+     * The labels a review's `band` takes (t-79), lowest first: what a list
+     * filters by. The labels only, never the score ranges behind them.
+     */
+    bands: string[];
     /**
      * The AI reviewers a review's `judges` and `judgeRuns` name, each with what
      * it covers: an appeal's id, a group's id, or `lenses` or `influence`.
@@ -185,6 +193,7 @@ function buildCatalogue(model: JsonObject): HowDoesThisLandCatalogue {
       perspectives: m.perspectives.map((p) => ({ ...idName(p), levers: p.levers.map(idName) })),
       ...(m.culture ? { cultureScales: m.culture.scales.map(idName) } : {}),
       profiles: m.judge_catalogue.map(idName),
+      bands: [...m.scoring.bands].sort((a, b) => a.min - b.min).map((b) => b.label),
       reviewers: m.judges.map(({ id, appeal }) => ({ id, covers: appeal })),
     },
   };

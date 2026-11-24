@@ -47,6 +47,12 @@ export type AssessmentSummary = {
   framework: FrameworkRef;
   /** The workspace's project it was reviewed in (t-70), or `null`. */
   projectId: string | null;
+  /**
+   * That project's id and name (t-79), so a list row can name it without a
+   * read of its own; `null` outside a project. An archived project is still
+   * named: its reviews keep their link to it.
+   */
+  project: { id: string; name: string } | null;
   title: string | null;
   source: { kind: 'text' | 'file' | 'url'; url: string | null; fileName: string | null };
   wordCount: number;
@@ -162,6 +168,7 @@ const SOURCE_KIND = { TEXT: 'text', FILE: 'file', URL: 'url' } as const;
 const summarySelect = {
   id: true,
   projectId: true,
+  project: { select: { id: true, name: true } },
   status: true,
   profile: true,
   judges: true,
@@ -230,6 +237,7 @@ function summaryView(row: SummaryRow): AssessmentSummary {
     judges: row.judges,
     framework: { slug: row.frameworkVersion.framework.slug, version: row.frameworkVersion.version },
     projectId: row.projectId,
+    project: row.project ? { id: row.project.id, name: row.project.name } : null,
     title: row.content.title,
     source: {
       kind: SOURCE_KIND[row.content.sourceKind],
@@ -317,17 +325,28 @@ async function quickScanWhileRunning(row: DetailRow): Promise<EarlyQuickScan | n
   });
 }
 
-/** A page of this workspace's assessments, newest first. */
+/**
+ * A page of this workspace's assessments, newest first.
+ *
+ * The content type is read from the stored `context` (t-79), which intake
+ * writes with defaults applied, so every review has one. A JSON-path filter
+ * rather than a column: a column would be a second copy of the context, and
+ * the `(orgId, createdAt)` index already narrows the scan to one workspace.
+ */
 export async function listAssessments(query: {
   page: number;
   limit: number;
   status?: AssessmentState;
   projectId?: string;
+  contentType?: string;
+  band?: string;
 }): Promise<{ items: AssessmentSummary[]; total: number }> {
   const where: Prisma.AssessmentWhereInput = {
     orgId: requireOrgId(),
     ...(query.status ? { status: toDbStatus(query.status) } : {}),
     ...(query.projectId ? { projectId: query.projectId } : {}),
+    ...(query.contentType ? { context: { path: ['contentType'], equals: query.contentType } } : {}),
+    ...(query.band ? { band: query.band } : {}),
   };
   const [rows, total] = await Promise.all([
     prisma.assessment.findMany({
