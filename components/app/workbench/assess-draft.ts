@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { APIClientError } from '@/lib/api/client';
 import {
   MAX_CONTENT_CHARS,
-  MAX_REVIEW_FILE_BYTES,
+  MAX_PAGE_FILE_BYTES,
   MAX_URL_CHARS,
 } from '@/lib/app/assessments/limits';
 import { USAGE_PAGE } from '@/lib/app/usage/wire';
@@ -303,10 +303,10 @@ export function problemsOf(
   }
   if (draft.source === 'file') {
     if (!file) problems.push({ field: 'assess-file', message: 'Choose a file to review.' });
-    else if (file.size > MAX_REVIEW_FILE_BYTES) {
+    else if (file.size > MAX_PAGE_FILE_BYTES) {
       problems.push({
         field: 'assess-file',
-        message: `${file.name} is ${(file.size / 1_048_576).toFixed(1)} MB; the largest we read is ${MAX_REVIEW_FILE_BYTES / 1_048_576} MB.`,
+        message: `${file.name} is ${(file.size / 1_048_576).toFixed(1)} MB; the largest this page sends is ${MAX_PAGE_FILE_BYTES / 1_048_576} MB. Paste its text instead.`,
       });
     }
   }

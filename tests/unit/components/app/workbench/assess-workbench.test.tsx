@@ -32,7 +32,7 @@ vi.mock('@/components/ui/select', async () => {
 import { AssessWorkbench } from '@/components/app/workbench/assess-workbench';
 import { DRAFT_KEY, EMPTY_DRAFT } from '@/components/app/workbench/assess-draft';
 import { apiClient, APIClientError } from '@/lib/api/client';
-import { MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { MAX_PAGE_FILE_BYTES } from '@/lib/app/assessments/limits';
 import { aProject } from '@/tests/unit/components/app/projects/fixtures';
 import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 import { QUICK_RESULT, anAssessCatalogue } from '@/tests/unit/components/app/workbench/fixtures';
@@ -275,12 +275,12 @@ describe('AssessWorkbench sources', () => {
     renderWorkbench();
     await userEvent.click(screen.getByRole('tab', { name: 'File' }));
     const big = new File(['x'], 'huge.pdf', { type: 'application/pdf' });
-    Object.defineProperty(big, 'size', { value: MAX_REVIEW_FILE_BYTES + 1 });
+    Object.defineProperty(big, 'size', { value: MAX_PAGE_FILE_BYTES + 1 });
     await userEvent.upload(field(/^A file to review/), big);
     await start();
 
     expect(apiClient.post).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(/huge\.pdf is 10\.0 MB/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/huge\.pdf is 3\.0 MB/);
   });
 
   it('asks for copy, or an address, before sending', async () => {

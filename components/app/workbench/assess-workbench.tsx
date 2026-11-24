@@ -33,7 +33,7 @@ import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useLocalStorage } from '@/lib/hooks/use-local-storage';
 import { readAsBase64 } from '@/lib/app/intake/read-as-base64';
-import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import { MAX_CONTENT_CHARS, MAX_PAGE_FILE_BYTES } from '@/lib/app/assessments/limits';
 import { WORDS } from '@/lib/app/reports/words';
 import { SettingPicker } from '@/components/app/projects/setting-picker';
 import { DOCUMENT_EXTENSIONS, type ProjectWire } from '@/components/app/projects/schemas';
@@ -253,8 +253,9 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
               A file to review
               <FieldHelp title="A file to review">
                 PDF, Word, PowerPoint, HTML, Markdown or plain text, up to{' '}
-                {MAX_REVIEW_FILE_BYTES / 1_048_576} MB. Its text is read and reviewed; a scanned PDF
-                with no text in it cannot be. The file is not kept in this browser&rsquo;s draft.
+                {MAX_PAGE_FILE_BYTES / 1_048_576} MB; for a larger one, paste its text. Its text is
+                read and reviewed; a scanned PDF with no text in it cannot be. The file is not kept
+                in this browser&rsquo;s draft.
               </FieldHelp>
             </Label>
             <Input
