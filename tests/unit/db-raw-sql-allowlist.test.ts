@@ -102,12 +102,12 @@ const ALLOWLIST: ReadonlyArray<{ file: string; calls: number; why: string }> = [
     calls: 1,
     why: "an admin's credit change reads the workspace's status with `SELECT … FOR SHARE` in the transaction that writes the entry, so a workspace suspended at the same moment is not credited after its check passed (t-57). Prisma has no row lock; it reads `org`, a system table with no RLS policy, by id",
   },
-  // FORK (HowDoesThisLand): the budget check's per-workspace lock (t-50).
+  // FORK (HowDoesThisLand): the budget check's per-workspace lock (t-50, t-81).
   // Ledger: .context/app/platform-divergences.md.
   {
     file: 'lib/app/usage/budget.ts',
-    calls: 1,
-    why: "a review request's budget check and the hold it writes run under `pg_advisory_xact_lock(hashtextextended(key, 0))`, keyed on the workspace's id, so requests arriving together cannot each pass on the same remainder (t-50). Prisma has no call for it, and it touches no table, so RLS has nothing to filter",
+    calls: 2,
+    why: "a review request's budget check and the hold it writes run under `pg_advisory_xact_lock(hashtextextended(key, 0))`, keyed on the workspace's id, so requests arriving together cannot each pass on the same remainder (t-50); a rewrite's check and the row it writes take the same lock (t-81). Prisma has no call for it, and it touches no table, so RLS has nothing to filter",
   },
   {
     file: 'lib/db/drift-probes.ts',
