@@ -1,7 +1,8 @@
 /**
  * One of the workspace's assessments (t-24).
  *
- * GET    /api/v1/assessments/{id} — the assessment, its judges and, once final, its result.
+ * GET    /api/v1/assessments/{id} — the assessment, its judges, its quick scan
+ *   while it runs (t-77) and, once final, its result.
  * DELETE /api/v1/assessments/{id} — delete it, its judge runs, its text, and
  *   its cached report PDFs (t-31).
  *

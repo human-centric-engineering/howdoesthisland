@@ -441,6 +441,113 @@ describe('POST /api/v1/assessments — stored', () => {
   });
 });
 
+describe('a review’s quick scan, before its judges (t-77)', () => {
+  /** Holds every judge until released, so the review stays running. */
+  function holdJudges() {
+    const gate = deferred();
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate.promise;
+      return reply(slot);
+    });
+    return gate;
+  }
+
+  it('answers it in the 202 and on GET while the review runs, then null once final', async () => {
+    const gate = holdJudges();
+    const res = await post({ source: { text: TEXT }, judges: TWO });
+
+    expect(res.status).toBe(202);
+    const created = assessmentDetailSchema.parse((await json(res)).data);
+    expect(created.quickScan).toEqual({
+      overall: 50,
+      band: 'mixed',
+      result: { scores: { overall: 50, band: 'mixed' }, judged: [] },
+    });
+    // The quick scan the engine works out from the stored text and context, with no judges.
+    const parsed = real.parseContext(fake.assessments[0]?.context);
+    if (!parsed.ok) throw new Error('the stored context should parse');
+    expect(engine.assemble).toHaveBeenCalledWith(
+      TEXT,
+      parsed.ctx,
+      real.quickScan(TEXT, parsed.ctx),
+      {},
+      null
+    );
+
+    await settle();
+    const running = assessmentDetailSchema.parse((await json(await getOne(created.id))).data);
+    expect(running.status).toBe('running');
+    expect(running.quickScan).toMatchObject({ overall: 50, band: 'mixed' });
+
+    gate.resolve();
+    await settle();
+    const done = assessmentDetailSchema.parse((await json(await getOne(created.id))).data);
+    expect(done.status).toBe('completed');
+    expect(done.overall).toBe(52);
+    expect(done.quickScan).toBeNull();
+  });
+
+  it('answers it for a page and a file too, scored with the page’s address', async () => {
+    holdJudges();
+    mocks.fetchPage.mockResolvedValue({
+      text: TEXT,
+      title: 'Pricing',
+      url: 'https://example.com/pricing',
+      wordCount: 14,
+      format: 'html',
+      warnings: [],
+    });
+    const fromPage = assessmentDetailSchema.parse(
+      (await json(await post({ source: { url: 'https://example.com/p' }, judges: TWO }))).data
+    );
+    expect(fromPage.quickScan).toMatchObject({ overall: 50 });
+    expect(engine.assemble).toHaveBeenLastCalledWith(
+      TEXT,
+      expect.anything(),
+      expect.anything(),
+      {},
+      'https://example.com/pricing'
+    );
+
+    const file = Buffer.from('# Launch\n\nWe cut onboarding to two days.').toString('base64');
+    const fromFile = assessmentDetailSchema.parse(
+      (
+        await json(
+          await post({ source: { file: { name: 'launch.md', base64: file } }, judges: TWO })
+        )
+      ).data
+    );
+    expect(fromFile.quickScan).toMatchObject({ overall: 50 });
+  });
+
+  it('answers null for a quick review, whose result is the quick scan', async () => {
+    const res = await post({ source: { text: TEXT }, profile: 'quick' });
+    const data = assessmentDetailSchema.parse((await json(res)).data);
+    expect(data.quickScan).toBeNull();
+  });
+
+  it('answers null for text the engine cannot score; the run then fails it', async () => {
+    holdJudges();
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('cannot score this');
+    });
+    const data = assessmentDetailSchema.parse(
+      (await json(await post({ source: { text: TEXT }, judges: TWO }))).data
+    );
+    expect(data.quickScan).toBeNull();
+    expect(log.warn).toHaveBeenCalledWith(
+      'Could not work out a running review’s quick scan',
+      expect.objectContaining({ assessmentId: data.id, error: 'cannot score this' })
+    );
+  });
+
+  it('leaves a review kept nowhere as it was: its result is already final', async () => {
+    const res = await post({ source: { text: TEXT }, judges: TWO, store: false });
+    expect(res.status).toBe(200);
+    expect((await json(res)).data).not.toHaveProperty('quickScan');
+  });
+});
+
 describe('POST /api/v1/assessments — store: false', () => {
   it('answers the result at once and keeps no Content, Assessment or JudgeRun row', async () => {
     mocks.runJudge.mockImplementation(async (slot: string) => {
@@ -792,6 +899,31 @@ describe('POST /api/v1/assessments — in a project (t-70)', () => {
         effective_weights: expected.effective_weights,
       });
       expect(expected.effective_weights.ethos).toBeGreaterThan(plain.effective_weights.ethos);
+    });
+
+    it('works the running review’s quick scan out with the overlay, as the run will (t-77)', async () => {
+      const bounded = useBoundedVersion();
+      project({ overlay: { weights: { ethos: 0.1 } } });
+      const gate = deferred();
+      mocks.runJudge.mockImplementation(async (slot: string) => {
+        await gate.promise;
+        return reply(slot);
+      });
+
+      const res = await post({ source: { text: TEXT }, projectId: 'project-1', judges: TWO });
+
+      expect(res.status).toBe(202);
+      const data = assessmentDetailSchema.parse((await json(res)).data);
+      const parsed = bounded.parseContext(fake.assessments[0]?.context);
+      if (!parsed.ok) throw new Error('the stored context should parse');
+      const adjusted = bounded.withOverlay({ weights: { ethos: 0.1 } });
+      const expected = adjusted.assemble(TEXT, parsed.ctx, adjusted.quickScan(TEXT, parsed.ctx));
+      const plain = bounded.assemble(TEXT, parsed.ctx, bounded.quickScan(TEXT, parsed.ctx));
+      expect(data.quickScan?.result).toMatchObject({
+        effective_weights: expected.effective_weights,
+      });
+      expect(expected.effective_weights.ethos).not.toBe(plain.effective_weights.ethos);
+      gate.resolve();
     });
 
     it('records none for a project without one', async () => {
@@ -1170,14 +1302,23 @@ describe('GET /api/v1/assessments/{id}/events', () => {
     const all = await received;
     expect(all.map((f) => f.event)).toEqual([
       'assessment_status',
+      'assessment_quick_scan',
       'assessment_judge',
       'assessment_judge',
       'assessment_status',
       'assessment_done',
     ]);
     expect(all[0]?.data).toEqual({ type: 'assessment_status', id, status: 'running' });
+    // The quick scan comes before any judge (t-77): the stub's answer with no judges.
+    expect(all[1]?.data).toEqual({
+      type: 'assessment_quick_scan',
+      id,
+      overall: 50,
+      band: 'mixed',
+      result: { scores: { overall: 50, band: 'mixed' }, judged: [] },
+    });
     expect(all.filter((f) => f.event === 'assessment_judge').map((f) => f.data.judge)).toEqual(TWO);
-    expect(all[4]?.data).toMatchObject({
+    expect(all[5]?.data).toMatchObject({
       type: 'assessment_done',
       status: 'completed',
       overall: 52,
@@ -1197,6 +1338,43 @@ describe('GET /api/v1/assessments/{id}/events', () => {
       'assessment_judge',
       'assessment_done',
     ]);
+  });
+
+  it('sends a running review’s quick scan first to a stream opened late, before the judges that landed (t-77)', async () => {
+    const a = fake.seed({ status: 'RUNNING', judges: TWO }, [
+      { judge: 'judge_ethos', status: 'SUCCEEDED' },
+    ]);
+    const ac = new AbortController();
+    const res = await stream(String(a.id), ac.signal);
+    const received = frames(res);
+    await settle();
+    ac.abort();
+    const all = await received;
+    expect(all.slice(0, 3).map((f) => f.event)).toEqual([
+      'assessment_status',
+      'assessment_quick_scan',
+      'assessment_judge',
+    ]);
+    expect(all[1]?.data).toMatchObject({ overall: 50, band: 'mixed' });
+  });
+
+  it('sends no quick scan for a quick review, nor for text the engine cannot score (t-77)', async () => {
+    const quick = fake.seed({ status: 'COMPLETED', profile: 'quick', judges: [] });
+    const unscorable = fake.seed({ status: 'RUNNING', judges: TWO });
+    const fromQuick = await frames(await stream(String(quick.id)));
+    engine.assemble.mockImplementationOnce(() => {
+      throw new Error('cannot score this');
+    });
+    const ac = new AbortController();
+    const received = frames(await stream(String(unscorable.id), ac.signal));
+    await settle();
+    ac.abort();
+    const fromUnscorable = await received;
+
+    expect(fromQuick.map((f) => f.event)).not.toContain('assessment_quick_scan');
+    // The poll found the review, so the stream did open on it.
+    expect(fromUnscorable[0]?.event).toBe('assessment_status');
+    expect(fromUnscorable.map((f) => f.event)).not.toContain('assessment_quick_scan');
   });
 
   it('logs a read that fails mid-stream, and ends it with the error frame', async () => {

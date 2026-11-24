@@ -19,7 +19,10 @@
  * passages, or `null`.
  *
  * - Default: stored and queued; 202 with the assessment. Follow it with
- *   `GET …/{id}` or `GET …/{id}/events`.
+ *   `GET …/{id}` or `GET …/{id}/events`. A review that calls judges carries
+ *   its `quickScan` (`overall`, `band`, `result`) in the 202 and while it
+ *   runs, to show before the judges land (t-77); `null` once final and for
+ *   a `quick` review.
  * - `wait: true`: 200 with the result once final, or 202 once the wait bound
  *   (`WAIT_BOUND_MS`) passes; the run carries on.
  * - `store: false`: always synchronous; 200 with the result and `stored:
