@@ -101,9 +101,12 @@ mode (against any version), with every check whose result changed, worse ones fi
 (`compare.ts`). A check whose expected value changed between the two runs' sets is not
 counted as changed.
 
-Before a run is stored, the set is checked against the version: its model version, the
-ids it names, every case's context, and (for an AI run) that the version has judges. A set
-that does not fit, or a retired version, is refused with nothing stored and nothing spent.
+Before a run is stored, the version's model is put through the import's checks again
+(`decompose`), so a draft imported before a check it now fails is refused as
+`INVALID_MODEL` and, with no complete run, can never publish. Then the set is checked
+against the version: its model version, the ids it names, every case's context, and (for
+an AI run) that the version has judges. A model or set that does not fit, or a retired
+version, is refused with nothing stored and nothing spent.
 A run is stored `RUNNING` when it starts, then `COMPLETE` with its results or `FAILED`
 with `error` and what its judges had cost so far. `totals` and `rows` are null until it is complete. Only a complete run is
 read back for comparing or for the gate, so a run that is still going, or one that died,

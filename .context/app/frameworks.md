@@ -58,6 +58,12 @@ All of it is reported in one run, and nothing is written:
   platform agent in every workspace ([`judges.md`](./judges.md)), so a version
   cannot add, drop or rename one without code;
 - `scoring.adjustment_bounds` that are malformed ([below](#adjustment-bounds-d5));
+- `scoring.bands` that leave a score without a band, or that a band filter cannot pick
+  (`checkBands`, t-79): limits must be whole numbers running from 0 to 100, each band
+  starting where the last ended, and labels unique and 1–64 characters, since the review
+  list filters by label. The engine rounds `overall` before it reads the band. The
+  engine's own read of a stored version does not check this, so a version stored before
+  the rule still opens; a calibration checks it again ([`calibration.md`](./calibration.md));
 - a file that is not JSON.
 
 The reference fields follow the model's own spec, `meta.reference_rules`, and are
