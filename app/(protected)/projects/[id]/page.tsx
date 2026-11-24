@@ -92,7 +92,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <ProjectForm key={project.id} project={project} catalogue={catalogue} />
       {/* Only when the version declares bounds, or the project holds an adjustment (t-72). */}
       <ProjectWeights key={`weights-${project.id}`} project={project} catalogue={catalogue} />
-      <ProjectDocuments projectId={project.id} documents={documents} />
+      <ProjectDocuments
+        key={`documents-${project.id}`}
+        projectId={project.id}
+        documents={documents}
+      />
     </div>
   );
 }

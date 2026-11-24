@@ -17,7 +17,11 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
   apiClient: { post: vi.fn(), delete: vi.fn() },
 }));
 
-import { DOCUMENT_POLL_MS, ProjectDocuments } from '@/components/app/projects/project-documents';
+import {
+  DOCUMENT_MAX_POLLS,
+  DOCUMENT_POLL_MS,
+  ProjectDocuments,
+} from '@/components/app/projects/project-documents';
 import { DOCUMENT_EXTENSIONS, type ProjectDocumentWire } from '@/components/app/projects/schemas';
 import { SUPPORTED_EXTENSIONS } from '@/lib/app/intake/extract-text';
 import { apiClient, APIClientError } from '@/lib/api/client';
@@ -188,6 +192,30 @@ describe('ProjectDocuments', () => {
     rerender(<ProjectDocuments projectId="proj-1" documents={[aDocument()]} />);
     vi.advanceTimersByTime(DOCUMENT_POLL_MS * 3);
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the list while an admin re-processes a document, but not while one waits on review', () => {
+    vi.useFakeTimers();
+    const { rerender } = render(
+      <ProjectDocuments projectId="proj-1" documents={[aDocument({ status: 'cleaning' })]} />
+    );
+    vi.advanceTimersByTime(DOCUMENT_POLL_MS);
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ProjectDocuments projectId="proj-1" documents={[aDocument({ status: 'pending_review' })]} />
+    );
+    vi.advanceTimersByTime(DOCUMENT_POLL_MS * 3);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops re-reading after the most polls, even if the document never settles', () => {
+    vi.useFakeTimers();
+    render(
+      <ProjectDocuments projectId="proj-1" documents={[aDocument({ status: 'processing' })]} />
+    );
+    vi.advanceTimersByTime(DOCUMENT_POLL_MS * (DOCUMENT_MAX_POLLS + 5));
+    expect(refresh).toHaveBeenCalledTimes(DOCUMENT_MAX_POLLS);
   });
 
   it('accepts the file types intake reads', () => {

@@ -7,9 +7,10 @@
  *
  * Adding is `POST /api/v1/projects/{id}/documents`, which answers once the
  * document is read and indexed, so the row being added shows as being read
- * until then. A document someone else is adding, or one an admin is
- * re-processing, reads as such from the list; while any does, the page
- * refreshes every few seconds until it settles. Removing is `DELETE …/{docId}`
+ * until then. A document someone else is adding (`processing`), or one an
+ * admin is re-processing (`cleaning`), reads as such from the list; while any
+ * does, the page refreshes every few seconds until it settles, for at most
+ * five minutes. One waiting on an admin's review is not polled. Removing is `DELETE …/{docId}`
  * and needs no confirmation: the document can be added again.
  */
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
@@ -36,7 +37,19 @@ import { MAX_DOCUMENT_BYTES } from '@/lib/app/projects/validations';
 /** How often the list is re-read while a document is still being read. */
 export const DOCUMENT_POLL_MS = 4000;
 
+/**
+ * The most re-reads before the page stops polling (five minutes): a row left
+ * `processing` by a request that died never settles, and a reload reads it again.
+ */
+export const DOCUMENT_MAX_POLLS = 75;
+
 type Status = ProjectDocumentWire['status'];
+
+/**
+ * The statuses that settle without anyone acting: being read, or being
+ * re-processed. `pending_review` waits on an admin, so it is not polled.
+ */
+const SETTLING: readonly Status[] = ['processing', 'cleaning'];
 
 const STATUS_LABEL: Record<Status, string> = {
   processing: 'Being read',
@@ -101,10 +114,14 @@ export function ProjectDocuments({ projectId, documents }: ProjectDocumentsProps
     fields: NO_SERVER_FIELDS,
   });
 
-  const settling = documents.some((doc) => doc.status === 'processing');
+  const settling = documents.some((doc) => SETTLING.includes(doc.status));
   useEffect(() => {
     if (!settling) return;
-    const timer = setInterval(() => router.refresh(), DOCUMENT_POLL_MS);
+    let polls = 0;
+    const timer = setInterval(() => {
+      router.refresh();
+      if (++polls >= DOCUMENT_MAX_POLLS) clearInterval(timer);
+    }, DOCUMENT_POLL_MS);
     return () => clearInterval(timer);
   }, [settling, router]);
 
