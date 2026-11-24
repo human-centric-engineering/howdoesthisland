@@ -104,10 +104,21 @@ summary writes a few sentences, a rewrite the whole text. The refusals are a
 review's (402 `INSUFFICIENT_CREDITS`, `BUDGET_EXCEEDED`, `details` the same),
 worded for a rewrite.
 
-**What it can miss.** Spend that lands after the charge: a call still running
-when its review is deleted (the delete charges what its rows record by then,
-and the call stops at its next save), or one whose review is purged by the
-retention window while it runs. The monthly cap still bounds both.
+**Charged by the call, whatever became of its row.** A streamed call writes its
+cost row only when it ends, so a charge made while it runs finds nothing and
+writes no entry: the delete of its review (which takes the rewrite, and stops
+the call at its next save), or recovery ending one whose saves failed past its
+lease. The call's own end charges again, after its cost row lands, under the
+same reference, so it is charged once whoever gets there first. Its ending
+also replaces recovery's `lost`, since it knows what happened. The retention
+purge leaves a review alone while one of its rewrites runs.
+
+**A call stopped part-way** (its signal, a save that failed, a dropped
+connection) reports no usage, since a provider reports it in a stream's last
+event. One that had answered at all is recorded at an estimate: the prompt and
+what it streamed, counted by the model's tokeniser, its row tagged
+`estimated: true`. Thinking is not counted, so the estimate is low, never
+high. One stopped before any reply is recorded at nothing.
 
 ## When the process dies
 
@@ -116,7 +127,8 @@ job (`app:rewrite-recovery`, every 15 minutes per workspace,
 `lib/app/rewrites/recover.ts`) fails it (`errorCode: lost`), keeping its saved
 draft, and charges its cost rows in the same transaction. Until then it holds
 its estimate. A call that died before the provider answered wrote no cost row,
-so it is charged nothing.
+so it is charged nothing. One whose process was alive after all charges itself
+as it ends (above).
 
 ## Limits
 
@@ -127,7 +139,8 @@ so it is charged nothing.
 ## Data
 
 `Rewrite` (`app_rewrite`) is tenant-owned (`org_isolation`). Its FK to its
-assessment cascades, so a delete or the retention purge takes it. Its maker's
+assessment cascades, so a delete or the retention purge takes it (the purge
+not while it runs). Its maker's
 FK to `user` is hand-written, SET NULL, with a drift probe. The subject and
 org exports carry rewrites without the lease or the hold.
 

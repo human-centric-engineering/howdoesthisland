@@ -309,10 +309,28 @@ describe('streamAgent failures after the call', () => {
     expect(err.spend?.usage.output).toBe(800);
   });
 
-  it('fails when the stream ends with no terminal chunk, recording nothing billed', async () => {
+  it('fails when the stream ends with no terminal chunk, recording an estimate of what it was billed', async () => {
     chatStream = scripted([{ type: 'text', content: 'A draft that' }]);
     const err = await refusal(run());
     expect(err.code).toBe('provider_error');
+    const row = mocks.logCost.mock.calls[0][0];
+    // The instructions and prompt in, the text streamed out, counted.
+    expect(row.inputTokens).toBeGreaterThan(0);
+    expect(row.outputTokens).toBeGreaterThan(0);
+    expect(row.metadata).toMatchObject({ estimated: true, error: 'provider_error' });
+    expect(err.spend?.costUsd).toBe(0.021);
+  });
+
+  it('records the provider’s usage, not an estimate, when it reported one', async () => {
+    await run();
+    expect(mocks.logCost.mock.calls[0][0].metadata).not.toHaveProperty('estimated');
+  });
+
+  it('records nothing for a call stopped before the provider answered', async () => {
+    chatStream = scripted([], new ProviderError('request aborted', { code: 'aborted' }));
+    const err = await refusal(run());
+    expect(err.code).toBe('provider_error');
+    expect(mocks.logCost).not.toHaveBeenCalled();
     expect(err.spend).toBeUndefined();
   });
 
@@ -329,7 +347,7 @@ describe('streamAgent failures after the call', () => {
     expect(mocks.logCost.mock.calls[0][0]).toMatchObject({ inputTokens: 3000, outputTokens: 100 });
   });
 
-  it('stops when onText throws, and records what was billed by then', async () => {
+  it('stops when onText throws, and records an estimate of what was billed by then', async () => {
     chatStream = scripted([{ type: 'text', content: 'one' }, { ...DONE }]);
     const err = await refusal(
       run({
@@ -339,8 +357,24 @@ describe('streamAgent failures after the call', () => {
       })
     );
     expect(err.code).toBe('provider_error');
-    // The terminal chunk was never read, so nothing was billed on this path.
-    expect(err.spend).toBeUndefined();
+    // The terminal chunk was never read, so its usage is estimated.
+    expect(mocks.logCost.mock.calls[0][0].metadata).toMatchObject({ estimated: true });
+    expect(err.spend?.costUsd).toBe(0.021);
+  });
+
+  it('records an estimate for a call its signal stopped part-way', async () => {
+    const controller = new AbortController();
+    chatStream = vi.fn(async function* () {
+      yield { type: 'text', content: 'Half a draft' } satisfies StreamChunk;
+      controller.abort();
+      throw new ProviderError('request aborted', { code: 'aborted' });
+    });
+    const err = await refusal(run({ signal: controller.signal }));
+    expect(err.code).toBe('provider_error');
+    expect(mocks.logCost.mock.calls[0][0]).toMatchObject({
+      outputTokens: expect.any(Number),
+      metadata: expect.objectContaining({ estimated: true, rewriteId: 'rw-1' }),
+    });
   });
 
   it('passes the caller’s signal to the provider', async () => {

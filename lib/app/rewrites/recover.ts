@@ -11,6 +11,10 @@
  *
  * Idempotent: the write that ends it matches only a `RUNNING` row past its
  * lease, so a second pass, or a call that finished meanwhile, changes nothing.
+ *
+ * A lease can also run out while the call lives, if its saves fail for that
+ * long. Its cost row lands only when it ends, so this charges nothing for it;
+ * the call charges itself as it ends, and replaces this ending with its own.
  */
 import { RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
@@ -20,6 +24,13 @@ import { requireOrgId } from '@/lib/tenancy/context';
 
 /** What a failed rewrite says when its process died. */
 export const LOST_REWRITE = 'It stopped before finishing.';
+
+/**
+ * The error code recovery ends a rewrite with. A process that was not lost
+ * after all (its saves failed past the lease) ends it again with what really
+ * happened, and charges what landed since (`service.ts`).
+ */
+export const LOST_REWRITE_CODE = 'lost';
 
 export async function recoverRewrites(now: Date = new Date()): Promise<{ failed: number }> {
   const orgId = requireOrgId();
@@ -43,7 +54,7 @@ export async function recoverRewrites(now: Date = new Date()): Promise<{ failed:
           data: {
             status: 'FAILED',
             error: LOST_REWRITE,
-            errorCode: 'lost',
+            errorCode: LOST_REWRITE_CODE,
             completedAt: now,
             leaseExpiresAt: null,
           },

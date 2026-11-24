@@ -27,6 +27,14 @@
  * keeps `RUNNING` until its lease runs out, then the recovery job fails and
  * charges it (`recover.ts`).
  *
+ * **Charged by the call, whatever became of its row.** A streamed call
+ * writes its cost row only when it ends, so a charge made while it runs (its
+ * review deleted, or recovery ending a rewrite whose saves failed past its
+ * lease) finds nothing to charge, and writes no entry. The call's own end
+ * charges again, after its row is written, under the same reference: once
+ * in all, whoever got there first. A live call's ending also replaces the
+ * `lost` that recovery wrote for it, since it knows what happened.
+ *
  * Tenancy: every read and write names the org the guard entered.
  */
 import type { Prisma } from '@prisma/client';
@@ -39,6 +47,7 @@ import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import { JudgeRunError, streamAgent } from '@/lib/app/judges/run-judge';
 import { parseProjectContext, renderProjectContext } from '@/lib/app/projects/context';
 import { EventChannel } from '@/lib/app/rewrites/channel';
+import { LOST_REWRITE_CODE } from '@/lib/app/rewrites/recover';
 import { DRAFT_SAVE_MS, REWRITE_COST_TAG } from '@/lib/app/rewrites/limits';
 import type { CreateRewriteRequest } from '@/lib/app/rewrites/validations';
 import { REWRITE_VIEW_SELECT, toRewriteView, type RewriteView } from '@/lib/app/rewrites/views';
@@ -165,8 +174,10 @@ export async function startRewrite(
     })
   );
   const rewrite = toRewriteView(row);
-  const channel = new EventChannel<RewriteEvent>();
-  channel.push({ type: 'rewrite', rewrite });
+  // Only a streamed request has a reader: otherwise every piece of the draft
+  // would be queued a second time for the whole call, and never read.
+  const channel = body.stream ? new EventChannel<RewriteEvent>() : null;
+  channel?.push({ type: 'rewrite', rewrite });
 
   const done = drive({
     orgId,
@@ -181,8 +192,13 @@ export async function startRewrite(
     channel,
   });
   keepRunningAfterResponse(done, 'app: rewrite', { rewriteId: row.id });
-  return { rewrite, events: channel, done };
+  return { rewrite, events: channel ?? NO_EVENTS, done };
 }
+
+/** The events of a request that did not ask to stream: none. */
+const NO_EVENTS: AsyncIterable<RewriteEvent> = {
+  async *[Symbol.asyncIterator]() {},
+};
 
 interface Drive {
   orgId: string;
@@ -194,7 +210,7 @@ interface Drive {
   maxTokens: number;
   frameworkVersion: string;
   userId: string | null;
-  channel: EventChannel<RewriteEvent>;
+  channel: EventChannel<RewriteEvent> | null;
 }
 
 /** Run the call, saving as it goes, and end the row. Never rejects. */
@@ -236,7 +252,7 @@ async function drive(d: Drive): Promise<RewriteView> {
       request: () => ({ prompt: d.prompt, maxTokens: d.maxTokens, reasoningEffort: 'low' }),
       onText: (piece) => {
         draft += piece;
-        d.channel.push({ type: 'rewrite_text', text: piece });
+        d.channel?.push({ type: 'rewrite_text', text: piece });
       },
       costMetadata: { editor: REWRITE_COST_TAG, rewriteId },
       frameworkVersion: d.frameworkVersion,
@@ -260,8 +276,8 @@ async function drive(d: Drive): Promise<RewriteView> {
   await saving;
 
   const ended = await finish(d, end);
-  d.channel.push({ type: 'rewrite_done', rewrite: ended });
-  d.channel.close();
+  d.channel?.push({ type: 'rewrite_done', rewrite: ended });
+  d.channel?.close();
   return ended;
 }
 
@@ -301,19 +317,25 @@ function failedEnding(rewriteId: string, draft: string, err: unknown): Ending {
 }
 
 /**
- * End the row and charge it, in one transaction. A row already ended (by
- * recovery, after this process lost its lease) or gone (its review deleted)
- * is not written again, and answers what it holds, or the ending it missed.
+ * End the row and charge it, in one transaction. The row is written while it
+ * runs, or once recovery has ended it `lost` (this process is not lost: its
+ * ending is the true one). It is charged whatever its state, or even with
+ * the row gone (its review deleted): see "Charged by the call" above. A row
+ * gone answers the ending it missed.
  */
 async function finish(d: Drive, end: Ending): Promise<RewriteView> {
   const { orgId, rewriteId } = d;
   try {
     return await prisma.$transaction(async (tx) => {
-      const { count } = await tx.rewrite.updateMany({
-        where: { id: rewriteId, orgId, status: 'RUNNING' },
+      await tx.rewrite.updateMany({
+        where: {
+          id: rewriteId,
+          orgId,
+          OR: [{ status: 'RUNNING' }, { status: 'FAILED', errorCode: LOST_REWRITE_CODE }],
+        },
         data: { ...end, completedAt: new Date(), leaseExpiresAt: null },
       });
-      if (count === 1) await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
+      await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
       const row = await tx.rewrite.findUnique({
         where: { id: rewriteId },
         select: REWRITE_VIEW_SELECT,

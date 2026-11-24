@@ -729,7 +729,8 @@ export async function remove(id: string): Promise<{ deleted: true }> {
     // Its rewrites go with it (FK cascade), so they are read first (t-81). One
     // still running is charged now for what its rows record, as an open
     // review is: its call stops at its next save, which finds the row gone,
-    // and what lands after is missed. A finished one was charged as it ended.
+    // and charges what it spent as it ends (`rewrites/service.ts`), once with
+    // this. A finished one was charged as it ended.
     const running = await tx.rewrite.findMany({
       where: { assessmentId: id, orgId, status: 'RUNNING' },
       select: { id: true, createdAt: true },

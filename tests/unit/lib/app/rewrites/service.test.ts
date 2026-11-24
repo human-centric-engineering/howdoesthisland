@@ -487,13 +487,15 @@ describe('while it runs', () => {
     await started.done;
   });
 
-  it('stops the call when a save finds the row gone, as when its review is deleted', async () => {
+  it('stops the call when a save finds the row gone, as when its review is deleted, and still charges it', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     let signal: AbortSignal | undefined;
     mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
       signal = call.signal;
       await call.onText('Part.');
       await new Promise<void>((resolve) => call.signal?.addEventListener('abort', () => resolve()));
+      // A stopped stream's cost row lands only now, after the delete's charge.
+      fake.addCost(ORG, 0.03, { ...call.costMetadata, estimated: true });
       throw new JudgeRunError('provider_error', "The editor's call failed.");
     });
     const review = finishedReview();
@@ -508,6 +510,79 @@ describe('while it runs', () => {
     expect(signal?.aborted).toBe(true);
     expect(await started.done).toMatchObject({ status: 'failed', assessmentId: review.id });
     expect(fake.rewrites).toEqual([]);
+    expect(charges()).toEqual([expect.objectContaining({ amount: -3 })]);
+  });
+
+  it('replaces recovery’s `lost` with its own ending, and charges what landed after', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await call.onText('All of it.');
+      await gate;
+      fake.addCost(ORG, 0.04, { ...call.costMetadata });
+      return {
+        text: 'All of it.',
+        provider: 'anthropic',
+        model: 'claude-sonnet-5-5',
+        usage: { input: 1, output: 1, attempts: 1 },
+        costUsd: 0.04,
+        costLogIds: [],
+        finishReason: 'stop',
+      } satisfies AgentStreamReply;
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    // Its saves failed past the lease, and recovery ended it, charging nothing.
+    Object.assign(fake.rewrites[0], {
+      status: 'FAILED',
+      errorCode: 'lost',
+      error: 'It stopped before finishing.',
+      leaseExpiresAt: null,
+    });
+    release();
+
+    expect(await started.done).toMatchObject({ status: 'completed', draft: 'All of it.' });
+    expect(fake.rewrites[0]).toMatchObject({ status: 'COMPLETED', errorCode: null, costUsd: 0.04 });
+    expect(charges()).toEqual([expect.objectContaining({ amount: -4 })]);
+  });
+
+  it('does not write over a rewrite that ended another way', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await gate;
+      await call.onText('Late.');
+      return {
+        text: 'Late.',
+        provider: 'anthropic',
+        model: 'm',
+        usage: { input: 1, output: 1, attempts: 1 },
+        costUsd: 0,
+        costLogIds: [],
+        finishReason: 'stop',
+      } satisfies AgentStreamReply;
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    Object.assign(fake.rewrites[0], { status: 'COMPLETED', draft: 'Earlier.' });
+    release();
+    expect(await started.done).toMatchObject({ status: 'completed', draft: 'Earlier.' });
+  });
+});
+
+describe('a request that does not stream', () => {
+  it('has no events to read, and still ends and charges the rewrite', async () => {
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    expect(await collect(started.events)).toEqual([]);
+    expect(await started.done).toMatchObject({ status: 'completed', draft: 'A sharper draft.' });
+    expect(charges()).toHaveLength(1);
   });
 });
 

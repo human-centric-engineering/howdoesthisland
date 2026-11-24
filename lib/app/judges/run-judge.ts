@@ -56,6 +56,7 @@ import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
+import { tokeniserForModel } from '@/lib/orchestration/llm/tokeniser';
 import { agentPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { getProvider, isLocalProvider } from '@/lib/orchestration/llm/provider-manager';
 import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-completion';
@@ -457,10 +458,11 @@ export interface AgentStreamCall extends CallTarget, CostTags {
   /**
    * Each piece of the reply as it arrives, in order. Awaited before the next
    * is read, so a caller that saves as it goes never falls behind. A throw
-   * here stops the call; what it was billed is still recorded.
+   * here stops the call, and what it spent is recorded as a stopped one's is
+   * (see {@link streamAgent}).
    */
   onText: (text: string) => void | Promise<void>;
-  /** Stops the call: what it was billed so far is still recorded. */
+  /** Stops the call, and what it spent is recorded as for `onText`'s throw. */
   signal?: AbortSignal;
 }
 
@@ -489,6 +491,14 @@ export interface AgentStreamReply {
  * reply cut off at its ceiling, `provider_error` for anything the provider
  * raised. Under `pseudonymise`, the provider manager restores the reply's
  * placeholders chunk by chunk before `onText` sees them.
+ *
+ * **A call stopped part-way.** A provider reports a stream's usage in its
+ * last event, so one stopped before it (the caller's signal, a throw from
+ * `onText`, a dropped connection) reports none, though it was billed. One
+ * that had answered at all is recorded at an estimate
+ * ({@link estimatedUsage}), its row tagged `estimated`, so the cap and the
+ * caller's charge still see it. One stopped before any reply is recorded at
+ * nothing: whether the provider read the prompt is not known.
  */
 export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamReply> {
   const { name } = call;
@@ -497,6 +507,8 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
 
   const billed: LlmUsage[] = [];
   let text = '';
+  // Whether the provider answered at all: then it read the prompt, and billed it.
+  let answered = false;
   let outcome: { finishReason: LlmFinishReason } | { error: JudgeRunError };
   try {
     const provider = await getProvider(
@@ -523,6 +535,7 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
             ...(call.signal ? { signal: call.signal } : {}),
           }
         )) {
+          answered = true;
           if (chunk.type === 'text') {
             text += chunk.content;
             await call.onText(chunk.content);
@@ -557,7 +570,11 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
     outcome = { error: toJudgeRunError(name, err) };
   }
 
-  const { rows, spend } = await recordSpend(prepared, call, billed, outcome);
+  const estimated = billed.length === 0 && answered;
+  if (estimated) {
+    billed.push(estimatedUsage(binding.model, [agent.systemInstructions, request.prompt], text));
+  }
+  const { rows, spend } = await recordSpend(prepared, call, billed, outcome, estimated);
   if ('error' in outcome) {
     if (billed.length > 0) outcome.error.spend = spend;
     throw outcome.error;
@@ -567,6 +584,19 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
     ...spend,
     costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
     finishReason: outcome.finishReason,
+  };
+}
+
+/**
+ * What a streamed call that stopped before its usage arrived was billed, as
+ * near as can be counted: the prompt it was sent, and the reply it had
+ * streamed. Thinking it did is not counted, so this is low, never high.
+ */
+function estimatedUsage(model: string, prompt: readonly string[], reply: string): LlmUsage {
+  const tokeniser = tokeniserForModel(model);
+  return {
+    inputTokens: prompt.reduce((sum, part) => sum + tokeniser.count(part), 0),
+    outputTokens: tokeniser.count(reply),
   };
 }
 
@@ -592,7 +622,9 @@ async function recordSpend(
   prepared: PreparedCall,
   call: CostTags,
   billed: readonly LlmUsage[],
-  outcome: { error: JudgeRunError } | object
+  outcome: { error: JudgeRunError } | object,
+  /** The usage is {@link estimatedUsage}'s, not the provider's. */
+  estimated = false
 ): Promise<{ rows: Array<{ id: string; totalCostUsd: number } | null>; spend: JudgeSpend }> {
   const { agent, binding, isLocal } = prepared;
   const rows = await Promise.all(
@@ -617,6 +649,7 @@ async function recordSpend(
           ...(call.ephemeral ? { ephemeral: true } : {}),
           attempts: attempts.length,
           ...('error' in outcome ? { error: outcome.error.code } : {}),
+          ...(estimated ? { estimated: true } : {}),
         },
       });
     })

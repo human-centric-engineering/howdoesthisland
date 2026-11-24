@@ -23,7 +23,10 @@
  * (`freePlace` clears the lease, as does the recovery job's charge of one
  * whose run died, t-58) or {@link CHARGE_SWEEP_MS} after the cancel, past any
  * judge's timeout and retries and the recovery job's charge. The recovery job
- * finishes or fails the live ones, and a later pass takes them.
+ * finishes or fails the live ones, and a later pass takes them. So is one
+ * with a rewrite still `RUNNING` (t-81): the cascade would take the rewrite
+ * with it mid-call. Once the rewrite ends, or recovery fails it, a later pass
+ * takes them both.
  *
  * An assessment's cached report PDFs (t-31, `lib/app/reports/pdf/cache.ts`)
  * are deleted before its row. One whose files storage would not delete is
@@ -86,7 +89,13 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
   let contents = 0;
   if (windows.retention) {
     const cutoff = before(windows.retention.days);
-    const expired = { orgId, createdAt: { lt: cutoff }, ...settled(now) };
+    const expired = {
+      orgId,
+      createdAt: { lt: cutoff },
+      ...settled(now),
+      // Its rewrites go with it (FK cascade): not while one runs (t-81).
+      rewrites: { none: { status: 'RUNNING' as const } },
+    };
     assessments = reportPdfStore(orgId)
       ? await purgeWithReportPdfs(orgId, expired)
       : // No store that caches PDFs: there are no files to remove first.
