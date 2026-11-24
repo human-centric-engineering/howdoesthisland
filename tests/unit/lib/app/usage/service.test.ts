@@ -241,6 +241,19 @@ describe('getMonthUsage', () => {
     ]);
   });
 
+  it('counts no review kept nowhere for a run refused after its project-context searches (t-75)', async () => {
+    cost(0.4, { judge: 'ethos', ephemeral: true, ephemeralRun: 'r1', attempts: 1 });
+    cost(0.01, { ephemeral: true, ephemeralRun: 'r1', kind: 'project_context' });
+    // Refused 503 after its searches: spent, reviewed nothing.
+    cost(0.02, { ephemeral: true, ephemeralRun: 'r2', kind: 'project_context' });
+
+    const usage = await getMonthUsage(ORG);
+
+    expect(usage.lines).toEqual([
+      { kind: 'kept-nowhere', projectId: null, reviews: 1, calls: 1, spendUsd: 0.43 },
+    ]);
+  });
+
   it('reads again when the month turns during the read, so lines and total are one month', async () => {
     // Last month's rows, read just before midnight UTC on the first.
     vi.setSystemTime(new Date('2026-11-30T23:59:59.900Z'));

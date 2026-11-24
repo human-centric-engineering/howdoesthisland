@@ -89,3 +89,66 @@ export const removedDocumentSchema = z.object({
   /** True when the document left the workspace's knowledge base too; false when only the link went. */
   knowledgeDocumentDeleted: z.boolean(),
 });
+
+/**
+ * A brief as a record holds it: the request's parts, with no limits, so a
+ * record kept from before a limit changed still reads (`briefSchema` is what
+ * a request is checked against).
+ */
+export const storedBriefSchema = z.object({
+  offer: z.string().optional(),
+  audience: z.string().optional(),
+  voice: z.string().optional(),
+  markets: z.string().optional(),
+  goals: z.string().optional(),
+});
+
+/**
+ * What the AI reviewers were given of an assessment's project (t-75,
+ * `lib/app/projects/context.ts`), as the assessment records it and the API
+ * answers it.
+ */
+export const contextUsedSchema = z.object({
+  /** The brief as given, or `null` when the project had none. */
+  brief: storedBriefSchema.nullable(),
+  /** The documents a passage came from: the project's document id and its title at the time. */
+  documents: z.array(z.object({ id: z.string(), title: z.string() })),
+  /** The passages, in the order the reviewers read them, best match first. */
+  passages: z.array(
+    z.object({
+      /** The document it came from (a `documents` id). */
+      documentId: z.string(),
+      /** The knowledge chunk it is. */
+      chunkId: z.string(),
+      text: z.string(),
+    })
+  ),
+});
+
+export type ContextUsed = z.infer<typeof contextUsedSchema>;
+
+/**
+ * What a share link serves of it: whether a brief was given and the
+ * documents' titles. Not the brief's words, the passages or the ids, which
+ * are the workspace's own material.
+ */
+export const sharedContextUsedSchema = z.object({
+  brief: z.boolean(),
+  documents: z.array(z.object({ title: z.string() })),
+});
+
+export type SharedContextUsed = z.infer<typeof sharedContextUsedSchema>;
+
+/**
+ * What a share link serves of a record (`SharedContextUsed`): no words,
+ * passages or ids. One already narrowed is answered as it is.
+ */
+export function sharedContextUsed(
+  used: ContextUsed | SharedContextUsed | null | undefined
+): SharedContextUsed | null {
+  if (!used) return null;
+  return {
+    brief: typeof used.brief === 'boolean' ? used.brief : used.brief !== null,
+    documents: used.documents.map((d) => ({ title: d.title })),
+  };
+}

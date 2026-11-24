@@ -185,7 +185,11 @@ async function readMonth(orgId: string, monthStart: Date): Promise<MonthUsage> {
       line = projectId ? lines.get('project', projectId) : lines.get('no-project');
     } else if (meta?.ephemeral && meta.calibrationRunId === undefined) {
       line = lines.get('kept-nowhere');
-      if (meta.ephemeralRun) ephemeralRuns.add(meta.ephemeralRun);
+      // A review is one whose reviewers ran: a run refused after its project
+      // context's searches (t-75) spent, but reviewed nothing.
+      if (meta.ephemeralRun && (meta.judge !== undefined || meta.editor !== undefined)) {
+        ephemeralRuns.add(meta.ephemeralRun);
+      }
     } else {
       // `other`'s spend is the remainder, set below; only its calls are summed here.
       lines.get('other').calls += reviewerCalls(meta);

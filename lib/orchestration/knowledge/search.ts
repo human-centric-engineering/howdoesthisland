@@ -114,6 +114,16 @@ async function assertActiveModelMatchesStoredVectors(): Promise<void> {
   });
 }
 
+/** How a search is run, beyond what it searches for. */
+export interface SearchOptions {
+  /**
+   * `false` logs the query's length instead of its text: for a caller whose
+   * query is material it has promised to keep nowhere (HowDoesThisLand's
+   * `store: false` reviews). Defaults to logging it.
+   */
+  logQuery?: boolean;
+}
+
 /** Search filter options */
 export interface SearchFilters {
   chunkType?: string;
@@ -204,9 +214,11 @@ export async function searchKnowledgeWithEmbedding(
   filters?: SearchFilters,
   limit: number = DEFAULT_LIMIT,
   threshold: number = DEFAULT_THRESHOLD,
-  attribution?: EmbeddingAttribution
+  attribution?: EmbeddingAttribution,
+  options: SearchOptions = {}
 ): Promise<KnowledgeSearchResponse> {
-  logger.info('Knowledge search', { query, filters, limit, threshold });
+  const queryLog = options.logQuery === false ? { queryLength: query.length } : { query };
+  logger.info('Knowledge search', { ...queryLog, filters, limit, threshold });
 
   await assertActiveModelMatchesStoredVectors();
 
@@ -273,8 +285,8 @@ export async function searchKnowledgeWithEmbedding(
   const whereClause = conditions.join(' AND ');
 
   const results = weights.hybridEnabled
-    ? await runHybridSearch({ query, weights, params, paramIdx, whereClause })
-    : await runVectorOnlySearch({ query, weights, params, paramIdx, whereClause });
+    ? await runHybridSearch({ query, queryLog, weights, params, paramIdx, whereClause })
+    : await runVectorOnlySearch({ query, queryLog, weights, params, paramIdx, whereClause });
 
   return {
     results,
@@ -289,6 +301,8 @@ export async function searchKnowledgeWithEmbedding(
 
 interface SearchBranchInput {
   query: string;
+  /** The query as the result log carries it: its text, or only its length. */
+  queryLog: { query: string } | { queryLength: number };
   weights: ResolvedSearchWeights;
   params: unknown[];
   paramIdx: number;
@@ -302,6 +316,7 @@ interface SearchBranchInput {
  */
 async function runVectorOnlySearch({
   query,
+  queryLog,
   weights,
   params,
   paramIdx,
@@ -373,7 +388,7 @@ async function runVectorOnlySearch({
   >(sql, ...params);
 
   logger.info('Knowledge search results', {
-    query,
+    ...queryLog,
     resultCount: results.length,
     topDistance: results[0]?.distance,
     mode: 'vector_only',
@@ -403,6 +418,7 @@ async function runVectorOnlySearch({
  */
 async function runHybridSearch({
   query,
+  queryLog,
   weights,
   params,
   paramIdx,
@@ -469,7 +485,7 @@ async function runHybridSearch({
   >(sql, ...params);
 
   logger.info('Knowledge search results', {
-    query,
+    ...queryLog,
     resultCount: results.length,
     topFinalScore: results[0]?.final_score,
     mode: 'hybrid',

@@ -509,6 +509,38 @@ describe('buildReportView — round 3 review', () => {
   });
 });
 
+describe('buildReportView — the context used (t-75)', () => {
+  const used = {
+    brief: { offer: 'Bicycles' },
+    documents: [
+      { id: 'doc-1', title: 'Brand guide' },
+      { id: 'doc-2', title: 'Positioning paper' },
+    ],
+    passages: [{ documentId: 'doc-1', chunkId: 'c-1', text: 'Our voice is plain.' }],
+  };
+
+  it('lists the brief and the documents the reviewers read, by title', () => {
+    expect(view(apiAssessment({ contextUsed: used })).contextUsed).toEqual({
+      brief: true,
+      documents: ['Brand guide', 'Positioning paper'],
+    });
+  });
+
+  it('lists the same from what a share link serves', () => {
+    const shared = reportAssessmentSchema.parse({
+      ...sharedAssessmentSchema.parse({ ...apiAssessment(), contextUsed: null }),
+      contextUsed: { brief: false, documents: [{ title: 'Brand guide' }] },
+    });
+    expect(view(shared).contextUsed).toEqual({ brief: false, documents: ['Brand guide'] });
+  });
+
+  it('lists none outside a project, or for an answer from before it was served', () => {
+    expect(view(apiAssessment({ contextUsed: null })).contextUsed).toBeNull();
+    const { contextUsed: _omitted, ...older } = apiAssessment();
+    expect(view(reportAssessmentSchema.parse(older)).contextUsed).toBeNull();
+  });
+});
+
 describe('buildReportView — what a share link serves (t-32)', () => {
   it('reads a shared assessment, which carries no cost, as a report with none', () => {
     const shared = reportAssessmentSchema.parse(sharedAssessmentSchema.parse(apiAssessment()));

@@ -114,7 +114,8 @@ export function initAppOrgSources(): void {
         model: 'Assessment',
         section: 'assessments',
         disposition: 'export',
-        description: 'Assessments run in the workspace, with their scores and results.',
+        description:
+          'Assessments run in the workspace, with their scores and results, and what their project gave the AI reviewers.',
         fetch: ({ orgId }) =>
           prisma.assessment.findMany({
             where: ownedBy(orgId),

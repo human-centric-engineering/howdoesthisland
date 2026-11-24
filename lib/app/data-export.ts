@@ -124,7 +124,8 @@ export function initAppSubjectSources(): void {
         model: 'Assessment',
         section: 'assessments',
         disposition: 'export',
-        description: 'Assessments you asked for, with their scores and results.',
+        description:
+          'Assessments you asked for, with their scores and results, and what their project gave the AI reviewers.',
       },
       {
         model: 'ReportShare',

@@ -11,6 +11,7 @@
  * (`runAsShareOrg`). A revoked, expired or unknown token, a well-formed or
  * not, all open nothing, and the caller answers each as not found.
  */
+import { sharedContextUsed, type SharedContextUsed } from '@/lib/app/projects/wire';
 import { APIError, NotFoundError } from '@/lib/api/errors';
 import { getPublicUrl } from '@/lib/api/server-fetch';
 import { prisma } from '@/lib/db/client';
@@ -66,7 +67,11 @@ export type SharedAssessment = Pick<
   | 'text'
   | 'overlay'
   | 'result'
-> & { judgeRuns: Pick<JudgeRunView, 'judge' | 'status' | 'model'>[] };
+> & {
+  judgeRuns: Pick<JudgeRunView, 'judge' | 'status' | 'model'>[];
+  /** The context used (t-75): whether a brief was given and the documents' titles. */
+  contextUsed: SharedContextUsed | null;
+};
 
 /** What a share link opens. */
 export interface SharedReport {
@@ -331,6 +336,8 @@ function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
     overlay: a.overlay,
     result,
     judgeRuns: a.judgeRuns.map((r) => ({ judge: r.judge, status: r.status, model: r.model })),
+    // The report lists them; the brief's words and the passages stay in the workspace.
+    contextUsed: sharedContextUsed(a.contextUsed),
   };
 }
 

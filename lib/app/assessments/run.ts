@@ -72,6 +72,15 @@
  * run asks before each judge starts, so no further judge is called; the ones
  * in flight finish and are saved, and the assessment is not written again.
  *
+ * **A project's context** (t-75, `lib/app/projects/context.ts`). A run in a
+ * project, with judges to call, gathers the project's brief and passages from
+ * its background documents before the first judge, stores what it gathered
+ * on `projectContext` under the lease, and gives the same block to every
+ * judge and the editor. A re-driven run reads it back instead of searching
+ * again, so its later judges read what the first ones did. A search that
+ * fails is an error that is not a judge's: back to the queue, no judge
+ * called. Its embeddings are charged with the review (`assessmentId`).
+ *
  * **Privacy.** The run is one privacy scope (`assessment:<id>`), and each
  * judge's call sits in its agent's scope inside it (`runJudge`), so each
  * agent's privacy mode applies to its call.
@@ -102,6 +111,14 @@ import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/priva
 import { requireOrgId } from '@/lib/tenancy/context';
 import { budgetRefusal } from '@/lib/app/usage/budget';
 import { chargeEndedReview } from '@/lib/app/credits/charge';
+import {
+  buildProjectContext,
+  parseProjectContext,
+  ProjectContextError,
+  renderProjectContext,
+  type BuiltProjectContext,
+  type ProjectContextRecord,
+} from '@/lib/app/projects/context';
 
 /** How a call to {@link runAssessment} ended. */
 export type RunOutcome =
@@ -171,6 +188,8 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         createdAt: true,
         context: true,
         overlay: true,
+        projectContext: true,
+        project: { select: { id: true, brief: true } },
         createdByUserId: true,
         content: { select: { text: true, sourceUrl: true } },
         judgeRuns: { include: { reply: { select: { output: true } } } },
@@ -278,6 +297,10 @@ type AssessmentRow = {
   context: Prisma.JsonValue;
   /** The project's adjustment the run scores with (t-72), or null. */
   overlay: Prisma.JsonValue;
+  /** What an earlier run of it gave the reviewers of its project (t-75), or null. */
+  projectContext: Prisma.JsonValue;
+  /** The project it runs in, or null. */
+  project: { id: string; brief: Prisma.JsonValue } | null;
   createdByUserId: string | null;
   content: { text: string; sourceUrl: string | null };
   judgeRuns: StoredJudgeRun[];
@@ -340,6 +363,14 @@ async function drive(
     return await notScorable(row.id, token, err);
   }
 
+  // The project's context (t-75): built once, before the first judge, and
+  // read back from the row on a re-drive, so every judge and the editor read
+  // the same block.
+  const gathered = await projectContextFor(row, token);
+  if (gathered === 'lost') return await lostTo(row.id);
+  if (gathered === 'failed') return 'failed';
+  const projectContext = renderProjectContext(gathered);
+
   const outputs: Record<string, unknown> = {};
   let failures = 0;
   // A judge run again: its earlier row, whose spend the new row carries on.
@@ -394,6 +425,7 @@ async function drive(
     text,
     ctx: row.context,
     slots: missing,
+    projectContext,
     assessmentId: row.id,
     userId: row.createdByUserId,
     shouldContinue: () => stillOurs(row.id, token, lease),
@@ -426,6 +458,7 @@ async function drive(
     result,
     judges: row.judges,
     answered: Object.keys(outputs).length,
+    projectContext,
     assessmentId: row.id,
     userId: row.createdByUserId,
   });
@@ -451,6 +484,89 @@ async function drive(
   });
   if (!written) return await lostTo(row.id);
   return status === 'PARTIAL' ? 'partial' : 'completed';
+}
+
+/**
+ * The project's context for this run (t-75, `lib/app/projects/context.ts`):
+ * the record an earlier run of it stored, or one built now and stored under
+ * the lease before any judge reads it. `null` outside a project; `'lost'`
+ * when the store matched nothing (cancelled, or the lease gone). A project
+ * that gives the reviewers nothing is stored as an empty record, so a
+ * re-drive does not search again and find what the first judges never read.
+ *
+ * A search that fails is never reviewed past as if the project had no
+ * documents. When the workspace's embedding setup stops it, which asking
+ * again cannot change, the run is finished `FAILED` saying so (`'failed'`,
+ * or `'lost'`); otherwise it throws on, and the run is handed back to the
+ * queue, as for any error that is not a judge's. Either way what the searches
+ * that ran cost is added first.
+ */
+async function projectContextFor(
+  row: Pick<
+    AssessmentRow,
+    'id' | 'project' | 'projectContext' | 'judges' | 'judgeRuns' | 'createdByUserId' | 'content'
+  >,
+  token: string
+): Promise<ProjectContextRecord | null | 'lost' | 'failed'> {
+  const stored = parseProjectContext(row.projectContext);
+  if (stored) return stored;
+  // The quick scan alone calls no model, so nothing would read it.
+  if (!row.project || row.judges.length === 0) return null;
+  // Judges already ran with none stored (a run begun before the context was
+  // gathered): its later judges read what its first ones did, which was nothing.
+  if (row.judgeRuns.length > 0) return await storeContext(row.id, token, EMPTY_CONTEXT);
+  let built: BuiltProjectContext;
+  try {
+    built = await buildProjectContext(row.project, row.content.text, {
+      ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
+      // Charged with the review (`charge.ts` reads `assessmentId`).
+      metadata: { assessmentId: row.id },
+    });
+  } catch (err) {
+    if (!(err instanceof ProjectContextError)) throw err;
+    await addContextCost(row.id, token, err.costUsd);
+    if (!err.permanent) throw err;
+    logger.error('Project context cannot be gathered: the embedding setup stops it', err, {
+      assessmentId: row.id,
+    });
+    const written = await finish(row.id, token, {
+      status: 'FAILED',
+      error: err.message,
+      errorCode: 'PROJECT_CONTEXT_NOT_SET_UP',
+    });
+    return written ? 'failed' : 'lost';
+  }
+  await addContextCost(row.id, token, built.costUsd);
+  return await storeContext(row.id, token, built.record ?? EMPTY_CONTEXT);
+}
+
+/** What a project that gives the reviewers nothing is stored as. */
+const EMPTY_CONTEXT: ProjectContextRecord = { brief: null, documents: [], passages: [] };
+
+/** Store the run's context under its lease: the record, or `'lost'` when the store matched nothing. */
+async function storeContext(
+  assessmentId: string,
+  token: string,
+  record: ProjectContextRecord
+): Promise<ProjectContextRecord | 'lost'> {
+  const { count } = await prisma.assessment.updateMany({
+    where: { id: assessmentId, leaseToken: token, status: 'RUNNING' },
+    // Plain data, checked by its schema.
+    data: { projectContext: record },
+  });
+  return count === 1 ? record : 'lost';
+}
+
+/** Add the project context's cost. Already billed: logged, not thrown, as the editor's cost is. */
+async function addContextCost(assessmentId: string, token: string, costUsd: number) {
+  try {
+    await addCost(assessmentId, token, costUsd);
+  } catch (err) {
+    logger.error('Could not add the project context’s cost to the assessment', err, {
+      assessmentId,
+      costUsd,
+    });
+  }
 }
 
 /**

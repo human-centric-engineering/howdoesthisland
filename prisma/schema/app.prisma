@@ -212,6 +212,14 @@ model Assessment {
   /// The project's adjustment to the weights it was scored with (t-72), as
   /// checked against this version. Null for none.
   overlay            Json?
+  /// What the AI reviewers were given of its project (t-75,
+  /// lib/app/projects/context.ts): `{ brief, documents: [{ id, title }],
+  /// passages: [{ documentId, chunkId, text }] }`, written once by the run
+  /// before its first judge, and re-read by a re-driven run. Null outside a
+  /// project. A project that gave them nothing is stored as an empty record
+  /// (`{ brief: null, documents: [], passages: [] }`), so a re-drive does not
+  /// search again; the API answers that as `contextUsed: null`.
+  projectContext     Json?
   status             AssessmentStatus @default(QUEUED)
   /// The engine's `assemble()` output, once the run is final.
   result             Json?

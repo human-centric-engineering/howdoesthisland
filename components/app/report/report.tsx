@@ -97,6 +97,9 @@ export function Report({ view, variant }: { view: ReportView; variant: ReportVar
   }
   add('craft', 'Craft metrics', <Craft view={view} />);
   if (view.culture) add('culture', 'Culture', <Culture culture={view.culture} />);
+  if (view.contextUsed) {
+    add('context', 'Context used', <ContextUsed used={view.contextUsed} />);
+  }
   add('method', 'Method and limitations', <Method view={view} variant={variant} />);
 
   return (
@@ -479,6 +482,34 @@ function Culture({ culture }: { culture: NonNullable<ReportView['culture']> }) {
         {culture.writer ? `, written from ${culture.writer}` : ''}.
       </p>
       <ScalePositions rows={culture.scales} />
+    </div>
+  );
+}
+
+/** What the reviewers read, in one sentence. */
+function contextSentence(used: NonNullable<ReportView['contextUsed']>): string {
+  const docs =
+    used.documents.length === 1 ? 'this background document' : 'these background documents';
+  const read =
+    used.brief && used.documents.length > 0
+      ? `the project’s brief, and passages from ${docs},`
+      : used.brief
+        ? 'the project’s brief'
+        : `passages from ${docs}`;
+  return `The AI reviewers read ${read} as background, not as instructions.`;
+}
+
+function ContextUsed({ used }: { used: NonNullable<ReportView['contextUsed']> }) {
+  return (
+    <div className="grid gap-3">
+      <p>{contextSentence(used)}</p>
+      {used.documents.length > 0 ? (
+        <ul className="list-disc pl-5">
+          {used.documents.map((title, i) => (
+            <li key={`${i}-${title}`}>{title}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -51,6 +51,17 @@ const REFUSED_FOR: Record<string, string> = {
 export function ReportNoResult({ assessment }: { assessment: ReportAssessment }) {
   const cancelled = assessment.status === 'cancelled';
   const refusedFor = cancelled ? null : REFUSED_FOR[assessment.errorCode ?? ''];
+  if (!cancelled && assessment.errorCode === 'PROJECT_CONTEXT_NOT_SET_UP') {
+    return (
+      <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="This review was not started">
+        <p>
+          Its project&rsquo;s background documents could not be searched, so no AI reviewer was
+          started for it. Running it again will fail the same way until an admin fixes the knowledge
+          base&rsquo;s embedding setup.
+        </p>
+      </Panel>
+    );
+  }
   if (refusedFor) {
     return (
       <Panel slug={`${WORDS.Review} · ${assessment.status}`} title="This review was not started">

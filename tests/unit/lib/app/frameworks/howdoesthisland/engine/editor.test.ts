@@ -16,6 +16,7 @@ import {
   recommendationId,
 } from '@/lib/app/frameworks/howdoesthisland/engine/editor';
 import type { Assessment } from '@/lib/app/frameworks/howdoesthisland/engine/types';
+import { renderProjectContext } from '@/lib/app/projects/context';
 import {
   loadCases,
   loadModel,
@@ -56,6 +57,17 @@ describe('the fixture', () => {
 
 describe('buildEditorRequest', () => {
   const request = engine.buildEditorRequest(TEXT, CTX, RESULT, 'We sell bicycles.');
+
+  it('fences a project’s rendered context, passages and all, for the editor and a judge (t-75)', () => {
+    const block = renderProjectContext({
+      brief: { offer: 'Bicycles' },
+      documents: [{ id: 'd1', title: 'Brand guide' }],
+      passages: [{ documentId: 'd1', chunkId: 'c1', text: 'Our voice is plain.' }],
+    });
+    const fenced = `<project_context>\n${block}\n</project_context>`;
+    expect(engine.buildEditorRequest(TEXT, CTX, RESULT, block).prompt).toContain(fenced);
+    expect(engine.buildJudgeRequest('judge_logos', TEXT, CTX, block).prompt).toContain(fenced);
+  });
 
   it('names every recommendation by its position, with its issue and rewrite', () => {
     RESULT.recommendations.forEach((r, i) => {

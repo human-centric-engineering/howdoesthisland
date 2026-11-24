@@ -60,9 +60,11 @@ import {
   updateProjectSchema,
 } from '@/lib/app/projects/validations';
 import {
+  contextUsedSchema,
   projectDocumentSchema,
   projectSchema,
   removedDocumentSchema,
+  sharedContextUsedSchema,
 } from '@/lib/app/projects/wire';
 import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
 import { quickScanSummarySchema } from '@/lib/app/quick-scan/summary';
@@ -394,7 +396,7 @@ export const assessmentSummarySchema = z.object({
     .string()
     .nullable()
     .describe(
-      "For a failed one that has one: `INSUFFICIENT_CREDITS` (the workspace's CopyCredits no longer covered it) or `BUDGET_EXCEEDED` (its monthly AI budget no longer did) when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started and nothing was charged. `null` otherwise."
+      "For a failed one that has one: `INSUFFICIENT_CREDITS` (the workspace's CopyCredits no longer covered it) or `BUDGET_EXCEEDED` (its monthly AI budget no longer did) when a stored review was refused as it was claimed, having waited in the queue while other spend landed (after its 202, not as the 402 at request). No AI reviewer was started and nothing was charged. `PROJECT_CONTEXT_NOT_SET_UP` when the knowledge base's embedding setup stopped the search of its project's background documents, which running it again cannot change until an admin fixes it; no AI reviewer was started (t-75). `null` otherwise."
     ),
   errorDetails: reviewRefusalDetailsSchema
     .nullable()
@@ -427,6 +429,11 @@ export const sharedResultField = z.unknown();
  * is `{ weights?, priorityDimensions? }`.
  */
 export const assessmentOverlayField = z.record(z.string(), z.unknown()).nullable();
+/**
+ * What the AI reviewers were given of the assessment's project (t-75): the
+ * brief, the documents used (id and title) and the passages, or `null`.
+ */
+export const contextUsedField = contextUsedSchema.nullable();
 
 /** `AssessmentDetail`. */
 export const assessmentDetailSchema = assessmentSummarySchema.extend({
@@ -434,6 +441,7 @@ export const assessmentDetailSchema = assessmentSummarySchema.extend({
   text: z.string(),
   context: assessmentContextField,
   overlay: assessmentOverlayField,
+  contextUsed: contextUsedField,
   result: storedResultField,
   judgeRuns: z.array(judgeRunViewSchema),
 });
@@ -469,7 +477,13 @@ export const sharedAssessmentSchema = assessmentDetailSchema
     // The report's cover names it, so a reader knows the scores were weighted for this project.
     overlay: true,
   })
-  .extend({ result: sharedResultField, judgeRuns: z.array(sharedJudgeRunSchema) });
+  .extend({
+    result: sharedResultField,
+    judgeRuns: z.array(sharedJudgeRunSchema),
+    // The report lists the context used (t-75): whether a brief was given and
+    // the documents' titles, never the brief's words or the passages.
+    contextUsed: sharedContextUsedSchema.nullable(),
+  });
 
 // `reportShareSchema` and `createdReportShareSchema` live with the share
 // routes' request schemas, which the share panel imports in the browser.
@@ -500,6 +514,7 @@ export const ephemeralAssessmentSchema = z.object({
   costUsd: z.number(),
   context: assessmentContextField,
   overlay: assessmentOverlayField,
+  contextUsed: contextUsedField,
   result: assessmentResultField,
   judgeRuns: z.array(judgeRunViewSchema),
 });
