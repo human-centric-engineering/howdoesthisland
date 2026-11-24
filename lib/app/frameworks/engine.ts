@@ -8,8 +8,9 @@
  *
  * **This interface grows with the features that implement it.** §8.2 lists
  * six methods. The judge methods arrived with f-judges (t-18), and
- * `rewriteRequest` arrives with f-rewrite, together with its implementation,
- * so no method is ever a stub (B31). f-judges added one §8.2 did not list,
+ * the rewrite pair (`rewriteFocuses`, `buildRewriteRequest`) with f-rewrite
+ * (t-81), each together with its implementation, so no method is ever a
+ * stub (B31). f-judges added one §8.2 did not list,
  * `validateJudgeReply`: the post-validation a reply needs is the framework's,
  * since only it knows the ids and scales. f-assessments added `parseContext`,
  * for the same reason: a context's ids are the version's, and the editor's
@@ -62,6 +63,26 @@ export interface JudgeRequest {
  * {@link JudgeRequest} without a slot, since the editor is one agent.
  */
 export type EditorRequest = Omit<JudgeRequest, 'slot'>;
+
+/**
+ * The editor's call for a rewrite of an assessed text (t-81), as the engine
+ * builds it. The reply is plain text, streamed, so there is no schema;
+ * `maxTokens` is sized from the text's length, and `timeoutMs` is a hint as
+ * on {@link JudgeRequest}.
+ */
+export interface RewriteRequest {
+  prompt: string;
+  maxTokens: number;
+  timeoutMs: number;
+}
+
+/** A rewrite focus the framework does not have (`rewriteFocuses()`). */
+export class RewriteFocusUnknownError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RewriteFocusUnknownError';
+  }
+}
 
 /**
  * The editor's summary of an assembled result (t-25): what to do first, in a
@@ -168,6 +189,26 @@ export interface FrameworkEngine<
    * change naming a recommendation the result does not have is dropped.
    */
   validateEditorReply(reply: unknown, result: Result): JudgeReplyValidation<EditorSummary>;
+  /**
+   * What a rewrite may aim at, the first being the default: the framework's
+   * own names (for this one, `balanced` and its appeals). Added in f-rewrite
+   * (t-81).
+   */
+  rewriteFocuses(): readonly string[];
+  /**
+   * The editor's call for a rewrite of `text` from `result`, which this
+   * engine assembled from the same text and context, aimed at `focus`.
+   * `projectContext` is the project's background, as for a judge. Throws
+   * {@link RewriteFocusUnknownError} for a focus {@link rewriteFocuses} does
+   * not name. Added in f-rewrite (t-81).
+   */
+  buildRewriteRequest(
+    text: string,
+    ctx: Ctx,
+    result: Result,
+    focus: string,
+    projectContext?: string | null
+  ): RewriteRequest;
   /**
    * A project's overlay (untrusted; absent is none) checked against this
    * version's bounds. A version that declares none refuses any overlay.
