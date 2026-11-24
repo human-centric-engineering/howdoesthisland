@@ -62,7 +62,11 @@ export default async function AssessPage() {
           logic and timing: a quick scan at once, then the AI reviewers, each as it finishes.
         </p>
       </div>
-      <AssessWorkbench catalogue={catalogue} projects={projects} />
+      <AssessWorkbench
+        catalogue={catalogue}
+        version={framework.latestVersion}
+        projects={projects}
+      />
     </div>
   );
 }

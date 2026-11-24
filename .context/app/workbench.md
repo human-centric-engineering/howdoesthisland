@@ -52,6 +52,15 @@ the limit would read back as empty. Their limits (40,000 characters, an
 address of 2,048) are what the page checks before sending. A file is never kept. A project that is no longer offered
 is dropped from a restored draft.
 
+There is one draft per browser, not per tab: `useLocalStorage` passes each
+write to every tab, so two tabs on `/assess` show the same draft, and starting
+the review in one clears it in both.
+
+The review runs on the version the page loaded: the body names `framework` and
+`version`, so one published while the page is open does not change what the
+offered settings and reviewers are checked against. If that version has been
+retired since, the page asks for a reload (`FRAMEWORK_VERSION_NOT_FOUND`).
+
 ## Live progress
 
 `useReviewEvents()` follows the stream; `ReviewProgress` shows it: the quick
@@ -72,7 +81,12 @@ three times (`MAX_RETRIES`), a little later each time, then shown as lost with
 **Try again**. The count starts over only after a stream has stayed open for
 `STABLE_MS`, not on an event: each new stream replays its status, so a stream
 that fails just after would otherwise be retried forever. One the browser is
-recovering from itself shows "Reconnecting…".
+recovering from itself shows "Reconnecting…"; if it has not reconnected
+within `STALL_MS` (it never gives up by itself while the network is down),
+that counts as a failed stream and a retry.
+
+Once the review is final the page opens the report, and shows a plain link to
+it as well, in case opening it by itself fails.
 
 A review with no AI reviewer is final in its 200 answer, so the page opens
 the report straight away and opens no stream.

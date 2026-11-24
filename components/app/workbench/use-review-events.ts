@@ -41,6 +41,13 @@ export const RETRY_MS = 2_000;
  * after its replay would otherwise never run out of retries.
  */
 export const STABLE_MS = 30_000;
+/**
+ * How long the browser may spend reconnecting a stream by itself before that
+ * counts as a failed stream, and a retry. It never gives up on its own while
+ * the network is down, so without this the page would say "Reconnecting…"
+ * for ever and never offer Try again.
+ */
+export const STALL_MS = 15_000;
 
 export type Connection = 'live' | 'reconnecting' | 'lost';
 
@@ -128,11 +135,14 @@ export function useReviewEvents(
   useEffect(() => {
     let source: EventSource | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stall: ReturnType<typeof setTimeout> | undefined;
     let retries = 0;
     let openedAt: number | null = null;
     let stopped = false;
 
     const close = () => {
+      clearTimeout(stall);
+      stall = undefined;
       source?.close();
       source = null;
     };
@@ -182,6 +192,8 @@ export function useReviewEvents(
       const es = new EventSource(assessmentEventsEndpoint(id));
       source = es;
       es.addEventListener('open', () => {
+        clearTimeout(stall);
+        stall = undefined;
         openedAt = Date.now();
         dispatch({ kind: 'connection', connection: 'live' });
       });
@@ -193,6 +205,10 @@ export function useReviewEvents(
           retry();
         } else {
           dispatch({ kind: 'connection', connection: 'reconnecting' });
+          stall ??= setTimeout(() => {
+            stall = undefined;
+            if (source === es) retry();
+          }, STALL_MS);
         }
       });
     }

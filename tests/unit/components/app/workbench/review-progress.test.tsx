@@ -18,7 +18,12 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ReviewProgress } from '@/components/app/workbench/review-progress';
-import { MAX_RETRIES, RETRY_MS, STABLE_MS } from '@/components/app/workbench/use-review-events';
+import {
+  MAX_RETRIES,
+  RETRY_MS,
+  STABLE_MS,
+  STALL_MS,
+} from '@/components/app/workbench/use-review-events';
 import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 import { QUICK_RESULT } from '@/tests/unit/components/app/workbench/fixtures';
 
@@ -192,6 +197,11 @@ describe('ReviewProgress', () => {
     expect(onDone).toHaveBeenCalledWith('partial');
     expect(FakeEventSource.opened).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Opening the report');
+    // In case opening it by itself fails.
+    expect(screen.getByRole('link', { name: 'open the report' })).toHaveAttribute(
+      'href',
+      '/assessments/a-1'
+    );
   });
 
   it('says so when the review is deleted, and opens no other stream', () => {
@@ -291,6 +301,30 @@ describe('ReviewProgress', () => {
       });
     }
     expect(FakeEventSource.opened).toHaveLength(MAX_RETRIES + 3);
+    vi.useRealTimers();
+  });
+
+  it('counts a reconnect the browser never finishes as a failed stream, so the retries run out', () => {
+    vi.useFakeTimers();
+    renderProgress();
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      act(() => FakeEventSource.latest().fail('connecting'));
+      act(() => {
+        vi.advanceTimersByTime(STALL_MS);
+      });
+      expect(FakeEventSource.latest().closed).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(RETRY_MS * attempt);
+      });
+    }
+    act(() => FakeEventSource.latest().fail('connecting'));
+    act(() => {
+      vi.advanceTimersByTime(STALL_MS);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/lost touch with the review/);
+    expect(FakeEventSource.opened).toHaveLength(MAX_RETRIES + 1);
     vi.useRealTimers();
   });
 

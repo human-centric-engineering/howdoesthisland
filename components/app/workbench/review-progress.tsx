@@ -18,7 +18,7 @@ import {
   type InitialProgress,
   type ReviewProgress as Progress,
 } from '@/components/app/workbench/use-review-events';
-import type { ReviewState } from '@/components/app/workbench/schemas';
+import { reportPath, type ReviewState } from '@/components/app/workbench/schemas';
 
 export interface ReviewProgressProps {
   assessmentId: string;
@@ -90,7 +90,17 @@ export function ReviewProgress({
               ? `This ${WORDS.review} was deleted`
               : 'Still reviewing'}
         </Heading>
-        {gone ? null : (
+        {finished ? (
+          // A plain link, so it loads the page afresh: if opening the report
+          // by itself failed (a refresh lost to the network), this still works.
+          <p className="text-(--hd-muted)">
+            If it does not open,{' '}
+            <a href={reportPath(assessmentId)} className="underline">
+              open the report
+            </a>
+            .
+          </p>
+        ) : gone ? null : (
           <p className="text-(--hd-muted)">
             {landed} of {reviewers.length} {WORDS.aiReviewers} have finished. This page fills in as
             each one does, and opens the report when they all have.

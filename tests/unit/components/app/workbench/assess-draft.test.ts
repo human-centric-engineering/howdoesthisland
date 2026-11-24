@@ -154,6 +154,16 @@ describe('problemsOf for a page’s address', () => {
   });
 });
 
+describe('problemsOf for the reviewer set', () => {
+  it('refuses a set the version no longer offers, beside its picker', () => {
+    const draft = { ...EMPTY_DRAFT, text: 'Copy', profile: 'culture' };
+    expect(
+      problemsOf(draft, null, anAssessCatalogue({ culture: false }), null).map((p) => p.field)
+    ).toEqual(['assess-profile']);
+    expect(problemsOf(draft, null, anAssessCatalogue({ culture: true }), null)).toEqual([]);
+  });
+});
+
 describe('requestBodyOf', () => {
   it('sends only the ticked AI reviewers the version still offers', () => {
     const draft = {
@@ -163,7 +173,9 @@ describe('requestBodyOf', () => {
       judges: ['judge_culture', 'judge_retired', 'judge_ethos'],
     };
     const catalogue = anAssessCatalogue({ culture: false });
-    expect(requestBodyOf(draft, null, catalogue)).toMatchObject({ judges: ['judge_ethos'] });
+    expect(requestBodyOf(draft, null, catalogue, '0.5.2')).toMatchObject({
+      judges: ['judge_ethos'],
+    });
     expect(
       problemsOf({ ...draft, judges: ['judge_culture'] }, null, catalogue, null).map((p) => p.field)
     ).toEqual(['assess-reviewers']);

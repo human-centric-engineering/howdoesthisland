@@ -82,13 +82,15 @@ const STARTED_UNREADABLE = `The ${WORDS.review} has started, but this page could
 
 export interface AssessWorkbenchProps {
   catalogue: AssessCatalogue;
+  /** The version {@link catalogue} is, which the review is run on. */
+  version: string;
   /** The workspace's live projects on this framework. */
   projects: ProjectWire[];
 }
 
 const words = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length;
 
-export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
+export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenchProps) {
   const router = useRouter();
   const [stored, setStored, clearStored] = useLocalStorage<unknown>(DRAFT_KEY, EMPTY_DRAFT);
   const read = readDraft(stored);
@@ -143,7 +145,7 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
           ? { name: file.name, base64: await readAsBase64(file) }
           : null;
       const data = await apiClient.post<unknown>(ASSESSMENTS_ENDPOINT, {
-        body: requestBodyOf(draft, chosen, catalogue),
+        body: requestBodyOf(draft, chosen, catalogue, version),
       });
       // From here the review exists and is charged: whatever the reply holds,
       // the draft is spent, and nothing may invite starting it again.
@@ -380,7 +382,9 @@ export function AssessWorkbench({ catalogue, projects }: AssessWorkbenchProps) {
                 help={
                   offeredAudience.has(m.id) && m.options.length > 0
                     ? (m.help ?? `${m.name}. It changes what the AI reviewers expect of the copy.`)
-                    : 'A default this project holds for a setting this version does not take. It can only be changed on the project’s page.'
+                    : fixed.has(`modifiers.${m.id}`)
+                      ? 'A default this project holds for a setting this version does not take. It can only be changed on the project’s page.'
+                      : 'Kept from an earlier draft, for a setting this version does not take. Set it back to the model’s default.'
                 }
                 options={withStored(m.options, s.modifiers[m.id] ?? NO_DEFAULT)}
                 value={s.modifiers[m.id] ?? NO_DEFAULT}

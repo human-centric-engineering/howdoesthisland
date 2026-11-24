@@ -55,16 +55,26 @@ function field<T extends HTMLElement = HTMLElement>(label: RegExp): T {
   return screen.getByLabelText<T>(label, { selector: 'input, textarea, select' });
 }
 
+/** The version the page loaded its catalogue for. */
+const VERSION = '0.5.2';
+
 function renderWorkbench(projects = [PROJECT, BARE]) {
-  return render(<AssessWorkbench catalogue={anAssessCatalogue()} projects={projects} />);
+  return render(
+    <AssessWorkbench catalogue={anAssessCatalogue()} version={VERSION} projects={projects} />
+  );
 }
 
-/** The body of the last POST. */
+/**
+ * The body of the last POST, less the framework and version, which every
+ * request names as the ones the page loaded (checked here, each time).
+ */
 function sentBody(): Record<string, unknown> {
   const call = vi.mocked(apiClient.post).mock.calls.at(-1);
   if (!call) throw new Error('Nothing was posted');
   const options = call[1] as { body: Record<string, unknown> };
-  return options.body;
+  const { framework, version, ...rest } = options.body;
+  expect({ framework, version }).toEqual({ framework: 'howdoesthisland', version: VERSION });
+  return rest;
 }
 
 const start = () => userEvent.click(screen.getByRole('button', { name: 'Start the review' }));
@@ -194,6 +204,27 @@ describe('AssessWorkbench settings', () => {
       source: { text: 'Copy' },
       judges: ['judge_ethos', 'judge_craft'],
     });
+  });
+});
+
+describe('AssessWorkbench version', () => {
+  it('runs the review on the version the page loaded, and asks for a reload once that is retired', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError(
+        'howdoesthisland has no published version 0.5.2.',
+        'FRAMEWORK_VERSION_NOT_FOUND',
+        404
+      )
+    );
+    renderWorkbench();
+    await userEvent.type(field(/^The copy to review/), 'Copy');
+    await start();
+
+    expect(vi.mocked(apiClient.post).mock.calls[0]?.[1]).toMatchObject({
+      body: { framework: 'howdoesthisland', version: VERSION },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Reload the page/);
+    expect(window.localStorage.getItem(DRAFT_KEY)).toMatch(/Copy/);
   });
 });
 

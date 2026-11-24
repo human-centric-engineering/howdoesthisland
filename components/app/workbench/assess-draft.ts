@@ -38,6 +38,7 @@ import {
 } from '@/components/app/projects/project-defaults';
 import type { ProjectWire } from '@/components/app/projects/schemas';
 import type { AssessCatalogue } from '@/components/app/workbench/schemas';
+import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug';
 
 /** Where the browser keeps the draft. Bump the version when its shape changes. */
 export const DRAFT_KEY = 'howdoesthisland.assess.draft.v1';
@@ -309,6 +310,15 @@ export function problemsOf(
       });
     }
   }
+  if (
+    draft.profile !== CHOOSE_REVIEWERS &&
+    !profileOptions(catalogue).some((o) => o.value === draft.profile)
+  ) {
+    problems.push({
+      field: 'assess-profile',
+      message: `This version of the model has no ${WORDS.aiReviewers} set “${draft.profile}”. Pick one it offers.`,
+    });
+  }
   if (draft.profile === CHOOSE_REVIEWERS && tickedReviewers(draft, catalogue).length === 0) {
     problems.push({
       field: 'assess-reviewers',
@@ -318,11 +328,17 @@ export function problemsOf(
   return problems;
 }
 
-/** `POST /api/v1/assessments`'s body for the draft, once {@link problemsOf} finds none. */
+/**
+ * `POST /api/v1/assessments`'s body for the draft, once {@link problemsOf}
+ * finds none. It names the `version` the page's catalogue is, so the review
+ * runs on the version whose settings and reviewers were offered, not on one
+ * published since the page was opened.
+ */
 export function requestBodyOf(
   draft: Draft,
   file: ChosenFile | null,
-  catalogue: AssessCatalogue
+  catalogue: AssessCatalogue,
+  version: string
 ): Record<string, unknown> {
   const source =
     draft.source === 'text'
@@ -333,6 +349,8 @@ export function requestBodyOf(
   const context = contextOf(draft.settings);
   return {
     source,
+    framework: HOWDOESTHISLAND_SLUG,
+    version,
     ...(Object.keys(context).length ? { context } : {}),
     ...(draft.projectId !== NO_PROJECT ? { projectId: draft.projectId } : {}),
     ...(draft.profile === CHOOSE_REVIEWERS
@@ -370,6 +388,12 @@ export function refusalOf(err: unknown): Refusal | null {
         usagePage: details.success ? details.data.usagePage : USAGE_PAGE,
       };
     }
+    case 'FRAMEWORK_VERSION_NOT_FOUND':
+      return {
+        message:
+          'The model has been updated since this page was opened. Reload the page to review with the new version; your draft is kept.',
+        usagePage: null,
+      };
     case 'WORKSPACE_BUSY':
       return {
         message:
