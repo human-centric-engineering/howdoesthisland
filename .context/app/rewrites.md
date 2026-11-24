@@ -130,3 +130,11 @@ so it is charged nothing.
 assessment cascades, so a delete or the retention purge takes it. Its maker's
 FK to `user` is hand-written, SET NULL, with a drift probe. The subject and
 org exports carry rewrites without the lease or the hold.
+
+## Checking it against the database
+
+`npm run smoke:rewrite-charge` (free, no AI call) runs in a fresh workspace
+as the restricted app role. It checks that a running rewrite's estimate is
+held by the next check, that a rewrite refused for credits writes no row, that
+recovery fails and charges a lost one once, from its own cost rows only, and
+that deleting the review takes its rewrites. It cleans up after itself.
