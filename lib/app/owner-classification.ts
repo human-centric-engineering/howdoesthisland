@@ -129,6 +129,12 @@ export function initAppOwnerClassification(): void {
         because:
           'A draft the editor rewrote from one of the workspace’s reviews; `createdByUserId` is who asked for it.',
       },
+      // t-87: a comparison of drafts, read by every member, as its reviews are.
+      AssessmentSet: {
+        kind: 'not-personal',
+        because:
+          'A comparison of drafts the workspace reviewed together; `createdByUserId` is who started it.',
+      },
     },
   });
 }

@@ -94,6 +94,7 @@ model FrameworkVersion {
   links           FrameworkLink[]
   assessments     Assessment[]
   calibrationRuns CalibrationRun[]
+  assessmentSets  AssessmentSet[]
 
   @@unique([frameworkId, version])
   @@map("app_framework_version")
@@ -192,16 +193,16 @@ enum ContentSourceKind {
 /// scan, then the judges its profile chose, assembled. Runs as a job under a
 /// lease (`lib/app/assessments/run.ts`).
 model Assessment {
-  id                 String           @id @default(cuid())
+  id                 String                @id @default(cuid())
   orgId              String?
-  org                Org?             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org                Org?                  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   contentId          String
-  content            Content          @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content            Content               @relation(fields: [contentId], references: [id], onDelete: Cascade)
   /// The project it ran in (t-70), whose defaults it took. SET NULL, as on `Content`.
   projectId          String?
-  project            Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project            Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
   frameworkVersionId String
-  frameworkVersion   FrameworkVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
+  frameworkVersion   FrameworkVersion      @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
   /// The profile asked for (`quick`, `full`, a catalogue group), or `custom`
   /// for an explicit list of judges.
   profile            String
@@ -220,13 +221,13 @@ model Assessment {
   /// (`{ brief: null, documents: [], passages: [] }`), so a re-drive does not
   /// search again; the API answers that as `contextUsed: null`.
   projectContext     Json?
-  status             AssessmentStatus @default(QUEUED)
+  status             AssessmentStatus      @default(QUEUED)
   /// The engine's `assemble()` output, once the run is final.
   result             Json?
   overall            Float?
   band               String?
   /// What every judge run cost, summed.
-  costUsd            Float            @default(0)
+  costUsd            Float                 @default(0)
   /// Why the run failed, for `FAILED`. A partial run's reasons are on its judge runs.
   error              String?
   /// What kind of failure, when it has one: `BUDGET_EXCEEDED` for a review
@@ -235,7 +236,7 @@ model Assessment {
   /// Its figures, for `BUDGET_EXCEEDED`: the refusal's `details`.
   errorDetails       Json?
   /// Runs started on it. The recovery job gives up after three.
-  attempts           Int              @default(0)
+  attempts           Int                   @default(0)
   leaseToken         String?
   leaseExpiresAt     DateTime?
   requestedVia       AssessmentVia
@@ -245,11 +246,12 @@ model Assessment {
   createdByUserId    String?
   startedAt          DateTime?
   completedAt        DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
   judgeRuns          JudgeRun[]
   shares             ReportShare[]
   rewrites           Rewrite[]
+  setMembers         AssessmentSetMember[]
 
   /// The budget check's history and in-flight reads (t-54, lib/app/usage/budget.ts).
   @@index([orgId, status, createdAt])
@@ -622,6 +624,7 @@ model Project {
   contents        Content[]
   assessments     Assessment[]
   documents       ProjectDocument[]
+  assessmentSets  AssessmentSet[]
 
   @@index([orgId, archivedAt, createdAt])
   @@map("app_project")
@@ -724,4 +727,63 @@ enum RewriteStatus {
   RUNNING
   COMPLETED
   FAILED
+}
+
+/// Reviews run together to be read together (t-87, app-plan §9). A
+/// `COMPARISON` is 2–5 drafts reviewed with the same framework version,
+/// context, project and judges (`lib/app/comparisons/`). Its members are
+/// ordinary reviews; the set records what they shared, so it still says how
+/// they were reviewed once a member is purged or deleted. Its state is read
+/// from its members, not stored: a stored copy would need every run to keep
+/// it in step.
+model AssessmentSet {
+  id                 String                @id @default(cuid())
+  orgId              String?
+  org                Org?                  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  kind               AssessmentSetKind
+  /// The project its members were reviewed in, or none. SET NULL, as on `Assessment`.
+  projectId          String?
+  project            Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  frameworkVersionId String
+  frameworkVersion   FrameworkVersion      @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
+  /// As each member records it: the profile's name, or `custom`.
+  profile            String
+  /// The judge slots every member runs, in the version's order.
+  judges             String[]
+  /// Who the drafts are for, defaults applied: what every member was given.
+  context            Json
+  /// Who asked for it. FK → user, ON DELETE SET NULL (the workspace keeps it).
+  createdByUserId    String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  members            AssessmentSetMember[]
+
+  @@index([orgId, kind, createdAt])
+  @@index([projectId])
+  @@map("app_assessment_set")
+}
+
+enum AssessmentSetKind {
+  COMPARISON
+}
+
+/// One draft of a set. `assessmentId` is SET NULL, so a review deleted or
+/// purged leaves its place, read as purged, rather than breaking the set.
+model AssessmentSetMember {
+  id           String        @id @default(cuid())
+  orgId        String?
+  org          Org?          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  setId        String
+  set          AssessmentSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  assessmentId String?
+  assessment   Assessment?   @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  /// Its place in the set, from 0, as the drafts were sent.
+  position     Int
+  /// What the writer called the draft ("Subject line A"), or none.
+  label        String?
+  createdAt    DateTime      @default(now())
+
+  @@unique([setId, position])
+  @@index([assessmentId])
+  @@map("app_assessment_set_member")
 }

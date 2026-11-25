@@ -18,6 +18,8 @@ vi.mock('@/lib/db/client', () => ({
     creditEntry: { findMany: vi.fn() },
     reviewCodeRedemption: { findMany: vi.fn() },
     rewrite: { findMany: vi.fn() },
+    assessmentSet: { findMany: vi.fn() },
+    assessmentSetMember: { findMany: vi.fn() },
   },
 }));
 
@@ -75,6 +77,7 @@ describe('initAppOrgSources', () => {
       () => prisma.rewrite.findMany,
       { omit: { leaseExpiresAt: true, heldUsd: true, callStart: true } },
     ],
+    ['AssessmentSet', 'comparisons', () => prisma.assessmentSet.findMany, {}],
   ] as const)('declares %s, fetched for the exported org', async (model, section, read, extra) => {
     const rows = [{ id: 'row-1', orgId: 'org-1' }];
     vi.mocked(read()).mockResolvedValue(rows as never);
@@ -87,6 +90,20 @@ describe('initAppOrgSources', () => {
       where: ownedBy('org-1'),
       ...extra,
       orderBy: { createdAt: 'asc' },
+    });
+  });
+
+  it('declares the comparisons’ drafts, fetched for the exported org set by set, in order', async () => {
+    const rows = [{ id: 'member-1', orgId: 'org-1' }];
+    vi.mocked(prisma.assessmentSetMember.findMany).mockResolvedValue(rows as never);
+
+    const source = getAppOrgSources().find((s) => s.model === 'AssessmentSetMember');
+    expect(source).toMatchObject({ section: 'comparisonDrafts', disposition: 'export' });
+
+    expect(await source?.fetch({ orgId: 'org-1' })).toEqual(rows);
+    expect(prisma.assessmentSetMember.findMany).toHaveBeenCalledWith({
+      where: ownedBy('org-1'),
+      orderBy: [{ setId: 'asc' }, { position: 'asc' }],
     });
   });
 });
