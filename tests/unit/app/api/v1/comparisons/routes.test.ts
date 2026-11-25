@@ -205,13 +205,41 @@ function signedIn(userId: string, orgId: string) {
   });
 }
 
+const KEY_ID = 'cmkey000000000000000key1';
+/** An API key of Alice's, bound to workspace A, with `scopes`. */
+function withKey(scopes: string[]) {
+  mocks.getSession.mockResolvedValue(null);
+  mocks.apiKey.mockResolvedValue({
+    id: KEY_ID,
+    userId: ALICE,
+    scopes,
+    rateLimitRpm: null,
+    expiresAt: null,
+    createdAt: new Date(),
+    orgId: WS_A,
+    user: {
+      id: ALICE,
+      name: 'Alice',
+      email: 'alice@example.com',
+      emailVerified: true,
+      image: null,
+      role: 'USER',
+      accountType: 'HUMAN',
+      erasureRequestedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+}
+const KEY_HEADERS = { authorization: 'Bearer sk_deadbeefdeadbeefdeadbeefdeadbeef' };
+
 const BASE = 'http://localhost/api/v1/comparisons';
 
-function post(body: unknown) {
+function post(body: unknown, headers: Record<string, string> = {}) {
   return create(
     new NextRequest(BASE, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
     })
   );
@@ -394,6 +422,36 @@ describe('POST /api/v1/comparisons', () => {
         ],
       },
     ]);
+  });
+
+  it('takes drafts with no label, untitled, and records a request through an API key as the API’s', async () => {
+    withKey(['assess']);
+
+    const res = await post(
+      { judges: TWO, drafts: [{ text: DRAFT_A }, { text: DRAFT_B }] },
+      KEY_HEADERS
+    );
+
+    expect(res.status).toBe(202);
+    const created = comparisonDetailSchema.parse((await json(res)).data);
+    expect(created.drafts.map((d) => d.label)).toEqual([null, null]);
+    expect(fake.contents.map((c) => c.title)).toEqual([null, null]);
+    for (const review of fake.assessments) {
+      expect(review).toMatchObject({
+        requestedVia: 'API',
+        apiKeyId: KEY_ID,
+        createdByUserId: ALICE,
+      });
+    }
+  });
+
+  it('refuses an API key without the assess scope with 403, storing nothing', async () => {
+    withKey(['reports']);
+
+    const res = await post({ judges: TWO, drafts: drafts(DRAFT_A, DRAFT_B) }, KEY_HEADERS);
+
+    expect(res.status).toBe(403);
+    expect(fake.assessments).toEqual([]);
   });
 
   it.each([
