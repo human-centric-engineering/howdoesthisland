@@ -63,6 +63,12 @@ describe('/r/[token]', () => {
     expect(getByRole('heading', { level: 1 }).textContent).toBe('Q3 board briefing');
   });
 
+  it('offers no rewrite: the drawer is the web report’s alone (t-82)', async () => {
+    h.readSharedReport.mockResolvedValue(opened());
+    const { queryByRole } = render(await SharedReportPage({ params }));
+    expect(queryByRole('button', { name: 'Rewrite' })).toBeNull();
+  });
+
   it('shows no cost, since a link carries none', async () => {
     h.readSharedReport.mockResolvedValue(opened());
     const { container } = render(await SharedReportPage({ params }));

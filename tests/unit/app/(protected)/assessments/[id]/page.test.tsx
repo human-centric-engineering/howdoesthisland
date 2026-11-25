@@ -8,7 +8,7 @@
  * @see app/(protected)/assessments/[id]/page.tsx
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReportLoad } from '@/lib/app/reports/load';
 import { buildReportView } from '@/lib/app/reports/view';
 import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
@@ -88,6 +88,24 @@ describe('/assessments/[id]', () => {
     expect(link.closest('[data-print="hide"]')).not.toBeNull();
   });
 
+  it('offers a rewrite of a ready report, with balanced and each appeal it scored (t-82)', async () => {
+    const a = apiAssessment();
+    const view = buildReportView({
+      assessment: a,
+      result: reportResultSchema.parse(a.result),
+      model: reportModelSchema.parse(modelDocument(true)),
+    });
+    loadReport.mockResolvedValue({ kind: 'ready', view });
+    render(await ReportPage({ params }));
+    const rewrite = screen.getByRole('button', { name: 'Rewrite' });
+    expect(rewrite.closest('[data-print="hide"]')).not.toBeNull();
+    fireEvent.click(rewrite);
+    expect(screen.getAllByRole('radio').map((r) => r.getAttribute('value'))).toEqual([
+      'balanced',
+      ...view.lands.appeals.map((x) => x.id),
+    ]);
+  });
+
   it('offers no PDF while there is no report', async () => {
     loadReport.mockResolvedValue({
       kind: 'pending',
@@ -95,6 +113,7 @@ describe('/assessments/[id]', () => {
     });
     render(await ReportPage({ params }));
     expect(screen.queryByRole('link', { name: 'Download PDF' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Rewrite' })).toBeNull();
   });
 
   it('renders each state the loader can answer', async () => {

@@ -155,6 +155,7 @@ export async function followRewrite(
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     onUpdate(rewrite);
     if (rewrite.status !== 'running') return rewrite;
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, everyMs);
       signal.addEventListener(
