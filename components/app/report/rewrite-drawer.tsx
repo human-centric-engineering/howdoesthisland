@@ -1,0 +1,494 @@
+'use client';
+
+/**
+ * Rewriting a review's copy from its report (t-82, `.context/app/rewrites.md`).
+ *
+ * A drawer off the report's actions. The writer picks a focus (balanced, or
+ * one appeal) and the editor's draft streams in as it is written
+ * (`POST /api/v1/rewrites`, `stream: true`). A finished draft can be copied,
+ * or reviewed as a new review with the original's reader context, project
+ * and AI reviewers, which then opens.
+ *
+ * Opening the drawer reads the review's earlier rewrites (one call for the
+ * whole list, each with its draft), and any of them reopens. One still being
+ * written is read again until it ends, rather than started again.
+ *
+ * **A stream that drops is never answered with a second rewrite.** The
+ * rewrite carries on, and is charged, on the server whatever the reader does,
+ * so the drawer reads the stored one to its end (`followRewrite`). The same
+ * holds when the drawer is closed mid-draft: it is listed, writing, on the
+ * next open.
+ *
+ * A refusal (no credits, over budget, too many at once) is shown beside the
+ * button that was pressed, with `<SaveError>`, in the assess page's words.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Check, Copy, Loader2, PenLine } from 'lucide-react';
+import { z } from 'zod';
+import { apiClient } from '@/lib/api/client';
+import { useSaveFailure } from '@/lib/hooks/use-save-failure';
+import { WORDS } from '@/lib/app/reports/words';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { FieldHelp } from '@/components/ui/field-help';
+import { SaveError } from '@/components/forms/form-error';
+import { ASSESSMENTS_ENDPOINT, reportPath } from '@/components/app/workbench/schemas';
+import {
+  failureMessage,
+  followRewrite,
+  listRewrites,
+  mergeRewrites,
+  originalReviewSchema,
+  reviewDraftBody,
+  reviewDraftRefusalOf,
+  rewriteRefusalOf,
+  startedSince,
+  streamRewrite,
+  type RewriteWire,
+} from '@/components/app/report/rewrite-client';
+import { BALANCED, type RewriteFocusOption } from '@/components/app/report/rewrite-focuses';
+
+const createdIdSchema = z.object({ id: z.string().min(1) });
+
+const timeFormat = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+const STATE_LABEL: Record<RewriteWire['status'], string> = {
+  running: 'Writing…',
+  completed: 'Done',
+  failed: 'Stopped',
+};
+
+type Phase = 'idle' | 'writing' | 'ended';
+
+const isAbort = (err: unknown): boolean => err instanceof DOMException && err.name === 'AbortError';
+
+export function RewriteDrawer({
+  assessmentId,
+  focuses,
+}: {
+  assessmentId: string;
+  focuses: RewriteFocusOption[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [focus, setFocus] = useState(BALANCED);
+  const [phase, setPhase] = useState<Phase>('idle');
+  /** The rewrite shown, once it exists; `null` before its first event. */
+  const [shown, setShown] = useState<RewriteWire | null>(null);
+  const [draft, setDraft] = useState('');
+  const [earlier, setEarlier] = useState<RewriteWire[] | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [usagePage, setUsagePage] = useState<string | null>(null);
+  const [reviewUsagePage, setReviewUsagePage] = useState<string | null>(null);
+  const rewrite = useSaveFailure({ fallback: 'The rewrite could not be started. Try again.' });
+  const review = useSaveFailure({
+    fallback: `The ${WORDS.review} of this draft could not be started. Try again.`,
+  });
+  const listFailure = useSaveFailure({
+    fallback: 'The earlier rewrites could not be read. Close this and open it again.',
+  });
+  /** Stops whatever is reading a rewrite: a stream, or the reads following one. */
+  const reading = useRef<AbortController | null>(null);
+  /** Every rewrite seen since the page opened, as last seen: laid over each list read. */
+  const seen = useRef(new Map<string, RewriteWire>());
+  /** Bumped by each list read and by closing, so only the latest read's answer is shown. */
+  const listRead = useRef(0);
+  /**
+   * The ids the server last listed, this open: what a rewrite found after a
+   * drop must not be. `null` until a read succeeds; never the rows the drawer
+   * remembered itself, which are not the server's word on what was there.
+   */
+  const listed = useRef<ReadonlySet<string> | null>(null);
+
+  const nameOf = useCallback(
+    (id: string) => focuses.find((f) => f.id === id)?.name ?? id,
+    [focuses]
+  );
+
+  const remember = useCallback((r: RewriteWire) => {
+    seen.current.set(r.id, r);
+    // A list that could not be read stays unread: one row is not the history.
+    setEarlier((list) => (list ? mergeRewrites(list, [r]) : list));
+  }, []);
+
+  const stopReading = () => {
+    reading.current?.abort();
+    reading.current = null;
+  };
+
+  const newReader = (): AbortSignal => {
+    stopReading();
+    const controller = new AbortController();
+    reading.current = controller;
+    return controller.signal;
+  };
+
+  useEffect(() => () => reading.current?.abort(), []);
+
+  const showEnded = useCallback(
+    (r: RewriteWire) => {
+      setShown(r);
+      setDraft(r.draft);
+      setPhase('ended');
+      remember(r);
+      if (r.status === 'failed') rewrite.show(failureMessage(r));
+    },
+    [remember, rewrite]
+  );
+
+  /**
+   * Read a stored rewrite to its end: one reopened while it runs, or whose
+   * stream dropped. While it runs, the draft shown only grows: the stored one
+   * is saved every few seconds, so it can be behind what streamed. Once it
+   * ends, the stored draft is the whole of it.
+   */
+  const follow = async (r: RewriteWire, signal: AbortSignal) => {
+    setShown(r);
+    setDraft((d) => (r.draft.length > d.length ? r.draft : d));
+    setPhase('writing');
+    try {
+      const ended = await followRewrite(
+        r.id,
+        (now) => {
+          setShown(now);
+          setDraft((d) => (now.draft.length > d.length ? now.draft : d));
+          remember(now);
+        },
+        signal
+      );
+      showEnded(ended);
+    } catch (err) {
+      if (isAbort(err) || signal.aborted) return;
+      setPhase('ended');
+      rewrite.show(
+        'The rewrite could not be read. Close this and open it again to see where it got to.'
+      );
+    }
+  };
+
+  const loadEarlier = async (): Promise<RewriteWire[] | null> => {
+    const read = ++listRead.current;
+    try {
+      const fromServer = await listRewrites(assessmentId);
+      const list = mergeRewrites(fromServer, seen.current.values());
+      if (read === listRead.current) {
+        listed.current = new Set(fromServer.map((r) => r.id));
+        setEarlier(list);
+        listFailure.clear();
+      }
+      return list;
+    } catch (err) {
+      if (read === listRead.current) listFailure.report(err);
+      return null;
+    }
+  };
+
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      void loadEarlier();
+      return;
+    }
+    // The rewrite carries on without the drawer; it is listed on the next open.
+    stopReading();
+    listRead.current++;
+    listed.current = null;
+    setEarlier(null);
+    setPhase('idle');
+    setShown(null);
+    setDraft('');
+    setCopied(false);
+    rewrite.clear();
+    review.clear();
+  };
+
+  const write = async () => {
+    rewrite.clear();
+    review.clear();
+    setUsagePage(null);
+    setCopied(false);
+    const signal = newReader();
+    setShown(null);
+    setDraft('');
+    setPhase('writing');
+    // What was listed before asking: a rewrite found after a drop must be
+    // new. Pressed before the list arrived, it is read first; with no list,
+    // a drop is never matched to a rewrite (`known` stays null).
+    if (!listed.current) await loadEarlier();
+    if (signal.aborted) return;
+    const known = listed.current;
+    try {
+      const outcome = await streamRewrite(
+        assessmentId,
+        focus,
+        {
+          onStart: (r) => {
+            setShown(r);
+            remember(r);
+          },
+          onText: (text) => setDraft((d) => d + text),
+        },
+        signal
+      );
+      if (outcome.kind === 'done') {
+        showEnded(outcome.rewrite);
+        return;
+      }
+      if (outcome.rewrite) {
+        await follow(outcome.rewrite, signal);
+        return;
+      }
+      // Dropped before its first event: it may still have started.
+      const list = await loadEarlier();
+      if (signal.aborted) return;
+      const started =
+        list && known ? startedSince(list, { sentAt: outcome.sentAt, focus, known }) : null;
+      if (started) {
+        await follow(started, signal);
+        return;
+      }
+      setPhase('idle');
+      rewrite.show(
+        list && known
+          ? 'The connection dropped before the rewrite started. If it did start, it is listed below.'
+          : 'The connection dropped before the rewrite started, and the earlier rewrites could not be read. Close this and open it again before trying again: if it did start, it will be listed.'
+      );
+    } catch (err) {
+      if (signal.aborted) return;
+      setPhase('idle');
+      const refusal = rewriteRefusalOf(err);
+      if (refusal) {
+        rewrite.show(refusal.message);
+        setUsagePage(refusal.usagePage);
+      } else {
+        rewrite.report(err);
+      }
+    }
+  };
+
+  const reopen = (r: RewriteWire) => {
+    rewrite.clear();
+    review.clear();
+    setUsagePage(null);
+    setReviewUsagePage(null);
+    setCopied(false);
+    const signal = newReader();
+    setDraft('');
+    if (r.status === 'running') void follow(r, signal);
+    else showEnded(r);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+    } catch {
+      // No clipboard (an insecure origin, a denied permission): the draft is
+      // selected for the reader to copy by hand.
+      const box = document.getElementById('rewrite-draft');
+      if (box) window.getSelection()?.selectAllChildren(box);
+    }
+  };
+
+  const reviewDraft = async () => {
+    review.clear();
+    setReviewUsagePage(null);
+    setReviewing(true);
+    try {
+      const original = originalReviewSchema.parse(
+        await apiClient.get<unknown>(`${ASSESSMENTS_ENDPOINT}/${encodeURIComponent(assessmentId)}`)
+      );
+      const created = createdIdSchema.parse(
+        await apiClient.post<unknown>(ASSESSMENTS_ENDPOINT, {
+          body: reviewDraftBody(original, draft),
+        })
+      );
+      router.push(reportPath(created.id));
+    } catch (err) {
+      const refusal = reviewDraftRefusalOf(err);
+      if (refusal) {
+        review.show(refusal.message);
+        setReviewUsagePage(refusal.usagePage);
+      } else {
+        review.report(err);
+      }
+      setReviewing(false);
+    }
+  };
+
+  const writing = phase === 'writing';
+  const finished = phase === 'ended' && shown?.status === 'completed';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <PenLine aria-hidden="true" />
+          Rewrite
+        </Button>
+      </DialogTrigger>
+      <DialogContent
+        className="data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 top-0 right-0 left-auto flex h-dvh w-full max-w-2xl translate-x-0 translate-y-0 flex-col gap-5 overflow-y-auto rounded-none sm:rounded-none"
+        aria-describedby="rewrite-drawer-description"
+      >
+        <DialogHeader>
+          <DialogTitle>Rewrite the copy</DialogTitle>
+          <DialogDescription id="rewrite-drawer-description">
+            The editor rewrites the copy from this {WORDS.review}&rsquo;s findings. Each rewrite is
+            charged in credits, as a {WORDS.review} is.
+          </DialogDescription>
+        </DialogHeader>
+
+        <fieldset className="space-y-2" disabled={writing}>
+          <legend className="mb-2 flex items-center gap-1 text-sm font-medium">
+            Focus
+            <FieldHelp title="Focus">
+              What the editor works on. Balanced works on the copy as a whole; an appeal raises that
+              one without weakening the others. You can rewrite again with another focus: each
+              rewrite is kept below.
+            </FieldHelp>
+          </legend>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            {focuses.map((f) => (
+              <div key={f.id} className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  id={`rewrite-focus-${f.id}`}
+                  name="rewrite-focus"
+                  value={f.id}
+                  checked={focus === f.id}
+                  onChange={() => setFocus(f.id)}
+                />
+                <label htmlFor={`rewrite-focus-${f.id}`}>{f.name}</label>
+                <FieldHelp title={f.name} ariaLabel={`About ${f.name}`}>
+                  {f.help}
+                </FieldHelp>
+              </div>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="space-y-2">
+          <Button type="button" onClick={() => void write()} disabled={writing || reviewing}>
+            {writing ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden="true" />
+                Writing…
+              </>
+            ) : (
+              'Write a rewrite'
+            )}
+          </Button>
+          <SaveError failure={rewrite.failure} />
+          {rewrite.failure && usagePage ? (
+            <p className="text-sm">
+              <Link href={usagePage} className="underline">
+                See this month&rsquo;s usage
+              </Link>
+            </p>
+          ) : null}
+        </div>
+
+        {phase !== 'idle' ? (
+          <section aria-labelledby="rewrite-draft-heading" className="space-y-3">
+            <h3 id="rewrite-draft-heading" className="text-sm font-medium">
+              {shown ? `${nameOf(shown.focus)} rewrite` : 'Rewrite'}
+              {writing ? ' · writing…' : ''}
+            </h3>
+            <div
+              id="rewrite-draft"
+              aria-busy={writing}
+              className="min-h-40 rounded-md border bg-(--hd-paper) p-4 text-sm leading-relaxed whitespace-pre-wrap"
+            >
+              {draft || (writing ? 'The editor is starting…' : '')}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void copy()}
+                disabled={draft === '' || writing}
+              >
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void reviewDraft()}
+                disabled={!finished || reviewing}
+              >
+                {reviewing ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+                Review this draft
+              </Button>
+              <FieldHelp title="Review this draft">
+                Starts a new {WORDS.review} of this draft with the original&rsquo;s reader settings,
+                project and {WORDS.aiReviewers}, and opens it. It is charged as any {WORDS.review}{' '}
+                is.
+              </FieldHelp>
+            </div>
+            <SaveError failure={review.failure} />
+            {review.failure && reviewUsagePage ? (
+              <p className="text-sm">
+                <Link href={reviewUsagePage} className="underline">
+                  See this month&rsquo;s usage
+                </Link>
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section aria-labelledby="rewrite-earlier-heading" className="space-y-2 border-t pt-4">
+          <h3 id="rewrite-earlier-heading" className="text-sm font-medium">
+            Earlier rewrites
+          </h3>
+          <SaveError failure={listFailure.failure} />
+          {earlier === null ? (
+            listFailure.failure ? null : (
+              <p className="text-sm text-(--hd-muted)">Loading…</p>
+            )
+          ) : earlier.length === 0 ? (
+            <p className="text-sm text-(--hd-muted)">None yet.</p>
+          ) : (
+            <ul className="divide-y text-sm">
+              {earlier.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-4 py-2 text-left hover:underline disabled:opacity-60 disabled:hover:no-underline"
+                    aria-current={shown?.id === r.id ? 'true' : undefined}
+                    onClick={() => reopen(r)}
+                    // Reopening another would stop the stream: text not yet
+                    // saved would be lost from view.
+                    disabled={writing}
+                  >
+                    <span>
+                      {nameOf(r.focus)} · {timeFormat.format(new Date(r.createdAt))}
+                    </span>
+                    <span className="text-(--hd-muted)">{STATE_LABEL[r.status]}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </DialogContent>
+    </Dialog>
+  );
+}

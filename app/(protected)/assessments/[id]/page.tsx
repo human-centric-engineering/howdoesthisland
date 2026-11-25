@@ -8,6 +8,7 @@ import { assessCatalogueSchema } from '@/components/app/workbench/schemas';
 import { reviewerName } from '@/components/app/workbench/assess-draft';
 import { Report } from '@/components/app/report/report';
 import { ReportActions } from '@/components/app/report/report-actions';
+import { rewriteFocuses } from '@/components/app/report/rewrite-focuses';
 import {
   ReportNoResult,
   ReportPending,
@@ -23,8 +24,9 @@ export const metadata: Metadata = { title: 'Report' };
  * model version it ran on. Another workspace's id is a 404 from the API, so it
  * renders the not-found page, the same as an id that does not exist.
  *
- * A ready report offers its PDF (t-31). One still running shows its live
- * progress, then the report once it is final (t-78).
+ * A ready report offers its PDF (t-31), and a rewrite of its copy (t-82).
+ * One still running shows its live progress, then the report once it is
+ * final (t-78).
  */
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,7 +39,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     case 'ready':
       return (
         <>
-          <ReportActions assessmentId={id} />
+          <ReportActions assessmentId={id} focuses={rewriteFocuses(load.view.lands.appeals)} />
           <Report view={load.view} variant="web" />
         </>
       );

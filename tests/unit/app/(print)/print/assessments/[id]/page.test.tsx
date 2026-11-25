@@ -79,6 +79,12 @@ describe('/print/assessments/[id]', () => {
     );
   });
 
+  it('offers no rewrite: the drawer is the web report’s alone (t-82)', async () => {
+    h.loadReport.mockResolvedValue(ready());
+    const { queryByRole } = render(await PrintReportPage({ params }));
+    expect(queryByRole('button', { name: 'Rewrite' })).toBeNull();
+  });
+
   it('is not found when the token is refused', async () => {
     h.runAsReportOrg.mockResolvedValue({ ok: false, refused: 'token', reason: 'expired' });
     await expect(PrintReportPage({ params })).rejects.toThrow('NEXT_NOT_FOUND');
