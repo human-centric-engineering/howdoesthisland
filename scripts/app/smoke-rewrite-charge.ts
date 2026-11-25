@@ -220,7 +220,9 @@ async function main(): Promise<number> {
         where: { orgId: org.id, metadata: { path: ['rewriteId'], equals: midStream.id } },
       });
       const [estimate] = estimates;
-      const tags = (estimate?.metadata ?? {}) as Record<string, unknown>;
+      const metadata = estimate?.metadata;
+      const tags =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
       check(
         estimates.length === 1 &&
           estimate.agentId === editor.id &&
