@@ -28,6 +28,12 @@
  * with it mid-call. Once the rewrite ends, or recovery fails it, a later pass
  * takes them both.
  *
+ * A comparison of drafts (t-87) is not purged with a review: the review's
+ * draft keeps its place in the set, read as purged (the member's link is SET
+ * NULL). The set itself goes once it is past the content window and none of
+ * its drafts has a review left, so a comparison inside the window, or with
+ * a draft still inside it, is kept and reads what is left.
+ *
  * An assessment's cached report PDFs (t-31, `lib/app/reports/pdf/cache.ts`)
  * are deleted before its row. One whose files storage would not delete is
  * kept for the next pass, so a PDF never outlives its window with nothing
@@ -74,6 +80,8 @@ export interface PurgeResult {
   assessments: number;
   /** Content rows deleted past the content window. */
   contents: number;
+  /** Comparisons past the content window with no review left (their drafts' places went with them). */
+  comparisons: number;
   /** Judge replies deleted past the reply window. */
   replies: number;
 }
@@ -87,6 +95,7 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
 
   let assessments = 0;
   let contents = 0;
+  let comparisons = 0;
   if (windows.retention) {
     const cutoff = before(windows.retention.days);
     const expired = {
@@ -103,6 +112,13 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
     ({ count: contents } = await prisma.content.deleteMany({
       where: { orgId, createdAt: { lt: cutoff }, assessments: { none: {} } },
     }));
+    ({ count: comparisons } = await prisma.assessmentSet.deleteMany({
+      where: {
+        orgId,
+        createdAt: { lt: cutoff },
+        members: { none: { assessmentId: { not: null } } },
+      },
+    }));
   }
 
   let replies = 0;
@@ -116,7 +132,7 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
     }));
   }
 
-  return { assessments, contents, replies };
+  return { assessments, contents, comparisons, replies };
 }
 
 /** Expired assessments taken per round when their PDFs go first. */

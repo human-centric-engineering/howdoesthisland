@@ -46,6 +46,8 @@ import {
   reportShareSchema,
   rewriteEventSchema,
   rewriteSchema,
+  comparisonDetailSchema,
+  comparisonSummarySchema,
   sharedAssessmentSchema,
   sharedReportSchema,
   versionMetaSchema,
@@ -81,6 +83,7 @@ import type {
 import type { PaginationMeta } from '@/types/api';
 import type { RewriteEvent } from '@/lib/app/rewrites/service';
 import type { RewriteView } from '@/lib/app/rewrites/views';
+import type { ComparisonDetail, ComparisonSummary } from '@/lib/app/comparisons/views';
 import type { FrameworkCalibration, StartedRun } from '@/lib/app/calibration/admin';
 import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
 import {
@@ -107,6 +110,8 @@ const APP_ROUTE_DIRS = [
   'projects',
   // Rewrites of a review (t-81).
   'rewrites',
+  // Comparisons of drafts (t-87).
+  'comparisons',
   'scan',
   'shared-reports',
   'shares',
@@ -374,6 +379,10 @@ describe('response schemas match what the services return', () => {
     expectTypeOf<z.infer<typeof reportShareSchema>>().toEqualTypeOf<Wire<ReportShareView>>();
     expectTypeOf<z.infer<typeof rewriteSchema>>().toEqualTypeOf<Wire<RewriteView>>();
     expectTypeOf<z.infer<typeof rewriteEventSchema>>().toEqualTypeOf<Wire<RewriteEvent>>();
+    expectTypeOf<z.infer<typeof comparisonSummarySchema>>().toEqualTypeOf<
+      Wire<ComparisonSummary>
+    >();
+    expectTypeOf<z.infer<typeof comparisonDetailSchema>>().toEqualTypeOf<Wire<ComparisonDetail>>();
     expectTypeOf<z.infer<typeof createdReportShareSchema>>().toEqualTypeOf<
       Wire<CreatedReportShare>
     >();

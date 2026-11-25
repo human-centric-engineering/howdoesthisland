@@ -92,4 +92,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/projects/',
   // Rewrites: a draft the editor writes from a finished review (t-81).
   'lib/app/rewrites/',
+  // Comparisons: 2–5 drafts reviewed the same way and read together (t-87).
+  'lib/app/comparisons/',
 ];

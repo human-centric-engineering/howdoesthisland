@@ -89,6 +89,12 @@ import {
 } from '@/lib/app/workspaces/validations';
 import { monthUsageSchema, reviewRefusalDetailsSchema } from '@/lib/app/usage/wire';
 import { rewriteEventSchema, rewriteSchema } from '@/lib/app/rewrites/wire';
+import { comparisonDetailSchema, comparisonSummarySchema } from '@/lib/app/comparisons/wire';
+import {
+  comparisonIdParamSchema,
+  createComparisonSchema,
+  listComparisonsQuerySchema,
+} from '@/lib/app/comparisons/validations';
 import {
   createRewriteSchema,
   listRewritesQuerySchema,
@@ -526,6 +532,8 @@ export const sharedAssessmentSchema = assessmentDetailSchema
 export { createdReportShareSchema, reportShareSchema };
 // `rewriteSchema` and `rewriteEventSchema` live with the rewrites (t-81).
 export { rewriteEventSchema, rewriteSchema };
+// The comparison's live with the comparisons (t-87).
+export { comparisonDetailSchema, comparisonSummarySchema };
 
 /**
  * `SharedReport`, less its model, plus the version's catalogue: what
@@ -973,6 +981,56 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: ASSESS,
     request: { params: rewriteIdParamSchema },
     response: { status: 200, data: rewriteSchema },
+  },
+  // Comparisons (t-87).
+  {
+    method: 'POST',
+    path: '/api/v1/comparisons',
+    summary:
+      "Review 2–5 drafts the same way, to read together: every draft gets the same framework version, context, project and AI reviewers. Each is an ordinary review, in the workspace's history and titled with its label. Answered 202 at once; follow the comparison with its GET. Each draft counts as a review against the per-user limit.",
+    auth: ASSESS,
+    request: { body: createComparisonSchema },
+    errors: [
+      {
+        status: 402,
+        code: 'INSUFFICIENT_CREDITS',
+        description:
+          "The workspace's CopyCredits, less what its reviews and rewrites in flight hold, do not cover every draft's estimate together. Nothing was stored and no draft was reviewed. `details` as for a review, `estimateCredits` being every draft's.",
+      },
+      {
+        status: 402,
+        code: 'BUDGET_EXCEEDED',
+        description:
+          "Every draft's estimate together is more than what is left of the workspace's monthly AI budget. Nothing was stored. `details` as for a review.",
+      },
+    ],
+    response: { status: 202, data: comparisonDetailSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/comparisons',
+    summary:
+      "List the workspace's comparisons, newest first, each with its drafts' states and scores. Filter by `projectId`.",
+    auth: ASSESS,
+    request: { query: listComparisonsQuerySchema },
+    response: { status: 200, data: z.array(comparisonSummarySchema), meta: paginationMetaSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/comparisons/{id}',
+    summary:
+      "Get one comparison: each draft's state and scores and, once two are scored, per appeal each draft's difference from the best and the leaders. A draft whose review was deleted or purged reads as `purged`.",
+    auth: ASSESS,
+    request: { params: comparisonIdParamSchema },
+    response: { status: 200, data: comparisonDetailSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/comparisons/{id}',
+    summary: "Delete a comparison. Its drafts' reviews stay in the workspace's history.",
+    auth: ASSESS,
+    request: { params: comparisonIdParamSchema },
+    response: { status: 200, data: assessmentDeletedSchema },
   },
   {
     method: 'POST',

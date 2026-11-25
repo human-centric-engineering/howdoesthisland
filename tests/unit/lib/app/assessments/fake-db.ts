@@ -48,6 +48,13 @@
  * (`orderBy: { createdAt }` and `take`), `findFirst`, `findUnique`, `count`,
  * `create`, `update` and `updateMany`, gone with their assessment (the
  * cascade).
+ *
+ * For comparisons (t-87): `assessmentSet` rows in `sets` and their members in
+ * `setMembers`. A set is read with its `members` (in position order, each
+ * with its `assessment` or `null`), `project` and `frameworkVersion`; its
+ * `deleteMany` honours `members: { none: { assessmentId: { not: null } } }`
+ * and takes its members with it (the cascade). An assessment deleted leaves
+ * its member with `assessmentId: null` (SET NULL).
  */
 import { vi } from 'vitest';
 
@@ -125,12 +132,18 @@ export function createFakeDb() {
   const projectDocuments: Row[] = [];
   const knowledgeDocuments: Row[] = [];
   const rewrites: Row[] = [];
+  const sets: Row[] = [];
+  const setMembers: Row[] = [];
   let seq = 0;
   /** The tail of the transaction queue: each waits for the one before. */
   let txQueue: Promise<unknown> = Promise.resolve();
 
   /** Remove an assessment's judge runs, and their replies, and its rewrites (the cascade). */
   const dropRunsOf = (assessmentId: unknown) => {
+    // A comparison's member keeps its place, its review gone (SET NULL).
+    for (const member of setMembers) {
+      if (member.assessmentId === assessmentId) member.assessmentId = null;
+    }
     for (let i = rewrites.length - 1; i >= 0; i -= 1) {
       if (rewrites[i]?.assessmentId === assessmentId) rewrites.splice(i, 1);
     }
@@ -152,6 +165,19 @@ export function createFakeDb() {
       .map((r) => ({ ...r, reply: replies.find((p) => p.judgeRunId === r.id) ?? null })),
     frameworkVersion: { version: '0.5.1', framework: { slug: 'howdoesthisland' } },
     project: projects.find((p) => p.id === row.projectId) ?? null,
+  });
+
+  const setWithRelations = (row: Row): Row => ({
+    ...row,
+    project: projects.find((p) => p.id === row.projectId) ?? null,
+    frameworkVersion: { version: '0.5.1', framework: { slug: 'howdoesthisland' } },
+    members: setMembers
+      .filter((m) => m.setId === row.id)
+      .sort((x, y) => Number(x.position) - Number(y.position))
+      .map((m) => ({
+        ...m,
+        assessment: assessments.find((a) => a.id === m.assessmentId) ?? null,
+      })),
   });
 
   type Order = { createdAt?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }[];
@@ -495,6 +521,65 @@ export function createFakeDb() {
         return { count: rows.length };
       }),
     },
+    assessmentSet: {
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        seq += 1;
+        const row: Row = { id: `set-${seq}`, createdAt: new Date(), ...data };
+        sets.push(row);
+        return { id: row.id };
+      }),
+      findUnique: vi.fn(async ({ where }: { where: Row }) => {
+        const row = sets.find((r) => matches(r, where));
+        return row ? setWithRelations(row) : null;
+      }),
+      findMany: vi.fn(
+        async ({
+          where,
+          take,
+          skip,
+          orderBy,
+        }: {
+          where?: Row;
+          take?: number;
+          skip?: number;
+          orderBy?: Order;
+        }) => {
+          const rows = ordered(
+            sets.filter((r) => matches(r, where)),
+            orderBy
+          );
+          const from = skip ?? 0;
+          return rows.slice(from, from + (take ?? rows.length)).map(setWithRelations);
+        }
+      ),
+      count: vi.fn(
+        async ({ where }: { where?: Row }) => sets.filter((r) => matches(r, where)).length
+      ),
+      deleteMany: vi.fn(async ({ where }: { where: Row & { members?: { none: Row } } }) => {
+        const { members: rel, ...own } = where;
+        const gone = sets.filter(
+          (r) =>
+            matches(r, own) &&
+            !(rel && setMembers.some((m) => m.setId === r.id && matches(m, rel.none)))
+        );
+        for (const row of gone) {
+          sets.splice(sets.indexOf(row), 1);
+          for (let i = setMembers.length - 1; i >= 0; i -= 1) {
+            if (setMembers[i]?.setId === row.id) setMembers.splice(i, 1);
+          }
+        }
+        return { count: gone.length };
+      }),
+    },
+    assessmentSetMember: {
+      createMany: vi.fn(async ({ data }: { data: Row[] }) => {
+        for (const member of data) {
+          seq += 1;
+          setMembers.push({ id: `member-${seq}`, createdAt: new Date(), ...member });
+        }
+        return { count: data.length };
+      }),
+    },
     aiKnowledgeDocument: {
       findMany: vi.fn(async ({ where }: { where?: Row }) =>
         knowledgeDocuments.filter((r) => matches(r, where)).map((r) => ({ ...r }))
@@ -614,6 +699,8 @@ export function createFakeDb() {
     projectDocuments,
     knowledgeDocuments,
     rewrites,
+    sets,
+    setMembers,
     withReply,
     seed,
     addCost,
