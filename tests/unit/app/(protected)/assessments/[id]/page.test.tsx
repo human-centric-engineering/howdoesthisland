@@ -8,7 +8,7 @@
  * @see app/(protected)/assessments/[id]/page.tsx
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReportLoad } from '@/lib/app/reports/load';
 import { buildReportView } from '@/lib/app/reports/view';
 import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
@@ -32,6 +32,8 @@ vi.mock('@/lib/app/reports/load', () => ({ loadReport, apiReportSource }));
 const loadServerData = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api/server-load', () => ({ loadServerData }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+const logger = vi.hoisted(() => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger }));
 
 import ReportPage, { metadata } from '@/app/(protected)/assessments/[id]/page';
 
@@ -42,6 +44,7 @@ beforeEach(() => {
   getServerSession.mockReset().mockResolvedValue({ user: { id: 'u1' }, session: { id: 's1' } });
   clearInvalidSession.mockClear();
   loadReport.mockReset();
+  logger.warn.mockClear();
   loadServerData
     .mockReset()
     .mockResolvedValue({ ok: true, data: anAssessCatalogue(), meta: undefined });
@@ -65,7 +68,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view });
+    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
     const { container } = render(await ReportPage({ params }));
     // Read through the API, as the signed-in reader.
     expect(loadReport).toHaveBeenCalledWith('asm_1', apiReportSource);
@@ -80,7 +83,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view });
+    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
     render(await ReportPage({ params }));
     const link = screen.getByRole('link', { name: 'Download PDF' });
     expect(link.getAttribute('href')).toBe('/api/v1/assessments/asm_1/report.pdf');
@@ -95,7 +98,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view });
+    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
     render(await ReportPage({ params }));
     const rewrite = screen.getByRole('button', { name: 'Rewrite' });
     expect(rewrite.closest('[data-print="hide"]')).not.toBeNull();
@@ -175,9 +178,127 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view });
+    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
     render(await ReportPage({ params }));
     expect(loadServerData).not.toHaveBeenCalled();
+  });
+
+  describe('the rewrite drawer’s invitation to write a brief (t-83)', () => {
+    const readyLoad = (projectId: string | null): ReportLoad => {
+      const a = apiAssessment();
+      const view = buildReportView({
+        assessment: a,
+        result: reportResultSchema.parse(a.result),
+        model: reportModelSchema.parse(modelDocument(true)),
+      });
+      return { kind: 'ready', view, projectId };
+    };
+    const project = (brief: Record<string, string>) => ({
+      id: 'prj_1',
+      name: 'Spring launch',
+      brief,
+      defaults: {},
+      framework: 'howdoesthisland',
+      overlay: null,
+      archived: false,
+      archivedAt: null,
+      reviewCount: 1,
+      createdAt: '2026-11-20T10:00:00.000Z',
+      updatedAt: '2026-11-21T10:00:00.000Z',
+    });
+    const openDrawer = () => fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+    const invite = () => screen.queryByRole('complementary', { name: 'Add a brief' });
+
+    it('invites a brief for a review in no project, reading no project', async () => {
+      loadReport.mockResolvedValue(readyLoad(null));
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(
+        within(invite() as HTMLElement).getByRole('link', { name: 'Make a project with a brief' })
+      ).toHaveAttribute('href', '/projects');
+      expect(loadServerData).not.toHaveBeenCalled();
+    });
+
+    it('reads the project, and invites a brief when it has none', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({ ok: true, data: project({}), meta: undefined });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(loadServerData).toHaveBeenCalledWith('/api/v1/projects/prj_1', { expected: [404] });
+      expect(
+        within(invite() as HTMLElement).getByRole('link', { name: 'Write the project’s brief' })
+      ).toHaveAttribute('href', '/projects/prj_1');
+    });
+
+    it('treats a project whose brief is only blank as having none', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({
+        ok: true,
+        data: project({ offer: '   ' }),
+        meta: undefined,
+      });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(invite()).not.toBeNull();
+    });
+
+    it('offers no invitation when the project has a brief', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({
+        ok: true,
+        data: project({ offer: 'Bookkeeping for sole traders' }),
+        meta: undefined,
+      });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(screen.getByRole('button', { name: 'Write a rewrite' })).toBeInTheDocument();
+      expect(invite()).toBeNull();
+    });
+
+    it('offers none when the project cannot be read, as there is nowhere to write one', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({
+        ok: false,
+        failure: { kind: 'failed', status: 404, code: null },
+      });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(screen.getByRole('button', { name: 'Write a rewrite' })).toBeInTheDocument();
+      expect(invite()).toBeNull();
+    });
+
+    it('offers none when the project’s answer cannot be parsed', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({
+        ok: true,
+        data: { brief: 'not a brief' },
+        meta: undefined,
+      });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(screen.getByRole('button', { name: 'Write a rewrite' })).toBeInTheDocument();
+      expect(invite()).toBeNull();
+      // Said, so drift in the project's answer is seen.
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Report: the project did not parse for the brief invitation',
+        expect.objectContaining({ projectId: 'prj_1' })
+      );
+    });
+
+    it('counts a stored brief the request schema would now refuse', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({
+        ok: true,
+        // A part past today's limit, and a part since renamed.
+        data: project({ offer: 'x'.repeat(5_000), tagline: 'Old part' }),
+        meta: undefined,
+      });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(screen.getByRole('button', { name: 'Write a rewrite' })).toBeInTheDocument();
+      expect(invite()).toBeNull();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
   });
 
   it('clears a cookie whose session is gone, returning to this report after login', async () => {

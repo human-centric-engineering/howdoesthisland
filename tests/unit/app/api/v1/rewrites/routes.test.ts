@@ -109,6 +109,7 @@ const view = (over: Partial<RewriteView> = {}): RewriteView => ({
   focus: 'balanced',
   status: 'completed',
   draft: 'A better draft.',
+  placeholders: [],
   error: null,
   errorCode: null,
   model: 'claude-sonnet-5-5',

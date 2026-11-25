@@ -20,14 +20,17 @@ export const reportPdfPath = (id: string): string =>
 export function ReportActions({
   assessmentId,
   focuses,
+  briefInvite = null,
 }: {
   assessmentId: string;
   /** What a rewrite can work on (`rewriteFocuses`). */
   focuses: RewriteFocusOption[];
+  /** Set when the review's project has no brief, or it is in none (t-83). */
+  briefInvite?: { projectId: string | null } | null;
 }) {
   return (
     <div className="mx-auto mb-4 flex max-w-5xl justify-end gap-2" data-print="hide">
-      <RewriteDrawer assessmentId={assessmentId} focuses={focuses} />
+      <RewriteDrawer assessmentId={assessmentId} focuses={focuses} briefInvite={briefInvite} />
       <SharePanel assessmentId={assessmentId} />
       <Button asChild variant="outline" size="sm">
         <a href={reportPdfPath(assessmentId)} download>

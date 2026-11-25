@@ -914,7 +914,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'POST',
     path: '/api/v1/rewrites',
     summary:
-      "Have the editor rewrite a finished review's text, balanced or raising one appeal, reading the project's brief and the passages its AI reviewers read. Answered once it ends, or streamed as Server-Sent Events with `stream: true` (`rewrite`, `rewrite_text` for each piece, `rewrite_done`). A rewrite is kept and charged however the stream ends.",
+      "Have the editor rewrite a finished review's text, balanced or raising one appeal, reading the project's brief and the passages its AI reviewers read. Answered once it ends, or streamed as Server-Sent Events with `stream: true` (`rewrite`, `rewrite_text` for each piece, `rewrite_done`). A rewrite is kept and charged however the stream ends. Its draft's gaps, each written `[ADD: …]`, come back as `placeholders`; send `fromRewriteId` and `answers` (by placeholder id) to have the editor fill the answered ones in that draft, leaving the rest (t-83). Answers are not saved to the project.",
     auth: ASSESS,
     request: { body: createRewriteSchema },
     errors: [
@@ -935,6 +935,24 @@ export const APP_ROUTES: readonly RouteContract[] = [
         code: 'ASSESSMENT_NOT_REWRITABLE',
         description:
           'The review is not finished (`completed` or `partial`), or its framework version can no longer be run.',
+      },
+      {
+        status: 409,
+        code: 'REWRITE_NOT_FINISHED',
+        description:
+          "The rewrite `fromRewriteId` names has not `completed`: only a finished draft's placeholders can be answered.",
+      },
+      {
+        status: 409,
+        code: 'REWRITE_TOO_LONG_TO_FILL',
+        description:
+          'The rewrite `fromRewriteId` names is over 80,000 characters: a fill gives the editor the draft whole, so a longer one is refused rather than cut.',
+      },
+      {
+        status: 404,
+        code: 'NOT_FOUND',
+        description:
+          'No such review in this workspace, or `fromRewriteId` is not a rewrite of this review.',
       },
     ],
     response: { status: 200, data: z.union([rewriteSchema, rewriteEventSchema]) },

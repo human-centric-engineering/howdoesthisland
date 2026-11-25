@@ -19,6 +19,17 @@
  * holds when the drawer is closed mid-draft: it is listed, writing, on the
  * next open.
  *
+ * **Gaps the writer fills** (t-83). A finished draft's placeholders
+ * (`[ADD: …]`, read by the server into `placeholders`) are listed under it as
+ * short fields, each with its label. **Fill these and rewrite** starts the
+ * next rewrite from that draft with the answers given (`fromRewriteId`,
+ * `answers`); the gaps left blank stay in the new draft, as fields again.
+ * The answers go to that rewrite only, not the project.
+ *
+ * **No brief** (t-83). On a review whose project has no brief, or that is in
+ * no project, the drawer says what a brief adds and links to writing one
+ * (`BriefInvite`). It never stops a rewrite.
+ *
  * A refusal (no credits, over budget, too many at once) is shown beside the
  * button that was pressed, with `<SaveError>`, in the assess page's words.
  */
@@ -30,7 +41,10 @@ import { z } from 'zod';
 import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { WORDS } from '@/lib/app/reports/words';
+import { MAX_ANSWER_CHARS } from '@/lib/app/rewrites/validations';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -42,7 +56,9 @@ import {
 import { FieldHelp } from '@/components/ui/field-help';
 import { SaveError } from '@/components/forms/form-error';
 import { ASSESSMENTS_ENDPOINT, reportPath } from '@/components/app/workbench/schemas';
+import { BriefInvite } from '@/components/app/projects/brief-invite';
 import {
+  answersFor,
   failureMessage,
   followRewrite,
   listRewrites,
@@ -53,6 +69,7 @@ import {
   rewriteRefusalOf,
   startedSince,
   streamRewrite,
+  type RewriteAsk,
   type RewriteWire,
 } from '@/components/app/report/rewrite-client';
 import { BALANCED, type RewriteFocusOption } from '@/components/app/report/rewrite-focuses';
@@ -76,12 +93,18 @@ type Phase = 'idle' | 'writing' | 'ended';
 
 const isAbort = (err: unknown): boolean => err instanceof DOMException && err.name === 'AbortError';
 
+/** Which button started what is shown: its refusals are shown beside it. */
+type Origin = 'write' | 'fill';
+
 export function RewriteDrawer({
   assessmentId,
   focuses,
+  briefInvite = null,
 }: {
   assessmentId: string;
   focuses: RewriteFocusOption[];
+  /** Set when the review's project has no brief, or it is in none: the drawer invites one. */
+  briefInvite?: { projectId: string | null } | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -94,6 +117,14 @@ export function RewriteDrawer({
   const [copied, setCopied] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [usagePage, setUsagePage] = useState<string | null>(null);
+  const [origin, setOrigin] = useState<Origin>('write');
+  /**
+   * What the writer has typed for each rewrite's placeholders: by rewrite,
+   * then by placeholder id. Keyed by rewrite, as ids repeat across drafts, so
+   * answers never show under another draft's gaps, and a fill that fails
+   * leaves them on the draft they answered.
+   */
+  const [answersBy, setAnswersBy] = useState<Record<string, Record<string, string>>>({});
   const [reviewUsagePage, setReviewUsagePage] = useState<string | null>(null);
   const rewrite = useSaveFailure({ fallback: 'The rewrite could not be started. Try again.' });
   const review = useSaveFailure({
@@ -213,15 +244,30 @@ export function RewriteDrawer({
     setShown(null);
     setDraft('');
     setCopied(false);
+    setAnswersBy({});
+    setOrigin('write');
     rewrite.clear();
     review.clear();
   };
 
-  const write = async () => {
+  const write = async (ask: RewriteAsk, from: Origin) => {
     rewrite.clear();
     review.clear();
+    setOrigin(from);
     setUsagePage(null);
     setCopied(false);
+    // A run refused before it starts puts back the draft shown, with what was
+    // typed for its gaps: a fill's refusal then shows beside its button.
+    const prior = shown && phase === 'ended' ? { rewrite: shown, draft } : null;
+    const notStarted = () => {
+      if (prior) {
+        setShown(prior.rewrite);
+        setDraft(prior.draft);
+        setPhase('ended');
+      } else {
+        setPhase('idle');
+      }
+    };
     const signal = newReader();
     setShown(null);
     setDraft('');
@@ -235,7 +281,7 @@ export function RewriteDrawer({
     try {
       const outcome = await streamRewrite(
         assessmentId,
-        focus,
+        ask,
         {
           onStart: (r) => {
             setShown(r);
@@ -257,12 +303,14 @@ export function RewriteDrawer({
       const list = await loadEarlier();
       if (signal.aborted) return;
       const started =
-        list && known ? startedSince(list, { sentAt: outcome.sentAt, focus, known }) : null;
+        list && known
+          ? startedSince(list, { sentAt: outcome.sentAt, focus: ask.focus, known })
+          : null;
       if (started) {
         await follow(started, signal);
         return;
       }
-      setPhase('idle');
+      notStarted();
       rewrite.show(
         list && known
           ? 'The connection dropped before the rewrite started. If it did start, it is listed below.'
@@ -270,7 +318,7 @@ export function RewriteDrawer({
       );
     } catch (err) {
       if (signal.aborted) return;
-      setPhase('idle');
+      notStarted();
       const refusal = rewriteRefusalOf(err);
       if (refusal) {
         rewrite.show(refusal.message);
@@ -281,9 +329,17 @@ export function RewriteDrawer({
     }
   };
 
+  /** The next rewrite, from the shown one's draft with the gaps the writer filled. */
+  const fill = (from: RewriteWire) => {
+    const answers = answersFor(from.placeholders, answersBy[from.id] ?? {});
+    if (Object.keys(answers).length === 0) return;
+    void write({ focus: from.focus, fromRewriteId: from.id, answers }, 'fill');
+  };
+
   const reopen = (r: RewriteWire) => {
     rewrite.clear();
     review.clear();
+    setOrigin('write');
     setUsagePage(null);
     setReviewUsagePage(null);
     setCopied(false);
@@ -333,6 +389,22 @@ export function RewriteDrawer({
 
   const writing = phase === 'writing';
   const finished = phase === 'ended' && shown?.status === 'completed';
+  const gaps = finished && shown ? shown.placeholders : [];
+  const typed = (shown && answersBy[shown.id]) || {};
+  const answered = shown ? Object.keys(answersFor(shown.placeholders, typed)).length : 0;
+
+  const refusal = (
+    <>
+      <SaveError failure={rewrite.failure} />
+      {rewrite.failure && usagePage ? (
+        <p className="text-sm">
+          <Link href={usagePage} className="underline">
+            See this month&rsquo;s usage
+          </Link>
+        </p>
+      ) : null}
+    </>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -353,6 +425,8 @@ export function RewriteDrawer({
             charged in credits, as a {WORDS.review} is.
           </DialogDescription>
         </DialogHeader>
+
+        {briefInvite ? <BriefInvite projectId={briefInvite.projectId} runs="rewrite" /> : null}
 
         <fieldset className="space-y-2" disabled={writing}>
           <legend className="mb-2 flex items-center gap-1 text-sm font-medium">
@@ -384,7 +458,11 @@ export function RewriteDrawer({
         </fieldset>
 
         <div className="space-y-2">
-          <Button type="button" onClick={() => void write()} disabled={writing || reviewing}>
+          <Button
+            type="button"
+            onClick={() => void write({ focus }, 'write')}
+            disabled={writing || reviewing}
+          >
             {writing ? (
               <>
                 <Loader2 className="animate-spin" aria-hidden="true" />
@@ -394,14 +472,7 @@ export function RewriteDrawer({
               'Write a rewrite'
             )}
           </Button>
-          <SaveError failure={rewrite.failure} />
-          {rewrite.failure && usagePage ? (
-            <p className="text-sm">
-              <Link href={usagePage} className="underline">
-                See this month&rsquo;s usage
-              </Link>
-            </p>
-          ) : null}
+          {origin === 'write' || gaps.length === 0 ? refusal : null}
         </div>
 
         {phase !== 'idle' ? (
@@ -451,6 +522,47 @@ export function RewriteDrawer({
                 </Link>
               </p>
             ) : null}
+          </section>
+        ) : null}
+
+        {shown && gaps.length > 0 ? (
+          <section aria-labelledby="rewrite-gaps-heading" className="space-y-3 border-t pt-4">
+            <h3 id="rewrite-gaps-heading" className="flex items-center gap-1 text-sm font-medium">
+              Facts the editor needs
+              <FieldHelp title="Facts the editor needs">
+                The editor left a gap wherever a stronger version needs a fact only you know. Fill
+                in the ones you can and rewrite: the editor puts each fact where its gap is, and
+                leaves the gaps you skip. Your answers go to this rewrite only, not to the project.
+              </FieldHelp>
+            </h3>
+            {gaps.map((g) => (
+              <div key={g.id} className="space-y-1">
+                <Label htmlFor={`rewrite-gap-${g.id}`}>{g.label}</Label>
+                <Input
+                  id={`rewrite-gap-${g.id}`}
+                  value={typed[g.id] ?? ''}
+                  maxLength={MAX_ANSWER_CHARS}
+                  autoComplete="off"
+                  disabled={writing || reviewing}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setAnswersBy((by) => ({
+                      ...by,
+                      [shown.id]: { ...by[shown.id], [g.id]: value },
+                    }));
+                  }}
+                />
+              </div>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => fill(shown)}
+              disabled={writing || reviewing || answered === 0}
+            >
+              Fill these and rewrite
+            </Button>
+            {origin === 'fill' ? refusal : null}
           </section>
         ) : null}
 

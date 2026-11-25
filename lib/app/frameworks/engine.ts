@@ -76,6 +76,17 @@ export interface RewriteRequest {
   timeoutMs: number;
 }
 
+/**
+ * A rewrite that fills an earlier one's gaps (t-83): that rewrite's draft, and
+ * the writer's answer to each of its placeholders they answered, the
+ * placeholder as written in the draft (`[ADD: …]`, `placeholders.ts`).
+ * Placeholders with no answer are left as they are.
+ */
+export interface RewriteFollowUp {
+  draft: string;
+  answers: Array<{ placeholder: string; answer: string }>;
+}
+
 /** A rewrite focus the framework does not have (`rewriteFocuses()`). */
 export class RewriteFocusUnknownError extends Error {
   constructor(message: string) {
@@ -201,13 +212,18 @@ export interface FrameworkEngine<
    * `projectContext` is the project's background, as for a judge. Throws
    * {@link RewriteFocusUnknownError} for a focus {@link rewriteFocuses} does
    * not name. Added in f-rewrite (t-81).
+   *
+   * Gaps are asked for in the form `placeholders.ts` parses. With
+   * `followUp` (t-83), the editor starts from that earlier draft and fills the
+   * gaps the writer answered, leaving the rest.
    */
   buildRewriteRequest(
     text: string,
     ctx: Ctx,
     result: Result,
     focus: string,
-    projectContext?: string | null
+    projectContext?: string | null,
+    followUp?: RewriteFollowUp | null
   ): RewriteRequest;
   /**
    * A project's overlay (untrusted; absent is none) checked against this

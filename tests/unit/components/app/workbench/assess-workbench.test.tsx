@@ -209,6 +209,60 @@ describe('AssessWorkbench settings', () => {
   });
 });
 
+describe('AssessWorkbench brief invitation (t-83)', () => {
+  const NO_BRIEF = aProject({ id: 'proj-3', name: 'Unbriefed', brief: {}, defaults: {} });
+  const invite = () => screen.queryByRole('complementary', { name: 'Add a brief' });
+
+  it('invites a brief for copy in no project, linking to the projects page', () => {
+    renderWorkbench();
+    const aside = invite();
+    expect(aside).not.toBeNull();
+    expect(
+      within(aside as HTMLElement).getByRole('link', { name: 'Make a project with a brief' })
+    ).toHaveAttribute('href', '/projects');
+    expect(within(aside as HTMLElement).getByText(/the review runs all the same/)).toBeVisible();
+  });
+
+  it('invites a brief for a project that has none, linking to that project', async () => {
+    renderWorkbench([PROJECT, NO_BRIEF]);
+    await userEvent.selectOptions(field(/^Project/), 'proj-3');
+    expect(
+      within(invite() as HTMLElement).getByRole('link', { name: 'Write the project’s brief' })
+    ).toHaveAttribute('href', '/projects/proj-3');
+  });
+
+  it('treats a brief of only blank parts as none', async () => {
+    const blank = aProject({ id: 'proj-4', name: 'Blank', brief: { offer: '  ' }, defaults: {} });
+    renderWorkbench([blank]);
+    await userEvent.selectOptions(field(/^Project/), 'proj-4');
+    expect(invite()).not.toBeNull();
+  });
+
+  it('shows none for a project that has a brief, and again when it is taken off', async () => {
+    renderWorkbench([PROJECT, NO_BRIEF]);
+    await userEvent.selectOptions(field(/^Project/), 'proj-1');
+    expect(invite()).toBeNull();
+
+    await userEvent.selectOptions(field(/^Project/), '__none__');
+    expect(invite()).not.toBeNull();
+  });
+
+  it('still starts the review with the invitation shown', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue(created({ status: 'completed', judges: [] }));
+    renderWorkbench([NO_BRIEF]);
+    await userEvent.selectOptions(field(/^Project/), 'proj-3');
+    expect(invite()).not.toBeNull();
+    await userEvent.type(field(/^The copy to review/), 'Book a call today.');
+    await start();
+
+    expect(sentBody()).toMatchObject({
+      source: { text: 'Book a call today.' },
+      projectId: 'proj-3',
+    });
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/assessments/a-9'));
+  });
+});
+
 describe('AssessWorkbench version', () => {
   it('runs the review on the version the page loaded, and asks for a reload once that is retired', async () => {
     vi.mocked(apiClient.post).mockRejectedValue(

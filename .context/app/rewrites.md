@@ -2,9 +2,9 @@
 
 A review says what to change; a rewrite is the draft that does it. The editor
 rewrites a finished review's text, streaming the draft as it writes, and the app
-keeps it. Built in t-81 (f-rewrite, app-plan §8.2). The report's drawer (t-82),
-the placeholders as fields (t-83) and reviewing a rewrite as a comparison (t-84)
-build on it.
+keeps it. Built in t-81 (f-rewrite, app-plan §8.2). The report's drawer (t-82)
+and the placeholders as fields (t-83) build on it; reviewing a rewrite as a
+comparison (t-84) is next.
 
 ## The API
 
@@ -15,7 +15,7 @@ build on it.
 | `GET /api/v1/rewrites/{id}`           | One rewrite: the draft as last saved while it runs, then the whole. |
 
 All three take a browser session or an API key with the `assess` scope. The
-body is `{ assessmentId, focus?, stream? }`:
+body is `{ assessmentId, focus?, stream?, fromRewriteId?, answers? }`:
 
 - **`focus`**: `balanced` (the default) or an appeal (`ethos`, `pathos`,
   `logos`, `kairos`). The framework names them (`engine.rewriteFocuses()`), so
@@ -25,6 +25,10 @@ body is `{ assessmentId, focus?, stream? }`:
   `running`), `rewrite_text` for each piece as it is written, then
   `rewrite_done` (the row, `completed` or `failed`). Without it, the answer is
   the row once it ends.
+- **`fromRewriteId` and `answers`** (t-83, together or not at all): fill an
+  earlier rewrite's gaps (below). `focus` then defaults to that rewrite's.
+
+Every rewrite answers its draft's gaps as `placeholders` (below).
 
 Only a `completed` or `partial` review can be rewritten. Anything else, or a
 review whose framework version can no longer be run, is a 409
@@ -36,6 +40,70 @@ A rewrite that fails after it started answers `failed`, with the editor's
 `rate_limited`, `agent_inactive`, `model_not_approved`, `lost` for one whose
 process died, `timed_out` for one whose call ran past `REWRITE_CALL_MS`,
 `internal_error`) and the draft it had written by then.
+
+## Placeholders
+
+A fact only the writer knows (a client's name, a result, a price) is not
+invented: the editor leaves a gap for it, in one fixed form,
+`[ADD: a customer like Sarah's]` (`placeholderText`,
+`lib/app/frameworks/placeholders.ts`). The form is a contract between every
+framework's rewrite prompt and the API, so it sits beside the engine
+interface rather than in one framework.
+
+**Read, not stored.** Every rewrite row answers `placeholders`, read from its
+draft as it is answered (`parsePlaceholders`): each `{ id, label, at }`, `at`
+being each `[start, end)` where it sits in `draft`. Nothing new is stored, so
+there is no migration and nothing for the exports. Ids are `p1`, `p2`, … in
+the order each first appears, so a running draft, which only grows, never
+renumbers one already shown.
+
+- **One per fact.** The same label twice (ignoring case and spacing) is one
+  placeholder sitting in two places, answered once.
+- **Only the form counts.** `[ADD:` (any case), a label on one line with no
+  brackets in it, `]`. A link's `[text](url)`, a citation `[1]`, an empty or
+  over-long label (`MAX_PLACEHOLDER_LABEL`, 200) and the bare
+  `[placeholder]` rewrites before t-83 wrote are left in the draft and not
+  offered. At most `MAX_PLACEHOLDERS` (30) are offered.
+
+**Answering them.** `fromRewriteId` names a `completed` rewrite of the same
+review; `answers` maps its placeholder ids to the writer's words (trimmed, at
+most 500 characters each). The new rewrite's prompt is the whole rewrite
+prompt again, plus the earlier draft and each answer against its placeholder
+as the draft wrote it, both fenced and data. The editor starts from that
+draft, puts each answer where its gap is, and leaves the unanswered ones as
+they are, so they come back as placeholders again. One step, not a
+conversation; the earlier rewrite is left as it was. Each spelling the draft
+used for an answered fact is listed with the answer, so every place it sits
+is filled. The fence tags (`earlier_draft`, `answers`, `content`,
+`project_context`) are stripped from the draft and the answers.
+
+The earlier draft is given whole, not cut at the text's limit: a rewrite may
+run to half as long again. A draft over `MAX_FILL_DRAFT_CHARS` (80,000, twice
+the text's limit) is refused (409 `REWRITE_TOO_LONG_TO_FILL`) rather than cut,
+since a cut draft would come back without its end; so a chain of fills, each
+from the last, cannot grow its prompt or its ceiling. The ceiling is sized
+from whichever is longer, the text or that draft.
+
+A fill keeps its rewrite's focus: another is a 400 (`details.focus`), since
+the editor is told to change nothing but the gaps. An answer that is itself a
+placeholder (`[ADD:`) is a 400: the editor would copy it in, and it would be
+asked for again.
+
+Refusals, before anything is held: 404 for a rewrite that is not this
+review's in this workspace, 409 `REWRITE_NOT_FINISHED` for one not
+`completed`, 409 `REWRITE_TOO_LONG_TO_FILL` (above), 400 for an answer to an
+id the draft does not have
+(`details.answers.unknown`, with its ids in `details.answers.placeholders`).
+
+**Answers are not saved.** They reach the new draft and nothing else, not
+the project's brief: keeping them for next time is `f-coached-rewrite`.
+
+**A fact already given is not a gap.** With project context, the prompt
+tells the editor to use a fact it gives rather than leave a placeholder. Not
+on a second pass: there the writer's answers say which gaps to fill, and a gap
+they left is left, as the drawer says.
+That the prompt carries the fact and the rule is tested; whether a model
+obeys is a paid check, parked for the end-of-project task.
 
 ## What the editor reads
 
@@ -59,8 +127,7 @@ Three things differ from the prototype:
   judges never saw. A review whose project has gone keeps the brief it stored.
 - **The content and the context are data**, and the prompt says so.
 
-A fact only the writer knows is left as a `[placeholder in square brackets]`,
-as in the prototype. t-83 turns those into fields.
+A fact only the writer knows is left as a placeholder, `[ADD: …]` (below).
 
 ## How it runs
 
@@ -181,6 +248,23 @@ show it.
   marked "(rewrite)" (a quick review
   is reviewed quickly again: `judges` takes at least one), then opens it. In
   t-84 that becomes a comparison with the original.
+- **Facts the editor needs** (t-83): a finished draft's placeholders are
+  listed under it as short fields, each with its label. **Fill these and
+  rewrite** (enabled once one is filled) starts the next rewrite from that
+  draft with the answers (`fromRewriteId`, `answers`, the draft's focus); the
+  ones left blank are fields again on the new draft. A fill refused before it
+  starts puts the draft and what was typed back, with the refusal beside its
+  button. What was typed is kept by the rewrite it answers, so it never shows
+  under another draft's gaps, and a fill that fails leaves it on its draft.
+- **No brief** (t-83): on a review whose project has no brief, or that is in
+  no project, the drawer says what a brief adds, with an example, and links
+  to writing one (`components/app/projects/brief-invite.tsx`). The report
+  page reads the project once to know (a project it cannot read invites
+  nothing). For a review in no project it also says that a review cannot be
+  moved into one once it has run, so its rewrites will never have a brief: a
+  new review of the copy in a project with one will. The `/assess` workbench
+  shows the same before a review starts,
+  for no project or a project with no brief. Neither ever stops a run.
 - **Refusals** show beside the button pressed, with `<SaveError>`. Credit and
   budget refusals use the assess page's `refusalOf`, with the usage link; the
   rate limit is worded for rewrites, without blaming the reader, since a burst
