@@ -248,6 +248,7 @@ export function failureMessage(rewrite: RewriteWire): string {
 
 /** The parts of `GET /api/v1/assessments/{id}` a review of its rewrite repeats. */
 export const originalReviewSchema = z.object({
+  title: z.string().nullable(),
   framework: z.object({ slug: z.string(), version: z.string() }),
   context: z.record(z.string(), z.unknown()).nullable(),
   projectId: z.string().nullable(),
@@ -255,14 +256,23 @@ export const originalReviewSchema = z.object({
 });
 export type OriginalReview = z.infer<typeof originalReviewSchema>;
 
+/** The most a review's title may be (`POST /api/v1/assessments`). */
+const MAX_TITLE = 200;
+const REWRITE_SUFFIX = ' (rewrite)';
+
 /**
  * `POST /api/v1/assessments` for a draft, reviewed as its original was: the
- * same model version, reader context, project and AI reviewers. A quick
- * review called none, so it is quick again (`judges` takes at least one).
+ * same model version, reader context, project and AI reviewers, and its
+ * title marked as a rewrite. A quick review called none, so it is quick
+ * again (`judges` takes at least one).
  */
 export function reviewDraftBody(original: OriginalReview, draft: string): Record<string, unknown> {
+  const title = original.title?.trim();
   return {
     source: { text: draft },
+    ...(title
+      ? { title: `${title.slice(0, MAX_TITLE - REWRITE_SUFFIX.length)}${REWRITE_SUFFIX}` }
+      : {}),
     framework: original.framework.slug,
     version: original.framework.version,
     ...(original.context ? { context: original.context } : {}),

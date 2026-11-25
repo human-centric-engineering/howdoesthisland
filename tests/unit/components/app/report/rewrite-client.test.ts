@@ -285,6 +285,22 @@ describe('rewriteRefusalOf', () => {
   });
 });
 
+describe('reviewDraftBody: the title', () => {
+  it('keeps a long title within the 200 characters a review takes, marked as a rewrite', () => {
+    const body = reviewDraftBody(
+      {
+        title: 'x'.repeat(200),
+        framework: { slug: 'howdoesthisland', version: '0.5.1' },
+        context: null,
+        projectId: null,
+        judges: [],
+      },
+      'The draft.'
+    );
+    expect(body.title).toBe(`${'x'.repeat(190)} (rewrite)`);
+  });
+});
+
 describe('reviewDraftRefusalOf', () => {
   it('says a retired model version cannot review the draft, rather than to reload', () => {
     expect(
@@ -303,6 +319,7 @@ describe('reviewDraftRefusalOf', () => {
 
 describe('reviewDraftBody', () => {
   const original = {
+    title: 'Q3 board briefing',
     framework: { slug: 'howdoesthisland', version: '0.5.1' },
     context: { contentType: 'proposal', audience: { awareness: 'aware' } },
     projectId: 'prj_1',
@@ -312,6 +329,7 @@ describe('reviewDraftBody', () => {
   it('reviews the draft with the original’s version, context, project and AI reviewers', () => {
     expect(reviewDraftBody(original, 'The draft.')).toEqual({
       source: { text: 'The draft.' },
+      title: 'Q3 board briefing (rewrite)',
       framework: 'howdoesthisland',
       version: '0.5.1',
       context: { contentType: 'proposal', audience: { awareness: 'aware' } },
@@ -322,7 +340,10 @@ describe('reviewDraftBody', () => {
 
   it('reviews a quick review’s draft quickly, and leaves out what the original had none of', () => {
     expect(
-      reviewDraftBody({ ...original, context: null, projectId: null, judges: [] }, 'The draft.')
+      reviewDraftBody(
+        { ...original, title: null, context: null, projectId: null, judges: [] },
+        'The draft.'
+      )
     ).toEqual({
       source: { text: 'The draft.' },
       framework: 'howdoesthisland',

@@ -22,7 +22,7 @@ export function rewriteFocuses(
     {
       id: BALANCED,
       name: 'Balanced',
-      help: 'Works on the weakest appeal first and applies the recommendations across all four, keeping the mix this reader needs. The default.',
+      help: 'Works on the weakest appeal first and applies the recommendations across all of them, keeping the mix this reader needs. The default.',
     },
     ...appeals.map((a) => ({
       id: a.id,

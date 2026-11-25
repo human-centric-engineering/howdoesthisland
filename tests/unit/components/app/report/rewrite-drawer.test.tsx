@@ -128,6 +128,7 @@ beforeEach(() => {
     assessment: () =>
       ok({
         id: 'asm_1',
+        title: 'Q3 board briefing',
         framework: { slug: 'howdoesthisland', version: '0.5.1' },
         context: { contentType: 'proposal' },
         projectId: 'prj_1',
@@ -266,22 +267,83 @@ describe('RewriteDrawer', () => {
     expect(calls('POST', '/api/v1/rewrites')).toHaveLength(1);
   });
 
-  it('keeps a rewrite started while the earlier ones were being read in the list', async () => {
-    let answer: (r: Response) => void = () => undefined;
-    routes.list = () => new Promise<Response>((resolve) => (answer = resolve));
+  it('keeps a rewrite started while an older read of the list was still on its way', async () => {
+    // The read made on opening lands last, after the rewrite has started.
+    let answerFirst: (r: Response) => void = () => undefined;
+    let listed = 0;
+    routes.list = () =>
+      listed++ === 0
+        ? new Promise<Response>((resolve) => (answerFirst = resolve))
+        : ok([earlierRow]);
     render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
     fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
     fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
     await waitFor(() => expect(draftBox()?.textContent).toBe('A better draft.'));
 
-    // The list read before the rewrite existed lands last.
-    answer(ok([earlierRow]));
-    await screen.findByRole('button', { name: /Pathos · / });
+    answerFirst(ok([]));
+    await waitFor(() => expect(listed).toBe(2));
     const items = within(screen.getByRole('list')).getAllByRole('button');
     expect(items.map((b) => b.textContent)).toEqual([
       expect.stringMatching(/^Ethos · .*Done$/),
       expect.stringMatching(/^Pathos · .*Done$/),
     ]);
+  });
+
+  it('matches no rewrite to a stream that dropped early when pressed before the list could be read', async () => {
+    // An older balanced rewrite is still running; the list cannot be read at
+    // first, so nothing says it was there before the press.
+    const older = row({ id: 'rw_older', focus: 'balanced' });
+    let posted = false;
+    // Every read before the press fails; the one after it lists the older rewrite.
+    routes.list = () =>
+      posted ? ok([older]) : refused(500, 'INTERNAL_ERROR', 'Something went wrong.');
+    routes.post = () => {
+      posted = true;
+      return streamed([], 'error');
+    };
+    render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+
+    expect(
+      await screen.findByText(
+        /the earlier rewrites could not be read\. Close this and open it again/
+      )
+    ).toBeInTheDocument();
+    expect(calls('GET', '/api/v1/rewrites/rw_older')).toHaveLength(0);
+  });
+
+  it('holds the earlier rewrites still while one is being written', async () => {
+    let finish: () => void = () => undefined;
+    routes.post = () => {
+      const enc = new TextEncoder();
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(enc.encode(frame({ type: 'rewrite', rewrite: row() })));
+            finish = () => {
+              c.enqueue(
+                enc.encode(
+                  frame({
+                    type: 'rewrite_done',
+                    rewrite: row({ status: 'completed', draft: 'Done.' }),
+                  })
+                )
+              );
+              c.close();
+            };
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } }
+      );
+    };
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    await screen.findByRole('heading', { name: 'Ethos rewrite · writing…' });
+    expect(screen.getByRole('button', { name: /Pathos · / })).toBeDisabled();
+
+    finish();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Pathos · / })).toBeEnabled());
   });
 
   it('says to reopen when a stream dropped early and the list could not be read either', async () => {
@@ -362,6 +424,7 @@ describe('RewriteDrawer', () => {
     const [, init] = calls('POST', '/api/v1/assessments')[0];
     expect(bodyOf(init)).toEqual({
       source: { text: 'A better draft.' },
+      title: 'Q3 board briefing (rewrite)',
       framework: 'howdoesthisland',
       version: '0.5.1',
       context: { contentType: 'proposal' },

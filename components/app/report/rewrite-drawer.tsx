@@ -160,6 +160,7 @@ export function RewriteDrawer({
         (now) => {
           setShown(now);
           setDraft((d) => (now.draft.length > d.length ? now.draft : d));
+          remember(now);
         },
         signal
       );
@@ -210,11 +211,15 @@ export function RewriteDrawer({
     setUsagePage(null);
     setCopied(false);
     const signal = newReader();
-    // What was listed before asking: a rewrite found after a drop must be new.
-    const known = new Set((earlier ?? []).map((r) => r.id));
     setShown(null);
     setDraft('');
     setPhase('writing');
+    // What was listed before asking: a rewrite found after a drop must be
+    // new. Pressed before the list arrived, it is read first; with no list,
+    // a drop is never matched to a rewrite (`known` stays null).
+    const before = earlier ?? (await loadEarlier());
+    if (signal.aborted) return;
+    const known = before ? new Set(before.map((r) => r.id)) : null;
     try {
       const outcome = await streamRewrite(
         assessmentId,
@@ -239,14 +244,15 @@ export function RewriteDrawer({
       // Dropped before its first event: it may still have started.
       const list = await loadEarlier();
       if (signal.aborted) return;
-      const started = list ? startedSince(list, { sentAt: outcome.sentAt, focus, known }) : null;
+      const started =
+        list && known ? startedSince(list, { sentAt: outcome.sentAt, focus, known }) : null;
       if (started) {
         await follow(started, signal);
         return;
       }
       setPhase('idle');
       rewrite.show(
-        list
+        list && known
           ? 'The connection dropped before the rewrite started. If it did start, it is listed below.'
           : 'The connection dropped before the rewrite started, and the earlier rewrites could not be read. Close this and open it again before trying again: if it did start, it will be listed.'
       );
@@ -264,8 +270,6 @@ export function RewriteDrawer({
   };
 
   const reopen = (r: RewriteWire) => {
-    // The one being written here already is: reading it again would only interrupt it.
-    if (phase === 'writing' && shown?.id === r.id) return;
     rewrite.clear();
     review.clear();
     setCopied(false);
@@ -453,9 +457,12 @@ export function RewriteDrawer({
                 <li key={r.id}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-4 py-2 text-left hover:underline"
+                    className="flex w-full items-center justify-between gap-4 py-2 text-left hover:underline disabled:opacity-60 disabled:hover:no-underline"
                     aria-current={shown?.id === r.id ? 'true' : undefined}
                     onClick={() => reopen(r)}
+                    // Reopening another would stop the stream: text not yet
+                    // saved would be lost from view.
+                    disabled={writing}
                   >
                     <span>
                       {nameOf(r.focus)} · {timeFormat.format(new Date(r.createdAt))}
