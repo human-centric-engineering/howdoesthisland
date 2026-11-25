@@ -260,7 +260,7 @@ describe('ComparisonView while it runs', () => {
   });
 
   it.each([
-    [404, /has been deleted/],
+    [404, /can no longer be found/],
     [401, /no longer signed in/],
   ])('stops reading after a %i, and says why', async (status, says) => {
     vi.useFakeTimers();

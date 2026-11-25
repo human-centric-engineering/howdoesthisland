@@ -96,7 +96,7 @@ export const draftSchema = z.object({
    * rest of the draft.
    */
   drafts: z
-    .array(z.object({ label: z.string(), text: z.string() }))
+    .array(z.object({ label: z.string(), text: z.string() }).catch(() => ({ label: '', text: '' })))
     .min(MIN_DRAFTS)
     .max(MAX_DRAFTS)
     .catch(() => EMPTY_COMPARE.map((d) => ({ ...d }))),

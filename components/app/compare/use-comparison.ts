@@ -13,7 +13,7 @@
  *
  * A read that fails, or a reply that does not parse, keeps what is shown and
  * tries again at the next tick; after {@link MAX_MISSES} in a row it says so
- * (`stale`), and keeps trying. A read answered 404 (the comparison is gone)
+ * (`stale`), and keeps trying. A read answered 404 (the comparison is gone, or not in this workspace)
  * or 401/403 (the session ended) stops the reads for good (`ended`). A tab in the background is not read; it is
  * read as soon as it is shown again.
  */

@@ -38,7 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FieldHelp } from '@/components/ui/field-help';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SaveError } from '@/components/forms/form-error';
-import { apiClient } from '@/lib/api/client';
+import { APIClientError, apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useLocalStorage } from '@/lib/hooks/use-local-storage';
 import { sendUpload } from '@/lib/app/intake/send-upload';
@@ -105,6 +105,15 @@ const FILE_TOO_LARGE_FOR_HOST =
 
 const COMPARE_STARTED_UNREADABLE =
   'The comparison has started, but this page could not read the reply, so it cannot open it. There is no need to start it again: it is in your reviews.';
+
+/** The draft a comparison's refusal names (`details.position`), if it is one of these. */
+function refusedDraftOf(err: unknown): number | null {
+  if (!(err instanceof APIClientError)) return null;
+  const position = err.details?.position;
+  return typeof position === 'number' && Number.isInteger(position) && position >= 0
+    ? position
+    : null;
+}
 
 const STARTED_UNREADABLE = `The ${WORDS.review} has started, but this page could not read the reply, so it cannot show its progress. There is no need to start it again.`;
 
@@ -221,7 +230,12 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
       else save.show(STARTED_UNREADABLE);
     } catch (err) {
       const refusal = refusalOf(err);
-      if (refusal) {
+      const at = comparing ? refusedDraftOf(err) : null;
+      if (at !== null && !refusal && err instanceof APIClientError) {
+        // The server names the draft it refused; say so on that draft.
+        const name = draft.drafts[at]?.label.trim() || `Draft ${at + 1}`;
+        save.block([{ field: `compare-text-${at}`, message: `${name}: ${err.message}` }]);
+      } else if (refusal) {
         save.show(refusal.message);
         setUsagePage(refusal.usagePage);
       } else {

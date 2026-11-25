@@ -12,7 +12,7 @@ export default function CompareLoading() {
       <div className="bg-muted h-9 w-2/3 animate-pulse rounded" />
       <div className="bg-muted h-4 w-1/3 animate-pulse rounded" />
       <div className="bg-muted h-24 w-full animate-pulse rounded" />
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {[1, 2, 3].map((i) => (
           <div key={i} className="bg-muted h-40 animate-pulse rounded" />
         ))}

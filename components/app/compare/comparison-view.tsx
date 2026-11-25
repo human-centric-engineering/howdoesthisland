@@ -259,7 +259,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
         {ended ? (
           <p role="status" className="mt-3 text-sm">
             {ended === 'gone'
-              ? 'This comparison has been deleted, so this page has stopped checking for progress.'
+              ? 'This comparison can no longer be found in this workspace, so this page has stopped checking for progress.'
               : 'You are no longer signed in, so this page has stopped checking for progress. Sign in again to see it.'}
           </p>
         ) : null}

@@ -213,6 +213,24 @@ describe('Compare drafts tab', () => {
     expect(screen.queryByText(/editor gives no verdict/)).toBeNull();
   });
 
+  it('names the draft the server refused, and moves focus to it', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('This copy has no words to review.', 'VALIDATION_ERROR', 400, {
+        position: 1,
+      })
+    );
+    renderWorkbench();
+    await openCompare();
+    await writeDraft(0, 'A');
+    await writeDraft(1, 'B', 'Subject B');
+    await userEvent.click(compareButton(2));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Subject B: This copy has no words to review.'
+    );
+    expect(field('compare-text-1')).toHaveFocus();
+  });
+
   it('names the comparison, not a review, when starting it fails without a reason', async () => {
     vi.mocked(apiClient.post).mockRejectedValue(new Error('network down'));
     renderWorkbench();
@@ -245,6 +263,17 @@ describe('Compare drafts kept in the browser', () => {
     expect(read.text).toBe('Older draft');
     expect(read.drafts).toEqual([
       { label: '', text: '' },
+      { label: '', text: '' },
+    ]);
+  });
+
+  it('keeps the other drafts when one stored draft is out of shape', () => {
+    const read = readDraft({
+      ...EMPTY_DRAFT,
+      drafts: [{ label: 'One', text: 'x' }, { label: 7 }],
+    });
+    expect(read.drafts).toEqual([
+      { label: 'One', text: 'x' },
       { label: '', text: '' },
     ]);
   });
