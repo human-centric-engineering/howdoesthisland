@@ -1001,9 +1001,25 @@ export async function reserveRewriteBudget<T>(
   // A rate for the reviews in flight, which the check holds back too. No
   // profile is a rewrite's, so `custom`: their judges at the workspace's rate.
   const budget = await readBudget(orgId, 'custom');
+  // Only worth working out with a bound to check it against, and its own
+  // failure (the agent's binding unreadable) is not the budget's.
+  const most =
+    budget && ceiling
+      ? async () => {
+          try {
+            return await ceiling();
+          } catch (err) {
+            logger.warn('Rewrite cost ceiling unreadable; holding nothing for it', {
+              orgId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return null;
+          }
+        }
+      : undefined;
   let estimate: ReviewEstimate = { estimateUsd: 0, basis: 'none' };
   try {
-    estimate = await estimateRewriteCost(orgId, prisma, ceiling);
+    estimate = await estimateRewriteCost(orgId, prisma, most);
   } catch (err) {
     unreadable(orgId, err);
   }

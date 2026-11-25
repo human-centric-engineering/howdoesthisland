@@ -729,9 +729,11 @@ type CostTags = Pick<
  *
  * `logCost` is called with its FK columns written out, so the platform's
  * attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
- * `agent.id` is the row the call loaded (for {@link recordStoppedStream},
- * the one it loaded before its process died), and `userId` is a real `User.id` or
- * nothing (see `AgentCall.userId`). It never rejects: a failed write is
+ * `agentId` is the id of the agent row the call loaded, by the workspace's
+ * slug. For {@link recordStoppedStream} that row was loaded before the
+ * process died, and its id read back from what the caller kept: if the agent
+ * has been deleted since, the FK refuses the row and the write answers
+ * `null`. `userId` is a real `User.id` or nothing (see `AgentCall.userId`). It never rejects: a failed write is
  * logged there and answers `null`.
  */
 async function recordSpend(
@@ -743,13 +745,12 @@ async function recordSpend(
   /** The usage is {@link estimatedUsage}'s, not the provider's. */
   estimated = false
 ): Promise<{ rows: Array<{ id: string; totalCostUsd: number } | null>; spend: JudgeSpend }> {
-  const { provider, model, isLocal } = pricing;
-  const agent = { id: pricing.agentId };
+  const { agentId, provider, model, isLocal } = pricing;
   const rows = await Promise.all(
     [...byTier(billed)].map(([tier, attempts]) => {
       const usage = sumUsage(attempts);
       return logCost({
-        agentId: agent.id,
+        agentId,
         userId: call.userId ?? null,
         provider,
         model,

@@ -30,7 +30,7 @@ vi.mock('@/lib/logging', () => ({
 
 import { RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { REWRITE_LIFETIME_MS } from '@/lib/app/rewrites/limits';
-import { LOST_REWRITE, recoverRewrites } from '@/lib/app/rewrites/recover';
+import { CLAIM_MS, LOST_REWRITE, recoverRewrites } from '@/lib/app/rewrites/recover';
 import { logger } from '@/lib/logging';
 import type { LogCostParams } from '@/lib/orchestration/llm/cost-tracker';
 import { tokeniserForModel } from '@/lib/orchestration/llm/tokeniser';
@@ -166,7 +166,54 @@ describe('recoverRewrites', () => {
     expect([young.status, old.status]).toEqual(['RUNNING', 'FAILED']);
     expect(mocks.logCost).not.toHaveBeenCalled();
   });
+
+  it('ends a young one that kept no call once its lease runs out: there is none to wait for', async () => {
+    const young = rewrite({
+      createdAt: new Date(NOW.getTime() - 30_000),
+      draft: '',
+      callStart: null,
+    });
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(young).toMatchObject({ status: 'FAILED', errorCode: 'lost', costUsd: 0 });
+    expect(charges()).toEqual([]);
+  });
+
+  it('leaves one a save renewed while the pass was at it: its call lives, and charges itself', async () => {
+    const row = rewrite({ draft: DRAFT_SAVED, callStart: CALL_START });
+    // The call's save lands between the pass's claim and its ending.
+    mocks.logCost.mockImplementationOnce(async () => {
+      Object.assign(row, { leaseExpiresAt: new Date(NOW.getTime() + 90_000) });
+      return null;
+    });
+    expect(await recover()).toEqual({ failed: 0 });
+    expect(row.status).toBe('RUNNING');
+    expect(charges()).toEqual([]);
+  });
+
+  it('leaves a young one whose call started after the pass looked: it may still be running', async () => {
+    const young = rewrite({ createdAt: new Date(NOW.getTime() - 30_000), callStart: null });
+    const find = fake.db.rewrite.findFirst;
+    const real = find.getMockImplementation();
+    find.mockImplementationOnce(async (args: { where?: Row }) => {
+      // Its `callStart` lands between the pass's read and its claim.
+      young.callStart = CALL_START;
+      return real?.(args);
+    });
+    expect(await recover()).toEqual({ failed: 0 });
+    expect(young.status).toBe('RUNNING');
+    expect(mocks.logCost).not.toHaveBeenCalled();
+    expect(charges()).toEqual([]);
+  });
+
+  it('takes one claimed by a pass alongside only once that claim runs out', async () => {
+    const row = rewrite();
+    row.leaseExpiresAt = new Date(NOW.getTime() + CLAIM_MS);
+    expect(await recover()).toEqual({ failed: 0 });
+    expect(row.status).toBe('RUNNING');
+  });
 });
+
+const DRAFT_SAVED = 'Some of a draft, saved by a call still running.';
 
 describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
   const DRAFT = 'The first half of a sharper draft, saved before the process died.';
@@ -174,8 +221,17 @@ describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
   it('prices it from what it kept and its saved draft, estimated, and charges it once', async () => {
     const row = rewrite({ draft: DRAFT, callStart: CALL_START });
 
+    let inTransaction: number | undefined;
+    mocks.logCost.mockImplementationOnce(async (params: LogCostParams) => {
+      // Written with no transaction open: it needs a connection of its own.
+      inTransaction = fake.db.$transaction.mock.calls.length;
+      fake.addCost(requireOrgId(), ESTIMATE_USD, params.metadata ?? {}, NOW);
+      return { id: fake.costRows.at(-1)?.id, totalCostUsd: ESTIMATE_USD };
+    });
+
     expect(await recover()).toEqual({ failed: 1 });
 
+    expect(inTransaction).toBe(0);
     expect(mocks.logCost).toHaveBeenCalledTimes(1);
     const written = mocks.logCost.mock.calls[0][0] as LogCostParams;
     expect(written).toMatchObject({
@@ -237,6 +293,17 @@ describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
     expect(mocks.logCost).not.toHaveBeenCalled();
     expect([none.status, unreadable.status]).toEqual(['FAILED', 'FAILED']);
     expect(charges()).toEqual([]);
+    // The provider answered, so it may have billed: said, for each.
+    expect(vi.mocked(logger.warn).mock.calls).toEqual([
+      [
+        'A lost rewrite answered but kept no call to price; it is ended uncharged',
+        { rewriteId: none.id },
+      ],
+      [
+        'A lost rewrite answered but kept no call to price; it is ended uncharged',
+        { rewriteId: unreadable.id },
+      ],
+    ]);
   });
 
   it('ends one whose estimate could not be written uncharged, and says so', async () => {
@@ -261,8 +328,8 @@ describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
     });
     expect(await recover()).toEqual({ failed: 0 });
     expect(mocks.logCost).toHaveBeenCalledTimes(1);
-    // The fake does not roll back: put back what the rollback would. The
-    // estimate stays, written outside the transaction.
+    // The fake does not roll back: put back what the rollback would, and let
+    // the pass's claim run out. The estimate stays, written before it.
     Object.assign(row, {
       status: 'RUNNING',
       error: null,

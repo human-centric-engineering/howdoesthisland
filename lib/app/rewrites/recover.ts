@@ -19,26 +19,30 @@
  * with no saved draft is charged nothing: the provider may not have
  * answered. See "What it can miss" in `.context/app/rewrites.md`.
  *
- * **Only once its call cannot still be running.** A rewrite is left alone
- * until it is {@link REWRITE_LIFETIME_MS} old, past which its call has been
- * cut off, so the estimate is not followed by the call's own row.
+ * **One that kept its call, only once that call has stopped.** It is left
+ * alone until it is {@link REWRITE_LIFETIME_MS} old: its call stops itself
+ * before then on any host (`REWRITE_CALL_MS`), writing its own cost row, so
+ * no row of its own follows the estimate. One that kept no call has nothing
+ * to price and none to wait for, and is ended once its lease runs out.
  *
- * Idempotent: the write that ends it matches only a `RUNNING` row past its
- * lease, so a second pass, or a call that finished meanwhile, changes
- * nothing; it locks the row, so a pass running alongside waits and then
- * finds it ended. An estimate written by a pass whose transaction then
- * failed is a cost row the next pass finds, and charges, without another.
+ * **Claimed, then priced, then ended.** The pass first claims the row (a
+ * lease of its own, {@link CLAIM_MS}), so a pass running alongside finds it
+ * taken. It then writes the estimate on its own (`logCost` writes outside
+ * any transaction, and holding one open while it does would need a second
+ * connection), and ends and charges it in one transaction, matching only its
+ * own claim. A pass that fails part-way leaves its claim to run out: the
+ * next pass finds any estimate it wrote, and charges it without another.
  *
  * A lease can also run out while the call lives, if its saves fail for that
  * long. Its next save sets it `RUNNING` again, and it charges itself as it
  * ends.
  */
+import type { Prisma } from '@prisma/client';
 import { RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
 import { recordStoppedStream } from '@/lib/app/judges/run-judge';
 import { parseRewriteCallStart } from '@/lib/app/rewrites/call-start';
 import { REWRITE_COST_TAG, REWRITE_LIFETIME_MS } from '@/lib/app/rewrites/limits';
-import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { requireOrgId } from '@/lib/tenancy/context';
@@ -53,80 +57,117 @@ export const LOST_REWRITE = 'It stopped before finishing.';
  */
 export const LOST_REWRITE_CODE = 'lost';
 
+/** How long a pass holds a rewrite it is ending: far longer than pricing and ending one takes. */
+export const CLAIM_MS = 60_000;
+
 export async function recoverRewrites(now: Date = new Date()): Promise<{ failed: number }> {
   const orgId = requireOrgId();
-  const lapsed = {
+  const lapsed: Prisma.RewriteWhereInput = {
     orgId,
-    status: 'RUNNING' as const,
+    status: 'RUNNING',
     OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
-    createdAt: { lt: new Date(now.getTime() - REWRITE_LIFETIME_MS) },
   };
+  const oldBefore = new Date(now.getTime() - REWRITE_LIFETIME_MS);
   const rows = await prisma.rewrite.findMany({
     where: lapsed,
     orderBy: { createdAt: 'asc' },
     take: RECOVERY_BATCH,
-    select: { id: true, createdAt: true },
+    select: { id: true, createdAt: true, callStart: true },
   });
   let failed = 0;
-  for (const { id, createdAt } of rows) {
+  for (const { id, createdAt, callStart } of rows) {
+    // SQL NULL filtered here, not in the query, as `frameworks/repo.ts` does:
+    // the query would need `Prisma.DbNull`, which `lib/app` cannot import.
+    const old = createdAt < oldBefore;
+    if (callStart !== null && !old) continue;
     try {
-      failed += await prisma.$transaction(async (tx) => {
-        const { count } = await tx.rewrite.updateMany({
-          where: { ...lapsed, id },
-          data: {
-            status: 'FAILED',
-            error: LOST_REWRITE,
-            errorCode: LOST_REWRITE_CODE,
-            completedAt: now,
-            leaseExpiresAt: null,
-          },
-        });
-        if (count === 0) return 0;
-        const ownRows = {
-          orgId,
-          createdAt: { gte: createdAt },
-          metadata: { path: ['rewriteId'], equals: id },
-        };
-        if ((await tx.aiCostLog.count({ where: ownRows })) === 0) {
-          await priceLostCall(tx, orgId, id);
-        }
-        await chargeRewrite(tx, orgId, id, createdAt);
-        // What its rows record, whether or not the workspace was charged for it.
-        const { _sum } = await tx.aiCostLog.aggregate({
-          where: ownRows,
-          _sum: { totalCostUsd: true },
-        });
-        const costUsd = _sum.totalCostUsd ?? 0;
-        if (costUsd > 0) await tx.rewrite.update({ where: { id }, data: { costUsd } });
-        return 1;
-      });
+      failed += await endLost(orgId, id, createdAt, old, lapsed, now);
     } catch (err) {
-      // Left for the next pass; the rest of this one goes on.
+      // Left for the next pass once its claim runs out; the rest of this one goes on.
       logger.error('Recovery could not end a lost rewrite', err, { rewriteId: id });
     }
   }
   return { failed };
 }
 
-/**
- * Write the cost row a lost rewrite's call left none of, from what it kept
- * of its call and the draft it saved (`recordStoppedStream`). The row is
- * written outside `tx` (`logCost` has no transaction of its own to join) and
- * read back by its charge inside it. Nothing is written for a rewrite that
- * kept no call (it died before the call's checks passed, or the write
- * failed) or saved no draft.
- */
-async function priceLostCall(
-  tx: Prisma.TransactionClient,
+async function endLost(
   orgId: string,
-  rewriteId: string
-): Promise<void> {
-  const row = await tx.rewrite.findFirst({
-    where: { id: rewriteId, orgId },
+  id: string,
+  createdAt: Date,
+  old: boolean,
+  lapsed: Prisma.RewriteWhereInput,
+  now: Date
+): Promise<number> {
+  const claim = new Date(now.getTime() + CLAIM_MS);
+  const { count: claimed } = await prisma.rewrite.updateMany({
+    where: { ...lapsed, id },
+    data: { leaseExpiresAt: claim },
+  });
+  if (claimed === 0) return 0;
+
+  const row = await prisma.rewrite.findFirst({
+    where: { id, orgId },
     select: { draft: true, callStart: true, createdByUserId: true },
   });
-  const start = parseRewriteCallStart(row?.callStart);
-  if (!row || !start || row.draft === '') return;
+  if (!row) return 0;
+  // Its call started since the pass looked, so it may still be running:
+  // left for when it is old enough (its claim runs out, or a save renews it).
+  if (!old && row.callStart !== null) return 0;
+
+  const ownRows = {
+    orgId,
+    createdAt: { gte: createdAt },
+    metadata: { path: ['rewriteId'], equals: id },
+  };
+  if (old && (await prisma.aiCostLog.count({ where: ownRows })) === 0) {
+    await priceLostCall(id, row);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.rewrite.updateMany({
+      // Still this pass's: a save from a call that lived after all, or a
+      // later pass once this claim ran out, would have changed it.
+      where: { id, orgId, status: 'RUNNING', leaseExpiresAt: claim },
+      data: {
+        status: 'FAILED',
+        error: LOST_REWRITE,
+        errorCode: LOST_REWRITE_CODE,
+        completedAt: now,
+        leaseExpiresAt: null,
+      },
+    });
+    if (count === 0) return 0;
+    await chargeRewrite(tx, orgId, id, createdAt);
+    // What its rows record, whether or not the workspace was charged for it.
+    const { _sum } = await tx.aiCostLog.aggregate({
+      where: ownRows,
+      _sum: { totalCostUsd: true },
+    });
+    const costUsd = _sum.totalCostUsd ?? 0;
+    if (costUsd > 0) await tx.rewrite.update({ where: { id }, data: { costUsd } });
+    return 1;
+  });
+}
+
+/**
+ * Write the cost row a lost rewrite's call left none of, from what it kept
+ * of its call and the draft it saved (`recordStoppedStream`). Nothing is
+ * written for a rewrite that saved no draft, or kept no call it can read
+ * (it died before the call's checks passed, or the write failed): the
+ * second is logged, since the provider may have billed it.
+ */
+async function priceLostCall(
+  rewriteId: string,
+  row: { draft: string; callStart: unknown; createdByUserId: string | null }
+): Promise<void> {
+  if (row.draft === '') return;
+  const start = parseRewriteCallStart(row.callStart);
+  if (!start) {
+    logger.warn('A lost rewrite answered but kept no call to price; it is ended uncharged', {
+      rewriteId,
+    });
+    return;
+  }
   const { frameworkVersion, ...pricing } = start;
   const written = await recordStoppedStream(
     pricing,

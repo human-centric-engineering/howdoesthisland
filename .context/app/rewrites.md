@@ -34,7 +34,8 @@ from.
 A rewrite that fails after it started answers `failed`, with the editor's
 `errorCode` (`refused`, `truncated`, `provider_error`, `over_budget`,
 `rate_limited`, `agent_inactive`, `model_not_approved`, `lost` for one whose
-process died, `internal_error`) and the draft it had written by then.
+process died, `timed_out` for one whose call ran past `REWRITE_CALL_MS`,
+`internal_error`) and the draft it had written by then.
 
 ## What the editor reads
 
@@ -131,7 +132,8 @@ its ending replaces recovery's. The retention
 purge leaves a review alone while one of its rewrites runs.
 
 **A call stopped part-way** (its signal, a save that failed, a dropped
-connection) reports no usage, since a provider reports it in a stream's last
+connection, or running past `REWRITE_CALL_MS`, 330s after its row was written,
+on any host) reports no usage, since a provider reports it in a stream's last
 event. One that had answered at all is recorded at an estimate: the prompt and
 what it streamed, counted by the model's tokeniser, its row tagged
 `estimated: true`. Thinking is not counted, so the estimate is low, never
@@ -146,9 +148,20 @@ draft, and charges its cost rows in the same transaction. Until then it holds
 its estimate. One whose process was alive after all charges itself as it ends
 (above).
 
-Recovery leaves a rewrite alone until it is `REWRITE_LIFETIME_MS` (360s, the
-route's `maxDuration`) old, past which a serverless host has cut its call off.
-So a rewrite it ends has a call that has stopped.
+Recovery leaves a rewrite that kept its call (`callStart`) alone until it is
+`REWRITE_LIFETIME_MS` (360s, the route's `maxDuration`) old. The call stops
+itself at `REWRITE_CALL_MS` (330s) on any host, writing its own cost row, so a
+rewrite recovery prices has a call that has stopped and will write no row
+after the estimate. One that kept no call is ended once its lease runs out:
+there is nothing to price, and no call to wait for.
+
+A pass claims a rewrite first (a lease of its own, `CLAIM_MS`), then writes
+any estimate, then ends and charges it in one transaction that matches only
+its claim. A save from a call that lived after all, or another pass, changes
+the claim, and the pass leaves the row. The estimate is written with no
+transaction open, so a pass needs one connection at a time. A pass that fails
+part-way leaves its claim to run out; the next finds its estimate and charges
+it without another.
 
 **Priced when it left no row** (t-85). A streamed call writes its cost row only
 as it ends, so one whose process died part-way through the stream (the platform
@@ -169,12 +182,13 @@ the row too.
 - **The estimate is low.** Thinking is not counted, and nor is what it wrote
   after its last save (up to 5s of it). As for a stopped call: low, never
   high.
-- **A call that outlives `REWRITE_LIFETIME_MS`** (only on a long-running
-  server, where nothing cuts it off there) and then ends writes its own cost
-  row after the estimate. The charge is still once (one reference); the
-  monthly cap counts both.
+- **A call whose process stalls for 30s or more** between being stopped at
+  `REWRITE_CALL_MS` and writing its cost row could write it after recovery's
+  estimate. The charge is still once (one reference); the monthly cap counts
+  both.
 - **A rewrite that kept no `callStart`** (that write failed, and is logged) is
-  charged nothing, as before t-85.
+  charged nothing, as before t-85. Recovery logs one that saved a draft, since
+  the provider answered it.
 - **A review's judge call** that dies with its process is still missed: this
   changed rewrites only.
 
@@ -184,6 +198,8 @@ the row too.
   handler-level sub-cap, as for reviews that call judges.
 - The route's `maxDuration` is 360s: the editor's longest timeout (300s), the
   budget lock's wait (10s), and the setup and ending write.
+- `REWRITE_CALL_MS` (330s) stops a call still running then, on any host,
+  leaving 30s for its cost row before recovery may price it.
 
 ## Data
 

@@ -40,8 +40,8 @@
  *
  * A rewrite that fails once started answers `failed` with `error` and
  * `errorCode` (the editor's: `refused`, `truncated`, `provider_error`,
- * `over_budget`, `rate_limited`, `agent_inactive`, …), and keeps what it had
- * written.
+ * `over_budget`, `rate_limited`, `agent_inactive`, …, or `timed_out` for one
+ * that ran past `REWRITE_CALL_MS`), and keeps what it had written.
  *
  * GET errors: 400 `VALIDATION_ERROR` (no `assessmentId`), 401, 403, 404
  * (no such review in this workspace).

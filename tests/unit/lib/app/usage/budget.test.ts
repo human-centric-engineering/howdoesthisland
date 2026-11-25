@@ -1707,6 +1707,30 @@ describe('rewrites (t-81)', () => {
       ]);
     });
 
+    it('does not ask for the ceiling with nothing to check it against', async () => {
+      state.creditsFail = true;
+      state.budget = null;
+      const ceiling = vi.fn(async () => 0.42);
+      expect(await reserve(ORG, ceiling)).toMatchObject({ status: 'RUNNING', heldUsd: 0 });
+      expect(ceiling).not.toHaveBeenCalled();
+    });
+
+    it('holds nothing when the ceiling cannot be read, and says so as its own failure', async () => {
+      state.credits = 60;
+      const row = await reserve(ORG, async () => {
+        throw new Error('binding unreadable');
+      });
+      expect(row).toMatchObject({ status: 'RUNNING', heldUsd: 0 });
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Rewrite cost ceiling unreadable; holding nothing for it',
+        { orgId: ORG, error: 'binding unreadable' }
+      );
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        'Review budget estimate unreadable; not refusing',
+        expect.anything()
+      );
+    });
+
     it('with no ceiling, as before, all three pass on any remainder', async () => {
       state.credits = 60;
       const outcomes = await Promise.allSettled([1, 2, 3].map(() => reserve(ORG)));

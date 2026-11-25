@@ -20,9 +20,10 @@
  * stops listening does not stop it, and the draft is saved and charged all
  * the same. While it runs it saves what it has written and renews its lease
  * every {@link DRAFT_SAVE_MS}, and once as soon as it has its first piece; a
- * save that finds the row gone (its review was deleted) stops the call. As
- * the call starts, the row keeps what it is priced from (`callStart`, t-85),
- * so recovery can price one whose process dies before it writes its cost row.
+ * save that finds the row gone (its review was deleted) stops the call, as
+ * does running past {@link REWRITE_CALL_MS}. As the call starts, the row
+ * keeps what it is priced from (`callStart`, t-85), so recovery can price one
+ * whose process dies before it writes its cost row.
  *
  * **How it ends.** One write: `COMPLETED` with the draft, or `FAILED` with
  * the reason and what was written by then, and in the same transaction the
@@ -60,7 +61,7 @@ import {
 import { parseProjectContext, renderProjectContext } from '@/lib/app/projects/context';
 import { EventChannel } from '@/lib/app/rewrites/channel';
 import { LOST_REWRITE_CODE } from '@/lib/app/rewrites/recover';
-import { DRAFT_SAVE_MS, REWRITE_COST_TAG } from '@/lib/app/rewrites/limits';
+import { DRAFT_SAVE_MS, REWRITE_CALL_MS, REWRITE_COST_TAG } from '@/lib/app/rewrites/limits';
 import type { CreateRewriteRequest } from '@/lib/app/rewrites/validations';
 import { REWRITE_VIEW_SELECT, toRewriteView, type RewriteView } from '@/lib/app/rewrites/views';
 import { reserveRewriteBudget } from '@/lib/app/usage/budget';
@@ -305,6 +306,17 @@ async function drive(d: Drive): Promise<RewriteView> {
   };
   const timer = setInterval(save, DRAFT_SAVE_MS);
   timer.unref?.();
+  // Stopped once it has run too long, on any host, so its own cost row lands
+  // before recovery may price it from its draft (`REWRITE_LIFETIME_MS`).
+  let overran = false;
+  const deadline = setTimeout(
+    () => {
+      overran = true;
+      stop.abort();
+    },
+    Math.max(0, d.createdAt.getTime() + REWRITE_CALL_MS - Date.now())
+  );
+  deadline.unref?.();
   // So recovery can price the call should this process die before it ends.
   const keepStart = async (start: StreamStart) => {
     try {
@@ -353,9 +365,10 @@ async function drive(d: Drive): Promise<RewriteView> {
       errorCode: null,
     };
   } catch (err) {
-    end = failedEnding(rewriteId, draft, err);
+    end = overran ? overranEnding(rewriteId, draft, err) : failedEnding(rewriteId, draft, err);
   } finally {
     clearInterval(timer);
+    clearTimeout(deadline);
   }
   await saving;
 
@@ -373,6 +386,24 @@ interface Ending {
   costUsd: number;
   error: string | null;
   errorCode: string | null;
+}
+
+/** What a rewrite whose call ran past {@link REWRITE_CALL_MS} says. */
+export const OVERRAN_REWRITE = 'It ran too long and was stopped.';
+
+/** The ending of a call stopped at {@link REWRITE_CALL_MS}, priced as any stopped call. */
+function overranEnding(rewriteId: string, draft: string, err: unknown): Ending {
+  logger.warn('A rewrite ran too long and was stopped', { rewriteId });
+  const spend = err instanceof JudgeRunError ? err.spend : undefined;
+  return {
+    status: 'FAILED',
+    draft,
+    provider: spend?.provider ?? null,
+    modelName: spend?.model ?? null,
+    costUsd: spend?.costUsd ?? 0,
+    error: OVERRAN_REWRITE,
+    errorCode: 'timed_out',
+  };
 }
 
 function failedEnding(rewriteId: string, draft: string, err: unknown): Ending {

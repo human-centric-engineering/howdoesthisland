@@ -49,11 +49,12 @@ import {
   type AgentStreamReply,
 } from '@/lib/app/judges/run-judge';
 import { rewriteMaxTokens } from '@/lib/app/frameworks/howdoesthisland/engine/rewrite';
-import { DRAFT_SAVE_MS } from '@/lib/app/rewrites/limits';
+import { DRAFT_SAVE_MS, REWRITE_CALL_MS } from '@/lib/app/rewrites/limits';
 import { logger } from '@/lib/logging';
 import {
   getRewrite,
   listRewrites,
+  OVERRAN_REWRITE,
   startRewrite,
   type RewriteEvent,
 } from '@/lib/app/rewrites/service';
@@ -622,6 +623,45 @@ describe('while it runs', () => {
     expect(await started.done).toMatchObject({ status: 'failed', assessmentId: review.id });
     expect(fake.rewrites).toEqual([]);
     expect(charges()).toEqual([expect.objectContaining({ amount: -3 })]);
+  });
+
+  it('stops a call that runs past REWRITE_CALL_MS on any host, and charges what it recorded', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    let signal: AbortSignal | undefined;
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      signal = call.signal;
+      await call.onText('Part of it.');
+      await new Promise<void>((resolve) => call.signal?.addEventListener('abort', () => resolve()));
+      // Stopped, the call writes its own row, as any stopped call does.
+      fake.addCost(ORG, 0.05, { ...call.costMetadata, estimated: true });
+      const err = new JudgeRunError('provider_error', "The editor's call failed.");
+      err.spend = {
+        provider: 'anthropic',
+        model: 'claude-sonnet-5-5',
+        usage: { input: 1, output: 1, attempts: 1 },
+        costUsd: 0.05,
+      };
+      throw err;
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+
+    await vi.advanceTimersByTimeAsync(REWRITE_CALL_MS - DRAFT_SAVE_MS);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_MS);
+    expect(signal?.aborted).toBe(true);
+
+    expect(await started.done).toMatchObject({
+      status: 'failed',
+      draft: 'Part of it.',
+      error: OVERRAN_REWRITE,
+      errorCode: 'timed_out',
+      costUsd: 0.05,
+    });
+    expect(fake.rewrites[0]).toMatchObject({ status: 'FAILED', errorCode: 'timed_out' });
+    expect(charges()).toEqual([expect.objectContaining({ amount: -5 })]);
   });
 
   it('runs on from recovery’s `lost`, replaces it with its own ending, and charges what landed after', async () => {
