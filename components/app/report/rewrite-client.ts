@@ -49,6 +49,16 @@ export type StreamOutcome =
    */
   | { kind: 'dropped'; rewrite: RewriteWire | null; sentAt: number };
 
+/**
+ * What a rewrite is asked for: its focus, and for one that fills an earlier
+ * rewrite's gaps (t-83), that rewrite and the answers, by placeholder id.
+ */
+export interface RewriteAsk {
+  focus: string;
+  fromRewriteId?: string;
+  answers?: Record<string, string>;
+}
+
 export interface StreamHandlers {
   /** The row, `running`: the rewrite exists, and is being charged for. */
   onStart: (rewrite: RewriteWire) => void;
@@ -64,7 +74,7 @@ export interface StreamHandlers {
  */
 export async function streamRewrite(
   assessmentId: string,
-  focus: string,
+  ask: RewriteAsk,
   handlers: StreamHandlers,
   signal: AbortSignal
 ): Promise<StreamOutcome> {
@@ -75,7 +85,7 @@ export async function streamRewrite(
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ assessmentId, focus, stream: true }),
+      body: JSON.stringify({ assessmentId, ...ask, stream: true }),
       signal,
     });
   } catch (err) {
@@ -253,6 +263,22 @@ export function reviewDraftRefusalOf(err: unknown): Refusal | null {
     };
   }
   return refusalOf(err);
+}
+
+/**
+ * The answers worth sending for `placeholders`: each one filled in, trimmed,
+ * keyed by its id. Empty when none is, so there is nothing to rewrite with.
+ */
+export function answersFor(
+  placeholders: readonly { id: string }[],
+  typed: Readonly<Record<string, string>>
+): Record<string, string> {
+  const answers: Record<string, string> = {};
+  for (const { id } of placeholders) {
+    const answer = typed[id]?.trim();
+    if (answer) answers[id] = answer;
+  }
+  return answers;
 }
 
 /** Why a rewrite failed, as the server put it; what it had written stays shown. */

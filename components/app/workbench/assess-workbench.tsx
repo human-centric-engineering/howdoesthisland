@@ -13,6 +13,10 @@
  * AI reviewer as it lands, then the report. A review with no AI reviewer is
  * final at once and opens its report straight away.
  *
+ * Before it starts, copy in no project, or in one with no brief, is invited
+ * to have one (`BriefInvite`, t-83): what a brief adds, with an example, and
+ * where to write it. It never stops the review.
+ *
  * The draft, less any file, is kept in this browser until the review starts.
  * A refusal is shown beside Start with `<SaveError>`, in words a person can
  * act on, with a link to the usage page when it is about credits or budget.
@@ -36,6 +40,7 @@ import { sendUpload } from '@/lib/app/intake/send-upload';
 import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
 import { WORDS } from '@/lib/app/reports/words';
 import { SettingPicker } from '@/components/app/projects/setting-picker';
+import { BriefInvite, hasBrief } from '@/components/app/projects/brief-invite';
 import { DOCUMENT_EXTENSIONS, type ProjectWire } from '@/components/app/projects/schemas';
 import {
   NO_DEFAULT,
@@ -315,6 +320,9 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
             noneLabel="No project"
             disabled={sending}
           />
+        ) : null}
+        {!project || !hasBrief(project.brief) ? (
+          <BriefInvite projectId={project?.id ?? null} runs="review" />
         ) : null}
         {project && stale.length > 0 ? (
           <div role="note" className="space-y-1 text-sm">

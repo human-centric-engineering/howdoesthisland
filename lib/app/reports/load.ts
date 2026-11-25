@@ -32,7 +32,12 @@ import { buildReportView, type ReportView } from '@/lib/app/reports/view';
 
 export type ReportLoad =
   /** Final, with a result: the report. */
-  | { kind: 'ready'; view: ReportView }
+  | {
+      kind: 'ready';
+      view: ReportView;
+      /** Its project, or `null` for none (or a share link's, which does not say). */
+      projectId: string | null;
+    }
   /** Still queued or running. */
   | { kind: 'pending'; assessment: ReportAssessment }
   /** Final with no result: failed, or cancelled (a cancel never stores one). */
@@ -134,5 +139,6 @@ export async function loadReport(
   return {
     kind: 'ready',
     view: buildReportView({ assessment: a, result: result.data, model: model.data }),
+    projectId: a.projectId ?? null,
   };
 }

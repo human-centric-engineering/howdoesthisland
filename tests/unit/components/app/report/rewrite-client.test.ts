@@ -89,7 +89,7 @@ describe('streamRewrite', () => {
 
     const outcome = await streamRewrite(
       'asm_1',
-      'ethos',
+      { focus: 'ethos' },
       { onStart, onText: (t) => pieces.push(t) },
       new AbortController().signal
     );
@@ -121,7 +121,7 @@ describe('streamRewrite', () => {
     );
     const outcome = await streamRewrite(
       'asm_1',
-      'balanced',
+      { focus: 'balanced' },
       { onStart: vi.fn(), onText: vi.fn() },
       new AbortController().signal
     );
@@ -137,7 +137,7 @@ describe('streamRewrite', () => {
     );
     const outcome = await streamRewrite(
       'asm_1',
-      'balanced',
+      { focus: 'balanced' },
       { onStart: vi.fn(), onText: vi.fn() },
       new AbortController().signal
     );
@@ -148,7 +148,7 @@ describe('streamRewrite', () => {
     fetchMock.mockResolvedValue(streamed([]));
     const outcome = await streamRewrite(
       'asm_1',
-      'balanced',
+      { focus: 'balanced' },
       { onStart: vi.fn(), onText: vi.fn() },
       new AbortController().signal
     );
@@ -171,7 +171,7 @@ describe('streamRewrite', () => {
     );
     const err = await streamRewrite(
       'asm_1',
-      'balanced',
+      { focus: 'balanced' },
       { onStart: vi.fn(), onText: vi.fn() },
       new AbortController().signal
     ).catch((e: unknown) => e);
@@ -188,7 +188,7 @@ describe('streamRewrite: the stream’s end', () => {
     );
     const outcome = await streamRewrite(
       'asm_1',
-      'balanced',
+      { focus: 'balanced' },
       { onStart: vi.fn(), onText: vi.fn() },
       new AbortController().signal
     );
@@ -213,7 +213,7 @@ describe('streamRewrite: the stream’s end', () => {
     );
     const outcome = await streamRewrite(
       'asm_1',
-      'balanced',
+      { focus: 'balanced' },
       { onStart: vi.fn(), onText: vi.fn() },
       new AbortController().signal
     );

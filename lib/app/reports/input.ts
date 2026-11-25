@@ -182,6 +182,8 @@ export type ReportRedFlag = z.infer<typeof redFlagSchema>;
  * fields (its id, source, timings, each run's cost) are stripped.
  */
 export const reportAssessmentSchema = sharedAssessmentSchema.extend({
+  /** Its project, for the rewrite drawer's brief invitation (t-83). Not served on a share link. */
+  projectId: z.string().nullish(),
   /**
    * The context used (t-75): the assessment's whole record on the web report
    * and the PDF, or what a share link serves of it. The report shows only
