@@ -141,6 +141,39 @@ what it streamed, counted by the model's tokeniser, its row tagged
 `estimated: true`. Thinking is not counted, so the estimate is low, never
 high. One stopped before any reply is recorded at nothing.
 
+## The report's drawer
+
+The web report's **Rewrite** action (`components/app/report/report-actions.tsx`)
+opens a drawer, `rewrite-drawer.tsx`, built in t-82. It is in the report's
+actions, so the PDF and a shared link, which render the report alone, never
+show it.
+
+- **Focus**: balanced, or one of the review's appeals (`rewrite-focuses.ts`,
+  from the report's own appeal names), each with its `<FieldHelp>`.
+- **Writing**: `POST /api/v1/rewrites` with `stream: true`, read with
+  `fetch` and `parseSseBlock` (`rewrite-client.ts`). Each `rewrite_text` is
+  added to the draft as it arrives.
+- **Earlier rewrites**: opening the drawer reads the review's list (one call,
+  each row with its draft), and any of them reopens. One still `running` is
+  read again (`GET /api/v1/rewrites/{id}`, every 3s) until it ends.
+- **A dropped stream starts nothing.** The rewrite carries on, and is charged,
+  on the server however the reader goes, so a second `POST` would be a second
+  charge. With the first event's row in hand, the drawer follows that rewrite.
+  When the stream dropped before it, the drawer reads the list again and
+  follows the newest one, if it is running and no older than the request
+  (`startedSince`); otherwise it says the connection dropped. Closing the
+  drawer mid-draft stops only the reading: the rewrite is listed, writing, on
+  the next open.
+- **Copy** copies the draft. **Review this draft** reads the review
+  (`GET /api/v1/assessments/{id}`) and starts a review of the draft with the
+  same model version, reader context, project and AI reviewers (a quick review
+  is reviewed quickly again: `judges` takes at least one), then opens it. In
+  t-84 that becomes a comparison with the original.
+- **Refusals** show beside the button pressed, with `<SaveError>`. Credit and
+  budget refusals use the assess page's `refusalOf`, with the usage link; the
+  rate limit is worded for rewrites (`rewriteRefusalOf`). A rewrite that
+  started and then failed shows the server's `error` and keeps what it wrote.
+
 ## When the process dies
 
 The rewrite keeps `RUNNING` with its lease running out. The rewrite recovery
