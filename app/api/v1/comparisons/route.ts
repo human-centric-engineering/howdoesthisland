@@ -49,6 +49,12 @@ import {
 } from '@/lib/app/comparisons/validations';
 import { listComparisons } from '@/lib/app/comparisons/views';
 
+/**
+ * Long enough for the drafts' runs the response did not wait for to finish
+ * under `after()`, as a single review's route allows.
+ */
+export const maxDuration = 300;
+
 export const POST = withAuth(async (request: NextRequest, session) => {
   const body = await validateRequestBody(request, createComparisonSchema);
   // Refused for its options, a draft's text or the budget: nothing spent,
@@ -63,9 +69,11 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       if (room.remaining < body.drafts.length) {
         return createRateLimitResponse({ ...room, success: false, remaining: 0 });
       }
-      body.drafts.forEach(() => aiAssessmentLimiter.check(key));
-      // Held only now, so a request refused above holds nothing meanwhile.
+      // Held only now, so a request refused above holds nothing meanwhile,
+      // and before the drafts are counted, so a set the budget refuses
+      // counts none of them.
       await holdComparisonBudget(body, prepared);
+      body.drafts.forEach(() => aiAssessmentLimiter.check(key));
     }
     const comparison = await createComparison(body, prepared, {
       userId: session.user.id,

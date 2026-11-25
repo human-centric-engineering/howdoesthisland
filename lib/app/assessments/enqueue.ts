@@ -72,6 +72,12 @@ export async function enqueueAssessment(
   return enqueued[0];
 }
 
+/**
+ * Sized for a comparison's five drafts of up to 40k characters each, written
+ * in one transaction: Prisma's 5s default is for one review's rows.
+ */
+const ENQUEUE_TRANSACTION = { maxWait: 10_000, timeout: 15_000 };
+
 /** One input checked as far as the store can, ready to write. */
 interface CheckedInput {
   input: EnqueueAssessmentInput;
@@ -81,9 +87,14 @@ interface CheckedInput {
   judges: readonly string[];
 }
 
-async function checkInput(input: EnqueueAssessmentInput): Promise<CheckedInput> {
+type LoadedEngine = Awaited<ReturnType<typeof engineForVersion>>;
+
+async function checkInput(
+  input: EnqueueAssessmentInput,
+  engineOf: (versionId: string) => Promise<LoadedEngine>
+): Promise<CheckedInput> {
   const text = assessableText(input.content.text);
-  const loaded = await engineForVersion(input.frameworkVersionId);
+  const loaded = await engineOf(input.frameworkVersionId);
   if (!loaded || loaded.version.status !== 'PUBLISHED') {
     throw new AssessmentInputError('version_not_found', 'There is no such published version.');
   }
@@ -111,8 +122,18 @@ export async function enqueueAssessments<T>(
   alsoWrite: (tx: Prisma.TransactionClient, enqueued: EnqueuedAssessment[]) => Promise<T>
 ): Promise<{ enqueued: EnqueuedAssessment[]; also: T }> {
   const orgId = requireOrgId();
+  // A comparison's drafts share one version: its engine is loaded once.
+  const engines = new Map<string, Promise<LoadedEngine>>();
+  const engineOf = (versionId: string): Promise<LoadedEngine> => {
+    let loaded = engines.get(versionId);
+    if (!loaded) {
+      loaded = engineForVersion(versionId);
+      engines.set(versionId, loaded);
+    }
+    return loaded;
+  };
   const checked: CheckedInput[] = [];
-  for (const input of inputs) checked.push(await checkInput(input));
+  for (const input of inputs) checked.push(await checkInput(input, engineOf));
 
   // One transaction, so a content row never exists without its assessment.
   const written = await prisma.$transaction(async (tx) => {
@@ -171,7 +192,7 @@ export async function enqueueAssessments<T>(
       enqueued.push({ assessmentId: assessment.id, contentId: assessment.contentId, judges });
     }
     return { enqueued, also: await alsoWrite(tx, enqueued) };
-  });
+  }, ENQUEUE_TRANSACTION);
 
   noteMaintenanceWork('app:assessment-queued');
   return written;

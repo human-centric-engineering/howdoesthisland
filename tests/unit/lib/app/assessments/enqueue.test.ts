@@ -266,6 +266,30 @@ describe('enqueueAssessments (t-87)', () => {
     expect(fake.db.project.findFirst).toHaveBeenCalledTimes(1);
     expect(fake.assessments.map((a) => a.projectId)).toEqual(['project-1', 'project-1']);
   });
+
+  it('loads the version the inputs share once, and each other version once', async () => {
+    await runAsOrg(ORG, () =>
+      enqueueAssessments(
+        [input(), input(), input({ frameworkVersionId: 'version-2' })],
+        async () => undefined
+      )
+    );
+
+    expect(mocks.engineForVersion.mock.calls.map(([id]) => id)).toEqual([
+      input().frameworkVersionId,
+      'version-2',
+    ]);
+    expect(fake.assessments).toHaveLength(3);
+  });
+
+  it('gives the write transaction room for a comparison of five long drafts', async () => {
+    await runAsOrg(ORG, () => enqueueAssessments([input(), input()], async () => undefined));
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
+  });
 });
 
 describe('startAssessmentInBackground', () => {

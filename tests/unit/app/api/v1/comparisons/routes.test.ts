@@ -552,6 +552,36 @@ describe('POST /api/v1/comparisons — the budget, for every draft together', ()
     check.mockRestore();
   });
 
+  it('counts none of its drafts against the per-user cap when the locked hold refuses a set the first check passed', async () => {
+    // Room for all three when the request is prepared; another request has
+    // spent the remainder by the time this one holds.
+    budget(6.5);
+    // Just before the locked check, another request's two reviews are held.
+    fake.db.budgetHold.deleteMany.mockImplementationOnce(async () => {
+      for (let i = 0; i < 2; i += 1) {
+        fake.holds.push({
+          id: `rival-${i}`,
+          orgId: WS_A,
+          judges: 9,
+          stored: true,
+          createdAt: new Date(),
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+      }
+      return { count: 0 };
+    });
+    const before = aiAssessmentLimiter.peek(`user:${ALICE}`).remaining;
+
+    const res = await post({ profile: 'full', drafts: drafts(DRAFT_A, DRAFT_B, DRAFT_C) });
+
+    expect(res.status).toBe(402);
+    expect((await json(res)).error?.code).toBe('BUDGET_EXCEEDED');
+    expect(fake.sets).toEqual([]);
+    // Only the rival's holds: this request holds none.
+    expect(fake.holds.map((h) => h.id)).toEqual(['rival-0', 'rival-1']);
+    expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(before);
+  });
+
   it('starts the set when every draft fits, and releases its holds once they are stored', async () => {
     budget(6.5);
 
