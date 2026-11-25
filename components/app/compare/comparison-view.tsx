@@ -278,7 +278,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
             </caption>
             <thead>
               <tr className="border-b border-(--hd-rule)">
-                <td className="w-40" />
+                <td className="sticky left-0 z-10 w-24 bg-(--hd-paper) md:w-40" />
                 {drafts.map((d) => (
                   <DraftHeader key={d.position} draft={d} winner={d.position === winnerAt} />
                 ))}
@@ -286,7 +286,10 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
             </thead>
             <tbody>
               <tr className="border-b border-(--hd-rule)">
-                <th scope="row" className="px-3 py-3 text-left align-top">
+                <th
+                  scope="row"
+                  className="sticky left-0 z-10 bg-(--hd-paper) px-3 py-3 text-left align-top"
+                >
                   Overall
                 </th>
                 {drafts.map((d) => {
@@ -310,7 +313,10 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
                 const compare = compareOf.get(appeal);
                 return (
                   <tr key={appeal} className="border-b border-(--hd-rule) last:border-0">
-                    <th scope="row" className="px-3 py-3 text-left align-top">
+                    <th
+                      scope="row"
+                      className="sticky left-0 z-10 bg-(--hd-paper) px-3 py-3 text-left align-top"
+                    >
                       {appealNames[appeal] ?? appeal}
                     </th>
                     {drafts.map((d) => {
