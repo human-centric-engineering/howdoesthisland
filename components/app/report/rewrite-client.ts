@@ -91,34 +91,48 @@ export async function streamRewrite(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  /** One block's event: the ended row for `rewrite_done`, else `null`. */
+  const handle = (block: string): RewriteWire | null => {
+    const frame = parseSseBlock(block);
+    if (!frame) return null;
+    const event = rewriteEventSchema.safeParse(frame.data);
+    // An event this page cannot read (the sanitised `error` frame among
+    // them) is passed over: the row says how it ended.
+    if (!event.success) return null;
+    if (event.data.type === 'rewrite') {
+      started = event.data.rewrite;
+      handlers.onStart(started);
+    } else if (event.data.type === 'rewrite_text') {
+      handlers.onText(event.data.text);
+    } else {
+      return event.data.rewrite;
+    }
+    return null;
+  };
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done) {
+        // A last block the stream ended without its blank line.
+        buffer += decoder.decode();
+        const ended = buffer.trim() ? handle(buffer) : null;
+        if (ended) return { kind: 'done', rewrite: ended };
+        break;
+      }
       buffer += decoder.decode(value, { stream: true });
       let sep: number;
       while ((sep = buffer.indexOf('\n\n')) !== -1) {
-        const block = buffer.slice(0, sep);
+        const ended = handle(buffer.slice(0, sep));
         buffer = buffer.slice(sep + 2);
-        const frame = parseSseBlock(block);
-        if (!frame) continue;
-        const event = rewriteEventSchema.safeParse(frame.data);
-        // An event this page cannot read (the sanitised `error` frame among
-        // them) is passed over: the row says how it ended.
-        if (!event.success) continue;
-        if (event.data.type === 'rewrite') {
-          started = event.data.rewrite;
-          handlers.onStart(started);
-        } else if (event.data.type === 'rewrite_text') {
-          handlers.onText(event.data.text);
-        } else {
-          return { kind: 'done', rewrite: event.data.rewrite };
-        }
+        if (ended) return { kind: 'done', rewrite: ended };
       }
     }
   } catch (err) {
     // Closed by the reader (the drawer shut, the page left): nothing to follow.
     if (signal.aborted) throw err;
+  } finally {
+    // Done with the response, however it ended: let its connection go.
+    reader.cancel().catch(() => undefined);
   }
   return { kind: 'dropped', rewrite: started, sentAt };
 }
@@ -268,11 +282,16 @@ const REWRITE_SUFFIX = ' (rewrite)';
  */
 export function reviewDraftBody(original: OriginalReview, draft: string): Record<string, unknown> {
   const title = original.title?.trim();
+  // Cut by code point, so a character outside the BMP is never split.
+  const cut = title
+    ? Array.from(title)
+        .slice(0, MAX_TITLE - REWRITE_SUFFIX.length)
+        .join('')
+        .trimEnd()
+    : '';
   return {
     source: { text: draft },
-    ...(title
-      ? { title: `${title.slice(0, MAX_TITLE - REWRITE_SUFFIX.length)}${REWRITE_SUFFIX}` }
-      : {}),
+    ...(cut ? { title: `${cut}${REWRITE_SUFFIX}` } : {}),
     framework: original.framework.slug,
     version: original.framework.version,
     ...(original.context ? { context: original.context } : {}),

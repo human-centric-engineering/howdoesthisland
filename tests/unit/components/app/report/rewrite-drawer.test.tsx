@@ -483,13 +483,13 @@ describe('RewriteDrawer', () => {
     expect(screen.queryByText('Loading…')).toBeNull();
   });
 
-  it('says the rewrite is still being written when following it fails', async () => {
+  it('says the rewrite could not be read when following it fails, without claiming it still runs', async () => {
     routes.list = () => ok([row({ id: 'rw_run', draft: 'Half' })]);
     routes.read = () => refused(500, 'INTERNAL_ERROR', 'Something went wrong.');
     fireEvent.click(await openDrawer(/Ethos · .*Writing/));
     expect(
       await screen.findByText(
-        'The rewrite could not be read. It is still being written: open this again in a moment to see it.'
+        'The rewrite could not be read. Close this and open it again to see where it got to.'
       )
     ).toBeInTheDocument();
     expect(draftBox()?.textContent).toBe('Half');
@@ -530,5 +530,63 @@ describe('RewriteDrawer', () => {
     ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Review this draft' })).toBeEnabled();
+  });
+
+  it('matches a drop only against what the server listed, not rewrites the drawer remembered', async () => {
+    // The list cannot be read until after the second press; the first press's
+    // rewrite is remembered, but is not the server's word on what was there.
+    let posts = 0;
+    routes.list = () =>
+      posts < 2
+        ? refused(500, 'INTERNAL_ERROR', 'Something went wrong.')
+        : ok([
+            row({ id: 'rw_theirs', focus: 'balanced' }),
+            row({ id: 'rw_mine1', focus: 'balanced', status: 'completed', draft: 'One.' }),
+          ]);
+    routes.post = () => {
+      posts++;
+      return posts === 1
+        ? streamed([
+            frame({ type: 'rewrite', rewrite: row({ id: 'rw_mine1', focus: 'balanced' }) }),
+            frame({
+              type: 'rewrite_done',
+              rewrite: row({
+                id: 'rw_mine1',
+                focus: 'balanced',
+                status: 'completed',
+                draft: 'One.',
+              }),
+            }),
+          ])
+        : streamed([], 'error');
+    };
+    render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    await waitFor(() => expect(draftBox()?.textContent).toBe('One.'));
+    // The list stays unread: one remembered row is not the history.
+    expect(screen.queryByRole('list')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    expect(
+      await screen.findByText(
+        /the earlier rewrites could not be read\. Close this and open it again/
+      )
+    ).toBeInTheDocument();
+    expect(calls('GET', '/api/v1/rewrites/rw_theirs')).toHaveLength(0);
+  });
+
+  it('drops an earlier refusal’s usage link when another rewrite is reopened', async () => {
+    routes.list = () =>
+      ok([row({ id: 'rw_failed', focus: 'pathos', status: 'failed', error: 'Timed out.' })]);
+    routes.post = () =>
+      refused(402, 'INSUFFICIENT_CREDITS', 'Add credits.', { usagePage: '/usage' });
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    await screen.findByRole('link', { name: /usage/ });
+
+    fireEvent.click(screen.getByRole('button', { name: /Pathos · / }));
+    expect(await screen.findByText('Timed out.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /usage/ })).toBeNull();
   });
 });

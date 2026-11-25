@@ -24,8 +24,9 @@ export const metadata: Metadata = { title: 'Report' };
  * model version it ran on. Another workspace's id is a 404 from the API, so it
  * renders the not-found page, the same as an id that does not exist.
  *
- * A ready report offers its PDF (t-31), and a rewrite of its copy (t-82). One still running shows its live
- * progress, then the report once it is final (t-78).
+ * A ready report offers its PDF (t-31), and a rewrite of its copy (t-82).
+ * One still running shows its live progress, then the report once it is
+ * final (t-78).
  */
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

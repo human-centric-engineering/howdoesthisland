@@ -106,8 +106,14 @@ export function RewriteDrawer({
   const reading = useRef<AbortController | null>(null);
   /** Every rewrite seen since the page opened, as last seen: laid over each list read. */
   const seen = useRef(new Map<string, RewriteWire>());
-  /** Bumped by each list read, so only the latest one's answer is shown. */
+  /** Bumped by each list read and by closing, so only the latest read's answer is shown. */
   const listRead = useRef(0);
+  /**
+   * The ids the server last listed, this open: what a rewrite found after a
+   * drop must not be. `null` until a read succeeds; never the rows the drawer
+   * remembered itself, which are not the server's word on what was there.
+   */
+  const listed = useRef<ReadonlySet<string> | null>(null);
 
   const nameOf = useCallback(
     (id: string) => focuses.find((f) => f.id === id)?.name ?? id,
@@ -116,7 +122,8 @@ export function RewriteDrawer({
 
   const remember = useCallback((r: RewriteWire) => {
     seen.current.set(r.id, r);
-    setEarlier((list) => mergeRewrites(list ?? [], [r]));
+    // A list that could not be read stays unread: one row is not the history.
+    setEarlier((list) => (list ? mergeRewrites(list, [r]) : list));
   }, []);
 
   const stopReading = () => {
@@ -169,7 +176,7 @@ export function RewriteDrawer({
       if (isAbort(err) || signal.aborted) return;
       setPhase('ended');
       rewrite.show(
-        'The rewrite could not be read. It is still being written: open this again in a moment to see it.'
+        'The rewrite could not be read. Close this and open it again to see where it got to.'
       );
     }
   };
@@ -177,8 +184,10 @@ export function RewriteDrawer({
   const loadEarlier = async (): Promise<RewriteWire[] | null> => {
     const read = ++listRead.current;
     try {
-      const list = mergeRewrites(await listRewrites(assessmentId), seen.current.values());
+      const fromServer = await listRewrites(assessmentId);
+      const list = mergeRewrites(fromServer, seen.current.values());
       if (read === listRead.current) {
+        listed.current = new Set(fromServer.map((r) => r.id));
         setEarlier(list);
         listFailure.clear();
       }
@@ -197,6 +206,9 @@ export function RewriteDrawer({
     }
     // The rewrite carries on without the drawer; it is listed on the next open.
     stopReading();
+    listRead.current++;
+    listed.current = null;
+    setEarlier(null);
     setPhase('idle');
     setShown(null);
     setDraft('');
@@ -217,9 +229,9 @@ export function RewriteDrawer({
     // What was listed before asking: a rewrite found after a drop must be
     // new. Pressed before the list arrived, it is read first; with no list,
     // a drop is never matched to a rewrite (`known` stays null).
-    const before = earlier ?? (await loadEarlier());
+    if (!listed.current) await loadEarlier();
     if (signal.aborted) return;
-    const known = before ? new Set(before.map((r) => r.id)) : null;
+    const known = listed.current;
     try {
       const outcome = await streamRewrite(
         assessmentId,
@@ -272,6 +284,8 @@ export function RewriteDrawer({
   const reopen = (r: RewriteWire) => {
     rewrite.clear();
     review.clear();
+    setUsagePage(null);
+    setReviewUsagePage(null);
     setCopied(false);
     const signal = newReader();
     setDraft('');

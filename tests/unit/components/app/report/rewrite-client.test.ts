@@ -179,6 +179,48 @@ describe('streamRewrite', () => {
   });
 });
 
+describe('streamRewrite: the stream’s end', () => {
+  it('reads a last frame the stream ended without its blank line', async () => {
+    const done = frame({ type: 'rewrite_done', rewrite: row({ status: 'completed' }) });
+    fetchMock.mockResolvedValue(
+      streamed([frame({ type: 'rewrite', rewrite: row() }), done.slice(0, -2)])
+    );
+    const outcome = await streamRewrite(
+      'asm_1',
+      'balanced',
+      { onStart: vi.fn(), onText: vi.fn() },
+      new AbortController().signal
+    );
+    expect(outcome).toEqual({ kind: 'done', rewrite: row({ status: 'completed' }) });
+  });
+
+  it('lets the response go once rewrite_done is read, though the server has not closed it', async () => {
+    const cancelled = vi.fn();
+    const enc = new TextEncoder();
+    fetchMock.mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(
+              enc.encode(frame({ type: 'rewrite_done', rewrite: row({ status: 'completed' }) }))
+            );
+            // Never closed: keepalives could follow.
+          },
+          cancel: cancelled,
+        })
+      )
+    );
+    const outcome = await streamRewrite(
+      'asm_1',
+      'balanced',
+      { onStart: vi.fn(), onText: vi.fn() },
+      new AbortController().signal
+    );
+    expect(outcome.kind).toBe('done');
+    await vi.waitFor(() => expect(cancelled).toHaveBeenCalled());
+  });
+});
+
 describe('followRewrite', () => {
   it('reads the rewrite again until it ends, passing on each read', async () => {
     fetchMock
@@ -298,6 +340,22 @@ describe('reviewDraftBody: the title', () => {
       'The draft.'
     );
     expect(body.title).toBe(`${'x'.repeat(190)} (rewrite)`);
+  });
+});
+
+describe('reviewDraftBody: a title with characters outside the BMP', () => {
+  it('never cuts one in half', () => {
+    const body = reviewDraftBody(
+      {
+        title: `${'x'.repeat(189)}😀😀`,
+        framework: { slug: 'howdoesthisland', version: '0.5.1' },
+        context: null,
+        projectId: null,
+        judges: [],
+      },
+      'The draft.'
+    );
+    expect(body.title).toBe(`${'x'.repeat(189)}😀 (rewrite)`);
   });
 });
 
