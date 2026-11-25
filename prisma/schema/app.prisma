@@ -704,6 +704,10 @@ model Rewrite {
   /// Renewed while its call runs. A `RUNNING` rewrite whose lease has run
   /// out lost its process: the recovery job fails and charges it.
   leaseExpiresAt  DateTime?
+  /// What its call is priced from, kept as the call starts (t-85,
+  /// lib/app/rewrites/call-start.ts): the agent, binding and prompt's token
+  /// count, so recovery can price one whose process died part-way.
+  callStart       Json?
   /// Who asked for it. FK → user, ON DELETE SET NULL (the workspace keeps it).
   createdByUserId String?
   completedAt     DateTime?

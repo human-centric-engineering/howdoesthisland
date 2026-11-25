@@ -146,7 +146,8 @@
  * too: no workspace admin can raise it.
  *
  * **Rewrites** (t-81). A running rewrite holds its estimate (`heldUsd`, the
- * median of the workspace's last billed rewrites) in every check, a
+ * median of the workspace's last billed rewrites, or with none what the
+ * request can cost at most, t-86) in every check, a
  * review's or a rewrite's, until it ends and is charged; its row is written
  * under the same lock ({@link reserveRewriteBudget}), so it is its own hold.
  *
@@ -945,13 +946,21 @@ export const REWRITE_HISTORY = 20;
 /**
  * What a rewrite is likely to cost this workspace (t-81): the median cost of
  * its last {@link REWRITE_HISTORY} ended rewrites that cost something,
- * failed ones too (`rewrites`), or `0` with none (`none`), so any positive remainder is enough, as for a
- * workspace's first review. The editor's summary spend is no guide: a
+ * failed ones too (`rewrites`). The editor's summary spend is no guide: a
  * rewrite writes the whole text, a summary a few sentences.
+ *
+ * With none, what this request can cost at most (`ceiling`, t-86): its prompt
+ * and its whole output ceiling at the editor's price, which `ceiling` gives
+ * (`streamCeilingUsd`), so a workspace's first rewrites hold something sized
+ * to the text, and several asked for together cannot each pass on a
+ * remainder that covers one. `0` (`none`) when that is nothing (a local or
+ * unpriced model, or an editor that would refuse the call before it spent)
+ * or there is no `ceiling` to ask.
  */
 export async function estimateRewriteCost(
   orgId: string,
-  db: Pick<Prisma.TransactionClient, 'rewrite'> = prisma
+  db: Pick<Prisma.TransactionClient, 'rewrite'> = prisma,
+  ceiling?: () => Promise<number | null>
 ): Promise<ReviewEstimate> {
   // Every ended rewrite that was billed, failed ones too: a workspace whose
   // rewrites keep failing (cut off on long texts) still pays for each, and
@@ -962,8 +971,11 @@ export async function estimateRewriteCost(
     take: REWRITE_HISTORY,
     select: { costUsd: true },
   });
-  if (past.length === 0) return { estimateUsd: 0, basis: 'none' };
-  return { estimateUsd: usd(median(past.map((r) => r.costUsd))), basis: 'rewrites' };
+  if (past.length > 0) {
+    return { estimateUsd: usd(median(past.map((r) => r.costUsd))), basis: 'rewrites' };
+  }
+  const most = usd((await ceiling?.()) ?? 0);
+  return most > 0 ? { estimateUsd: most, basis: 'ceiling' } : { estimateUsd: 0, basis: 'none' };
 }
 
 /**
@@ -982,14 +994,16 @@ export async function estimateRewriteCost(
  */
 export async function reserveRewriteBudget<T>(
   orgId: string,
-  create: (tx: Prisma.TransactionClient, estimate: ReviewEstimate) => Promise<T>
+  create: (tx: Prisma.TransactionClient, estimate: ReviewEstimate) => Promise<T>,
+  /** What this request can cost at most, for a workspace with no rewrites to go by. */
+  ceiling?: () => Promise<number | null>
 ): Promise<T> {
   // A rate for the reviews in flight, which the check holds back too. No
   // profile is a rewrite's, so `custom`: their judges at the workspace's rate.
   const budget = await readBudget(orgId, 'custom');
   let estimate: ReviewEstimate = { estimateUsd: 0, basis: 'none' };
   try {
-    estimate = await estimateRewriteCost(orgId);
+    estimate = await estimateRewriteCost(orgId, prisma, ceiling);
   } catch (err) {
     unreadable(orgId, err);
   }

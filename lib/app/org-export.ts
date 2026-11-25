@@ -215,8 +215,9 @@ export function initAppOrgSources(): void {
         fetch: ({ orgId }) =>
           prisma.rewrite.findMany({
             where: ownedBy(orgId),
-            // The lease and the budget hold are the call's bookkeeping.
-            omit: { leaseExpiresAt: true, heldUsd: true },
+            // The lease, the budget hold and what its call is priced from are the
+            // call's bookkeeping.
+            omit: { leaseExpiresAt: true, heldUsd: true, callStart: true },
             orderBy: { createdAt: 'asc' },
           }),
       },

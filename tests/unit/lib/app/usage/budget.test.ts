@@ -1612,11 +1612,14 @@ describe('rewrites (t-81)', () => {
     });
 
   /** Reserve a rewrite, writing a `RUNNING` row with the estimate it was handed. */
-  const reserve = (orgId = ORG) =>
-    reserveRewriteBudget(orgId, (tx, estimate) =>
-      tx.rewrite.create({
-        data: { orgId, status: 'RUNNING', heldUsd: estimate.estimateUsd },
-      } as never)
+  const reserve = (orgId = ORG, ceiling?: () => Promise<number | null>) =>
+    reserveRewriteBudget(
+      orgId,
+      (tx, estimate) =>
+        tx.rewrite.create({
+          data: { orgId, status: 'RUNNING', heldUsd: estimate.estimateUsd },
+        } as never),
+      ceiling
     );
 
   describe('estimateRewriteCost', () => {
@@ -1646,8 +1649,68 @@ describe('rewrites (t-81)', () => {
       expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.8, basis: 'rewrites' });
     });
 
-    it('is 0 with no history', async () => {
+    it('is 0 with no history and no ceiling to ask', async () => {
       expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0, basis: 'none' });
+    });
+
+    it('with no history, is what the request can cost at most (t-86)', async () => {
+      const ceiling = vi.fn(async () => 0.4212345678);
+      expect(await estimateRewriteCost(ORG, undefined, ceiling)).toEqual({
+        estimateUsd: 0.421235,
+        basis: 'ceiling',
+      });
+    });
+
+    it('with history, is the median, and does not ask for the ceiling', async () => {
+      pastRewrite(0.2);
+      const ceiling = vi.fn(async () => 5);
+      expect(await estimateRewriteCost(ORG, undefined, ceiling)).toEqual({
+        estimateUsd: 0.2,
+        basis: 'rewrites',
+      });
+      expect(ceiling).not.toHaveBeenCalled();
+    });
+
+    it('is 0 when the ceiling costs nothing or cannot be priced', async () => {
+      expect(await estimateRewriteCost(ORG, undefined, async () => 0)).toEqual({
+        estimateUsd: 0,
+        basis: 'none',
+      });
+      expect(await estimateRewriteCost(ORG, undefined, async () => null)).toEqual({
+        estimateUsd: 0,
+        basis: 'none',
+      });
+    });
+  });
+
+  describe('a workspace’s first rewrites asked for together (t-86)', () => {
+    it('of three with credits for one, passes one holding its ceiling and refuses the others', async () => {
+      // $0.60 of credits; each rewrite can cost $0.42 at most.
+      state.credits = 60;
+      const ceiling = async () => 0.42;
+
+      const outcomes = await Promise.allSettled([1, 2, 3].map(() => reserve(ORG, ceiling)));
+
+      const passed = outcomes.filter((o) => o.status === 'fulfilled');
+      const refused = outcomes.flatMap((o) => (o.status === 'rejected' ? [o.reason] : []));
+      expect(passed).toHaveLength(1);
+      expect(refused).toHaveLength(2);
+      for (const err of refused) {
+        expect(err).toMatchObject({
+          status: 402,
+          code: 'INSUFFICIENT_CREDITS',
+          details: { estimateCredits: 42, basis: 'ceiling', heldCredits: 42 },
+        });
+      }
+      expect(state.rewrites).toEqual([
+        expect.objectContaining({ status: 'RUNNING', heldUsd: 0.42 }),
+      ]);
+    });
+
+    it('with no ceiling, as before, all three pass on any remainder', async () => {
+      state.credits = 60;
+      const outcomes = await Promise.allSettled([1, 2, 3].map(() => reserve(ORG)));
+      expect(outcomes.every((o) => o.status === 'fulfilled')).toBe(true);
     });
   });
 

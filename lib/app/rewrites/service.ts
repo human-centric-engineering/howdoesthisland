@@ -13,12 +13,16 @@
  * **How it runs.** {@link startRewrite} checks the request, then writes the
  * `RUNNING` row in the budget check's transaction (`reserveRewriteBudget`):
  * the row is the budget hold, so requests sent together cannot each spend
- * the same remainder. The call then runs on its own under
+ * the same remainder. A workspace with no rewrites ended yet holds what this
+ * one can cost at most, at the editor's price (t-86, `streamCeilingUsd`). The
+ * call then runs on its own under
  * `keepRunningAfterResponse`, not as part of the response: a reader that
  * stops listening does not stop it, and the draft is saved and charged all
  * the same. While it runs it saves what it has written and renews its lease
- * every {@link DRAFT_SAVE_MS}; a save that finds the row gone (its review was
- * deleted) stops the call.
+ * every {@link DRAFT_SAVE_MS}, and once as soon as it has its first piece; a
+ * save that finds the row gone (its review was deleted) stops the call. As
+ * the call starts, the row keeps what it is priced from (`callStart`, t-85),
+ * so recovery can price one whose process dies before it writes its cost row.
  *
  * **How it ends.** One write: `COMPLETED` with the draft, or `FAILED` with
  * the reason and what was written by then, and in the same transaction the
@@ -47,7 +51,12 @@ import { LEASE_MS } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
 import { RewriteFocusUnknownError } from '@/lib/app/frameworks/engine';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
-import { JudgeRunError, streamAgent } from '@/lib/app/judges/run-judge';
+import {
+  JudgeRunError,
+  streamAgent,
+  streamCeilingUsd,
+  type StreamStart,
+} from '@/lib/app/judges/run-judge';
 import { parseProjectContext, renderProjectContext } from '@/lib/app/projects/context';
 import { EventChannel } from '@/lib/app/rewrites/channel';
 import { LOST_REWRITE_CODE } from '@/lib/app/rewrites/recover';
@@ -73,6 +82,14 @@ export interface StartedRewrite {
   /** The row once it ends, `completed` or `failed`. Never rejects. */
   done: Promise<RewriteView>;
 }
+
+/** Who a rewrite's call goes to, for its checks, its ceiling and its refusals. */
+const EDITOR_CALL = {
+  agentSlug: EDITOR_AGENT_SLUG,
+  role: 'editor',
+  name: 'editor',
+  target: 'the editor',
+} as const;
 
 /** A review that can be rewritten: finished, with a result to rewrite from. */
 const REWRITABLE = new Set(['COMPLETED', 'PARTIAL']);
@@ -183,18 +200,21 @@ export async function startRewrite(
 
   let row;
   try {
-    row = await reserveRewriteBudget(orgId, (tx, estimate) =>
-      tx.rewrite.create({
-        data: {
-          orgId,
-          assessmentId: review.id,
-          focus,
-          heldUsd: estimate.estimateUsd,
-          leaseExpiresAt: new Date(Date.now() + LEASE_MS),
-          createdByUserId: who.userId,
-        },
-        select: REWRITE_VIEW_SELECT,
-      })
+    row = await reserveRewriteBudget(
+      orgId,
+      (tx, estimate) =>
+        tx.rewrite.create({
+          data: {
+            orgId,
+            assessmentId: review.id,
+            focus,
+            heldUsd: estimate.estimateUsd,
+            leaseExpiresAt: new Date(Date.now() + LEASE_MS),
+            createdByUserId: who.userId,
+          },
+          select: REWRITE_VIEW_SELECT,
+        }),
+      () => streamCeilingUsd(EDITOR_CALL, request)
     );
   } catch (err) {
     // The review was deleted (or purged) since it was read: nothing was held.
@@ -285,19 +305,37 @@ async function drive(d: Drive): Promise<RewriteView> {
   };
   const timer = setInterval(save, DRAFT_SAVE_MS);
   timer.unref?.();
+  // So recovery can price the call should this process die before it ends.
+  const keepStart = async (start: StreamStart) => {
+    try {
+      await prisma.rewrite.updateMany({
+        where: { id: rewriteId, orgId: d.orgId, OR: ALIVE },
+        data: { callStart: { ...start, frameworkVersion: d.frameworkVersion } },
+      });
+    } catch (err) {
+      // Not fatal: the call is still worth making, and charges itself as it
+      // ends. Only a process that died as well would go uncharged.
+      logger.warn('A rewrite could not keep what its call is priced from', {
+        rewriteId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
 
   let end: Ending;
   try {
     const reply = await streamAgent({
-      agentSlug: EDITOR_AGENT_SLUG,
-      role: 'editor',
-      name: 'editor',
-      target: 'the editor',
+      ...EDITOR_CALL,
       // A rewrite asks for little thinking, so the longest text's reply fits
       // the editor's ceiling with it (`lib/app/judges/agents.ts`).
       request: () => ({ prompt: d.prompt, maxTokens: d.maxTokens, reasoningEffort: 'low' }),
+      onStart: keepStart,
       onText: (piece) => {
+        // Saved at once, so a process that dies before the next save has a
+        // draft that says the provider answered, and how much (t-85).
+        const first = draft === '';
         draft += piece;
+        if (first) save();
         d.channel?.push({ type: 'rewrite_text', text: piece });
       },
       costMetadata: { editor: REWRITE_COST_TAG, rewriteId },

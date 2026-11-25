@@ -9,12 +9,15 @@
  * under its advisory lock, that a running rewrite's `heldUsd` is read back by
  * the next check, that the `rewriteId` JSON-path filter finds a rewrite's
  * cost rows and no others, that the recovery write and its charge stand
- * together, and that deleting the review takes its rewrites (the FK
+ * together, that a rewrite that died mid-stream with no cost row is priced
+ * from what it kept of its call and its saved draft, and charged once
+ * (t-85), and that deleting the review takes its rewrites (the FK
  * cascade); under `TENANCY_MODE=multi`, as the restricted app role, inside
  * the workspace's scope.
  *
  * In a fresh workspace: a finished review of a few words, a completed rewrite
- * at $0.50 (the estimate's history), 80 credits, then two rewrites asked for.
+ * at $0.50 (the estimate's history), 80 credits, then two rewrites asked for,
+ * then two that died mid-stream, one with a draft saved and one without.
  * Self-cleaning: the cost rows are deleted and the workspace (and with it its
  * rows and ledger) erased in `finally`.
  *
@@ -24,6 +27,9 @@ import type { Prisma } from '@prisma/client';
 import { APIError } from '@/lib/api/errors';
 import { chargeRewrite } from '@/lib/app/credits/charge';
 import { getCreditBalance, recordCreditEntry } from '@/lib/app/credits/ledger';
+import { creditsForUsd } from '@/lib/app/credits/rate';
+import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
+import { REWRITE_LIFETIME_MS } from '@/lib/app/rewrites/limits';
 import { recoverRewrites } from '@/lib/app/rewrites/recover';
 import { reserveRewriteBudget } from '@/lib/app/usage/budget';
 import { createWorkspaceOrg } from '@/lib/app/workspaces/provision';
@@ -146,7 +152,9 @@ async function main(): Promise<number> {
           costRow(org.id, 0.09, { editor: 'rewrite', rewriteId: 'someone-else' }),
         ],
       });
-      const recovered = await recoverRewrites(new Date(Date.now() + 120_000));
+      // Once its call cannot still be running.
+      const lostAt = () => new Date(Date.now() + REWRITE_LIFETIME_MS + 120_000);
+      const recovered = await recoverRewrites(lostAt());
       check(recovered.failed === 1, `recovery failed the lost rewrite (${recovered.failed})`);
       const lost = await prisma.rewrite.findUnique({ where: { id: first.id } });
       check(
@@ -173,6 +181,94 @@ async function main(): Promise<number> {
         third.heldUsd === 0.26505,
         `with the lost one ended, the next rewrite fits, holding the median of both (${third.heldUsd})`
       );
+
+      // t-85: two that died mid-stream, their calls having written no cost row.
+      const editor = await prisma.aiAgent.findUnique({
+        where: { orgId_slug: { orgId: org.id, slug: EDITOR_AGENT_SLUG } },
+        select: { id: true },
+      });
+      check(editor !== null, 'the workspace has its editor');
+      if (!editor) return;
+      // A model the static price list knows, so the estimate costs something.
+      const callStart = {
+        agentId: editor.id,
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        isLocal: false,
+        promptTokens: 6_000,
+        frameworkVersion: 'smoke@0',
+      };
+      const died = (draft: string) =>
+        prisma.rewrite.create({
+          data: {
+            orgId: org.id,
+            assessmentId: review.id,
+            focus: 'balanced',
+            heldUsd: 0.5,
+            leaseExpiresAt: new Date(),
+            draft,
+            callStart,
+          },
+        });
+      const midStream = await died('A sharper draft, half written. '.repeat(40));
+      const noDraft = await died('');
+
+      const pass = await recoverRewrites(lostAt());
+      // The third, which never ran a call, and these two.
+      check(pass.failed === 3, `recovery failed the three lost rewrites (${pass.failed})`);
+      const estimates = await prisma.aiCostLog.findMany({
+        where: { orgId: org.id, metadata: { path: ['rewriteId'], equals: midStream.id } },
+      });
+      const [estimate] = estimates;
+      const tags = (estimate?.metadata ?? {}) as Record<string, unknown>;
+      check(
+        estimates.length === 1 &&
+          estimate.agentId === editor.id &&
+          estimate.inputTokens === 6_000 &&
+          estimate.outputTokens > 0 &&
+          estimate.totalCostUsd > 0 &&
+          tags.estimated === true &&
+          tags.error === 'lost' &&
+          tags.editor === 'rewrite',
+        `the mid-stream one is priced from its call and draft, estimated (${JSON.stringify(
+          estimates.map((r) => [r.inputTokens, r.outputTokens, r.totalCostUsd, r.metadata])
+        )})`
+      );
+      const priced = await prisma.rewrite.findUnique({ where: { id: midStream.id } });
+      check(
+        priced?.status === 'FAILED' &&
+          priced.errorCode === 'lost' &&
+          priced.costUsd === estimate?.totalCostUsd,
+        `it is failed, 'lost', at its estimate (${priced?.status}, ${priced?.costUsd})`
+      );
+      const owed = creditsForUsd(estimate?.totalCostUsd ?? 0);
+      const midCharges = await prisma.creditEntry.findMany({
+        where: { orgId: org.id, reference: `rewrite:${midStream.id}` },
+        select: { amount: true },
+      });
+      check(
+        owed > 0 && JSON.stringify(midCharges) === JSON.stringify([{ amount: -owed }]),
+        `it is charged ${owed} credits, once: ${JSON.stringify(midCharges)}`
+      );
+      const unpriced = await prisma.aiCostLog.count({
+        where: { orgId: org.id, metadata: { path: ['rewriteId'], equals: noDraft.id } },
+      });
+      const noDraftCharges = await prisma.creditEntry.count({
+        where: { orgId: org.id, reference: `rewrite:${noDraft.id}` },
+      });
+      check(
+        unpriced === 0 && noDraftCharges === 0,
+        `the one with no draft is priced and charged nothing (${unpriced} rows, ${noDraftCharges} charges)`
+      );
+      const again2 = await recoverRewrites(lostAt());
+      const estimatesAfter = await prisma.aiCostLog.count({
+        where: { orgId: org.id, metadata: { path: ['rewriteId'], equals: midStream.id } },
+      });
+      check(
+        again2.failed === 0 && estimatesAfter === 1,
+        `another pass changes nothing (${again2.failed} failed, ${estimatesAfter} rows)`
+      );
+      check((await getCreditBalance(org.id)) === 76 - owed, `the balance is ${76 - owed}`);
 
       await prisma.assessment.delete({ where: { id: review.id } });
       const left = await prisma.rewrite.count({ where: { orgId: org.id } });

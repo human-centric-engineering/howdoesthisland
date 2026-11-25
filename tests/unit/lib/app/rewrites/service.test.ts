@@ -17,6 +17,7 @@ import { createFakeDb, type FakeDb, type Row } from '@/tests/unit/lib/app/assess
 
 const mocks = vi.hoisted(() => ({
   streamAgent: vi.fn(),
+  streamCeilingUsd: vi.fn(),
   engineForVersion: vi.fn(),
   reserve: vi.fn(),
 }));
@@ -33,6 +34,7 @@ vi.mock('@/lib/logging', () => ({
 vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/judges/run-judge')>()),
   streamAgent: mocks.streamAgent,
+  streamCeilingUsd: mocks.streamCeilingUsd,
 }));
 vi.mock('@/lib/app/assessments/engine', () => ({ engineForVersion: mocks.engineForVersion }));
 vi.mock('@/lib/app/usage/budget', () => ({ reserveRewriteBudget: mocks.reserve }));
@@ -46,7 +48,9 @@ import {
   type AgentStreamCall,
   type AgentStreamReply,
 } from '@/lib/app/judges/run-judge';
+import { rewriteMaxTokens } from '@/lib/app/frameworks/howdoesthisland/engine/rewrite';
 import { DRAFT_SAVE_MS } from '@/lib/app/rewrites/limits';
+import { logger } from '@/lib/logging';
 import {
   getRewrite,
   listRewrites,
@@ -245,6 +249,31 @@ describe('startRewrite on a finished review', () => {
     expect(request.reasoningEffort).toBe('low');
     expect(request.prompt).toContain('Weakest appeal:');
     expect(request.prompt.endsWith(`<content>\n${TEXT}\n</content>`)).toBe(true);
+  });
+
+  it('hands the budget check what this request can cost at most, at the editor’s price (t-86)', async () => {
+    mocks.streamCeilingUsd.mockResolvedValue(0.42);
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: 'user-1' })
+    );
+    await started.done;
+
+    const ceiling = mocks.reserve.mock.calls[0][2] as () => Promise<number | null>;
+    expect(await ceiling()).toBe(0.42);
+    const [target, request] = mocks.streamCeilingUsd.mock.calls[0] as [
+      Record<string, unknown>,
+      { prompt: string; maxTokens: number },
+    ];
+    expect(target).toEqual({
+      agentSlug: 'hdtl-editor',
+      role: 'editor',
+      name: 'editor',
+      target: 'the editor',
+    });
+    // The request the call is made with: the same prompt, the text's own ceiling.
+    expect(request.prompt).toBe(theCall().request().prompt);
+    expect(request.maxTokens).toBe(rewriteMaxTokens(TEXT));
   });
 
   it('reads the project’s brief as it is now, with the passages the judges read', async () => {
@@ -496,6 +525,77 @@ describe('while it runs', () => {
 
     release();
     await started.done;
+  });
+
+  it('saves the draft as soon as it has its first piece, before the first interval (t-85)', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await call.onText('First.');
+      await call.onText(' Second.');
+      await gate;
+      throw new JudgeRunError('provider_error', 'stopped');
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    // Saved once, at the first piece; the next waits for the interval.
+    expect(fake.rewrites[0]).toMatchObject({ status: 'RUNNING', draft: 'First.' });
+
+    release();
+    await started.done;
+  });
+
+  it('keeps what its call is priced from on the row as the call starts (t-85)', async () => {
+    const start = {
+      agentId: 'agent-editor',
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
+      isLocal: false,
+      promptTokens: 6_000,
+    };
+    let kept: unknown;
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await call.onStart?.(start);
+      kept = fake.rewrites[0].callStart;
+      throw new JudgeRunError('provider_error', 'stopped');
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    await started.done;
+    expect(kept).toEqual({ ...start, frameworkVersion: 'howdoesthisland@0.5.1' });
+  });
+
+  it('goes on with the call when what it is priced from cannot be kept, and says so', async () => {
+    let reached = false;
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      fake.db.rewrite.updateMany.mockRejectedValueOnce(new Error('connection reset'));
+      await call.onStart?.({
+        agentId: 'a',
+        provider: 'p',
+        model: 'm',
+        isLocal: false,
+        promptTokens: 1,
+      });
+      reached = true;
+      throw new JudgeRunError('provider_error', 'stopped');
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    await started.done;
+    expect(reached).toBe(true);
+    expect(fake.rewrites[0].callStart).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'A rewrite could not keep what its call is priced from',
+      expect.objectContaining({ error: 'connection reset' })
+    );
   });
 
   it('stops the call when a save finds the row gone, as when its review is deleted, and still charges it', async () => {

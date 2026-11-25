@@ -53,7 +53,7 @@ import { approvedEntry, roleOfSlot, type JudgeRole } from '@/lib/app/judges/appr
 import { prisma } from '@/lib/db/client';
 import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
 import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
-import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
+import { calculateCost, checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
 import { tokeniserForModel } from '@/lib/orchestration/llm/tokeniser';
@@ -289,54 +289,10 @@ async function prepareCall<Request>(
   call: CallTarget,
   build: () => Request
 ): Promise<{ prepared: PreparedCall; request: Request }> {
-  const orgId = requireOrgId();
-  const { name, target } = call;
-  const agent = await prisma.aiAgent.findUnique({
-    where: { orgId_slug: { orgId, slug: call.agentSlug } },
-    select: {
-      id: true,
-      isActive: true,
-      provider: true,
-      model: true,
-      temperature: true,
-      maxTokens: true,
-      rateLimitRpm: true,
-      systemInstructions: true,
-    },
-  });
-  if (!agent) {
-    throw new JudgeRunError('agent_not_found', `This workspace has no agent for ${target}.`);
-  }
-  if (!agent.isActive) {
-    throw new JudgeRunError('agent_inactive', `The agent for ${target} is switched off.`);
-  }
-
+  const { name } = call;
+  const agent = await loadAgent(call);
   const request = build();
-
-  let binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
-  let isLocal: boolean;
-  try {
-    binding = await resolveAgentProviderAndModel(
-      { provider: agent.provider, model: agent.model, fallbackProviders: [] },
-      'chat'
-    );
-    isLocal = await isLocalProvider(binding.providerSlug);
-  } catch (err) {
-    throw toJudgeRunError(name, err);
-  }
-
-  // Only a model on the role's list is sent, with that entry's settings, so
-  // no call asks a model for more than it can produce.
-  const approved = approvedEntry(call.role, {
-    provider: binding.providerSlug,
-    model: binding.model,
-  });
-  if (!approved) {
-    throw new JudgeRunError(
-      'model_not_approved',
-      `The ${name} is bound to "${binding.model}", which is not approved for it.`
-    );
-  }
+  const { binding, isLocal, approved } = await bindAgent(call, agent);
 
   // A reached cap stops paid calls, not free ones, as in the chat handler: an
   // agent bound to a local model still runs. (The org and install caps are
@@ -361,6 +317,67 @@ async function prepareCall<Request>(
   }
 
   return { prepared: { agent, binding, isLocal, approved }, request };
+}
+
+/** The workspace's agent for `call`, refused when it is missing or switched off. */
+async function loadAgent(call: CallTarget) {
+  const orgId = requireOrgId();
+  const agent = await prisma.aiAgent.findUnique({
+    where: { orgId_slug: { orgId, slug: call.agentSlug } },
+    select: {
+      id: true,
+      isActive: true,
+      provider: true,
+      model: true,
+      temperature: true,
+      maxTokens: true,
+      rateLimitRpm: true,
+      systemInstructions: true,
+    },
+  });
+  if (!agent) {
+    throw new JudgeRunError('agent_not_found', `This workspace has no agent for ${call.target}.`);
+  }
+  if (!agent.isActive) {
+    throw new JudgeRunError('agent_inactive', `The agent for ${call.target} is switched off.`);
+  }
+  return agent;
+}
+
+/**
+ * The agent's binding and the approved entry it must be on, refused when the
+ * binding cannot be resolved or the model is not approved for the role.
+ */
+async function bindAgent(
+  call: CallTarget,
+  agent: { provider: string | null; model: string | null }
+): Promise<Omit<PreparedCall, 'agent'>> {
+  const { name } = call;
+  let binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
+  let isLocal: boolean;
+  try {
+    binding = await resolveAgentProviderAndModel(
+      { provider: agent.provider, model: agent.model, fallbackProviders: [] },
+      'chat'
+    );
+    isLocal = await isLocalProvider(binding.providerSlug);
+  } catch (err) {
+    throw toJudgeRunError(name, err);
+  }
+
+  // Only a model on the role's list is sent, with that entry's settings, so
+  // no call asks a model for more than it can produce.
+  const approved = approvedEntry(call.role, {
+    provider: binding.providerSlug,
+    model: binding.model,
+  });
+  if (!approved) {
+    throw new JudgeRunError(
+      'model_not_approved',
+      `The ${name} is bound to "${binding.model}", which is not approved for it.`
+    );
+  }
+  return { binding, isLocal, approved };
 }
 
 /** Make one {@link AgentCall}. Fails as {@link runJudge} does. */
@@ -420,7 +437,12 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
     outcome = { error: toJudgeRunError(name, err) };
   }
 
-  const { rows, spend } = await recordSpend(prepared, call, billed, outcome);
+  const { rows, spend } = await recordSpend(
+    pricingOf(prepared),
+    call,
+    billed,
+    'error' in outcome ? outcome.error.code : undefined
+  );
 
   if ('error' in outcome) {
     // Only a call that reached the provider was billed; one refused before it
@@ -462,8 +484,30 @@ export interface AgentStreamCall extends CallTarget, CostTags {
    * (see {@link streamAgent}).
    */
   onText: (text: string) => void | Promise<void>;
+  /**
+   * What the call will be priced at, once its checks have passed and before
+   * the provider is asked: for a caller that keeps it, so a call whose
+   * process dies part-way can still be priced ({@link recordStoppedStream}).
+   * Awaited; a throw here is the caller's error and propagates, before
+   * anything is spent.
+   */
+  onStart?: (start: StreamStart) => Promise<void>;
   /** Stops the call, and what it spent is recorded as for `onText`'s throw. */
   signal?: AbortSignal;
+}
+
+/** Who a call's cost row says answered it, and at what binding. */
+export interface CallPricing {
+  agentId: string;
+  provider: string;
+  model: string;
+  isLocal: boolean;
+}
+
+/** What a streamed call is priced from: its binding, and the prompt it was sent. */
+export interface StreamStart extends CallPricing {
+  /** The system instructions and the request, counted by the model's tokeniser. */
+  promptTokens: number;
 }
 
 /** A streamed call's whole reply, with what it cost. */
@@ -504,6 +548,8 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
   const { name } = call;
   const { prepared, request } = await prepareCall(call, call.request);
   const { agent, binding, approved } = prepared;
+  const promptTokens = countTokens(binding.model, [agent.systemInstructions, request.prompt]);
+  await call.onStart?.({ ...pricingOf(prepared), promptTokens });
 
   const billed: LlmUsage[] = [];
   let text = '';
@@ -529,7 +575,7 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
           {
             model: binding.model,
             temperature: agent.temperature,
-            maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
+            maxTokens: ceilingOf(request.maxTokens, prepared),
             timeoutMs: approved.settings.timeoutMs,
             ...(reasoningEffort ? { reasoningEffort } : {}),
             ...(call.signal ? { signal: call.signal } : {}),
@@ -574,10 +620,14 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
   }
 
   const estimated = billed.length === 0 && answered;
-  if (estimated) {
-    billed.push(estimatedUsage(binding.model, [agent.systemInstructions, request.prompt], text));
-  }
-  const { rows, spend } = await recordSpend(prepared, call, billed, outcome, estimated);
+  if (estimated) billed.push(estimatedUsage(binding.model, promptTokens, text));
+  const { rows, spend } = await recordSpend(
+    pricingOf(prepared),
+    call,
+    billed,
+    'error' in outcome ? outcome.error.code : undefined,
+    estimated
+  );
   if ('error' in outcome) {
     if (billed.length > 0) outcome.error.spend = spend;
     throw outcome.error;
@@ -591,16 +641,78 @@ export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamRep
 }
 
 /**
+ * Record a streamed call whose process died part-way (t-85): the cost row
+ * {@link streamAgent} would have written had it been stopped there, from
+ * what its caller kept of it ({@link AgentStreamCall.onStart}) and the reply
+ * saved by then. Tagged `estimated` and with `errorCode`, as a stopped
+ * call's row is. Nothing is written for a reply that is empty: as for a
+ * stopped call, whether the provider read the prompt is not known.
+ *
+ * Answers the row, or `null` when there was nothing to write or the write
+ * failed (`logCost` logs it).
+ */
+export async function recordStoppedStream(
+  start: StreamStart,
+  reply: string,
+  call: CostTags,
+  errorCode: string
+): Promise<{ id: string; totalCostUsd: number } | null> {
+  if (reply === '') return null;
+  const usage = estimatedUsage(start.model, start.promptTokens, reply);
+  const { rows } = await recordSpend(start, call, [usage], errorCode, true);
+  return rows[0] ?? null;
+}
+
+/**
+ * The most one streamed call to `call`'s agent with `request` can cost
+ * (t-86): its prompt and its whole output ceiling, at the agent's binding.
+ * `0` for a local or unpriced model, which is billed nothing. `null` when
+ * the call would be refused before anything is spent (no agent, switched
+ * off, a binding that cannot be resolved or is not approved): it costs
+ * nothing then. Nothing is checked against a budget or a rate limit, and
+ * nothing is spent.
+ */
+export async function streamCeilingUsd(
+  call: CallTarget,
+  request: { prompt: string; maxTokens: number }
+): Promise<number | null> {
+  let prepared: PreparedCall;
+  try {
+    const agent = await loadAgent(call);
+    prepared = { agent, ...(await bindAgent(call, agent)) };
+  } catch (err) {
+    if (err instanceof JudgeRunError) return null;
+    throw err;
+  }
+  if (prepared.isLocal) return 0;
+  const { agent, binding } = prepared;
+  const promptTokens = countTokens(binding.model, [agent.systemInstructions, request.prompt]);
+  return calculateCost(binding.model, promptTokens, ceilingOf(request.maxTokens, prepared))
+    .totalCostUsd;
+}
+
+/** The output ceiling a call asks for: the request's, never above the approved entry's or the agent's. */
+function ceilingOf(maxTokens: number, prepared: PreparedCall): number {
+  return Math.min(maxTokens, prepared.approved.settings.maxTokens, prepared.agent.maxTokens);
+}
+
+function pricingOf({ agent, binding, isLocal }: PreparedCall): CallPricing {
+  return { agentId: agent.id, provider: binding.providerSlug, model: binding.model, isLocal };
+}
+
+/** `parts` counted by `model`'s tokeniser. */
+function countTokens(model: string, parts: readonly string[]): number {
+  const tokeniser = tokeniserForModel(model);
+  return parts.reduce((sum, part) => sum + tokeniser.count(part), 0);
+}
+
+/**
  * What a streamed call that stopped before its usage arrived was billed, as
  * near as can be counted: the prompt it was sent, and the reply it had
  * streamed. Thinking it did is not counted, so this is low, never high.
  */
-function estimatedUsage(model: string, prompt: readonly string[], reply: string): LlmUsage {
-  const tokeniser = tokeniserForModel(model);
-  return {
-    inputTokens: prompt.reduce((sum, part) => sum + tokeniser.count(part), 0),
-    outputTokens: tokeniser.count(reply),
-  };
+function estimatedUsage(model: string, promptTokens: number, reply: string): LlmUsage {
+  return { inputTokens: promptTokens, outputTokens: countTokens(model, [reply]) };
 }
 
 /** What a call's cost rows say: who it was for, and what kind of call. */
@@ -617,27 +729,30 @@ type CostTags = Pick<
  *
  * `logCost` is called with its FK columns written out, so the platform's
  * attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
- * `agent.id` is the row just loaded, and `userId` is a real `User.id` or
+ * `agent.id` is the row the call loaded (for {@link recordStoppedStream},
+ * the one it loaded before its process died), and `userId` is a real `User.id` or
  * nothing (see `AgentCall.userId`). It never rejects: a failed write is
  * logged there and answers `null`.
  */
 async function recordSpend(
-  prepared: PreparedCall,
+  pricing: CallPricing,
   call: CostTags,
   billed: readonly LlmUsage[],
-  outcome: { error: JudgeRunError } | object,
+  /** The call's failure, when it failed. */
+  errorCode: string | undefined,
   /** The usage is {@link estimatedUsage}'s, not the provider's. */
   estimated = false
 ): Promise<{ rows: Array<{ id: string; totalCostUsd: number } | null>; spend: JudgeSpend }> {
-  const { agent, binding, isLocal } = prepared;
+  const { provider, model, isLocal } = pricing;
+  const agent = { id: pricing.agentId };
   const rows = await Promise.all(
     [...byTier(billed)].map(([tier, attempts]) => {
       const usage = sumUsage(attempts);
       return logCost({
         agentId: agent.id,
         userId: call.userId ?? null,
-        provider: binding.providerSlug,
-        model: binding.model,
+        provider,
+        model,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         ...(usage.cacheReadTokens ? { cacheReadTokens: usage.cacheReadTokens } : {}),
@@ -651,7 +766,7 @@ async function recordSpend(
           ...(call.assessmentId ? { assessmentId: call.assessmentId } : {}),
           ...(call.ephemeral ? { ephemeral: true } : {}),
           attempts: attempts.length,
-          ...('error' in outcome ? { error: outcome.error.code } : {}),
+          ...(errorCode ? { error: errorCode } : {}),
           ...(estimated ? { estimated: true } : {}),
         },
       });
@@ -659,8 +774,8 @@ async function recordSpend(
   );
   const usage = sumUsage(billed);
   const spend: JudgeSpend = {
-    provider: binding.providerSlug,
-    model: binding.model,
+    provider,
+    model,
     usage: { input: usage.inputTokens, output: usage.outputTokens, attempts: billed.length },
     costUsd: rows.reduce((sum, row) => sum + (row?.totalCostUsd ?? 0), 0),
   };

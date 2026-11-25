@@ -373,6 +373,9 @@ export function createFakeDb() {
       findMany: vi.fn(async ({ where }: { where?: Row }) =>
         costRows.filter((r) => matches(r, where))
       ),
+      count: vi.fn(
+        async ({ where }: { where?: Row }) => costRows.filter((r) => matches(r, where)).length
+      ),
       aggregate: vi.fn(async ({ where }: { where?: Row }) => {
         const rows = costRows.filter((r) => matches(r, where));
         return {

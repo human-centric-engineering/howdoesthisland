@@ -19,3 +19,14 @@ export const DRAFT_SAVE_MS = 5_000;
 
 /** Where the editor's role is named in its rewrite's cost rows. */
 export const REWRITE_COST_TAG = 'rewrite';
+
+/**
+ * How old a rewrite must be before recovery ends it (t-85): the route's
+ * `maxDuration` (`app/api/v1/rewrites/route.ts`, in seconds there; a test
+ * holds them equal). A serverless host cuts the call off there, and it is
+ * sized to hold the editor's longest timeout, so a rewrite recovery prices
+ * from its saved draft is one whose call has stopped. A call that somehow
+ * outlives it and then ends writes its own cost row after the estimate:
+ * the monthly cap counts both, the charge only the first (one reference).
+ */
+export const REWRITE_LIFETIME_MS = 360_000;
