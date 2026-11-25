@@ -238,8 +238,10 @@ review").
 
 Share links (t-32) and rewrites (t-81) go with their assessment (FK cascade),
 so purging or deleting one takes them. A rewrite still running when its review
-is deleted is charged first (`rewrites.md`). Comparison sets do not exist yet;
-the task that adds them says what purging an assessment does to one.
+is deleted is charged first (`rewrites.md`). A comparison (t-87) does not go
+with a review: deleting or purging one of its drafts' reviews leaves the
+draft's place in the set, read as `purged`, and the set goes only once it is
+past the content window with no review left (`comparisons.md`).
 
 ## The API
 

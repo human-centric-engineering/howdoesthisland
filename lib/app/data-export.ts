@@ -183,6 +183,13 @@ export function initAppSubjectSources(): void {
         description:
           'Drafts you asked the editor to rewrite from a review: the draft, its focus and what it cost.',
       },
+      {
+        model: 'AssessmentSet',
+        section: 'comparisons',
+        disposition: 'export',
+        description:
+          'Comparisons of drafts you started: who they were for, the AI reviewers, and each draft’s label and review.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -209,6 +216,11 @@ export function initAppSubjectSources(): void {
         model: 'BudgetHold',
         reason:
           'A lease on part of the monthly budget a review request holds until its review is stored or its run ends, deleted then; it has no user column and records nothing about anyone.',
+      },
+      {
+        model: 'AssessmentSetMember',
+        reason:
+          'One draft’s place in a comparison, with no user column; it is exported within the comparison it belongs to.',
       },
     ],
   });
@@ -237,6 +249,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     reviewCodes,
     codeRedemptions,
     rewrites,
+    comparisons,
   ] = await Promise.all([
     // The ones to them, without the inviter's id (their name is in the
     // invitation email, and the id is someone else's data).
@@ -319,6 +332,13 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       omit: { leaseExpiresAt: true, heldUsd: true, callStart: true },
       orderBy: { createdAt: 'asc' },
     }),
+    // The comparisons they started (t-87), each with its drafts' places. The
+    // reviews themselves are in `assessments`, as they asked for each.
+    prisma.assessmentSet.findMany({
+      where: { createdByUserId: userId },
+      include: { members: { orderBy: { position: 'asc' } } },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
   return {
     workspaceInvitations: [
@@ -335,5 +355,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     reviewCodes,
     codeRedemptions,
     rewrites,
+    comparisons,
   };
 }

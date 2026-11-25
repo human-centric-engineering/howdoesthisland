@@ -18,16 +18,16 @@ import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
  * checked with its own message once parsed (`assessableText`); this bound
  * only stops a body far past it from being held as a string any longer.
  */
-const textField = z.string().max(MAX_CONTENT_CHARS * 2);
+export const textField = z.string().max(MAX_CONTENT_CHARS * 2);
 
 /** The framework and version to score against; both default (`versionToScore`). */
-const versionChoice = {
+export const versionChoice = {
   framework: slugParam.optional(),
   version: versionParam.optional(),
 };
 
 /** Who the text is for, checked against the version's ids before anything runs. */
-const contextField = z.record(z.string(), z.unknown()).optional();
+export const contextField = z.record(z.string(), z.unknown()).optional();
 
 /**
  * POST /api/v1/scan: pasted text only (D7, D14). `code` is accepted and

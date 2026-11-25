@@ -221,6 +221,27 @@ export function initAppOrgSources(): void {
             orderBy: { createdAt: 'asc' },
           }),
       },
+      {
+        model: 'AssessmentSet',
+        section: 'comparisons',
+        disposition: 'export',
+        description:
+          'Comparisons of drafts: who they were for, the project, the AI reviewers and when.',
+        fetch: ({ orgId }) =>
+          prisma.assessmentSet.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+      },
+      {
+        model: 'AssessmentSetMember',
+        section: 'comparisonDrafts',
+        disposition: 'export',
+        description:
+          'Each draft’s place in a comparison: its label and its review, or none once that review was deleted or purged.',
+        fetch: ({ orgId }) =>
+          prisma.assessmentSetMember.findMany({
+            where: ownedBy(orgId),
+            orderBy: [{ setId: 'asc' }, { position: 'asc' }],
+          }),
+      },
     ],
     excluded: [
       {

@@ -145,6 +145,12 @@
  * history that cannot be read, nothing is refused. The install-wide cap is left to that gate
  * too: no workspace admin can raise it.
  *
+ * **Comparisons** (t-87). A comparison's drafts are checked together: the
+ * estimate is one review's times the drafts, so the set is refused whole
+ * rather than half-started ({@link reserveComparisonBudget}). Under the lock
+ * it takes one hold per draft, each released as that draft's review is
+ * stored, which is then held in its place as any queued review is.
+ *
  * **Rewrites** (t-81). A running rewrite holds its estimate (`heldUsd`, the
  * median of the workspace's last billed rewrites, or with none what the
  * request can cost at most, t-86) in every check, a
@@ -580,11 +586,16 @@ const usedUp = (budget: Budget) =>
 
 /** How a refusal names what it refused: a review, or a rewrite (t-81). */
 interface RefusalWords {
-  thing: 'review' | 'rewrite';
+  thing: 'review' | 'rewrite' | 'comparison';
   /** What did not happen, as a sentence's opening. */
   notStarted: string;
 }
 const REVIEW_WORDS: RefusalWords = { thing: 'review', notStarted: 'No AI reviewer was started' };
+/** A comparison's drafts, checked together (t-87): refused whole, none of them reviewed. */
+const COMPARISON_WORDS: RefusalWords = {
+  thing: 'comparison',
+  notStarted: 'None of its drafts was reviewed',
+};
 const REWRITE_WORDS: RefusalWords = {
   thing: 'rewrite',
   notStarted: 'The editor was not asked to rewrite it',
@@ -636,15 +647,26 @@ function creditRefusal(
   };
 }
 
-/** The refusal for a review of `judgeCount` judges with `inFlight` held back, or `null` when it fits. */
+/**
+ * The refusal for `reviews` reviews of `judgeCount` judges each (one, but for
+ * a comparison's drafts, t-87) with `inFlight` held back, or `null` when they
+ * fit.
+ */
 function refusalFor(
   budget: Budget,
   judgeCount: number,
   inFlight: InFlight,
-  stored: boolean
+  stored: boolean,
+  reviews = 1
 ): BudgetRefusal | null {
   const { rate } = budget;
-  return refusalForCost(budget, heldCost(rate, judgeCount, stored), rate.basis, inFlight);
+  return refusalForCost(
+    budget,
+    reviews * heldCost(rate, judgeCount, stored),
+    rate.basis,
+    inFlight,
+    reviews > 1 ? COMPARISON_WORDS : REVIEW_WORDS
+  );
 }
 
 /** The refusal for something costing `estimate` with `inFlight` held back, or `null` when it fits. */
@@ -733,23 +755,26 @@ export async function budgetRefusal(
 /**
  * Throw 402 `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED` when
  * {@link budgetRefusal} would refuse a review of `profile` calling
- * `judgeCount` judges. Holds nothing: a request checked before its other
- * refusals, which {@link reserveReviewBudget} checks again. Answers the rate
- * it read, for that check to reuse; `null` when it calls no judge, or neither
- * bound nor the history can be read.
+ * `judgeCount` judges, or `reviews` of them together (a comparison's drafts,
+ * t-87): refused whole when their estimates together do not fit. Holds
+ * nothing: a request checked before its other refusals, which
+ * {@link reserveReviewBudget} or {@link reserveComparisonBudget} checks
+ * again. Answers the rate it read, for that check to reuse; `null` when it
+ * calls no judge, or neither bound nor the history can be read.
  */
 export async function assertReviewFits(
   orgId: string,
   profile: string,
   judgeCount: number,
-  stored: boolean
+  stored: boolean,
+  reviews = 1
 ): Promise<ReviewRate | null> {
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
   if (!budget) return null;
   let refusal: BudgetRefusal | null;
   if (usedUp(budget)) {
-    refusal = refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored);
+    refusal = refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored, reviews);
   } else {
     try {
       const inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date());
@@ -757,7 +782,8 @@ export async function assertReviewFits(
         await withBalanceNow(budget, orgId, prisma),
         judgeCount,
         inFlight,
-        stored
+        stored,
+        reviews
       );
     } catch (err) {
       return unreadable(orgId, err);
@@ -876,11 +902,44 @@ export async function reserveReviewBudget(
   stored: boolean,
   rate?: ReviewRate
 ): Promise<BudgetHold | null> {
-  if (judgeCount === 0) return null;
+  const [hold] = await reserveHolds(orgId, profile, judgeCount, stored, 1, rate);
+  return hold ?? null;
+}
+
+/**
+ * {@link reserveReviewBudget} for a comparison's `drafts` stored reviews
+ * (t-87), each of `profile` calling `judgeCount` judges: checked together
+ * under the lock, so the set is refused whole (402) when their estimates
+ * together do not fit, and held as one hold per draft. The caller releases
+ * each once its review is stored, and all of them however the request ends.
+ * Empty when nothing is held, as {@link reserveReviewBudget}'s `null`.
+ */
+export async function reserveComparisonBudget(
+  orgId: string,
+  profile: string,
+  judgeCount: number,
+  drafts: number,
+  rate?: ReviewRate
+): Promise<BudgetHold[]> {
+  return reserveHolds(orgId, profile, judgeCount, true, drafts, rate);
+}
+
+/** Check `reviews` reviews together and hold one hold for each: see {@link reserveReviewBudget}. */
+async function reserveHolds(
+  orgId: string,
+  profile: string,
+  judgeCount: number,
+  stored: boolean,
+  reviews: number,
+  rate?: ReviewRate
+): Promise<BudgetHold[]> {
+  if (judgeCount === 0) return [];
   const budget = await readBudget(orgId, profile, rate);
-  if (!budget) return null;
+  if (!budget) return [];
   // Nothing left: refused whatever is held, so no lock to wait for.
-  const spentUp = usedUp(budget) ? refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored) : null;
+  const spentUp = usedUp(budget)
+    ? refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored, reviews)
+    : null;
   if (spentUp) refuse(spentUp);
 
   // Holds whose process died: they count for nothing already, and nothing
@@ -895,7 +954,7 @@ export async function reserveReviewBudget(
     });
   }
 
-  let taken: { id: string } | { refusal: BudgetRefusal };
+  let taken: { ids: string[] } | { refusal: BudgetRefusal };
   try {
     taken = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey(orgId)}, 0))`;
@@ -905,21 +964,27 @@ export async function reserveReviewBudget(
         await withBalanceNow(budget, orgId, tx),
         judgeCount,
         inFlight,
-        stored
+        stored,
+        reviews
       );
       if (refusal) return { refusal };
-      return tx.budgetHold.create({
-        data: {
-          orgId,
-          judges: judgeCount,
-          stored,
-          // Read under the lock, so a claim check orders it after every
-          // review it counted (see "Again when it is claimed").
-          createdAt: now,
-          leaseExpiresAt: new Date(now.getTime() + LEASE_MS),
-        },
-        select: { id: true },
-      });
+      const ids: string[] = [];
+      for (let n = 0; n < reviews; n++) {
+        const hold = await tx.budgetHold.create({
+          data: {
+            orgId,
+            judges: judgeCount,
+            stored,
+            // Read under the lock, so a claim check orders it after every
+            // review it counted (see "Again when it is claimed").
+            createdAt: now,
+            leaseExpiresAt: new Date(now.getTime() + LEASE_MS),
+          },
+          select: { id: true },
+        });
+        ids.push(hold.id);
+      }
+      return { ids };
     }, HOLD_TRANSACTION);
   } catch (err) {
     // Swamped by a burst: passed, it would spend on a remainder checked
@@ -934,10 +999,11 @@ export async function reserveReviewBudget(
         429
       );
     }
-    return unreadable(orgId, err);
+    unreadable(orgId, err);
+    return [];
   }
   if ('refusal' in taken) refuse(taken.refusal);
-  return keepHold(orgId, taken.id);
+  return taken.ids.map((id) => keepHold(orgId, id));
 }
 
 /** Ended rewrites the rewrite estimate reads, most recent first (t-81). */

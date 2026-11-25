@@ -34,6 +34,7 @@ vi.mock('@/lib/app/assessments/run', () => ({ runAssessment: mocks.runAssessment
 
 import {
   enqueueAssessment,
+  enqueueAssessments,
   startAssessmentInBackground,
   type EnqueueAssessmentInput,
 } from '@/lib/app/assessments/enqueue';
@@ -202,6 +203,98 @@ describe('enqueueAssessment', () => {
       message: "There is no judge profile 'everything'",
     });
     expect(fake.assessments).toHaveLength(0);
+  });
+});
+
+describe('enqueueAssessments (t-87)', () => {
+  it('stores each review in order and hands them to alsoWrite in the same transaction', async () => {
+    const alsoWrite = vi.fn(async (_tx: unknown, enqueued: { assessmentId: string }[]) =>
+      enqueued.map((e) => e.assessmentId).join(',')
+    );
+
+    const { enqueued, also } = await runAsOrg(ORG, () =>
+      enqueueAssessments(
+        [
+          input({ content: { text: 'Draft one.', sourceKind: 'TEXT', title: 'A' } }),
+          input({ content: { text: 'Draft two.', sourceKind: 'TEXT', title: 'B' } }),
+        ],
+        alsoWrite
+      )
+    );
+
+    expect(fake.contents.map((c) => [c.text, c.title])).toEqual([
+      ['Draft one.', 'A'],
+      ['Draft two.', 'B'],
+    ]);
+    expect(enqueued.map((e) => e.assessmentId)).toEqual(fake.assessments.map((a) => a.id));
+    expect(enqueued.map((e) => e.judges)).toEqual([SLOTS, SLOTS]);
+    expect(also).toBe(fake.assessments.map((a) => a.id).join(','));
+    expect(fake.db.$transaction).toHaveBeenCalledTimes(1);
+    expect(alsoWrite.mock.calls[0][0]).toBe(fake.db);
+    expect(mocks.noteMaintenanceWork).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks every input before writing any: one refused stores none', async () => {
+    const alsoWrite = vi.fn(async () => undefined);
+
+    const err = await refusal(
+      runAsOrg(ORG, () =>
+        enqueueAssessments(
+          [input(), input({ content: { text: '   ', sourceKind: 'TEXT' } })],
+          alsoWrite
+        )
+      )
+    );
+
+    expect(err.code).toBe('content_empty');
+    expect(fake.contents).toEqual([]);
+    expect(fake.assessments).toEqual([]);
+    expect(alsoWrite).not.toHaveBeenCalled();
+  });
+
+  it('checks a project the inputs share once', async () => {
+    fake.projects.push({ id: 'project-1', orgId: ORG, archivedAt: null });
+    const inProject = { text: 'Draft.', sourceKind: 'TEXT' as const, projectId: 'project-1' };
+
+    await runAsOrg(ORG, () =>
+      enqueueAssessments(
+        [input({ content: inProject }), input({ content: inProject })],
+        async () => undefined
+      )
+    );
+
+    expect(fake.db.project.findFirst).toHaveBeenCalledTimes(1);
+    expect(fake.assessments.map((a) => a.projectId)).toEqual(['project-1', 'project-1']);
+  });
+
+  it('loads the version the inputs share once, and each other version once', async () => {
+    await runAsOrg(ORG, () =>
+      enqueueAssessments(
+        [input(), input(), input({ frameworkVersionId: 'version-2' })],
+        async () => undefined
+      )
+    );
+
+    expect(mocks.engineForVersion.mock.calls.map(([id]) => id)).toEqual([
+      input().frameworkVersionId,
+      'version-2',
+    ]);
+    expect(fake.assessments).toHaveLength(3);
+  });
+
+  it('gives the write transaction room for a comparison of five long drafts', async () => {
+    await runAsOrg(ORG, () => enqueueAssessments([input(), input()], async () => undefined));
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
+  });
+
+  it('leaves a single review on the transaction defaults', async () => {
+    await runAsOrg(ORG, () => enqueueAssessments([input()], async () => undefined));
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), undefined);
   });
 });
 

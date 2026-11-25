@@ -25,5 +25,6 @@ domain folders beside this one: start at [`../substrate.md`](../substrate.md).
 | [`projects.md`](./projects.md)                         | Projects: the brief and defaults, the routes, how a review takes a project's defaults, and the demo seed's projects.                                                                         |
 | [`workbench.md`](./workbench.md)                       | The assess workbench: `/assess`, how a project's defaults fill its settings, the kept draft, live progress over the event stream, and how refusals are shown.                                |
 | [`rewrites.md`](./rewrites.md)                         | Rewrites: the API, what the editor reads, how a rewrite runs on its own and is kept, what it costs and how it is charged, and recovery.                                                      |
+| [`comparisons.md`](./comparisons.md)                   | Comparisons: 2–5 drafts reviewed the same way, the API, what the read compares per appeal, the budget and the cap, and what deleting or purging does.                                        |
 
 Features add their own page here as they land, and a row to this table.

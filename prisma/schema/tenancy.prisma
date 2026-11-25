@@ -111,6 +111,8 @@ model Org {
   projectDocuments     ProjectDocument[]
   codeRedemptions      ReviewCodeRedemption[]
   rewrites             Rewrite[]
+  assessmentSets       AssessmentSet[]
+  assessmentSetMembers AssessmentSetMember[]
 
   @@map("org")
 }

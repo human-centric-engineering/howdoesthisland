@@ -457,6 +457,8 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_project_document_knowledgeDocumentId_fkey (hand-written FK → ai_knowledge_document)',
       'app_project_document_addedByUserId_fkey (hand-written FK → user)',
       'app_rewrite_createdByUserId_fkey (hand-written FK → user)',
+      // FORK (HowDoesThisLand): a comparison's maker (t-87).
+      'app_assessment_set_createdByUserId_fkey (hand-written FK → user)',
     ]);
   });
 });

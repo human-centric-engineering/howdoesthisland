@@ -9,6 +9,10 @@
  * population holds rows on both sides of each cutoff, so a purge that did
  * nothing, or everything, fails.
  *
+ * Comparisons (t-87): sets and their members, a member's link to its
+ * assessment set null when the assessment goes, and a set's members going
+ * with it (the cascades the schema declares).
+ *
  * What only a real database shows (the relation filters, under the tenant
  * scope) was checked by running the purge against the development database.
  */
@@ -43,6 +47,16 @@ interface RewriteRow {
   assessmentId: string;
   status: 'RUNNING' | 'COMPLETED' | 'FAILED';
 }
+interface SetRow {
+  id: string;
+  orgId: string;
+  createdAt: Date;
+}
+interface MemberRow {
+  id: string;
+  setId: string;
+  assessmentId: string | null;
+}
 interface ReplyRow {
   id: string;
   orgId: string;
@@ -57,6 +71,8 @@ const db = vi.hoisted(() => ({
   judgeRuns: [] as JudgeRunRow[],
   replies: [] as ReplyRow[],
   rewrites: [] as RewriteRow[],
+  sets: [] as SetRow[],
+  members: [] as MemberRow[],
   orgId: '',
 }));
 
@@ -124,6 +140,9 @@ const fakePrisma = vi.hoisted(() => {
     db.judgeRuns = db.judgeRuns.filter((r) => !runs.has(r.id));
     db.replies = db.replies.filter((r) => !runs.has(r.judgeRunId));
     db.rewrites = db.rewrites.filter((r) => !ids.has(r.assessmentId));
+    // A comparison's member keeps its place (SET NULL).
+    for (const m of db.members)
+      if (m.assessmentId && ids.has(m.assessmentId)) m.assessmentId = null;
   };
   return {
     org: {
@@ -171,6 +190,27 @@ const fakePrisma = vi.hoisted(() => {
         );
         const ids = new Set(hit.map((c) => c.id));
         db.contents = db.contents.filter((c) => !ids.has(c.id));
+        return Promise.resolve({ count: hit.length });
+      }),
+    },
+    assessmentSet: {
+      deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
+        allowed(where, ['orgId', 'createdAt', 'members']);
+        if (
+          JSON.stringify(where.members) !==
+          JSON.stringify({ none: { assessmentId: { not: null } } })
+        ) {
+          throw new Error('fake models only `members: { none: { assessmentId: { not: null } } }`');
+        }
+        const hit = db.sets.filter(
+          (set) =>
+            set.orgId === where.orgId &&
+            before(set.createdAt, where.createdAt) &&
+            !db.members.some((m) => m.setId === set.id && m.assessmentId !== null)
+        );
+        const gone = new Set(hit.map((set) => set.id));
+        db.sets = db.sets.filter((set) => !gone.has(set.id));
+        db.members = db.members.filter((m) => !gone.has(m.setId));
         return Promise.resolve({ count: hit.length });
       }),
     },
@@ -290,6 +330,8 @@ beforeEach(() => {
   db.judgeRuns = [];
   db.replies = [];
   db.rewrites = [];
+  db.sets = [];
+  db.members = [];
   db.orgId = WS;
   pdfs.held.clear();
   pdfs.refuse.clear();
@@ -327,7 +369,7 @@ describe('with a content window', () => {
 
     const second = await purgeExpiredContent(NOW);
 
-    expect(second).toEqual({ assessments: 0, contents: 0, replies: 0 });
+    expect(second).toEqual({ assessments: 0, contents: 0, comparisons: 0, replies: 0 });
     expect(snapshot()).toEqual(after);
   });
 
@@ -494,7 +536,7 @@ describe('judge replies', () => {
 
     const result = await purgeExpiredContent(NOW);
 
-    expect(result).toEqual({ assessments: 0, contents: 0, replies: 1 });
+    expect(result).toEqual({ assessments: 0, contents: 0, comparisons: 0, replies: 1 });
     expect(ids(db.replies)).toEqual([fresh.reply.id]);
     expect(ids(db.judgeRuns)).toEqual(ids([month.run, fresh.run]));
     expect(db.assessments).toHaveLength(2);
@@ -545,7 +587,7 @@ describe('with no content window', () => {
 
     const result = await purgeExpiredContent(NOW);
 
-    expect(result).toEqual({ assessments: 0, contents: 0, replies: 2 });
+    expect(result).toEqual({ assessments: 0, contents: 0, comparisons: 0, replies: 2 });
     expect(ids(db.contents)).toEqual(ids([ancient.content, month.content, fresh.content]));
     expect(db.assessments).toHaveLength(3);
     expect(ids(db.replies)).toEqual([fresh.reply.id]);
@@ -571,5 +613,86 @@ describe('with no content window', () => {
 
     expect(ids(db.assessments)).toEqual(ids([old.assessment, fresh.assessment]));
     expect(ids(db.replies)).toEqual([fresh.reply.id]);
+  });
+});
+
+describe('comparisons (t-87)', () => {
+  beforeEach(() => {
+    db.settings.set(WS, { app: { retention: { days: 90 } } });
+    db.settings.set(OTHER, { app: { retention: { days: 90 } } });
+  });
+
+  let setSeq = 0;
+  /** A comparison of `drafts`, each a piece of the given age, in `orgId`. */
+  function comparison(orgId: string, ageDays: number, draftAges: number[]) {
+    const set = { id: `s${++setSeq}`, orgId, createdAt: daysAgo(ageDays) };
+    db.sets.push(set);
+    const drafts = draftAges.map((age, position) => {
+      const p = piece(orgId, age);
+      db.members.push({
+        id: `${set.id}-m${position}`,
+        setId: set.id,
+        assessmentId: p.assessment.id,
+      });
+      return p;
+    });
+    return { set, drafts };
+  }
+  const membersOf = (setId: string) => db.members.filter((m) => m.setId === setId);
+
+  it('keeps a comparison with a draft still inside the window, its purged drafts left in place', async () => {
+    const { set, drafts } = comparison(WS, 120, [120, 120, 10]);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result).toMatchObject({ assessments: 2, comparisons: 0 });
+    expect(db.sets).toEqual([set]);
+    expect(membersOf(set.id)).toEqual([
+      { id: `${set.id}-m0`, setId: set.id, assessmentId: null },
+      { id: `${set.id}-m1`, setId: set.id, assessmentId: null },
+      { id: `${set.id}-m2`, setId: set.id, assessmentId: drafts[2].assessment.id },
+    ]);
+  });
+
+  it('deletes a comparison past the window once none of its drafts has a review left, and no other', async () => {
+    const old = comparison(WS, 120, [120, 120]);
+    // Past the window, but a draft was reviewed again inside it: kept.
+    const mixed = comparison(WS, 120, [120, 30]);
+    // Inside the window, its drafts' reviews deleted by hand: kept.
+    const recent = comparison(WS, 20, []);
+    db.members.push({ id: 'recent-m0', setId: recent.set.id, assessmentId: null });
+    // Another workspace's, as old: not this pass's.
+    const theirs = comparison(OTHER, 120, [120, 120]);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result).toMatchObject({ assessments: 3, comparisons: 1 });
+    expect(ids(db.sets)).toEqual(ids([mixed.set, recent.set, theirs.set]));
+    expect(membersOf(old.set.id)).toEqual([]);
+    expect(membersOf(mixed.set.id).map((m) => m.assessmentId)).toEqual([
+      null,
+      mixed.drafts[1].assessment.id,
+    ]);
+    expect(membersOf(theirs.set.id).map((m) => m.assessmentId)).toEqual(
+      theirs.drafts.map((d) => d.assessment.id)
+    );
+  });
+
+  it('a second pass changes nothing', async () => {
+    comparison(WS, 120, [120, 120]);
+    comparison(WS, 120, [120, 30]);
+    await purgeExpiredContent(NOW);
+    const after = structuredClone({ s: db.sets, m: db.members });
+
+    expect(await purgeExpiredContent(NOW)).toMatchObject({ assessments: 0, comparisons: 0 });
+    expect({ s: db.sets, m: db.members }).toEqual(after);
+  });
+
+  it('purges no comparison without a content window', async () => {
+    db.settings.set(WS, null);
+    const { set } = comparison(WS, 400, [400, 400]);
+
+    expect(await purgeExpiredContent(NOW)).toMatchObject({ comparisons: 0 });
+    expect(db.sets).toEqual([set]);
   });
 });

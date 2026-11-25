@@ -255,6 +255,7 @@ import {
   KEPT_NOWHERE_TAIL,
   estimateRewriteCost,
   REWRITE_HISTORY,
+  reserveComparisonBudget,
   reserveReviewBudget,
   reserveRewriteBudget,
 } from '@/lib/app/usage/budget';
@@ -1871,5 +1872,86 @@ describe('rewrites (t-81)', () => {
         code: 'INSUFFICIENT_CREDITS',
       });
     });
+  });
+});
+
+describe('a comparison’s drafts, checked together (t-87)', () => {
+  beforeEach(() => {
+    state.budget = 10;
+    // An estimate of $1.00 a 7-judge review, and an editor that costs nothing.
+    for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+  });
+
+  it('refuses the set whole when there is room for two of its three drafts, holding nothing', async () => {
+    state.spent = 7.5;
+
+    const err = await refusal(async () => {
+      await reserveComparisonBudget(ORG, 'full', 7, 3);
+    });
+
+    expect(err).toMatchObject({
+      status: 402,
+      code: 'BUDGET_EXCEEDED',
+      details: { estimateUsd: 3, remainingUsd: 2.5, inFlightUsd: 0 },
+    });
+    expect(err.message).toMatch(/^This comparison would cost about \$3\.00/);
+    expect(err.message).toContain('None of its drafts was reviewed');
+    expect(state.holds).toEqual([]);
+  });
+
+  it('refuses on credits the same way, the estimate being every draft’s', async () => {
+    state.spent = 0;
+    // $1.00 is 100 credits (`CREDITS_PER_USD`): room for two drafts, not three.
+    state.credits = 250;
+
+    const err = await refusal(async () => {
+      await reserveComparisonBudget(ORG, 'full', 7, 3);
+    });
+
+    expect(err).toMatchObject({
+      code: 'INSUFFICIENT_CREDITS',
+      details: { estimateCredits: 300, balanceCredits: 250 },
+    });
+    expect(state.holds).toEqual([]);
+  });
+
+  it('holds one stored hold per draft under one lock, which a later check counts', async () => {
+    state.spent = 5;
+
+    const holds = await reserveComparisonBudget(ORG, 'full', 7, 3);
+
+    expect(holds).toHaveLength(3);
+    expect(state.holds).toEqual(
+      Array(3).fill(expect.objectContaining({ orgId: ORG, judges: 7, stored: true }))
+    );
+    expect(state.locked).toHaveLength(1);
+    // $5 spent and $3 held leave $2: a 7-judge review fits, a 21-judge one does not.
+    await check(ORG, 'full', 7);
+    const err = await refusal(() => check(ORG, 'full', 21));
+    expect(err.details).toMatchObject({ inFlightUsd: 3, remainingUsd: 2 });
+
+    // Released one by one, as each draft's review is stored.
+    await holds[0].release();
+    expect(state.holds).toHaveLength(2);
+    for (const hold of holds) await hold.release();
+    expect(state.holds).toEqual([]);
+  });
+
+  it('assertReviewFits refuses the same set before anything is held', async () => {
+    state.spent = 7.5;
+
+    const err = await refusal(async () => {
+      await assertReviewFits(ORG, 'full', 7, true, 3);
+    });
+
+    expect(err).toMatchObject({ code: 'BUDGET_EXCEEDED', details: { estimateUsd: 3 } });
+    expect(state.holds).toEqual([]);
+    // One draft alone would fit.
+    expect(await assertReviewFits(ORG, 'full', 7, true)).toMatchObject({ basis: 'profile' });
+  });
+
+  it('holds nothing for drafts that call no judge', async () => {
+    expect(await reserveComparisonBudget(ORG, 'quick', 0, 3)).toEqual([]);
+    expect(state.locked).toEqual([]);
   });
 });

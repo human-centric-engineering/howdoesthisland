@@ -380,6 +380,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.reviewCode, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCodeRedemption, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.rewrite, 'findMany').mockResolvedValue([] as never),
+        // FORK (HowDoesThisLand): comparisons (t-87).
+        vi.spyOn(prisma.assessmentSet, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
@@ -393,6 +395,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         reviewCodes: [],
         codeRedemptions: [],
         rewrites: [],
+        comparisons: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -412,6 +415,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReviewCode', 'reviewCodes'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
         ['Rewrite', 'rewrites'],
+        // FORK (HowDoesThisLand): comparisons of drafts (t-87).
+        ['AssessmentSet', 'comparisons'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22), their replies
@@ -426,6 +431,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'JudgeReply',
         'AssessmentPlace',
         'BudgetHold',
+        // FORK (HowDoesThisLand): a draft's place in a comparison (t-87).
+        'AssessmentSetMember',
       ]);
     },
   },
@@ -454,6 +461,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['CreditEntry', 'creditEntries'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
         ['Rewrite', 'rewrites'],
+        // FORK (HowDoesThisLand): comparisons and their drafts (t-87).
+        ['AssessmentSet', 'comparisons'],
+        ['AssessmentSetMember', 'comparisonDrafts'],
       ]);
       // FORK (HowDoesThisLand): the running places (t-28) and the budget holds
       // (t-50), leases. Ledger row 2.
@@ -490,6 +500,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ReviewCode', 'not-personal'],
         ['ReviewCodeRedemption', 'not-personal'],
         ['Rewrite', 'not-personal'],
+        // FORK (HowDoesThisLand): a comparison of drafts (t-87).
+        ['AssessmentSet', 'not-personal'],
       ]);
     },
   },

@@ -90,6 +90,11 @@ import {
 import { monthUsageSchema, reviewRefusalDetailsSchema } from '@/lib/app/usage/wire';
 import { rewriteEventSchema, rewriteSchema } from '@/lib/app/rewrites/wire';
 import {
+  comparisonIdParamSchema,
+  createComparisonSchema,
+  listComparisonsQuerySchema,
+} from '@/lib/app/comparisons/validations';
+import {
   createRewriteSchema,
   listRewritesQuerySchema,
   rewriteIdParamSchema,
@@ -597,6 +602,69 @@ export const assessmentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('assessment_timeout'), id: z.string() }),
 ]);
 
+// --- Comparisons (t-87): `ComparisonSummary` and `ComparisonDetail` in
+// `lib/app/comparisons/views.ts`. Here, not beside them, so `context` is the
+// registry's own field, which the OpenAPI document types as the framework's.
+
+/** `DraftSummary` in `views.ts`. */
+const comparisonDraftSchema = z.object({
+  position: z.number().int(),
+  label: z.string().nullable(),
+  assessmentId: z.string().nullable(),
+  status: z.enum([...ASSESSMENT_STATES, 'purged']),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+});
+
+const comparisonAppealScoreSchema = z.object({ appeal: z.string(), score: z.number() });
+
+/** `ComparisonSummary` in `views.ts`. */
+export const comparisonSummarySchema = z.object({
+  id: z.string(),
+  kind: z.literal('comparison'),
+  status: z.enum(['running', 'completed', 'partial', 'failed']),
+  framework: frameworkRefSchema,
+  profile: z.string(),
+  judges: z.array(z.string()),
+  projectId: z.string().nullable(),
+  project: z.object({ id: z.string(), name: z.string() }).nullable(),
+  createdAt: isoDateTime,
+  drafts: z.array(comparisonDraftSchema),
+});
+
+/** `ComparisonDetail` in `views.ts`. */
+export const comparisonDetailSchema = comparisonSummarySchema.extend({
+  context: assessmentContextField,
+  drafts: z.array(
+    comparisonDraftSchema.extend({
+      appeals: z
+        .array(comparisonAppealScoreSchema)
+        .nullable()
+        .meta({ description: 'Its score on each appeal once scored; `null` before.' }),
+    })
+  ),
+  appeals: z
+    .array(
+      z.object({
+        appeal: z.string(),
+        leaders: z.array(z.number().int()).meta({
+          description: 'The positions of the drafts with the best score; more than one on a tie.',
+        }),
+        drafts: z.array(
+          z.object({
+            position: z.number().int(),
+            score: z.number().nullable(),
+            delta: z.number().nullable().meta({
+              description:
+                '`score` less the best score: `0` for a leader, negative for the rest; `null` when not scored.',
+            }),
+          })
+        ),
+      })
+    )
+    .meta({ description: 'Per appeal, once at least two drafts are scored; empty before.' }),
+});
+
 /** What `remove()` in `lib/app/assessments/api/service.ts` returns. */
 export const assessmentDeletedSchema = z.object({ deleted: z.literal(true) });
 
@@ -973,6 +1041,56 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: ASSESS,
     request: { params: rewriteIdParamSchema },
     response: { status: 200, data: rewriteSchema },
+  },
+  // Comparisons (t-87).
+  {
+    method: 'POST',
+    path: '/api/v1/comparisons',
+    summary:
+      "Review 2–5 drafts the same way, to read together: every draft gets the same framework version, context, project and AI reviewers. Each is an ordinary review, in the workspace's history and titled with its label. Answered 202 at once; follow the comparison with its GET. Each draft counts as a review against the per-user limit.",
+    auth: ASSESS,
+    request: { body: createComparisonSchema },
+    errors: [
+      {
+        status: 402,
+        code: 'INSUFFICIENT_CREDITS',
+        description:
+          "The workspace's CopyCredits, less what its reviews and rewrites in flight hold, do not cover every draft's estimate together. Nothing was stored and no draft was reviewed. `details` as for a review, `estimateCredits` being every draft's.",
+      },
+      {
+        status: 402,
+        code: 'BUDGET_EXCEEDED',
+        description:
+          "Every draft's estimate together is more than what is left of the workspace's monthly AI budget. Nothing was stored. `details` as for a review.",
+      },
+    ],
+    response: { status: 202, data: comparisonDetailSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/comparisons',
+    summary:
+      "List the workspace's comparisons, newest first, each with its drafts' states and scores. Filter by `projectId`.",
+    auth: ASSESS,
+    request: { query: listComparisonsQuerySchema },
+    response: { status: 200, data: z.array(comparisonSummarySchema), meta: paginationMetaSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/comparisons/{id}',
+    summary:
+      "Get one comparison: each draft's state and scores and, once two are scored, per appeal each draft's difference from the best and the leaders. A draft whose review was deleted or purged reads as `purged`.",
+    auth: ASSESS,
+    request: { params: comparisonIdParamSchema },
+    response: { status: 200, data: comparisonDetailSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/comparisons/{id}',
+    summary: "Delete a comparison. Its drafts' reviews stay in the workspace's history.",
+    auth: ASSESS,
+    request: { params: comparisonIdParamSchema },
+    response: { status: 200, data: assessmentDeletedSchema },
   },
   {
     method: 'POST',
