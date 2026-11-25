@@ -158,12 +158,19 @@ show it.
   read again (`GET /api/v1/rewrites/{id}`, every 3s) until it ends.
 - **A dropped stream starts nothing.** The rewrite carries on, and is charged,
   on the server however the reader goes, so a second `POST` would be a second
-  charge. With the first event's row in hand, the drawer follows that rewrite.
-  When the stream dropped before it, the drawer reads the list again and
-  follows the newest one, if it is running and no older than the request
-  (`startedSince`); otherwise it says the connection dropped. Closing the
-  drawer mid-draft stops only the reading: the rewrite is listed, writing, on
-  the next open.
+  charge. With the first event's row in hand, the drawer follows that rewrite,
+  and the draft shown only grows while it runs: the stored draft is saved every
+  few seconds, so it can be behind what streamed. When the stream dropped
+  before its first event, the drawer reads the list again and follows the
+  newest running rewrite of the focus asked for that was not listed before the
+  request and is no older than it (`startedSince`; a minute's slack for clock
+  skew). Someone else starting the same focus on the same review in that
+  minute would still match: nothing on the row says who started it. Otherwise
+  it says the connection dropped. Closing the drawer mid-draft stops only the
+  reading: the rewrite is listed, writing, on the next open.
+- **The list** is each read laid under the rows the drawer has seen since
+  (`mergeRewrites`), so a read that lands after a rewrite started does not
+  hide it, and only the latest read's answer is shown.
 - **Copy** copies the draft. **Review this draft** reads the review
   (`GET /api/v1/assessments/{id}`) and starts a review of the draft with the
   same model version, reader context, project and AI reviewers (a quick review
@@ -171,7 +178,10 @@ show it.
   t-84 that becomes a comparison with the original.
 - **Refusals** show beside the button pressed, with `<SaveError>`. Credit and
   budget refusals use the assess page's `refusalOf`, with the usage link; the
-  rate limit is worded for rewrites (`rewriteRefusalOf`). A rewrite that
+  rate limit is worded for rewrites, without blaming the reader, since a burst
+  of the workspace's requests answers it too (`rewriteRefusalOf`). A review of
+  the draft refused for a retired model version says so, rather than to reload
+  (`reviewDraftRefusalOf`): the draft is reviewed with its original's version. A rewrite that
   started and then failed shows the server's `error` and keeps what it wrote.
 
 ## When the process dies
