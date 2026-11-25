@@ -32,6 +32,9 @@
  * connection), and ends and charges it in one transaction, matching only its
  * own claim. A pass that fails part-way leaves its claim to run out: the
  * next pass finds any estimate it wrote, and charges it without another.
+ * Whatever charges a rewrite first leaves it one account of its call
+ * ({@link settleRewriteCostRows}), so an estimate that a stalled call's own
+ * row, or a second pass's estimate, joined is never counted twice.
  *
  * A lease can also run out while the call lives, if its saves fail for that
  * long. Its next save sets it `RUNNING` again, and it charges itself as it
@@ -114,13 +117,10 @@ async function endLost(
   // left for when it is old enough (its claim runs out, or a save renews it).
   if (!old && row.callStart !== null) return 0;
 
-  const ownRows = {
-    orgId,
-    createdAt: { gte: createdAt },
-    metadata: { path: ['rewriteId'], equals: id },
-  };
+  const ownRows = rewriteCostRows(orgId, id, createdAt);
   if (old && (await prisma.aiCostLog.count({ where: ownRows })) === 0) {
-    await priceLostCall(id, row);
+    // A write that may succeed next time: leave the claim to run out.
+    if ((await priceLostCall(id, row)) === 'retry') return 0;
   }
 
   return prisma.$transaction(async (tx) => {
@@ -137,6 +137,7 @@ async function endLost(
       },
     });
     if (count === 0) return 0;
+    await settleRewriteCostRows(tx, orgId, id, createdAt);
     await chargeRewrite(tx, orgId, id, createdAt);
     // What its rows record, whether or not the workspace was charged for it.
     const { _sum } = await tx.aiCostLog.aggregate({
@@ -149,24 +150,82 @@ async function endLost(
   });
 }
 
+/** A rewrite's cost rows: those tagged with it since it was made. */
+function rewriteCostRows(orgId: string, rewriteId: string, since: Date) {
+  return {
+    orgId,
+    createdAt: { gte: since },
+    metadata: { path: ['rewriteId'], equals: rewriteId },
+  } satisfies Prisma.AiCostLogWhereInput;
+}
+
+/** Whether a cost row's metadata is recovery's estimate ({@link priceLostCall}). */
+function isRecoveryEstimate(metadata: Prisma.JsonValue): boolean {
+  return (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    !Array.isArray(metadata) &&
+    metadata.estimated === true &&
+    metadata.error === LOST_REWRITE_CODE
+  );
+}
+
+/**
+ * Leave a rewrite at most one account of its call, before it is charged
+ * (t-85): call it in the transaction that charges it, here and as its call
+ * ends (`service.ts`). Recovery's estimate stands in for the row a call
+ * that died never wrote. Should the call's own row land as well (a process
+ * that stalled past {@link REWRITE_LIFETIME_MS} and then recovered), the
+ * estimate is removed, so neither the charge nor the monthly cap counts the
+ * call twice; should two passes each have written one, the later goes.
+ * A rewrite already charged at the estimate stays charged at it (one
+ * reference): low, never high.
+ */
+export async function settleRewriteCostRows(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  rewriteId: string,
+  since: Date
+): Promise<void> {
+  const rows = await tx.aiCostLog.findMany({
+    where: rewriteCostRows(orgId, rewriteId, since),
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, metadata: true },
+  });
+  const estimates = rows.filter((r) => isRecoveryEstimate(r.metadata));
+  const ownCount = rows.length - estimates.length;
+  const extra = ownCount > 0 ? estimates : estimates.slice(1);
+  if (extra.length === 0) return;
+  await tx.aiCostLog.deleteMany({ where: { orgId, id: { in: extra.map((r) => r.id) } } });
+  logger.warn('A rewrite had more than one account of its call; the extra estimates are removed', {
+    rewriteId,
+    removed: extra.length,
+  });
+}
+
 /**
  * Write the cost row a lost rewrite's call left none of, from what it kept
  * of its call and the draft it saved (`recordStoppedStream`). Nothing is
  * written for a rewrite that saved no draft, or kept no call it can read
  * (it died before the call's checks passed, or the write failed): the
  * second is logged, since the provider may have billed it.
+ *
+ * Answers `retry` when the write failed for a reason that may pass (the
+ * database, the network), so the pass leaves the rewrite to the next
+ * rather than ending it uncharged. A write refused because the agent it
+ * names is gone would be refused at every pass: that one is ended uncharged.
  */
 async function priceLostCall(
   rewriteId: string,
   row: { draft: string; callStart: unknown; createdByUserId: string | null }
-): Promise<void> {
-  if (row.draft === '') return;
+): Promise<'done' | 'retry'> {
+  if (row.draft === '') return 'done';
   const start = parseRewriteCallStart(row.callStart);
   if (!start) {
     logger.warn('A lost rewrite answered but kept no call to price; it is ended uncharged', {
       rewriteId,
     });
-    return;
+    return 'done';
   }
   const { frameworkVersion, ...pricing } = start;
   const written = await recordStoppedStream(
@@ -179,12 +238,15 @@ async function priceLostCall(
     },
     LOST_REWRITE_CODE
   );
-  // The write failed (`logCost` logged why). A row the database refuses (its
-  // agent gone, say) would be refused at every pass, so it is ended
-  // uncharged rather than left holding budget, and said so.
-  if (!written) {
-    logger.error('A lost rewrite could not be priced; it is ended uncharged', undefined, {
-      rewriteId,
-    });
+  if (written) return 'done';
+  // The write failed (`logCost` logged why).
+  if ((await prisma.aiAgent.count({ where: { id: pricing.agentId } })) > 0) {
+    logger.warn('A lost rewrite could not be priced; left for the next pass', { rewriteId });
+    return 'retry';
   }
+  logger.error('A lost rewrite could not be priced; it is ended uncharged', undefined, {
+    rewriteId,
+    reason: 'agent_gone',
+  });
+  return 'done';
 }

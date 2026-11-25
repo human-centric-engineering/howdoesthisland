@@ -60,7 +60,7 @@ import {
 } from '@/lib/app/judges/run-judge';
 import { parseProjectContext, renderProjectContext } from '@/lib/app/projects/context';
 import { EventChannel } from '@/lib/app/rewrites/channel';
-import { LOST_REWRITE_CODE } from '@/lib/app/rewrites/recover';
+import { LOST_REWRITE_CODE, settleRewriteCostRows } from '@/lib/app/rewrites/recover';
 import { DRAFT_SAVE_MS, REWRITE_CALL_MS, REWRITE_COST_TAG } from '@/lib/app/rewrites/limits';
 import type { CreateRewriteRequest } from '@/lib/app/rewrites/validations';
 import { REWRITE_VIEW_SELECT, toRewriteView, type RewriteView } from '@/lib/app/rewrites/views';
@@ -320,10 +320,12 @@ async function drive(d: Drive): Promise<RewriteView> {
   // So recovery can price the call should this process die before it ends.
   const keepStart = async (start: StreamStart) => {
     try {
-      await prisma.rewrite.updateMany({
+      const { count } = await prisma.rewrite.updateMany({
         where: { id: rewriteId, orgId: d.orgId, OR: ALIVE },
         data: { callStart: { ...start, frameworkVersion: d.frameworkVersion } },
       });
+      // Gone (its review was deleted) or ended another way: stop before paying.
+      if (count === 0) stop.abort();
     } catch (err) {
       // Not fatal: the call is still worth making, and charges itself as it
       // ends. Only a process that died as well would go uncharged.
@@ -365,7 +367,12 @@ async function drive(d: Drive): Promise<RewriteView> {
       errorCode: null,
     };
   } catch (err) {
-    end = overran ? overranEnding(rewriteId, draft, err) : failedEnding(rewriteId, draft, err);
+    // Only a failure the stop caused: one the call had already met (cut off
+    // at its ceiling, refused) as the deadline passed keeps its own reason.
+    end =
+      overran && err instanceof JudgeRunError && err.code === 'provider_error'
+        ? overranEnding(rewriteId, draft, err)
+        : failedEnding(rewriteId, draft, err);
   } finally {
     clearInterval(timer);
     clearTimeout(deadline);
@@ -392,9 +399,9 @@ interface Ending {
 export const OVERRAN_REWRITE = 'It ran too long and was stopped.';
 
 /** The ending of a call stopped at {@link REWRITE_CALL_MS}, priced as any stopped call. */
-function overranEnding(rewriteId: string, draft: string, err: unknown): Ending {
+function overranEnding(rewriteId: string, draft: string, err: JudgeRunError): Ending {
   logger.warn('A rewrite ran too long and was stopped', { rewriteId });
-  const spend = err instanceof JudgeRunError ? err.spend : undefined;
+  const { spend } = err;
   return {
     status: 'FAILED',
     draft,
@@ -477,6 +484,9 @@ async function endAndCharge(d: Drive, end: Ending): Promise<RewriteView> {
       where: { id: rewriteId, orgId, OR: ALIVE },
       data: { ...end, completedAt: new Date(), leaseExpiresAt: null },
     });
+    // Recovery's estimate, should it have priced this call meanwhile, gives
+    // way to the row the call wrote itself.
+    await settleRewriteCostRows(tx, orgId, rewriteId, d.createdAt);
     await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
     const row = await tx.rewrite.findFirst({
       where: { id: rewriteId, orgId },

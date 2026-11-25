@@ -161,7 +161,17 @@ its claim. A save from a call that lived after all, or another pass, changes
 the claim, and the pass leaves the row. The estimate is written with no
 transaction open, so a pass needs one connection at a time. A pass that fails
 part-way leaves its claim to run out; the next finds its estimate and charges
-it without another.
+it without another. An estimate write that fails is left for the next pass
+too, unless the agent it names is gone (every pass would be refused): that
+one is ended uncharged, and logged.
+
+**One account of a call** (`settleRewriteCostRows`). Whatever charges a
+rewrite (recovery, or its call as it ends) first leaves it one account of its
+call: should the call's own cost row have landed beside recovery's estimate (a
+process that stalled past the lifetime, then recovered), the estimate is
+removed; should two passes each have written one, the later goes. So neither
+the charge nor the monthly cap counts a call twice. One already charged at the
+estimate stays charged at it (one reference): low, never high.
 
 **Priced when it left no row** (t-85). A streamed call writes its cost row only
 as it ends, so one whose process died part-way through the stream (the platform
@@ -182,10 +192,10 @@ the row too.
 - **The estimate is low.** Thinking is not counted, and nor is what it wrote
   after its last save (up to 5s of it). As for a stopped call: low, never
   high.
-- **A call whose process stalls for 30s or more** between being stopped at
-  `REWRITE_CALL_MS` and writing its cost row could write it after recovery's
-  estimate. The charge is still once (one reference); the monthly cap counts
-  both.
+- **A call whose process stalls past the lifetime** and then writes its own
+  cost row, after recovery charged its estimate, is charged the estimate (one
+  reference). Its estimate is removed when the call ends, so the cap counts
+  only its own row.
 - **A rewrite that kept no `callStart`** (that write failed, and is logged) is
   charged nothing, as before t-85. Recovery logs one that saved a draft, since
   the provider answered it.

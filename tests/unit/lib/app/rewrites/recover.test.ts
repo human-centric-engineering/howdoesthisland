@@ -195,9 +195,9 @@ describe('recoverRewrites', () => {
     const find = fake.db.rewrite.findFirst;
     const real = find.getMockImplementation();
     find.mockImplementationOnce(async (args: { where?: Row }) => {
-      // Its `callStart` lands between the pass's read and its claim.
+      // Its `callStart` lands between the pass's first read and its claim.
       young.callStart = CALL_START;
-      return real?.(args);
+      return (await real?.(args)) ?? null;
     });
     expect(await recover()).toEqual({ failed: 0 });
     expect(young.status).toBe('RUNNING');
@@ -306,8 +306,27 @@ describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
     ]);
   });
 
-  it('ends one whose estimate could not be written uncharged, and says so', async () => {
+  it('leaves one whose estimate could not be written for the next pass, which prices it', async () => {
+    mocks.logCost.mockResolvedValueOnce(null);
+    const row = rewrite({ draft: DRAFT, callStart: CALL_START });
+    expect(await recover()).toEqual({ failed: 0 });
+    expect(row.status).toBe('RUNNING');
+    expect(charges()).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'A lost rewrite could not be priced; left for the next pass',
+      { rewriteId: row.id }
+    );
+
+    // Its claim runs out, and the next pass's write lands.
+    row.leaseExpiresAt = new Date(NOW.getTime() - 1_000);
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(row).toMatchObject({ status: 'FAILED', costUsd: ESTIMATE_USD });
+    expect(charges()).toEqual([expect.objectContaining({ amount: -13 })]);
+  });
+
+  it('ends one whose agent is gone uncharged, since every pass would be refused, and says so', async () => {
     mocks.logCost.mockResolvedValue(null);
+    vi.mocked(fake.db.aiAgent.count).mockResolvedValue(0);
     const row = rewrite({ draft: DRAFT, callStart: CALL_START });
     expect(await recover()).toEqual({ failed: 1 });
     expect(row).toMatchObject({ status: 'FAILED', costUsd: 0 });
@@ -315,8 +334,38 @@ describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
     expect(logger.error).toHaveBeenCalledWith(
       'A lost rewrite could not be priced; it is ended uncharged',
       undefined,
-      { rewriteId: row.id }
+      { rewriteId: row.id, reason: 'agent_gone' }
     );
+  });
+
+  it('charges one estimate when two passes each wrote one, and removes the other', async () => {
+    const row = rewrite({ draft: DRAFT, callStart: CALL_START });
+    const lost = { rewriteId: row.id, error: 'lost', estimated: true };
+    // A pass that overran its claim wrote one; this pass finds it and writes none.
+    fake.addCost(ORG, ESTIMATE_USD, lost, new Date(NOW.getTime() - 2_000));
+    // ...but a second landed from a pass alongside, before this one ends it.
+    vi.mocked(fake.db.aiCostLog.count).mockImplementationOnce(async () => {
+      fake.addCost(ORG, ESTIMATE_USD, lost, new Date(NOW.getTime() - 1_000));
+      return 1;
+    });
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(fake.costRows.filter((r) => (r.metadata as Row).rewriteId === row.id)).toHaveLength(1);
+    expect(row.costUsd).toBe(ESTIMATE_USD);
+    expect(charges()).toEqual([expect.objectContaining({ amount: -13 })]);
+  });
+
+  it('removes its estimate when the call’s own row has landed too, and charges that', async () => {
+    const row = rewrite({ draft: DRAFT, callStart: CALL_START });
+    // The call's own row lands while the pass writes its estimate.
+    mocks.logCost.mockImplementationOnce(async (params: LogCostParams) => {
+      fake.addCost(ORG, 0.07, { rewriteId: row.id }, new Date(NOW.getTime() - 1_000));
+      fake.addCost(ORG, ESTIMATE_USD, params.metadata ?? {}, NOW);
+      return { id: fake.costRows.at(-1)?.id, totalCostUsd: ESTIMATE_USD };
+    });
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(fake.costRows.map((r) => r.totalCostUsd)).toEqual([0.07]);
+    expect(row.costUsd).toBe(0.07);
+    expect(charges()).toEqual([expect.objectContaining({ amount: -7 })]);
   });
 
   it('charges, without a second estimate, the one a failed pass wrote', async () => {

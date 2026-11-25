@@ -33,7 +33,7 @@
  * lock) answering `0`. One transaction at a time is also what the lock
  * guarantees the check: a request checked behind another sees its hold.
  *
- * For the credits (t-58): `aiCostLog` rows in `costRows`, with `aggregate`
+ * For the credits (t-58): `aiCostLog` rows in `costRows`, with `deleteMany`, `aggregate`
  * summing `totalCostUsd` and `findMany` (`createdAt` bounds and a `metadata:
  * { path, equals }` filter honoured), and `creditEntry` rows in `credits`, with
  * `findMany`, `aggregate` summing `amount` and `createMany` honouring the `(kind,
@@ -370,9 +370,17 @@ export function createFakeDb() {
       }),
     },
     aiCostLog: {
+      // Only `orderBy: { createdAt: 'asc' }` is asked for.
       findMany: vi.fn(async ({ where }: { where?: Row }) =>
-        costRows.filter((r) => matches(r, where))
+        costRows
+          .filter((r) => matches(r, where))
+          .sort((a, b) => Number(a.createdAt) - Number(b.createdAt))
       ),
+      deleteMany: vi.fn(async ({ where }: { where?: Row }) => {
+        const gone = costRows.filter((r) => matches(r, where));
+        for (const r of gone) costRows.splice(costRows.indexOf(r), 1);
+        return { count: gone.length };
+      }),
       count: vi.fn(
         async ({ where }: { where?: Row }) => costRows.filter((r) => matches(r, where)).length
       ),
@@ -386,6 +394,10 @@ export function createFakeDb() {
           },
         };
       }),
+    },
+    // Every agent a test names exists, unless it says otherwise.
+    aiAgent: {
+      count: vi.fn(async () => 1),
     },
     creditEntry: {
       findMany: vi.fn(async ({ where }: { where?: Row }) =>

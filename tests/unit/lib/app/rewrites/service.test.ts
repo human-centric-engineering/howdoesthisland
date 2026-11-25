@@ -664,6 +664,79 @@ describe('while it runs', () => {
     expect(charges()).toEqual([expect.objectContaining({ amount: -5 })]);
   });
 
+  it('keeps a call’s own reason when the deadline passes as it fails another way', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await call.onText('Part.');
+      await gate;
+      throw new JudgeRunError('truncated', "The editor's reply was cut off at its limit.");
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    await vi.advanceTimersByTimeAsync(REWRITE_CALL_MS);
+    release();
+    expect(await started.done).toMatchObject({ status: 'failed', errorCode: 'truncated' });
+  });
+
+  it('stops the call before the provider is asked when its row is gone as it starts', async () => {
+    let aborted: boolean | undefined;
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      // Its review is deleted before the call starts.
+      fake.rewrites.splice(0);
+      await call.onStart?.({
+        agentId: 'a',
+        provider: 'p',
+        model: 'm',
+        isLocal: false,
+        promptTokens: 1,
+      });
+      aborted = call.signal?.aborted;
+      throw new JudgeRunError('provider_error', 'stopped');
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    await started.done;
+    expect(aborted).toBe(true);
+  });
+
+  it('gives way, as it ends, to recovery’s estimate of it: charged once, for its own row', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      await call.onText('All of it.');
+      await gate;
+      fake.addCost(ORG, 0.04, { ...call.costMetadata });
+      return {
+        text: 'All of it.',
+        provider: 'anthropic',
+        model: 'claude-sonnet-5-5',
+        usage: { input: 1, output: 1, attempts: 1 },
+        costUsd: 0.04,
+        costLogIds: [],
+        finishReason: 'stop',
+      } satisfies AgentStreamReply;
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    const rewriteId = String(fake.rewrites[0].id);
+    // It stalled past its lifetime: recovery priced it from its draft, but
+    // had not charged it yet.
+    fake.addCost(ORG, 0.02, { editor: 'rewrite', rewriteId, error: 'lost', estimated: true });
+    release();
+
+    expect(await started.done).toMatchObject({ status: 'completed', costUsd: 0.04 });
+    expect(fake.costRows.map((r) => r.totalCostUsd)).toEqual([0.04]);
+    expect(charges()).toEqual([expect.objectContaining({ amount: -4 })]);
+  });
+
   it('runs on from recovery’s `lost`, replaces it with its own ending, and charges what landed after', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     let release!: () => void;

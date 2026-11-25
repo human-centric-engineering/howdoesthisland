@@ -671,6 +671,11 @@ export async function recordStoppedStream(
  * off, a binding that cannot be resolved or is not approved): it costs
  * nothing then. Nothing is checked against a budget or a rate limit, and
  * nothing is spent.
+ *
+ * The output ceiling is exact; the prompt is counted by the model's
+ * tokeniser, exact for OpenAI and elsewhere an approximation calibrated to
+ * count high (`lib/orchestration/llm/tokeniser.ts`), so the ceiling errs
+ * above the bill, as a hold should.
  */
 export async function streamCeilingUsd(
   call: CallTarget,
