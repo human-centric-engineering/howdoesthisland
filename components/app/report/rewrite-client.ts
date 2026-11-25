@@ -128,14 +128,49 @@ const STARTED_SLACK_MS = 60_000;
 
 /**
  * The rewrite a stream that dropped before its first event started, if it
- * started one: the newest of the review's list, still running, and no older
- * than the request. `null` when there is none.
+ * started one: the newest of the review's list that is still running, has
+ * the focus asked for, was not listed before the request (`known`), and is
+ * no older than the request but for clock skew (`STARTED_SLACK_MS`).
+ * `null` when there is none.
+ *
+ * Someone else starting the same focus on the same review in that window
+ * still matches: nothing on the row says who started it.
  */
-export function startedSince(list: readonly RewriteWire[], sentAt: number): RewriteWire | null {
-  const newest = list[0];
-  if (!newest || newest.status !== 'running') return null;
-  return Date.parse(newest.createdAt) >= sentAt - STARTED_SLACK_MS ? newest : null;
+export function startedSince(
+  list: readonly RewriteWire[],
+  asked: { sentAt: number; focus: string; known: ReadonlySet<string> }
+): RewriteWire | null {
+  return (
+    list.find(
+      (r) =>
+        r.status === 'running' &&
+        r.focus === asked.focus &&
+        !asked.known.has(r.id) &&
+        Date.parse(r.createdAt) >= asked.sentAt - STARTED_SLACK_MS
+    ) ?? null
+  );
 }
+
+/**
+ * A review's list, read from the server, with the rows the drawer has seen
+ * since: a list read before a rewrite started does not hide it. Where both
+ * have a row, the one further on (ended, or with more draft) is kept.
+ * Newest first.
+ */
+export function mergeRewrites(
+  listed: readonly RewriteWire[],
+  seen: Iterable<RewriteWire>
+): RewriteWire[] {
+  const byId = new Map(listed.map((r) => [r.id, r]));
+  for (const r of seen) {
+    const other = byId.get(r.id);
+    if (!other || isFurther(r, other)) byId.set(r.id, r);
+  }
+  return [...byId.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+const isFurther = (a: RewriteWire, b: RewriteWire): boolean =>
+  b.status === 'running' && (a.status !== 'running' || a.draft.length > b.draft.length);
 
 /** How often a running rewrite is read again. The server saves its draft every 5s. */
 export const FOLLOW_EVERY_MS = 3_000;
@@ -157,15 +192,15 @@ export async function followRewrite(
     if (rewrite.status !== 'running') return rewrite;
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, everyMs);
-      signal.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          reject(new DOMException('Aborted', 'AbortError'));
-        },
-        { once: true }
-      );
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, everyMs);
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 }
@@ -178,15 +213,32 @@ export async function followRewrite(
 export function rewriteRefusalOf(err: unknown): Refusal | null {
   if (!(err instanceof APIClientError)) return null;
   switch (err.code) {
+    // Over the per-user cap, or a burst of the workspace's requests kept the
+    // budget check from its lock: either way, waiting is the remedy.
     case 'RATE_LIMIT_EXCEEDED':
       return {
-        message:
-          'You have started a lot of rewrites in the last minute. Wait a minute, then try again.',
+        message: 'Too many rewrites are starting right now. Wait a minute, then try again.',
         usagePage: null,
       };
     default:
       return refusalOf(err);
   }
+}
+
+/**
+ * A refused review of a draft, in words a person can act on: the assess
+ * page's, but for a retired model version. Reloading cannot help there, since
+ * the draft is reviewed with its original's version.
+ */
+export function reviewDraftRefusalOf(err: unknown): Refusal | null {
+  if (err instanceof APIClientError && err.code === 'FRAMEWORK_VERSION_NOT_FOUND') {
+    return {
+      message:
+        'The model this review ran on has been retired, so the draft cannot be reviewed the same way. Copy it, and review it from the assess page.',
+      usagePage: null,
+    };
+  }
+  return refusalOf(err);
 }
 
 /** Why a rewrite failed, as the server put it; what it had written stays shown. */

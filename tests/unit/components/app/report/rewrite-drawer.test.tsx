@@ -82,7 +82,7 @@ const refused = (status: number, code: string, message: string, details?: unknow
 
 /** The routes, answered by the test: each a function of the request. */
 let routes: {
-  list: () => Response;
+  list: () => Response | Promise<Response>;
   post: () => Response;
   read: () => Response;
   assessment: () => Response;
@@ -220,11 +220,82 @@ describe('RewriteDrawer', () => {
     routes.list = () => (listed++ === 0 ? ok([earlierRow]) : ok([row(), earlierRow]));
     routes.post = () => streamed([], 'error');
     await openDrawer();
+    fireEvent.click(screen.getByRole('radio', { name: 'Ethos' }));
     fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
 
     await waitFor(() => expect(draftBox()?.textContent).toBe('A better draft.'));
     expect(calls('GET', '/api/v1/rewrites/rw_new')).toHaveLength(1);
     expect(calls('POST', '/api/v1/rewrites')).toHaveLength(1);
+  });
+
+  it('does not take another focus’s rewrite, started in that window, for the one asked for', async () => {
+    let listed = 0;
+    routes.list = () =>
+      listed++ === 0
+        ? ok([earlierRow])
+        : ok([row({ id: 'rw_theirs', focus: 'pathos' }), earlierRow]);
+    routes.post = () => streamed([], 'error');
+    await openDrawer();
+    fireEvent.click(screen.getByRole('radio', { name: 'Ethos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+
+    expect(
+      await screen.findByText(
+        'The connection dropped before the rewrite started. If it did start, it is listed below.'
+      )
+    ).toBeInTheDocument();
+    expect(calls('GET', '/api/v1/rewrites/rw_theirs')).toHaveLength(0);
+  });
+
+  it('keeps the text that streamed when its stream drops and the stored draft is behind', async () => {
+    routes.post = () =>
+      streamed(
+        [
+          frame({ type: 'rewrite', rewrite: row() }),
+          frame({ type: 'rewrite_text', text: 'A better draft, so far' }),
+        ],
+        'error'
+      );
+    // Saved every few seconds, the stored draft is shorter than what streamed.
+    routes.read = () => ok(row({ draft: 'A bet' }));
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+
+    await waitFor(() => expect(calls('GET', '/api/v1/rewrites/rw_new')).toHaveLength(1));
+    expect(draftBox()?.textContent).toBe('A better draft, so far');
+    expect(calls('POST', '/api/v1/rewrites')).toHaveLength(1);
+  });
+
+  it('keeps a rewrite started while the earlier ones were being read in the list', async () => {
+    let answer: (r: Response) => void = () => undefined;
+    routes.list = () => new Promise<Response>((resolve) => (answer = resolve));
+    render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    await waitFor(() => expect(draftBox()?.textContent).toBe('A better draft.'));
+
+    // The list read before the rewrite existed lands last.
+    answer(ok([earlierRow]));
+    await screen.findByRole('button', { name: /Pathos · / });
+    const items = within(screen.getByRole('list')).getAllByRole('button');
+    expect(items.map((b) => b.textContent)).toEqual([
+      expect.stringMatching(/^Ethos · .*Done$/),
+      expect.stringMatching(/^Pathos · .*Done$/),
+    ]);
+  });
+
+  it('says to reopen when a stream dropped early and the list could not be read either', async () => {
+    let listed = 0;
+    routes.list = () =>
+      listed++ === 0 ? ok([earlierRow]) : refused(500, 'INTERNAL_ERROR', 'Something went wrong.');
+    routes.post = () => streamed([], 'error');
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    expect(
+      await screen.findByText(
+        /the earlier rewrites could not be read\. Close this and open it again/
+      )
+    ).toBeInTheDocument();
   });
 
   it('says so when a stream dropped before anything started', async () => {
@@ -253,13 +324,13 @@ describe('RewriteDrawer', () => {
     expect(draftBox()).toBeNull();
   });
 
-  it('words a rate limit as being about rewrites', async () => {
+  it('words a rate limit as being about rewrites, blaming no one', async () => {
     routes.post = () => refused(429, 'RATE_LIMIT_EXCEEDED', 'Too many requests');
     await openDrawer();
     fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
     expect(
       await screen.findByText(
-        'You have started a lot of rewrites in the last minute. Wait a minute, then try again.'
+        'Too many rewrites are starting right now. Wait a minute, then try again.'
       )
     ).toBeInTheDocument();
   });

@@ -27,7 +27,9 @@ export function rewriteFocuses(
     ...appeals.map((a) => ({
       id: a.id,
       name: a.name,
-      help: `Raises ${a.name} without weakening the others, applying the recommendations about it. ${a.name} asks: ${a.question}`,
+      help: `Raises ${a.name} without weakening the others, applying the recommendations about it.${
+        a.question ? ` ${a.name} asks: ${a.question}` : ''
+      }`,
     })),
   ];
 }

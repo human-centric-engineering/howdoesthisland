@@ -41,14 +41,15 @@ import {
 } from '@/components/ui/dialog';
 import { FieldHelp } from '@/components/ui/field-help';
 import { SaveError } from '@/components/forms/form-error';
-import { refusalOf } from '@/components/app/workbench/assess-draft';
 import { ASSESSMENTS_ENDPOINT, reportPath } from '@/components/app/workbench/schemas';
 import {
   failureMessage,
   followRewrite,
   listRewrites,
+  mergeRewrites,
   originalReviewSchema,
   reviewDraftBody,
+  reviewDraftRefusalOf,
   rewriteRefusalOf,
   startedSince,
   streamRewrite,
@@ -103,6 +104,10 @@ export function RewriteDrawer({
   });
   /** Stops whatever is reading a rewrite: a stream, or the reads following one. */
   const reading = useRef<AbortController | null>(null);
+  /** Every rewrite seen since the page opened, as last seen: laid over each list read. */
+  const seen = useRef(new Map<string, RewriteWire>());
+  /** Bumped by each list read, so only the latest one's answer is shown. */
+  const listRead = useRef(0);
 
   const nameOf = useCallback(
     (id: string) => focuses.find((f) => f.id === id)?.name ?? id,
@@ -110,7 +115,8 @@ export function RewriteDrawer({
   );
 
   const remember = useCallback((r: RewriteWire) => {
-    setEarlier((list) => (list ? [r, ...list.filter((x) => x.id !== r.id)] : [r]));
+    seen.current.set(r.id, r);
+    setEarlier((list) => mergeRewrites(list ?? [], [r]));
   }, []);
 
   const stopReading = () => {
@@ -138,17 +144,22 @@ export function RewriteDrawer({
     [remember, rewrite]
   );
 
-  /** Read a stored rewrite to its end: one reopened while it runs, or whose stream dropped. */
+  /**
+   * Read a stored rewrite to its end: one reopened while it runs, or whose
+   * stream dropped. While it runs, the draft shown only grows: the stored one
+   * is saved every few seconds, so it can be behind what streamed. Once it
+   * ends, the stored draft is the whole of it.
+   */
   const follow = async (r: RewriteWire, signal: AbortSignal) => {
     setShown(r);
-    setDraft(r.draft);
+    setDraft((d) => (r.draft.length > d.length ? r.draft : d));
     setPhase('writing');
     try {
       const ended = await followRewrite(
         r.id,
         (now) => {
           setShown(now);
-          setDraft(now.draft);
+          setDraft((d) => (now.draft.length > d.length ? now.draft : d));
         },
         signal
       );
@@ -163,13 +174,16 @@ export function RewriteDrawer({
   };
 
   const loadEarlier = async (): Promise<RewriteWire[] | null> => {
+    const read = ++listRead.current;
     try {
-      const list = await listRewrites(assessmentId);
-      setEarlier(list);
-      listFailure.clear();
+      const list = mergeRewrites(await listRewrites(assessmentId), seen.current.values());
+      if (read === listRead.current) {
+        setEarlier(list);
+        listFailure.clear();
+      }
       return list;
     } catch (err) {
-      listFailure.report(err);
+      if (read === listRead.current) listFailure.report(err);
       return null;
     }
   };
@@ -196,6 +210,8 @@ export function RewriteDrawer({
     setUsagePage(null);
     setCopied(false);
     const signal = newReader();
+    // What was listed before asking: a rewrite found after a drop must be new.
+    const known = new Set((earlier ?? []).map((r) => r.id));
     setShown(null);
     setDraft('');
     setPhase('writing');
@@ -223,14 +239,16 @@ export function RewriteDrawer({
       // Dropped before its first event: it may still have started.
       const list = await loadEarlier();
       if (signal.aborted) return;
-      const started = list ? startedSince(list, outcome.sentAt) : null;
+      const started = list ? startedSince(list, { sentAt: outcome.sentAt, focus, known }) : null;
       if (started) {
         await follow(started, signal);
         return;
       }
       setPhase('idle');
       rewrite.show(
-        'The connection dropped before the rewrite started. If it did start, it is listed below.'
+        list
+          ? 'The connection dropped before the rewrite started. If it did start, it is listed below.'
+          : 'The connection dropped before the rewrite started, and the earlier rewrites could not be read. Close this and open it again before trying again: if it did start, it will be listed.'
       );
     } catch (err) {
       if (signal.aborted) return;
@@ -246,10 +264,13 @@ export function RewriteDrawer({
   };
 
   const reopen = (r: RewriteWire) => {
+    // The one being written here already is: reading it again would only interrupt it.
+    if (phase === 'writing' && shown?.id === r.id) return;
     rewrite.clear();
     review.clear();
     setCopied(false);
     const signal = newReader();
+    setDraft('');
     if (r.status === 'running') void follow(r, signal);
     else showEnded(r);
   };
@@ -281,7 +302,7 @@ export function RewriteDrawer({
       );
       router.push(reportPath(created.id));
     } catch (err) {
-      const refusal = refusalOf(err);
+      const refusal = reviewDraftRefusalOf(err);
       if (refusal) {
         review.show(refusal.message);
         setReviewUsagePage(refusal.usagePage);

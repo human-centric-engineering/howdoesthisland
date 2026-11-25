@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIClientError } from '@/lib/api/client';
 import {
   followRewrite,
+  mergeRewrites,
   reviewDraftBody,
+  reviewDraftRefusalOf,
   rewriteRefusalOf,
   startedSince,
   streamRewrite,
@@ -216,24 +218,55 @@ describe('followRewrite', () => {
 
 describe('startedSince', () => {
   const sentAt = Date.parse('2026-11-25T10:00:00.000Z');
+  const asked = { sentAt, focus: 'balanced', known: new Set<string>(['rw_listed']) };
 
-  it('finds the newest rewrite when it is running and no older than the request', () => {
-    const newest = row({ id: 'rw_new', createdAt: '2026-11-25T10:00:01.000Z' });
-    expect(startedSince([newest, row({ id: 'rw_old', status: 'completed' })], sentAt)).toBe(newest);
+  it('finds the newest running rewrite of the focus asked for, new since the request', () => {
+    const mine = row({ id: 'rw_new', createdAt: '2026-11-25T10:00:01.000Z' });
+    expect(startedSince([mine, row({ id: 'rw_old', status: 'completed' })], asked)).toBe(mine);
   });
 
-  it('finds none when the newest has ended, is from long before, or there are none', () => {
-    expect(startedSince([row({ status: 'completed' })], sentAt)).toBeNull();
-    expect(startedSince([row({ createdAt: '2026-11-25T09:00:00.000Z' })], sentAt)).toBeNull();
-    expect(startedSince([], sentAt)).toBeNull();
+  it('passes over a rewrite of another focus, or one listed before the request', () => {
+    const otherFocus = row({
+      id: 'rw_pathos',
+      focus: 'pathos',
+      createdAt: '2026-11-25T10:00:02.000Z',
+    });
+    const listedBefore = row({ id: 'rw_listed', createdAt: '2026-11-25T09:59:50.000Z' });
+    expect(startedSince([otherFocus, listedBefore], asked)).toBeNull();
+    const mine = row({ id: 'rw_new', createdAt: '2026-11-25T10:00:01.000Z' });
+    expect(startedSince([otherFocus, mine, listedBefore], asked)).toBe(mine);
+  });
+
+  it('finds none that has ended, is from long before, or when there are none', () => {
+    expect(startedSince([row({ status: 'completed' })], asked)).toBeNull();
+    expect(startedSince([row({ createdAt: '2026-11-25T09:00:00.000Z' })], asked)).toBeNull();
+    expect(startedSince([], asked)).toBeNull();
+  });
+});
+
+describe('mergeRewrites', () => {
+  it('keeps a rewrite seen since a list read that does not have it, newest first', () => {
+    const listed = [
+      row({ id: 'rw_old', createdAt: '2026-11-24T10:00:00.000Z', status: 'completed' }),
+    ];
+    const started = row({ id: 'rw_new', createdAt: '2026-11-25T10:00:00.000Z' });
+    expect(mergeRewrites(listed, [started]).map((r) => r.id)).toEqual(['rw_new', 'rw_old']);
+  });
+
+  it('keeps whichever copy of a row is further on', () => {
+    const running = row({ draft: 'He' });
+    const ended = row({ status: 'completed', draft: 'Hello' });
+    expect(mergeRewrites([running], [ended])[0]).toBe(ended);
+    expect(mergeRewrites([ended], [running])[0]).toBe(ended);
+    const longer = row({ draft: 'Hello wor' });
+    expect(mergeRewrites([running], [longer])[0]).toBe(longer);
   });
 });
 
 describe('rewriteRefusalOf', () => {
-  it('words a rate limit as being about rewrites', () => {
+  it('words a rate limit as being about rewrites, blaming no one', () => {
     expect(rewriteRefusalOf(new APIClientError('x', 'RATE_LIMIT_EXCEEDED', 429))).toEqual({
-      message:
-        'You have started a lot of rewrites in the last minute. Wait a minute, then try again.',
+      message: 'Too many rewrites are starting right now. Wait a minute, then try again.',
       usagePage: null,
     });
   });
@@ -249,6 +282,22 @@ describe('rewriteRefusalOf', () => {
   it('leaves the rest to the server’s own message', () => {
     expect(rewriteRefusalOf(new APIClientError('x', 'ASSESSMENT_NOT_REWRITABLE', 409))).toBeNull();
     expect(rewriteRefusalOf(new Error('x'))).toBeNull();
+  });
+});
+
+describe('reviewDraftRefusalOf', () => {
+  it('says a retired model version cannot review the draft, rather than to reload', () => {
+    expect(
+      reviewDraftRefusalOf(new APIClientError('x', 'FRAMEWORK_VERSION_NOT_FOUND', 404))?.message
+    ).toBe(
+      'The model this review ran on has been retired, so the draft cannot be reviewed the same way. Copy it, and review it from the assess page.'
+    );
+  });
+
+  it('words the rest as the assess page does', () => {
+    expect(
+      reviewDraftRefusalOf(new APIClientError('Add credits.', 'INSUFFICIENT_CREDITS', 402))
+    ).toEqual({ message: 'Add credits.', usagePage: '/usage' });
   });
 });
 
