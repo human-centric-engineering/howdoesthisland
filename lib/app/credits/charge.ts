@@ -20,7 +20,8 @@
  *   rows have been quiet for `CANCEL_GRACE_MS` ({@link chargeLapsedEphemeralRuns}).
  *
  * **Once.** The entry's reference is `assessment:<id>` or
- * `ephemeral-run:<runId>`, and `(kind, reference)` is unique, so the insert
+ * `ephemeral-run:<runId>` (`rewrite:<id>` for a rewrite, t-81), and
+ * `(kind, reference)` is unique, so the insert
  * skips a duplicate rather than failing: two finishers racing, or a recovery
  * after a run already charged, charge once. Stored reviews are never claimed
  * again once final, so a re-drive or recovery runs before the one charge,
@@ -56,6 +57,10 @@ export function assessmentChargeReference(assessmentId: string): string {
 
 export function ephemeralRunChargeReference(runId: string): string {
   return `ephemeral-run:${runId}`;
+}
+
+export function rewriteChargeReference(rewriteId: string): string {
+  return `rewrite:${rewriteId}`;
 }
 
 async function charge(
@@ -100,6 +105,28 @@ export async function chargeStoredReview(
   return charge(db, orgId, assessmentChargeReference(assessmentId), {
     createdAt: { gte: since },
     metadata: { path: ['assessmentId'], equals: assessmentId },
+  });
+}
+
+/**
+ * Charge the rewrite `rewriteId` (t-81) for its cost rows since `since` (its
+ * `createdAt`), which carry `rewriteId` and no `assessmentId`, so its
+ * review's charge never counted them. Call it from the write that ends the
+ * rewrite, in that write's transaction, as for a stored review; one made
+ * before its workspace's first credit entry is not charged, for the same
+ * reason.
+ */
+export async function chargeRewrite(
+  db: ChargeClient,
+  orgId: string,
+  rewriteId: string,
+  since: Date
+): Promise<ReviewCharge> {
+  const first = await firstCreditEntryAt(orgId, db);
+  if (!first || since < first) return { credits: 0, spentUsd: 0 };
+  return charge(db, orgId, rewriteChargeReference(rewriteId), {
+    createdAt: { gte: since },
+    metadata: { path: ['rewriteId'], equals: rewriteId },
   });
 }
 

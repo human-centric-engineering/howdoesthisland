@@ -438,7 +438,8 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
     // assessments to user and ai_api_key (t-22), and from a share link to
     // user (t-32), from a calibration run (t-37), a credit entry (t-57), a
     // review code (t-59), a code's redemption (t-60), a project (t-70) and a
-    // project document, to its knowledge document and its adder (t-74).
+    // project document, to its knowledge document and its adder (t-74), and
+    // a rewrite's maker (t-81).
     // Ledger:
     // .context/app/platform-divergences.md row 11.
     expect(getAppDriftProbes().map((probe) => probe.name)).toEqual([
@@ -455,6 +456,7 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_project_createdByUserId_fkey (hand-written FK → user)',
       'app_project_document_knowledgeDocumentId_fkey (hand-written FK → ai_knowledge_document)',
       'app_project_document_addedByUserId_fkey (hand-written FK → user)',
+      'app_rewrite_createdByUserId_fkey (hand-written FK → user)',
     ]);
   });
 });

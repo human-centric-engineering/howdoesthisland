@@ -27,6 +27,7 @@ vi.mock('@/lib/db/client', () => ({
     projectDocument: { findMany: vi.fn() },
     reviewCode: { findMany: vi.fn() },
     reviewCodeRedemption: { findMany: vi.fn() },
+    rewrite: { findMany: vi.fn() },
   },
 }));
 
@@ -47,6 +48,7 @@ describe('collectAppSubjectData', () => {
     vi.mocked(prisma.projectDocument.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCode.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.reviewCodeRedemption.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.rewrite.findMany).mockResolvedValue([] as never);
   });
 
   it('reads invitations to the person by invitee, and the ones they sent without the invitee', async () => {
@@ -90,6 +92,7 @@ describe('collectAppSubjectData', () => {
       projectDocuments: [],
       reviewCodes: [],
       codeRedemptions: [],
+      rewrites: [],
     });
   });
 
@@ -127,6 +130,7 @@ describe('collectAppSubjectData', () => {
       projectDocuments: [],
       reviewCodes: [],
       codeRedemptions: [],
+      rewrites: [],
     });
   });
 
@@ -224,5 +228,19 @@ describe('collectAppSubjectData', () => {
       orderBy: { createdAt: 'asc' },
     });
     expect(data.codeRedemptions).toEqual([{ id: 'redemption-1' }]);
+  });
+
+  it('reads the rewrites they asked for, without the lease or the budget hold', async () => {
+    vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.rewrite.findMany).mockResolvedValue([{ id: 'rewrite-1' }] as never);
+
+    const data = await collectAppSubjectData(SUBJECT);
+
+    expect(vi.mocked(prisma.rewrite.findMany)).toHaveBeenCalledWith({
+      where: { createdByUserId: 'user-1' },
+      omit: { leaseExpiresAt: true, heldUsd: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(data.rewrites).toEqual([{ id: 'rewrite-1' }]);
   });
 });

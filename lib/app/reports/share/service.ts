@@ -31,6 +31,7 @@ import { asOnTheWire, loadModelDocument } from '@/lib/app/reports/pdf/print-sour
 import { runAsShareOrg, type ShareOrgRefusal } from '@/lib/app/reports/share/share-org';
 import { mintShareToken, sharedReportPath } from '@/lib/app/reports/share/token';
 import type { CreateShareInput } from '@/lib/app/reports/share/validations';
+import { isForeignKeyFailure } from '@/lib/app/assessments/prisma-errors';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -106,14 +107,6 @@ const shareSelect = {
 function toView(row: ShareRow, now: Date): ReportShareView {
   const state = row.revokedAt ? 'revoked' : row.expiresAt <= now ? 'expired' : 'active';
   return { ...row, state };
-}
-
-/**
- * Prisma's P2003, a foreign key that no longer resolves, read by its code:
- * `lib/app` does not import Prisma's runtime, only its types.
- */
-function isForeignKeyFailure(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2003';
 }
 
 /** 404 unless the assessment is in this workspace. */

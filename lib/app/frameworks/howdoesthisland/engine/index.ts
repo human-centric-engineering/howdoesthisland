@@ -20,8 +20,9 @@
  * And (t-72) a project's adjustment to the weights within the version's
  * bounds (`overlay.ts`), which `withOverlay()` scores with.
  *
- * Not here: the rewrite prompt (f-rewrite), `calibrate` (f-calibration) and
- * `toApi` (f-assessments).
+ * And (t-81) the rewrite prompt (`rewrite.ts`), with the duty fix.
+ *
+ * Not here: `calibrate` (f-calibration) and `toApi` (f-assessments).
  *
  * Differences from the prototype, each listed against the baseline
  * (`tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-differences.ts`):
@@ -36,6 +37,10 @@ import {
   validateEditorReply,
 } from '@/lib/app/frameworks/howdoesthisland/engine/editor';
 import { outputSchema } from '@/lib/app/frameworks/howdoesthisland/engine/judge-schemas';
+import {
+  buildRewriteRequest,
+  REWRITE_FOCUSES,
+} from '@/lib/app/frameworks/howdoesthisland/engine/rewrite';
 import {
   activeJudgeSlots,
   buildJudgeRequest,
@@ -143,6 +148,9 @@ export function createHowDoesThisLandEngine(
     buildEditorRequest: (text, ctx, result, projectContext = null) =>
       buildEditorRequest(m, text, ctx, result, { ...options, projectContext }),
     validateEditorReply: (reply, result) => validateEditorReply(reply, result),
+    rewriteFocuses: () => REWRITE_FOCUSES,
+    buildRewriteRequest: (text, ctx, result, focus, projectContext = null) =>
+      buildRewriteRequest(m, text, ctx, result, focus, { ...options, projectContext }),
     parseOverlay: (input) => parseOverlay(m, input),
     withOverlay: (overlay) => createHowDoesThisLandEngine(model, { ...options, overlay }),
   };

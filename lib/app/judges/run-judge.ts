@@ -56,10 +56,11 @@ import { withAgentBudgetLock } from '@/lib/orchestration/llm/budget-mutex';
 import { checkBudget, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import { primaryCallContext } from '@/lib/orchestration/llm/provider-eligibility';
+import { tokeniserForModel } from '@/lib/orchestration/llm/tokeniser';
 import { agentPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { getProvider, isLocalProvider } from '@/lib/orchestration/llm/provider-manager';
 import { runStructuredCompletion } from '@/lib/orchestration/llm/structured-completion';
-import type { LlmFinishReason, LlmUsage } from '@/lib/orchestration/llm/types';
+import type { LlmFinishReason, LlmUsage, ReasoningEffort } from '@/lib/orchestration/llm/types';
 import { createDynamicLimiter } from '@/lib/security/rate-limit';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { CostOperation } from '@/types/orchestration';
@@ -261,8 +262,33 @@ export interface AgentCall<Output> {
 /** An agent's checked reply, with what it cost. */
 export type AgentReply<Output> = Omit<JudgeReply<Output>, 'slot'>;
 
-/** Make one {@link AgentCall}. Fails as {@link runJudge} does. */
-export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentReply<Output>> {
+/** What every agent call has passed before anything is spent: see this file's header, 1 to 3. */
+interface PreparedCall {
+  agent: {
+    id: string;
+    temperature: number;
+    maxTokens: number;
+    systemInstructions: string;
+  };
+  binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
+  isLocal: boolean;
+  approved: NonNullable<ReturnType<typeof approvedEntry>>;
+}
+
+/** What {@link prepareCall} needs to know of a call: who it goes to, and how it is named. */
+type CallTarget = Pick<AgentCall<unknown>, 'agentSlug' | 'role' | 'name' | 'target'>;
+
+/**
+ * The agent, its binding, the approved entry and the budget and rate-limit
+ * checks, in that order, for a structured call ({@link callAgent}) and a
+ * streamed one ({@link streamAgent}) alike. `build` makes the request once the
+ * agent is known to exist and be on, before the binding is resolved: a throw
+ * there is the caller's error and propagates, before anything is spent.
+ */
+async function prepareCall<Request>(
+  call: CallTarget,
+  build: () => Request
+): Promise<{ prepared: PreparedCall; request: Request }> {
   const orgId = requireOrgId();
   const { name, target } = call;
   const agent = await prisma.aiAgent.findUnique({
@@ -285,7 +311,7 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
     throw new JudgeRunError('agent_inactive', `The agent for ${target} is switched off.`);
   }
 
-  const request = call.request();
+  const request = build();
 
   let binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
   let isLocal: boolean;
@@ -333,6 +359,15 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
       });
     }
   }
+
+  return { prepared: { agent, binding, isLocal, approved }, request };
+}
+
+/** Make one {@link AgentCall}. Fails as {@link runJudge} does. */
+export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentReply<Output>> {
+  const { name } = call;
+  const { prepared, request } = await prepareCall(call, call.request);
+  const { agent, binding, approved } = prepared;
 
   // Every response the provider returns, and the usage on any error it
   // raises, so the cost row counts what was billed on every path.
@@ -385,15 +420,216 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
     outcome = { error: toJudgeRunError(name, err) };
   }
 
-  // One row per service tier the attempts were served at: a row is priced at
-  // one tier, and under `auto` one attempt can be priority and the retry
-  // standard. Almost always a single row.
-  //
-  // `logCost` is called with its FK columns written out, so the platform's
-  // attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
-  // `agent.id` is the row just loaded, and `userId` is a real `User.id` or
-  // nothing (see `AgentCall.userId`). It never rejects: a failed write is
-  // logged there and answers `null`.
+  const { rows, spend } = await recordSpend(prepared, call, billed, outcome);
+
+  if ('error' in outcome) {
+    // Only a call that reached the provider was billed; one refused before it
+    // (the spend gate, a provider that could not be built) carries nothing.
+    if (billed.length > 0) outcome.error.spend = spend;
+    throw outcome.error;
+  }
+  return {
+    output: outcome.value.output,
+    drops: outcome.value.drops,
+    ...spend,
+    costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
+    finishReason: outcome.finishReason,
+  };
+}
+
+/**
+ * One streamed call to one of the app's agents (t-81): the editor's rewrite.
+ * The reply is plain text, so there is no schema to hold it to.
+ */
+export interface AgentStreamCall extends CallTarget, CostTags {
+  /**
+   * The call, built once the agent is known to exist and be on, and before
+   * anything is spent. A throw here is the caller's error and propagates.
+   */
+  request: () => {
+    prompt: string;
+    maxTokens: number;
+    /**
+     * In place of the approved entry's: a rewrite asks for little thinking,
+     * so a long text's reply fits the ceiling with it.
+     */
+    reasoningEffort?: ReasoningEffort;
+  };
+  /**
+   * Each piece of the reply as it arrives, in order. Awaited before the next
+   * is read, so a caller that saves as it goes never falls behind. A throw
+   * here stops the call, and what it spent is recorded as a stopped one's is
+   * (see {@link streamAgent}).
+   */
+  onText: (text: string) => void | Promise<void>;
+  /** Stops the call, and what it spent is recorded as for `onText`'s throw. */
+  signal?: AbortSignal;
+}
+
+/** A streamed call's whole reply, with what it cost. */
+export interface AgentStreamReply {
+  text: string;
+  provider: string;
+  model: string;
+  usage: { input: number; output: number; attempts: number };
+  costUsd: number;
+  costLogIds: string[];
+  finishReason: LlmFinishReason;
+}
+
+/**
+ * Make one {@link AgentStreamCall}: the same checks as {@link callAgent}
+ * (binding, approved list, budget, rate limit, privacy scope) and the same
+ * cost rows, with the reply handed to `onText` as it streams.
+ *
+ * **One attempt.** A structured call is retried once when its reply does not
+ * parse; a streamed one is not, because what it streamed has already been
+ * shown and kept, and a second attempt would be billed and shown again.
+ *
+ * Fails with a {@link JudgeRunError}, carrying what it was billed:
+ * `refused` for a content-filter finish or an empty reply, `truncated` for a
+ * reply cut off at its ceiling, `provider_error` for anything the provider
+ * raised. Under `pseudonymise`, the provider manager restores the reply's
+ * placeholders chunk by chunk before `onText` sees them.
+ *
+ * **A call stopped part-way.** A provider reports a stream's usage in its
+ * last event, so one stopped before it (the caller's signal, a throw from
+ * `onText`, a dropped connection) reports none, though it was billed. One
+ * that had answered at all is recorded at an estimate
+ * ({@link estimatedUsage}), its row tagged `estimated`, so the cap and the
+ * caller's charge still see it. One stopped before any reply is recorded at
+ * nothing: whether the provider read the prompt is not known.
+ */
+export async function streamAgent(call: AgentStreamCall): Promise<AgentStreamReply> {
+  const { name } = call;
+  const { prepared, request } = await prepareCall(call, call.request);
+  const { agent, binding, approved } = prepared;
+
+  const billed: LlmUsage[] = [];
+  let text = '';
+  // Whether the provider answered at all: then it read the prompt, and billed it.
+  let answered = false;
+  let outcome: { finishReason: LlmFinishReason } | { error: JudgeRunError };
+  try {
+    const provider = await getProvider(
+      binding.providerSlug,
+      primaryCallContext(binding.provenance)
+    );
+    const reasoningEffort = request.reasoningEffort ?? approved.settings.reasoningEffort;
+    // In the agent's privacy scope, as a structured call is: the stream is
+    // read inside it, which is where the privacy stage runs.
+    const finishReason = await runInPrivacyScope(agentPrivacyScope(agent.id), async () => {
+      let finish: LlmFinishReason | null = null;
+      try {
+        for await (const chunk of provider.chatStream(
+          [
+            { role: 'system', content: agent.systemInstructions },
+            { role: 'user', content: request.prompt },
+          ],
+          {
+            model: binding.model,
+            temperature: agent.temperature,
+            maxTokens: Math.min(request.maxTokens, approved.settings.maxTokens, agent.maxTokens),
+            timeoutMs: approved.settings.timeoutMs,
+            ...(reasoningEffort ? { reasoningEffort } : {}),
+            ...(call.signal ? { signal: call.signal } : {}),
+          }
+        )) {
+          answered = true;
+          if (chunk.type === 'text') {
+            text += chunk.content;
+            await call.onText(chunk.content);
+          } else if (chunk.type === 'done') {
+            billed.push(chunk.usage);
+            finish = chunk.finishReason;
+          }
+        }
+      } catch (err) {
+        if (err instanceof ProviderError && err.usage) billed.push(err.usage);
+        throw err;
+      }
+      return finish;
+    });
+    // A ceiling reached first: a reasoning model can think up to it and write
+    // nothing, which is a cut-off reply, not a refusal.
+    if (finishReason === 'length') {
+      outcome = {
+        error: new JudgeRunError('truncated', `The ${name}'s reply was cut off at its limit.`),
+      };
+    } else if (finishReason === null) {
+      // A stream that ended with no terminal chunk, with or without text:
+      // what it said may be cut short, and it is no refusal.
+      outcome = {
+        error: new JudgeRunError('provider_error', `The ${name}'s reply stopped part-way.`),
+      };
+    } else if (finishReason === 'error' || text.trim() === '') {
+      outcome = {
+        error: new JudgeRunError('refused', `The provider declined to run the ${name}.`),
+      };
+    } else {
+      outcome = { finishReason };
+    }
+  } catch (err) {
+    outcome = { error: toJudgeRunError(name, err) };
+  }
+
+  const estimated = billed.length === 0 && answered;
+  if (estimated) {
+    billed.push(estimatedUsage(binding.model, [agent.systemInstructions, request.prompt], text));
+  }
+  const { rows, spend } = await recordSpend(prepared, call, billed, outcome, estimated);
+  if ('error' in outcome) {
+    if (billed.length > 0) outcome.error.spend = spend;
+    throw outcome.error;
+  }
+  return {
+    text,
+    ...spend,
+    costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
+    finishReason: outcome.finishReason,
+  };
+}
+
+/**
+ * What a streamed call that stopped before its usage arrived was billed, as
+ * near as can be counted: the prompt it was sent, and the reply it had
+ * streamed. Thinking it did is not counted, so this is low, never high.
+ */
+function estimatedUsage(model: string, prompt: readonly string[], reply: string): LlmUsage {
+  const tokeniser = tokeniserForModel(model);
+  return {
+    inputTokens: prompt.reduce((sum, part) => sum + tokeniser.count(part), 0),
+    outputTokens: tokeniser.count(reply),
+  };
+}
+
+/** What a call's cost rows say: who it was for, and what kind of call. */
+type CostTags = Pick<
+  AgentCall<unknown>,
+  'costMetadata' | 'frameworkVersion' | 'assessmentId' | 'ephemeral' | 'userId'
+>;
+
+/**
+ * Write the cost rows for what a call's attempts were billed, and answer
+ * them with the spend they record. One row per service tier the attempts
+ * were served at: a row is priced at one tier, and under `auto` one attempt
+ * can be priority and the retry standard. Almost always a single row.
+ *
+ * `logCost` is called with its FK columns written out, so the platform's
+ * attribution guard (`cost-log-fk-attribution.test.ts`) can read them:
+ * `agent.id` is the row just loaded, and `userId` is a real `User.id` or
+ * nothing (see `AgentCall.userId`). It never rejects: a failed write is
+ * logged there and answers `null`.
+ */
+async function recordSpend(
+  prepared: PreparedCall,
+  call: CostTags,
+  billed: readonly LlmUsage[],
+  outcome: { error: JudgeRunError } | object,
+  /** The usage is {@link estimatedUsage}'s, not the provider's. */
+  estimated = false
+): Promise<{ rows: Array<{ id: string; totalCostUsd: number } | null>; spend: JudgeSpend }> {
+  const { agent, binding, isLocal } = prepared;
   const rows = await Promise.all(
     [...byTier(billed)].map(([tier, attempts]) => {
       const usage = sumUsage(attempts);
@@ -416,6 +652,7 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
           ...(call.ephemeral ? { ephemeral: true } : {}),
           attempts: attempts.length,
           ...('error' in outcome ? { error: outcome.error.code } : {}),
+          ...(estimated ? { estimated: true } : {}),
         },
       });
     })
@@ -427,20 +664,7 @@ export async function callAgent<Output>(call: AgentCall<Output>): Promise<AgentR
     usage: { input: usage.inputTokens, output: usage.outputTokens, attempts: billed.length },
     costUsd: rows.reduce((sum, row) => sum + (row?.totalCostUsd ?? 0), 0),
   };
-
-  if ('error' in outcome) {
-    // Only a call that reached the provider was billed; one refused before it
-    // (the spend gate, a provider that could not be built) carries nothing.
-    if (billed.length > 0) outcome.error.spend = spend;
-    throw outcome.error;
-  }
-  return {
-    output: outcome.value.output,
-    drops: outcome.value.drops,
-    ...spend,
-    costLogIds: rows.flatMap((row) => (row ? [row.id] : [])),
-    finishReason: outcome.finishReason,
-  };
+  return { rows, spend };
 }
 
 type Provider = Awaited<ReturnType<typeof getProvider>>;

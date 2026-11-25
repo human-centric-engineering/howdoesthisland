@@ -38,6 +38,11 @@ interface JudgeRunRow {
   orgId: string;
   assessmentId: string;
 }
+interface RewriteRow {
+  id: string;
+  assessmentId: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+}
 interface ReplyRow {
   id: string;
   orgId: string;
@@ -51,6 +56,7 @@ const db = vi.hoisted(() => ({
   assessments: [] as AssessmentRow[],
   judgeRuns: [] as JudgeRunRow[],
   replies: [] as ReplyRow[],
+  rewrites: [] as RewriteRow[],
   orgId: '',
 }));
 
@@ -94,14 +100,19 @@ const fakePrisma = vi.hoisted(() => {
    * in one org, and (on the delete) among the ids whose PDFs were cleared.
    */
   const expired = (where: Record<string, unknown>) => {
-    allowed(where, ['orgId', 'createdAt', 'status', 'OR', 'id']);
-    const { orgId, createdAt, id, ...rest } = where;
+    allowed(where, ['orgId', 'createdAt', 'status', 'OR', 'id', 'rewrites']);
+    const { orgId, createdAt, id, rewrites, ...rest } = where;
+    // The one rewrite filter the purge sends: none of its rewrites running.
+    if (JSON.stringify(rewrites) !== JSON.stringify({ none: { status: 'RUNNING' } })) {
+      throw new Error("fake models only `rewrites: { none: { status: 'RUNNING' } }`");
+    }
     const idCond = (id ?? {}) as { in?: string[]; notIn?: string[] };
     return db.assessments.filter(
       (a) =>
         a.orgId === orgId &&
         before(a.createdAt, createdAt) &&
         settled(a, rest) &&
+        !db.rewrites.some((r) => r.assessmentId === a.id && r.status === 'RUNNING') &&
         (idCond.in === undefined || idCond.in.includes(a.id)) &&
         (idCond.notIn === undefined || !idCond.notIn.includes(a.id))
     );
@@ -112,6 +123,7 @@ const fakePrisma = vi.hoisted(() => {
     const runs = new Set(db.judgeRuns.filter((r) => ids.has(r.assessmentId)).map((r) => r.id));
     db.judgeRuns = db.judgeRuns.filter((r) => !runs.has(r.id));
     db.replies = db.replies.filter((r) => !runs.has(r.judgeRunId));
+    db.rewrites = db.rewrites.filter((r) => !ids.has(r.assessmentId));
   };
   return {
     org: {
@@ -277,6 +289,7 @@ beforeEach(() => {
   db.assessments = [];
   db.judgeRuns = [];
   db.replies = [];
+  db.rewrites = [];
   db.orgId = WS;
   pdfs.held.clear();
   pdfs.refuse.clear();
@@ -349,6 +362,25 @@ describe('with a content window', () => {
     expect(ids(db.contents)).toEqual(ids([queued.content, running.content]));
     // A re-drive reads its finished judges' replies back.
     expect(ids(db.replies)).toEqual(ids([queued.reply, running.reply]));
+  });
+
+  it('leaves an expired assessment while one of its rewrites runs, and takes it once that ends', async () => {
+    const rewritten = piece(WS, 120);
+    const ended = piece(WS, 120);
+    db.rewrites.push(
+      { id: 'rw-running', assessmentId: rewritten.assessment.id, status: 'RUNNING' },
+      { id: 'rw-done', assessmentId: rewritten.assessment.id, status: 'COMPLETED' },
+      { id: 'rw-failed', assessmentId: ended.assessment.id, status: 'FAILED' }
+    );
+
+    await purgeExpiredContent(NOW);
+    expect(ids(db.assessments)).toEqual([rewritten.assessment.id]);
+    expect(db.rewrites.map((r) => r.id).sort()).toEqual(['rw-done', 'rw-running']);
+
+    db.rewrites[db.rewrites.findIndex((r) => r.id === 'rw-running')].status = 'COMPLETED';
+    await purgeExpiredContent(NOW);
+    expect(db.assessments).toEqual([]);
+    expect(db.rewrites).toEqual([]);
   });
 
   it('leaves a cancelled assessment whose judges may still land or that is not charged yet, by the cancel time not the lease', async () => {

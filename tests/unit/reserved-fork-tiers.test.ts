@@ -258,6 +258,9 @@ describe('reserved fork tiers', () => {
       'model Project {',
       // FORK (HowDoesThisLand): a project's context documents (t-74).
       'model ProjectDocument {',
+      // FORK (HowDoesThisLand): rewrites (t-81).
+      'model Rewrite {',
+      'enum RewriteStatus {',
     ]);
   });
 

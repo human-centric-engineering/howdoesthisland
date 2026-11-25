@@ -38,12 +38,16 @@ import { registerAppJob } from '@/lib/orchestration/maintenance/app-jobs';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
 import { purgeExpiredContent } from '@/lib/app/retention/purge';
+import { recoverRewrites } from '@/lib/app/rewrites/recover';
 
 /** The signup-workspace sweep's name, as the tick logs it. */
 export const SIGNUP_WORKSPACE_SWEEP_JOB = 'app:signup-workspace-sweep';
 
 /** The assessment recovery job's name, as the tick logs it. */
 export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
+
+/** The rewrite recovery job's name, as the tick logs it. */
+export const REWRITE_RECOVERY_JOB = 'app:rewrite-recovery';
 
 /** The retention purge's name, as the tick logs it. */
 export const RETENTION_PURGE_JOB = 'app:retention-purge';
@@ -70,6 +74,16 @@ export function initAppJobs(): void {
     intervalMs: 15 * 60 * 1000,
     scope: 'per-org',
     run: () => recoverAssessments(),
+  });
+
+  // Fail and charge rewrites whose process died (t-81): until then each
+  // holds its estimate of the workspace's budget. Per workspace, at the
+  // assessment recovery's interval, for the same reason.
+  registerAppJob({
+    name: REWRITE_RECOVERY_JOB,
+    intervalMs: 15 * 60 * 1000,
+    scope: 'per-org',
+    run: () => recoverRewrites(),
   });
 
   // Delete content and assessments past the workspace's window, and judge

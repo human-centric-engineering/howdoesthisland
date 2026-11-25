@@ -56,7 +56,7 @@ vi.mock('@/lib/logging', () => ({
 
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { indexModel } from '@/lib/app/frameworks/howdoesthisland/engine/model';
-import { runJudge } from '@/lib/app/judges/run-judge';
+import { runJudge, streamAgent } from '@/lib/app/judges/run-judge';
 import { clearCache, registerProviderInstance } from '@/lib/orchestration/llm/provider-manager';
 import { runAsOrg } from '@/lib/tenancy/context';
 import { __resetPrivacyAdaptersForTests } from '@/lib/privacy/adapters/registry';
@@ -170,5 +170,73 @@ describe('runJudge under pseudonymise', () => {
       expect.objectContaining({ quote: `Write to ${EMAIL} for a test ride.` }),
     ]);
     expect(run.drops.filter((d) => d.at.startsWith('highlights'))).toEqual([]);
+  });
+});
+
+/**
+ * A vendor that streams a rewrite back with the placeholder it was sent for
+ * the email, split across two chunks, so a restore that worked chunk by
+ * chunk without holding back would miss it.
+ */
+function streamingVendor() {
+  const received: unknown[][] = [];
+  const provider = {
+    name: 'anthropic',
+    isLocal: false,
+    chat: vi.fn(),
+    chatStream: vi.fn(async function* (...args: unknown[]) {
+      received.push(args);
+      const placeholder = /\[EMAIL_\d+\]/.exec(JSON.stringify(args))?.[0];
+      if (!placeholder) throw new Error('the request carried no email placeholder');
+      const half = Math.floor(placeholder.length / 2);
+      yield { type: 'text', content: `Book a ride: write to ${placeholder.slice(0, half)}` };
+      yield { type: 'text', content: `${placeholder.slice(half)} today.` };
+      yield {
+        type: 'done',
+        usage: { inputTokens: 100, outputTokens: 50 },
+        finishReason: 'stop',
+      };
+    }),
+    embed: vi.fn(),
+    embedMany: vi.fn(),
+    transcribe: vi.fn(),
+    listModels: vi.fn(async () => []),
+    testConnection: vi.fn(async () => ({ ok: true, models: [] })),
+  } as unknown as LlmProvider;
+  return { provider, received };
+}
+
+describe('streamAgent under pseudonymise (t-81)', () => {
+  it('sends the editor placeholders only, and streams its rewrite back restored', async () => {
+    mocks.resolve.mockResolvedValue({
+      providerSlug: 'anthropic',
+      model: 'claude-sonnet-5-5',
+      fallbacks: [],
+      provenance: { task: 'chat', primary: 'primary', fallbacks: 'system' },
+    });
+    const { provider, received } = streamingVendor();
+    registerProviderInstance('anthropic', provider);
+    const pieces: string[] = [];
+
+    const reply = await runAsOrg('org-judges', () =>
+      streamAgent({
+        agentSlug: 'hdtl-editor',
+        role: 'editor',
+        name: 'editor',
+        target: 'the editor',
+        request: () => ({ prompt: `Rewrite this:\n${TEXT}`, maxTokens: 8_192 }),
+        onText: (t) => {
+          pieces.push(t);
+        },
+        costMetadata: { editor: 'rewrite' },
+        frameworkVersion: 'howdoesthisland@0.5.1',
+      })
+    );
+
+    expect(received).toHaveLength(1);
+    expect(JSON.stringify(received)).not.toContain(EMAIL);
+    expect(reply.text).toBe(`Book a ride: write to ${EMAIL} today.`);
+    expect(pieces.join('')).toBe(reply.text);
+    expect(pieces.join('')).not.toMatch(/\[EMAIL_/);
   });
 });

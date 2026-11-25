@@ -59,6 +59,7 @@ import {
   type AddDocumentRequest,
 } from '@/lib/app/projects/validations';
 import type { DocumentStatus, ProjectDocumentView } from '@/lib/app/projects/wire';
+import { isForeignKeyFailure } from '@/lib/app/assessments/prisma-errors';
 
 /**
  * What a context document may be. Larger than a review's text (40,000
@@ -141,14 +142,6 @@ async function knowledgeStates(ids: string[], orgId: string): Promise<Map<string
     select: { id: true, status: true, chunkCount: true },
   });
   return new Map(rows.map((row) => [row.id, { status: row.status, chunkCount: row.chunkCount }]));
-}
-
-/**
- * Prisma's P2003, a foreign key that no longer resolves, read by its code:
- * `lib/app` does not import Prisma's runtime, only its types.
- */
-function isForeignKeyFailure(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2003';
 }
 
 /** 404 unless the project is in this workspace; says whether it is archived. */

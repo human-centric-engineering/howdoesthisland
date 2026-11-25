@@ -36,6 +36,14 @@ interface HoldRow {
   leaseExpiresAt: Date;
   createdAt: Date;
 }
+interface RewriteRow {
+  id: string;
+  orgId: string;
+  status: string;
+  heldUsd: number;
+  costUsd: number;
+  createdAt: Date;
+}
 interface CostRow {
   orgId: string;
   totalCostUsd: number;
@@ -61,6 +69,9 @@ const state = vi.hoisted(() => ({
   reviews: [] as ReviewRow[],
   runs: [] as RunRow[],
   holds: [] as HoldRow[],
+  rewrites: [] as RewriteRow[],
+  /** Set to make the next rewrite insert fail. */
+  rewriteCreateFails: false,
   costRows: [] as CostRow[],
   /** The keys the advisory lock was taken on, in order. */
   locked: [] as string[],
@@ -82,7 +93,11 @@ const matches = (row: Record<string, unknown>, where: Where): boolean =>
       const { not: _not, ...rest } = v as Where;
       return Object.keys(rest).length === 0 || matches({ [k]: value }, { [k]: rest });
     }
-    if ('gt' in v) return value instanceof Date && value > (v as { gt: Date }).gt;
+    if ('gt' in v) {
+      const gt = (v as { gt: Date | number }).gt;
+      if (typeof gt === 'number') return typeof value === 'number' && value > gt;
+      return value instanceof Date && value > gt;
+    }
     if ('lte' in v) return value instanceof Date && value <= (v as { lte: Date }).lte;
     if ('gte' in v) return value instanceof Date && value >= (v as { gte: Date }).gte;
     if ('lt' in v) {
@@ -137,6 +152,23 @@ vi.mock('@/lib/db/client', () => {
         state.holds = state.holds.filter((h) => !gone.includes(h));
         return { count: gone.length };
       }),
+    },
+    rewrite: {
+      findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
+        newestFirst(
+          state.rewrites.filter((r) => matches({ ...r }, where)),
+          take ?? Infinity
+        ).map((r) => ({ heldUsd: r.heldUsd, costUsd: r.costUsd }))
+      ),
+      create: vi.fn(
+        async ({ data }: { data: Omit<RewriteRow, 'id' | 'createdAt' | 'costUsd'> }) => {
+          if (state.rewriteCreateFails) throw new Error('insert failed');
+          state.seq += 1;
+          const row = { id: `rw-${state.seq}`, createdAt: new Date(), costUsd: 0, ...data };
+          state.rewrites.push(row);
+          return row;
+        }
+      ),
     },
     assessment: {
       findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
@@ -221,7 +253,10 @@ import {
   JUDGE_HISTORY,
   KEPT_NOWHERE_SCAN,
   KEPT_NOWHERE_TAIL,
+  estimateRewriteCost,
+  REWRITE_HISTORY,
   reserveReviewBudget,
+  reserveRewriteBudget,
 } from '@/lib/app/usage/budget';
 import { LEASE_MS, LEASE_RENEW_MS } from '@/lib/app/assessments/limits';
 
@@ -289,6 +324,8 @@ beforeEach(() => {
     reviews: [],
     runs: [],
     holds: [],
+    rewrites: [],
+    rewriteCreateFails: false,
     costRows: [],
     locked: [],
   });
@@ -466,7 +503,7 @@ describe('reserveReviewBudget: the check (t-49)', () => {
       inFlightUsd: 1.428571,
     });
     expect(err.message).toContain(
-      'once $1.43 is held for reviews already starting, queued, running or finishing'
+      'once $1.43 is held for reviews and rewrites already starting, queued, running or finishing'
     );
   });
 
@@ -515,7 +552,7 @@ describe('reserveReviewBudget: the check (t-49)', () => {
 
     expect(err.details).toMatchObject({ remainingUsd: 0, inFlightUsd: 2 });
     expect(err.message).toContain(
-      "Reviews already starting, queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
+      "Reviews and rewrites already starting, queued, running or finishing are held the rest of the workspace's $10.00 monthly AI budget ($2.00)."
     );
     expect(err.message).not.toContain('more than the');
   });
@@ -1407,7 +1444,7 @@ describe('the credits (t-58)', () => {
       usagePage: '/usage',
     });
     expect(err.message).toContain(
-      "more than the 47 left of the workspace's 250 CopyCredits once 203 are held for reviews already starting"
+      "more than the 47 left of the workspace's 250 CopyCredits once 203 are held for reviews and rewrites already starting"
     );
   });
 
@@ -1558,5 +1595,194 @@ describe('the credits (t-58)', () => {
       details: { heldCredits: 100, remainingCredits: 50 },
     });
     expect(refused?.reason).toContain('CopyCredits');
+  });
+});
+
+describe('rewrites (t-81)', () => {
+  /** A completed rewrite that cost `costUsd`. */
+  const pastRewrite = (costUsd: number, over: Partial<RewriteRow> = {}) =>
+    state.rewrites.push({
+      id: `past-${state.rewrites.length}`,
+      orgId: ORG,
+      status: 'COMPLETED',
+      heldUsd: 0,
+      costUsd,
+      createdAt: at(),
+      ...over,
+    });
+
+  /** Reserve a rewrite, writing a `RUNNING` row with the estimate it was handed. */
+  const reserve = (orgId = ORG) =>
+    reserveRewriteBudget(orgId, (tx, estimate) =>
+      tx.rewrite.create({
+        data: { orgId, status: 'RUNNING', heldUsd: estimate.estimateUsd },
+      } as never)
+    );
+
+  describe('estimateRewriteCost', () => {
+    it(`is the median of the last ${REWRITE_HISTORY} ended rewrites that cost something`, async () => {
+      // The oldest, at $9, is past the last 20 and does not count.
+      pastRewrite(9);
+      for (let i = 0; i < REWRITE_HISTORY - 1; i += 1) pastRewrite(0.1);
+      pastRewrite(0.3);
+      expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.1, basis: 'rewrites' });
+    });
+
+    it('reads only this workspace’s ended rewrites, not a running one', async () => {
+      pastRewrite(5, { status: 'RUNNING' });
+      pastRewrite(5, { orgId: OTHER });
+      pastRewrite(0.2);
+      expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.2, basis: 'rewrites' });
+    });
+
+    it('counts a failed rewrite that was billed, and not one that cost nothing', async () => {
+      // Cut off on long texts: each failed, and each was billed.
+      pastRewrite(0.8, { status: 'FAILED' });
+      pastRewrite(0.8, { status: 'FAILED' });
+      // Refused before the provider answered: no guide to what one costs.
+      pastRewrite(0, { status: 'FAILED' });
+      pastRewrite(0, { status: 'FAILED' });
+      pastRewrite(0, { status: 'FAILED' });
+      expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0.8, basis: 'rewrites' });
+    });
+
+    it('is 0 with no history', async () => {
+      expect(await estimateRewriteCost(ORG)).toEqual({ estimateUsd: 0, basis: 'none' });
+    });
+  });
+
+  describe('reserveRewriteBudget', () => {
+    it('writes the row under the workspace’s lock, holding the estimate', async () => {
+      pastRewrite(0.5);
+      const row = await reserve();
+      expect(state.locked).toEqual([expect.stringContaining(`app:budget-hold:${ORG}`)]);
+      expect(row).toMatchObject({ status: 'RUNNING', heldUsd: 0.5 });
+    });
+
+    it('refuses with no credits left, before the lock, worded for a rewrite', async () => {
+      state.credits = 0;
+      const err = await refusal(async () => {
+        await reserve();
+      });
+      expect(err).toMatchObject({ status: 402, code: 'INSUFFICIENT_CREDITS' });
+      expect(err.message).toContain(
+        'The editor was not asked to rewrite it, and nothing was charged.'
+      );
+      expect(err.message).not.toContain('AI reviewer');
+      expect(state.locked).toEqual([]);
+      expect(state.rewrites).toEqual([]);
+    });
+
+    it('refuses a rewrite whose estimate is more than the credits left, naming it', async () => {
+      pastRewrite(0.5);
+      state.credits = 40;
+      const err = await refusal(async () => {
+        await reserve();
+      });
+      expect(err.code).toBe('INSUFFICIENT_CREDITS');
+      expect(err.details).toMatchObject({
+        estimateCredits: 50,
+        basis: 'rewrites',
+        balanceCredits: 40,
+      });
+      expect(err.message).toContain(
+        "This rewrite would cost about 50 CopyCredits, more than the workspace's 40 CopyCredits."
+      );
+      expect(state.rewrites.filter((r) => r.status === 'RUNNING')).toEqual([]);
+    });
+
+    it('refuses over the monthly budget, worded for a rewrite', async () => {
+      pastRewrite(0.5);
+      state.budget = 10;
+      state.spent = 9.8;
+      const err = await refusal(async () => {
+        await reserve();
+      });
+      expect(err.code).toBe('BUDGET_EXCEEDED');
+      expect(err.message).toContain('This rewrite would cost about $0.50');
+      expect(err.message).toContain('The editor was not asked to rewrite it.');
+    });
+
+    it('holds back the reviews in flight from a rewrite’s check', async () => {
+      pastRewrite(0.5);
+      // A rewrite has no profile, so the reviews in flight are held at the
+      // workspace's judge rate: $0.15 a judge.
+      for (let i = 0; i < 3; i += 1) judgeRun(0.15);
+      // Running, none of its 7 judges in yet: 7 × $0.15, its editor at $0.
+      review(0, { status: 'RUNNING', judges: slots(7) });
+      state.credits = 120;
+      const err = await refusal(async () => {
+        await reserve();
+      });
+      expect(err.code).toBe('INSUFFICIENT_CREDITS');
+      expect(err.details).toMatchObject({ heldCredits: 105, remainingCredits: 15 });
+    });
+
+    it('lets the write’s own failure through as it is', async () => {
+      state.rewriteCreateFails = true;
+      await expect(reserve()).rejects.toThrow('insert failed');
+    });
+
+    it('with nothing to check against, writes the row unchecked', async () => {
+      state.creditsFail = true;
+      state.budget = null;
+      const row = await reserve();
+      expect(row).toMatchObject({ status: 'RUNNING', heldUsd: 0 });
+      expect(state.locked).toEqual([]);
+    });
+  });
+
+  describe('a running rewrite in every later check', () => {
+    it('holds back its estimate from a review’s, until it ends', async () => {
+      for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+      state.credits = 150;
+      state.rewrites.push({
+        id: 'rw-running',
+        orgId: ORG,
+        status: 'RUNNING',
+        heldUsd: 0.6,
+        costUsd: 0,
+        createdAt: at(),
+      });
+
+      const err = await refusal(() => check(ORG, 'full', 7));
+      expect(err.details).toMatchObject({ heldCredits: 60, remainingCredits: 90 });
+
+      state.rewrites[0].status = 'COMPLETED';
+      await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+    });
+
+    it('holds back another workspace’s rewrite from nothing', async () => {
+      for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+      state.credits = 100;
+      state.rewrites.push({
+        id: 'rw-other',
+        orgId: OTHER,
+        status: 'RUNNING',
+        heldUsd: 5,
+        costUsd: 0,
+        createdAt: at(),
+      });
+      await expect(check(ORG, 'full', 7)).resolves.toBeUndefined();
+    });
+
+    it('at claim, holds back only rewrites created before the review', async () => {
+      for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+      state.credits = 150;
+      const claimed = { id: 'claimed', createdAt: at() };
+      state.rewrites.push({
+        id: 'rw-later',
+        orgId: ORG,
+        status: 'RUNNING',
+        heldUsd: 0.9,
+        costUsd: 0,
+        createdAt: at(),
+      });
+      expect(await budgetRefusal(ORG, 'full', 7, claimed)).toBeNull();
+      state.rewrites[0].createdAt = new Date(claimed.createdAt.getTime() - 1);
+      expect(await budgetRefusal(ORG, 'full', 7, claimed)).toMatchObject({
+        code: 'INSUFFICIENT_CREDITS',
+      });
+    });
   });
 });

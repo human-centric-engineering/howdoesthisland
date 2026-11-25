@@ -110,6 +110,7 @@ model Org {
   projects             Project[]
   projectDocuments     ProjectDocument[]
   codeRedemptions      ReviewCodeRedemption[]
+  rewrites             Rewrite[]
 
   @@map("org")
 }

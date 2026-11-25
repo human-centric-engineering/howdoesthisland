@@ -44,6 +44,8 @@ import {
   quickScanViewSchema,
   reportPdfSchema,
   reportShareSchema,
+  rewriteEventSchema,
+  rewriteSchema,
   sharedAssessmentSchema,
   sharedReportSchema,
   versionMetaSchema,
@@ -77,6 +79,8 @@ import type {
   SharedReport,
 } from '@/lib/app/reports/share/service';
 import type { PaginationMeta } from '@/types/api';
+import type { RewriteEvent } from '@/lib/app/rewrites/service';
+import type { RewriteView } from '@/lib/app/rewrites/views';
 import type { FrameworkCalibration, StartedRun } from '@/lib/app/calibration/admin';
 import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
 import {
@@ -101,6 +105,8 @@ const APP_ROUTE_DIRS = [
   'openapi.json',
   // A workspace's projects (t-70).
   'projects',
+  // Rewrites of a review (t-81).
+  'rewrites',
   'scan',
   'shared-reports',
   'shares',
@@ -366,6 +372,8 @@ describe('response schemas match what the services return', () => {
     >();
     expectTypeOf<z.infer<typeof removedDocumentSchema>>().toEqualTypeOf<Wire<RemovedDocument>>();
     expectTypeOf<z.infer<typeof reportShareSchema>>().toEqualTypeOf<Wire<ReportShareView>>();
+    expectTypeOf<z.infer<typeof rewriteSchema>>().toEqualTypeOf<Wire<RewriteView>>();
+    expectTypeOf<z.infer<typeof rewriteEventSchema>>().toEqualTypeOf<Wire<RewriteEvent>>();
     expectTypeOf<z.infer<typeof createdReportShareSchema>>().toEqualTypeOf<
       Wire<CreatedReportShare>
     >();

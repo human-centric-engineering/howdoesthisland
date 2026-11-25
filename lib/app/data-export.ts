@@ -176,6 +176,13 @@ export function initAppSubjectSources(): void {
         description:
           'Free review codes you redeemed: when, into which workspace, and the credits each gave.',
       },
+      {
+        model: 'Rewrite',
+        section: 'rewrites',
+        disposition: 'export',
+        description:
+          'Drafts you asked the editor to rewrite from a review: the draft, its focus and what it cost.',
+      },
     ],
     excluded: [
       // The framework store (t-10): shared model records, with no link to any person.
@@ -229,6 +236,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     projectDocuments,
     reviewCodes,
     codeRedemptions,
+    rewrites,
   ] = await Promise.all([
     // The ones to them, without the inviter's id (their name is in the
     // invitation email, and the id is someone else's data).
@@ -302,6 +310,14 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       where: { userId },
       orderBy: { createdAt: 'asc' },
     }),
+    // The rewrites they asked for (t-81). The workspace keeps them after
+    // they leave; this is their copy of what the editor wrote for them.
+    prisma.rewrite.findMany({
+      where: { createdByUserId: userId },
+      // The lease and the budget hold are the call's bookkeeping.
+      omit: { leaseExpiresAt: true, heldUsd: true },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
   return {
     workspaceInvitations: [
@@ -317,5 +333,6 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     projectDocuments,
     reviewCodes,
     codeRedemptions,
+    rewrites,
   };
 }

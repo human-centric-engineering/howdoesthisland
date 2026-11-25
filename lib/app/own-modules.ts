@@ -90,4 +90,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/example/',
   // A workspace's projects: the brief, the defaults its reviews take (t-70).
   'lib/app/projects/',
+  // Rewrites: a draft the editor writes from a finished review (t-81).
+  'lib/app/rewrites/',
 ];

@@ -148,4 +148,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_project_document',
     probe: constraintExists('app_project_document_addedByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-81: the hand-written FK from a rewrite to `user`. SET NULL: the
+  // rewrite is the workspace's and outlives its maker's erasure.
+  registerAppDriftProbe({
+    name: 'app_rewrite_createdByUserId_fkey (hand-written FK → user)',
+    kind: 'FK constraint',
+    table: 'app_rewrite',
+    probe: constraintExists('app_rewrite_createdByUserId_fkey', 'ON DELETE SET NULL'),
+  });
 }

@@ -379,6 +379,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         vi.spyOn(prisma.projectDocument, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCode, 'findMany').mockResolvedValue([] as never),
         vi.spyOn(prisma.reviewCodeRedemption, 'findMany').mockResolvedValue([] as never),
+        vi.spyOn(prisma.rewrite, 'findMany').mockResolvedValue([] as never),
       ];
       expect(await collectAppSubjectData({ userId: 'user-1', email: 'user@example.com' })).toEqual({
         workspaceInvitations: [],
@@ -391,6 +392,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         projectDocuments: [],
         reviewCodes: [],
         codeRedemptions: [],
+        rewrites: [],
       });
       for (const read of reads) read.mockRestore();
       // The declaration half (#533). The reads trigger the lazy init, so this
@@ -409,6 +411,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ProjectDocument', 'projectDocuments'],
         ['ReviewCode', 'reviewCodes'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
+        ['Rewrite', 'rewrites'],
       ]);
       // FORK (HowDoesThisLand): and the framework store's four models excluded,
       // holding no personal data (t-10), judge runs (t-22), their replies
@@ -450,6 +453,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ProjectDocument', 'projectDocuments'],
         ['CreditEntry', 'creditEntries'],
         ['ReviewCodeRedemption', 'codeRedemptions'],
+        ['Rewrite', 'rewrites'],
       ]);
       // FORK (HowDoesThisLand): the running places (t-28) and the budget holds
       // (t-50), leases. Ledger row 2.
@@ -485,6 +489,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['ProjectDocument', 'not-personal'],
         ['ReviewCode', 'not-personal'],
         ['ReviewCodeRedemption', 'not-personal'],
+        ['Rewrite', 'not-personal'],
       ]);
     },
   },
@@ -597,8 +602,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       __resetAppJobsForTests();
       // getAppJobs() triggers the lazy init, so this exercises the REAL seam.
       // FORK (HowDoesThisLand): pinned to our jobs, the signup-workspace
-      // sweep (t-7), assessment recovery (t-22) and the retention purge
-      // (t-26). Ledger:
+      // sweep (t-7), assessment recovery (t-22), rewrite recovery (t-81) and
+      // the retention purge (t-26). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppJobs().map((job) => [job.name, job.intervalMs, job.scope])).toEqual([
         [
@@ -607,6 +612,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
           { system: 'signup workspaces span orgs; Org is a system model' },
         ],
         ['app:assessment-recovery', 15 * 60 * 1000, 'per-org'],
+        ['app:rewrite-recovery', 15 * 60 * 1000, 'per-org'],
         ['app:retention-purge', 24 * 60 * 60 * 1000, 'per-org'],
       ]);
     },

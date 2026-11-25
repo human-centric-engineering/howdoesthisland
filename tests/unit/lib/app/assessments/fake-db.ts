@@ -7,7 +7,7 @@
  * semantics: `where` with equality, `null`, `in`, `not`, `gt`, `lt` (on a
  * string too), `gte`, `OR` and `AND`; `attempts: { increment }`; `updateMany` answering a count; the
  * `assessmentId_judge` upsert; `$transaction(fn)` running `fn` on the same
- * store. A `findUnique` returns the whole row with its `content`,
+ * store. A `findUnique` or `findFirst` returns the whole row with its `content`,
  * `judgeRuns` and `frameworkVersion` (always `howdoesthisland@0.5.1`),
  * whatever it selects: the code under test reads what it asked for, and
  * extra fields cannot make a test pass.
@@ -43,6 +43,11 @@
  * For a project's context (t-75): `projects` (an assessment's `project`
  * relation reads it), `projectDocument` links in `projectDocuments` and
  * knowledge rows in `knowledgeDocuments`, each with `findMany`.
+ *
+ * For rewrites (t-81): `rewrite` rows in `rewrites`, with `findMany`
+ * (`orderBy: { createdAt }` and `take`), `findFirst`, `findUnique`, `count`,
+ * `create`, `update` and `updateMany`, gone with their assessment (the
+ * cascade).
  */
 import { vi } from 'vitest';
 
@@ -119,12 +124,16 @@ export function createFakeDb() {
   const projects: Row[] = [];
   const projectDocuments: Row[] = [];
   const knowledgeDocuments: Row[] = [];
+  const rewrites: Row[] = [];
   let seq = 0;
   /** The tail of the transaction queue: each waits for the one before. */
   let txQueue: Promise<unknown> = Promise.resolve();
 
-  /** Remove an assessment's judge runs, and their replies (the cascade). */
+  /** Remove an assessment's judge runs, and their replies, and its rewrites (the cascade). */
   const dropRunsOf = (assessmentId: unknown) => {
+    for (let i = rewrites.length - 1; i >= 0; i -= 1) {
+      if (rewrites[i]?.assessmentId === assessmentId) rewrites.splice(i, 1);
+    }
     for (let i = judgeRuns.length - 1; i >= 0; i -= 1) {
       const run = judgeRuns[i];
       if (run?.assessmentId !== assessmentId) continue;
@@ -186,7 +195,7 @@ export function createFakeDb() {
         const rows = assessments
           .filter((a) => matches(a, where))
           .sort((x, y) => (x.createdAt as Date).getTime() - (y.createdAt as Date).getTime());
-        return rows[0] ? { ...rows[0] } : null;
+        return rows[0] ? withRelations(rows[0]) : null;
       }),
       count: vi.fn(
         async ({ where }: { where?: Row }) => assessments.filter((a) => matches(a, where)).length
@@ -417,6 +426,60 @@ export function createFakeDb() {
         projectDocuments.filter((r) => matches(r, where)).map((r) => ({ ...r }))
       ),
     },
+    rewrite: {
+      findMany: vi.fn(
+        async ({ where, take, orderBy }: { where?: Row; take?: number; orderBy?: Order }) => {
+          const rows = ordered(
+            rewrites.filter((r) => matches(r, where)),
+            orderBy
+          );
+          return rows.slice(0, take ?? rows.length).map((r) => ({ ...r }));
+        }
+      ),
+      findFirst: vi.fn(async ({ where }: { where?: Row }) => {
+        const row = rewrites.find((r) => matches(r, where));
+        return row ? { ...row } : null;
+      }),
+      findUnique: vi.fn(async ({ where }: { where: Row }) => {
+        const row = rewrites.find((r) => matches(r, where));
+        return row ? { ...row } : null;
+      }),
+      count: vi.fn(
+        async ({ where }: { where?: Row }) => rewrites.filter((r) => matches(r, where)).length
+      ),
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        seq += 1;
+        const row: Row = {
+          id: `rewrite-${seq}`,
+          status: 'RUNNING',
+          draft: '',
+          heldUsd: 0,
+          provider: null,
+          modelName: null,
+          costUsd: 0,
+          error: null,
+          errorCode: null,
+          leaseExpiresAt: null,
+          createdByUserId: null,
+          completedAt: null,
+          createdAt: new Date(),
+          ...data,
+        };
+        rewrites.push(row);
+        return { ...row };
+      }),
+      update: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const row = rewrites.find((r) => matches(r, where));
+        if (!row) throw new Error('record not found');
+        apply(row, data);
+        return { ...row };
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = rewrites.filter((r) => matches(r, where));
+        for (const row of rows) apply(row, data);
+        return { count: rows.length };
+      }),
+    },
     aiKnowledgeDocument: {
       findMany: vi.fn(async ({ where }: { where?: Row }) =>
         knowledgeDocuments.filter((r) => matches(r, where)).map((r) => ({ ...r }))
@@ -535,6 +598,7 @@ export function createFakeDb() {
     projects,
     projectDocuments,
     knowledgeDocuments,
+    rewrites,
     withReply,
     seed,
     addCost,
