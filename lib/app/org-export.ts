@@ -226,9 +226,19 @@ export function initAppOrgSources(): void {
         section: 'comparisons',
         disposition: 'export',
         description:
-          'Comparisons of drafts: who they were for, the project, the AI reviewers and when.',
+          'Comparisons of drafts: who they were for, the project, the AI reviewers, when, and the editor’s verdict on which lands better.',
         fetch: ({ orgId }) =>
-          prisma.assessmentSet.findMany({ where: ownedBy(orgId), orderBy: { createdAt: 'asc' } }),
+          prisma.assessmentSet.findMany({
+            where: ownedBy(orgId),
+            // The verdict call's bookkeeping (t-88), as the subject export leaves it out.
+            omit: {
+              verdictLeaseExpiresAt: true,
+              verdictHeldUsd: true,
+              verdictAttempts: true,
+              verdictStartedAt: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          }),
       },
       {
         model: 'AssessmentSetMember',

@@ -194,6 +194,12 @@ export async function createComparison(
             },
             select: { id: true },
           });
+          // The comparison holds the verdict's part from here: the request's
+          // hold stops holding it in the same commit, so no check counts it twice.
+          const [first] = prepared.holds;
+          if (first && verdictRuns(prepared.judges)) {
+            await tx.budgetHold.updateMany({ where: { id: first.id }, data: { extraUsd: 0 } });
+          }
           await tx.assessmentSetMember.createMany({
             data: enqueued.map((review, position) => ({
               orgId,

@@ -256,7 +256,12 @@ describe('collectAppSubjectData', () => {
 
     expect(vi.mocked(prisma.assessmentSet.findMany)).toHaveBeenCalledWith({
       where: { createdByUserId: 'user-1' },
-      omit: { verdictLeaseExpiresAt: true, verdictHeldUsd: true, verdictAttempts: true },
+      omit: {
+        verdictLeaseExpiresAt: true,
+        verdictHeldUsd: true,
+        verdictAttempts: true,
+        verdictStartedAt: true,
+      },
       include: { members: { orderBy: { position: 'asc' } } },
       orderBy: { createdAt: 'asc' },
     });

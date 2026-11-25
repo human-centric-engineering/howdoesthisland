@@ -767,7 +767,12 @@ describe('the editor’s verdict (t-88)', () => {
       // The request's own holds are released; the comparison holds the verdict's part.
       expect(fake.holds).toEqual([]);
       await settle();
-      expect(heldWhileWaiting).toEqual({ _sum: { verdictHeldUsd: 0.6 } });
+      expect(heldWhileWaiting).toMatchObject({ _sum: { verdictHeldUsd: 0.6 } });
+      // Stored with its set, the request's hold stopped carrying the verdict's part.
+      expect(fake.db.budgetHold.updateMany).toHaveBeenCalledWith({
+        where: { id: expect.any(String) },
+        data: { extraUsd: 0 },
+      });
       // Ended: no longer held.
       expect(fake.sets[0]?.verdictStatus).toBe('COMPLETED');
     });

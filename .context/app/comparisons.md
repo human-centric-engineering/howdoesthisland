@@ -129,8 +129,14 @@ two starters one runs it; a verdict already ended, or running under a live
 lease, is left alone.
 
 **It survives the process ending.** The lease is renewed while the call
-runs. One whose lease ran out lost its process: recovery claims it again and
-asks again, up to three starts. Past them it ends `failed`, `reason` `lost`.
+runs. One whose lease ran out, and whose attempt began more than 15 minutes
+ago (longer than any call can live: two attempts at the approved entry's
+timeout), lost its process: recovery claims it again and asks again, up to
+three starts. Waiting out that lifetime keeps a live call whose renewals
+failed from running beside a second one, or landing cost rows after the
+verdict was charged. What earlier attempts spent is kept on the comparison
+(`verdictCostUsd`) as it is claimed again or set to wait, so the budget check
+counts it before the verdict is charged. Past them it ends `failed`, `reason` `lost`.
 A failure that passes (`rate_limited`, `provider_error`) goes back to
 `waiting`, its code in `reason`, and the recovery tick asks again while it has
 starts left. Any other failure ends `failed` with the call's code
@@ -144,7 +150,8 @@ the editor's price, its request built from each draft's free quick scan (the
 reviews do not exist yet: low by what the judges add, and the output ceiling
 dominates). The first budget hold carries it (`BudgetHold.extraUsd`); once
 stored, the comparison holds it (`verdictHeldUsd`) in every check while its
-verdict is `waiting` or `running`.
+verdict is `waiting` or `running`, and the hold stops carrying it in the same
+commit, so no check counts it twice.
 
 **Charge.** The write that ends the verdict charges its cost rows (tagged
 `comparisonId`, `editor: 'verdict'`, no `assessmentId`, so no draft's charge
@@ -189,8 +196,8 @@ Each draft is charged in CopyCredits as its review ends, as any review is.
   reviews stay in the workspace's history. A verdict whose call is still
   running charges itself as it ends. One whose process was lost (and a
   verdict purged with its comparison) is charged by the recovery tick once its
-  cost rows have been quiet an hour: nothing else can charge it once the row
-  is gone.
+  cost rows have been quiet an hour, from when the comparison was made (its
+  rows carry it): nothing else can charge it once the row is gone.
 - **Deleting a draft's review** (`DELETE /api/v1/assessments/{id}`) leaves its
   place in the set: the member's link is `ON DELETE SET NULL`, and the draft
   reads as `purged`, its label kept. The set is not failed for it; with fewer

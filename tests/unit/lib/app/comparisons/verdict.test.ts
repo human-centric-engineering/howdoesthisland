@@ -40,6 +40,7 @@ import { LEASE_MS, MAX_ATTEMPTS } from '@/lib/app/assessments/limits';
 import {
   estimateComparisonVerdict,
   recoverVerdicts,
+  VERDICT_LIFETIME_MS,
   verdictProjectContext,
   startVerdict,
   startVerdictsAfterReview,
@@ -48,6 +49,7 @@ import { readComparison } from '@/lib/app/comparisons/views';
 import { cancelAssessment } from '@/lib/app/assessments/run';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { comparisonVerdictChargeReference } from '@/lib/app/credits/charge';
+import { creditsForUsd } from '@/lib/app/credits/rate';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { runAsOrg } from '@/lib/tenancy/context';
@@ -352,7 +354,8 @@ describe('the verdict’s failure and charge', () => {
     const set = comparison([review('COMPLETED'), review('COMPLETED')]);
     await runAsOrg(ORG, () => startVerdict(set.id as string, NOW));
     // Its lease runs out while the call stalls; recovery claims it again.
-    const later = new Date(NOW.getTime() + LEASE_MS + 1_000);
+    // Past any call's life, as no real call would be: the stalled one ends after.
+    const later = new Date(NOW.getTime() + VERDICT_LIFETIME_MS + 1_000);
     fake.sets[0].verdictLeaseExpiresAt = new Date(later.getTime() - 1);
     expect(await runAsOrg(ORG, () => startVerdict(set.id as string, later))).toBe('started');
     await settle();
@@ -523,6 +526,104 @@ describe('round-1 review fixes', () => {
     await settle();
     expect(mocks.callAgent).toHaveBeenCalledTimes(1);
     expect(fake.sets.map((x) => x.verdictStatus)).toEqual(['WAITING', 'COMPLETED']);
+  });
+});
+
+describe('round-3 review fixes', () => {
+  /** A running verdict whose lease ran out, its attempt claimed `ageMs` ago. */
+  const lapsed = (ageMs: number, over: Row = {}) => ({
+    verdictStatus: 'RUNNING',
+    verdictAttempts: 1,
+    verdictLeaseExpiresAt: new Date(NOW.getTime() - 1_000),
+    verdictStartedAt: new Date(NOW.getTime() - ageMs),
+    ...over,
+  });
+
+  it('leaves alone a lapsed lease whose attempt may still be running: not claimed, given up on or skipped', async () => {
+    const young = VERDICT_LIFETIME_MS - 60_000;
+    comparison([review('COMPLETED'), review('COMPLETED')], lapsed(young));
+    comparison(
+      [review('COMPLETED'), review('COMPLETED')],
+      lapsed(young, { verdictAttempts: MAX_ATTEMPTS })
+    );
+    comparison([review('COMPLETED'), null], lapsed(young));
+
+    expect(await runAsOrg(ORG, () => recoverVerdicts(NOW))).toEqual({
+      started: 0,
+      skipped: 0,
+      gaveUp: 0,
+    });
+    expect(fake.sets.map((x) => x.verdictStatus)).toEqual(['RUNNING', 'RUNNING', 'RUNNING']);
+    expect(mocks.callAgent).not.toHaveBeenCalled();
+    expect(charges()).toEqual([]);
+  });
+
+  it('claims one past any call’s life again, keeping what its earlier attempt spent for the budget', async () => {
+    let seenAtClaim: unknown;
+    mocks.callAgent.mockImplementationOnce(
+      async (call: { costMetadata: Record<string, string> }) => {
+        seenAtClaim = fake.sets[0]?.verdictCostUsd;
+        fake.addCost(ORG, 0.02, { ...call.costMetadata }, new Date());
+        return { output: VERDICT, drops: [], provider: 'openai', model: 'gpt-5', costUsd: 0.02 };
+      }
+    );
+    const set = comparison(
+      [review('COMPLETED'), review('COMPLETED')],
+      lapsed(VERDICT_LIFETIME_MS + 60_000)
+    );
+    fake.addCost(ORG, 0.03, { editor: 'verdict', comparisonId: set.id }, NOW);
+
+    expect((await runAsOrg(ORG, () => recoverVerdicts(NOW))).started).toBe(1);
+    expect(fake.sets[0]).toMatchObject({ verdictAttempts: 2, verdictStartedAt: NOW });
+    await settle();
+    expect(seenAtClaim).toBe(0.03);
+    expect(fake.sets[0]).toMatchObject({ verdictStatus: 'COMPLETED', verdictCostUsd: 0.05 });
+  });
+
+  it('keeps what a call that failed in a way that passes spent, while it waits', async () => {
+    mocks.callAgent.mockImplementationOnce(
+      async (call: { costMetadata: Record<string, string> }) => {
+        fake.addCost(ORG, 0.01, { ...call.costMetadata }, new Date());
+        throw new JudgeRunError('provider_error', 'the provider is down');
+      }
+    );
+    const set = comparison([review('COMPLETED'), review('COMPLETED')]);
+    await runAsOrg(ORG, () => startVerdict(set.id as string, NOW));
+    await settle();
+    expect(fake.sets[0]).toMatchObject({ verdictStatus: 'WAITING', verdictCostUsd: 0.01 });
+  });
+
+  it('tags the call’s rows with when its comparison was made', async () => {
+    const set = comparison([review('COMPLETED'), review('COMPLETED')]);
+    await runAsOrg(ORG, () => startVerdict(set.id as string, NOW));
+    await settle();
+    expect(mocks.callAgent.mock.calls[0][0].costMetadata).toEqual({
+      editor: 'verdict',
+      comparisonId: set.id,
+      comparisonCreatedAt: (set.createdAt as Date).toISOString(),
+    });
+  });
+
+  it('charges a gone comparison’s verdict from when it was made, rows before the sweep’s window too', async () => {
+    const hour = 60 * 60 * 1000;
+    const made = new Date(NOW.getTime() - 30 * hour);
+    const tags = {
+      editor: 'verdict',
+      comparisonId: 'gone',
+      comparisonCreatedAt: made.toISOString(),
+    };
+    // Attempt 1, before the sweep's day-long window; attempt 2, inside it and quiet.
+    fake.addCost(ORG, 0.04, tags, new Date(NOW.getTime() - 29 * hour));
+    fake.addCost(ORG, 0.04, tags, new Date(NOW.getTime() - 2 * hour));
+
+    await runAsOrg(ORG, () => recoverVerdicts(NOW));
+
+    expect(charges()).toEqual([
+      expect.objectContaining({
+        reference: comparisonVerdictChargeReference('gone'),
+        amount: -creditsForUsd(0.08),
+      }),
+    ]);
   });
 });
 

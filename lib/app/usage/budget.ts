@@ -494,9 +494,12 @@ async function inFlightCost(
       verdictStatus: { in: ['WAITING', 'RUNNING'] },
       ...(self ? { createdAt: { lt: self.createdAt } } : {}),
     },
-    _sum: { verdictHeldUsd: true },
+    _sum: { verdictHeldUsd: true, verdictCostUsd: true },
   });
   const verdicting = verdicts._sum.verdictHeldUsd ?? 0;
+  // What their earlier attempts spent, kept as each is claimed or set to
+  // wait for a retry: not charged in credits until the verdict ends.
+  const verdictSpent = verdicts._sum.verdictCostUsd ?? 0;
   const yet = live.reduce(
     (sum, r) => {
       const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
@@ -508,7 +511,7 @@ async function inFlightCost(
     },
     held + rewriting + verdicting
   );
-  return { yet, spent: open.reduce((sum, r) => sum + r.costUsd, 0) };
+  return { yet, spent: open.reduce((sum, r) => sum + r.costUsd, verdictSpent) };
 }
 
 /** A stored review checked again as it is claimed (t-53). */

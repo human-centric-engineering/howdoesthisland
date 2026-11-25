@@ -563,6 +563,7 @@ export function createFakeDb() {
           verdictModel: null,
           verdictAttempts: 0,
           verdictLeaseExpiresAt: null,
+          verdictStartedAt: null,
           verdictCompletedAt: null,
           ...data,
         };
@@ -588,6 +589,9 @@ export function createFakeDb() {
           _sum: {
             verdictHeldUsd: rows.length
               ? rows.reduce((sum, r) => sum + Number(r.verdictHeldUsd), 0)
+              : null,
+            verdictCostUsd: rows.length
+              ? rows.reduce((sum, r) => sum + Number(r.verdictCostUsd), 0)
               : null,
           },
         };

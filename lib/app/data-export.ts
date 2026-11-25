@@ -337,7 +337,12 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     prisma.assessmentSet.findMany({
       where: { createdByUserId: userId },
       // The verdict's lease, budget hold and attempt count are its call's bookkeeping (t-88).
-      omit: { verdictLeaseExpiresAt: true, verdictHeldUsd: true, verdictAttempts: true },
+      omit: {
+        verdictLeaseExpiresAt: true,
+        verdictHeldUsd: true,
+        verdictAttempts: true,
+        verdictStartedAt: true,
+      },
       include: { members: { orderBy: { position: 'asc' } } },
       orderBy: { createdAt: 'asc' },
     }),

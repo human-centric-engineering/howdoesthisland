@@ -77,7 +77,19 @@ describe('initAppOrgSources', () => {
       () => prisma.rewrite.findMany,
       { omit: { leaseExpiresAt: true, heldUsd: true, callStart: true } },
     ],
-    ['AssessmentSet', 'comparisons', () => prisma.assessmentSet.findMany, {}],
+    [
+      'AssessmentSet',
+      'comparisons',
+      () => prisma.assessmentSet.findMany,
+      {
+        omit: {
+          verdictLeaseExpiresAt: true,
+          verdictHeldUsd: true,
+          verdictAttempts: true,
+          verdictStartedAt: true,
+        },
+      },
+    ],
   ] as const)('declares %s, fetched for the exported org', async (model, section, read, extra) => {
     const rows = [{ id: 'row-1', orgId: 'org-1' }];
     vi.mocked(read()).mockResolvedValue(rows as never);

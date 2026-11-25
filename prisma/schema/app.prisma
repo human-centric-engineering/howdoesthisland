@@ -778,6 +778,9 @@ model AssessmentSet {
   verdictAttempts       Int                     @default(0)
   /// Renewed while its call runs. A `RUNNING` verdict whose lease ran out lost its process.
   verdictLeaseExpiresAt DateTime?
+  /// When its latest attempt was claimed: a lapsed lease is taken for a lost
+  /// process only once the attempt is older than any call can live.
+  verdictStartedAt      DateTime?
   verdictCompletedAt    DateTime?
 
   @@index([orgId, kind, createdAt])

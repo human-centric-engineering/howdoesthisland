@@ -29,9 +29,12 @@
  * read, so it is never run twice at once: of two starters, one claims it.
  *
  * **It survives the process ending.** The lease is renewed while the call
- * runs; one whose lease ran out lost its process, and recovery claims it
+ * runs. One whose lease ran out and whose attempt is older than any call can
+ * live ({@link VERDICT_LIFETIME_MS}) lost its process, and recovery claims it
  * again and asks again, up to `MAX_ATTEMPTS` starts. Past them it is ended
- * `FAILED` (`lost`) and charged for what its attempts recorded.
+ * `FAILED` (`lost`) and charged for what its attempts recorded. Waiting out
+ * the lifetime is what keeps a live call whose renewals failed from running
+ * beside a second, or landing rows after the charge.
  *
  * **Charged once.** The write that ends it (`COMPLETED` or `FAILED`) charges
  * its cost rows in the same transaction, under its own reference
@@ -89,6 +92,17 @@ export type VerdictSkipReason =
 
 /** Why a verdict failed, for `FAILED`: the call's code, `lost`, or `internal_error`. */
 export const LOST_VERDICT_CODE = 'lost';
+
+/**
+ * How old an attempt must be before a lapsed lease is taken for a lost
+ * process. A call cannot outlive it: `callAgent` makes at most two attempts,
+ * each bounded by the approved entry's timeout (at most 300s), and writes its
+ * cost row as it ends. So an attempt claimed again, given up on or skipped
+ * past it has written every row it will, and the charge that ends the
+ * verdict counts them all. One whose lease lapsed sooner (its renewals
+ * failing) may still be running, and is left to finish.
+ */
+export const VERDICT_LIFETIME_MS = 15 * 60 * 1000;
 
 /** The editor's call, as `callAgent` and its ceiling name it. */
 const EDITOR_CALL = {
@@ -181,10 +195,42 @@ const claimable = (now: Date): Prisma.AssessmentSetWhereInput => ({
     { verdictStatus: 'WAITING' },
     {
       verdictStatus: 'RUNNING',
-      OR: [{ verdictLeaseExpiresAt: null }, { verdictLeaseExpiresAt: { lt: now } }],
+      AND: [
+        { OR: [{ verdictLeaseExpiresAt: null }, { verdictLeaseExpiresAt: { lt: now } }] },
+        // Past any call's life: a lapsed lease alone may be a live call whose
+        // renewals fail, and one still running could land rows after a charge.
+        {
+          OR: [
+            { verdictStartedAt: null },
+            { verdictStartedAt: { lt: new Date(now.getTime() - VERDICT_LIFETIME_MS) } },
+          ],
+        },
+      ],
     },
   ],
 });
+
+/**
+ * What the verdict's earlier attempts spent, from its cost rows: kept on the
+ * comparison as it is claimed or set to wait, so the budget check counts it
+ * before the verdict is charged.
+ */
+async function spentSoFar(orgId: string, set: Pick<VerdictSet, 'id' | 'createdAt'>) {
+  const { _sum } = await prisma.aiCostLog.aggregate({
+    where: verdictRows(orgId, set),
+    _sum: { totalCostUsd: true },
+  });
+  return _sum.totalCostUsd ?? 0;
+}
+
+/** A verdict's cost rows: those its calls tagged with its comparison since it was made. */
+function verdictRows(orgId: string, set: Pick<VerdictSet, 'id' | 'createdAt'>) {
+  return {
+    orgId,
+    createdAt: { gte: set.createdAt },
+    metadata: { path: ['comparisonId'], equals: set.id },
+  } satisfies Prisma.AiCostLogWhereInput;
+}
 
 /** What a start did. */
 export type VerdictStart =
@@ -245,6 +291,8 @@ export async function startVerdict(setId: string, now: Date = new Date()): Promi
       verdictStatus: 'RUNNING',
       verdictAttempts: attempt,
       verdictLeaseExpiresAt: new Date(now.getTime() + LEASE_MS),
+      verdictStartedAt: now,
+      verdictCostUsd: attempt > 1 ? await spentSoFar(orgId, set) : 0,
     },
   });
   if (count === 0) return 'not_due';
@@ -341,7 +389,19 @@ export async function recoverVerdicts(
 }
 
 /** A verdict's cost row, as its call tags it. */
-const verdictCostRow = z.object({ editor: z.literal(VERDICT_COST_TAG), comparisonId: z.string() });
+const verdictCostRow = z.object({
+  editor: z.literal(VERDICT_COST_TAG),
+  comparisonId: z.string(),
+  /** When its comparison was made, which its charge counts rows from. */
+  comparisonCreatedAt: z.iso.datetime().optional(),
+});
+
+/**
+ * The most verdict cost rows a sweep reads, oldest first. A workspace runs at
+ * most a few verdicts at once, so a day's window holds far fewer; past it the
+ * rest wait for the window to move on, and the cut is logged.
+ */
+const ORPHAN_SCAN = 5_000;
 
 /**
  * Charge the verdicts whose comparison is gone and that were never charged:
@@ -363,19 +423,25 @@ async function chargeOrphanedVerdicts(orgId: string, now: Date): Promise<void> {
         createdAt: { gte: floor },
         metadata: { path: ['editor'], equals: VERDICT_COST_TAG },
       },
+      orderBy: { createdAt: 'asc' },
+      take: ORPHAN_SCAN,
       select: { createdAt: true, metadata: true },
     });
-    const verdicts = new Map<string, { first: Date; last: Date }>();
+    if (rows.length === ORPHAN_SCAN) {
+      logger.warn('Verdict charge sweep read its most rows; the rest wait for the next', { orgId });
+    }
+    const verdicts = new Map<string, { since: Date; last: Date }>();
     for (const row of rows) {
       const parsed = verdictCostRow.safeParse(row.metadata);
       if (!parsed.success) continue;
-      const seen = verdicts.get(parsed.data.comparisonId);
-      if (!seen)
-        verdicts.set(parsed.data.comparisonId, { first: row.createdAt, last: row.createdAt });
-      else {
-        if (row.createdAt < seen.first) seen.first = row.createdAt;
-        if (row.createdAt > seen.last) seen.last = row.createdAt;
-      }
+      const { comparisonId, comparisonCreatedAt } = parsed.data;
+      const seen = verdicts.get(comparisonId);
+      if (!seen) {
+        // From when its comparison was made, as the write that ends a verdict
+        // charges: every attempt's rows, and none from before charging began.
+        const since = comparisonCreatedAt ? new Date(comparisonCreatedAt) : row.createdAt;
+        verdicts.set(comparisonId, { since, last: row.createdAt });
+      } else if (row.createdAt > seen.last) seen.last = row.createdAt;
     }
     const quietSince = now.getTime() - CANCEL_GRACE_MS;
     const quiet = [...verdicts].filter(([, v]) => v.last.getTime() <= quietSince);
@@ -384,7 +450,11 @@ async function chargeOrphanedVerdicts(orgId: string, now: Date): Promise<void> {
     const [existing, charged] = await Promise.all([
       prisma.assessmentSet.findMany({ where: { orgId, id: { in: ids } }, select: { id: true } }),
       prisma.creditEntry.findMany({
-        where: { kind: 'CHARGE', reference: { in: ids.map(comparisonVerdictChargeReference) } },
+        where: {
+          orgId,
+          kind: 'CHARGE',
+          reference: { in: ids.map(comparisonVerdictChargeReference) },
+        },
         select: { reference: true },
       }),
     ]);
@@ -394,8 +464,7 @@ async function chargeOrphanedVerdicts(orgId: string, now: Date): Promise<void> {
     for (const [id, v] of quiet) {
       if (count >= RECOVERY_BATCH) break;
       if (kept.has(id) || done.has(comparisonVerdictChargeReference(id))) continue;
-      // Since its first row: its comparison's `createdAt` is gone with it.
-      const { credits } = await chargeComparisonVerdict(prisma, orgId, id, v.first);
+      const { credits } = await chargeComparisonVerdict(prisma, orgId, id, v.since);
       if (credits > 0) count += 1;
     }
   } catch (err) {
@@ -463,6 +532,7 @@ async function drive(
           verdictStatus: 'WAITING',
           verdictReason: ending.reason,
           verdictLeaseExpiresAt: null,
+          verdictCostUsd: await spentSoFar(orgId, set),
         },
       });
       if (count === 1) return;
@@ -508,7 +578,12 @@ async function ask(set: VerdictSet, drafts: VerdictDraft[]): Promise<Ending> {
         const checked = engine.validateVerdictReply(raw, drafts);
         return checked.ok ? { output: checked.output, drops: checked.drops } : null;
       },
-      costMetadata: { editor: VERDICT_COST_TAG, comparisonId: set.id },
+      costMetadata: {
+        editor: VERDICT_COST_TAG,
+        comparisonId: set.id,
+        // So a charge made once the comparison is gone counts from the same moment.
+        comparisonCreatedAt: set.createdAt.toISOString(),
+      },
       phase: 'editor',
       frameworkVersion: label,
       userId: set.createdByUserId,
@@ -551,12 +626,10 @@ async function end(
   ending: Ending
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
-    const rows = {
-      orgId,
-      createdAt: { gte: set.createdAt },
-      metadata: { path: ['comparisonId'], equals: set.id },
-    } satisfies Prisma.AiCostLogWhereInput;
-    const { _sum } = await tx.aiCostLog.aggregate({ where: rows, _sum: { totalCostUsd: true } });
+    const { _sum } = await tx.aiCostLog.aggregate({
+      where: verdictRows(orgId, set),
+      _sum: { totalCostUsd: true },
+    });
     const { count } = await tx.assessmentSet.updateMany({
       where,
       data: {

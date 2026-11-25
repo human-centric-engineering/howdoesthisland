@@ -23,6 +23,7 @@ ADD COLUMN     "verdictHeldUsd" DOUBLE PRECISION NOT NULL DEFAULT 0,
 ADD COLUMN     "verdictLeaseExpiresAt" TIMESTAMP(3),
 ADD COLUMN     "verdictModel" TEXT,
 ADD COLUMN     "verdictReason" TEXT,
+ADD COLUMN     "verdictStartedAt" TIMESTAMP(3),
 ADD COLUMN     "verdictStatus" "ComparisonVerdictStatus" NOT NULL DEFAULT 'WAITING';
 
 UPDATE "app_assessment_set" SET "verdictStatus" = 'SKIPPED', "verdictReason" = 'predates_verdicts';

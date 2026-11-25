@@ -188,6 +188,7 @@ vi.mock('@/lib/db/client', () => {
         return {
           _sum: {
             verdictHeldUsd: rows.length ? rows.reduce((n, r) => n + r.verdictHeldUsd, 0) : null,
+            verdictCostUsd: rows.length ? rows.reduce((n, r) => n + r.verdictCostUsd, 0) : null,
           },
         };
       }),
@@ -2050,6 +2051,20 @@ describe('a comparison’s verdict, held with its drafts (t-88)', () => {
     set({ orgId: 'org-b', verdictHeldUsd: 9 });
     const err = await refusal(() => check(ORG, 'full', 7 * 5));
     expect(err.details).toMatchObject({ inFlightUsd: 0.75, remainingUsd: 4.25 });
+  });
+
+  it('counts what a waiting or running verdict’s earlier attempts spent against the credits, not yet charged', async () => {
+    state.spent = 0;
+    // 300 credits is $3.00: one 7-judge review at $1 fits beside $1.50 held and $0.40 spent.
+    state.credits = 300;
+    set({ verdictStatus: 'WAITING', verdictHeldUsd: 1.5, verdictCostUsd: 0.4 });
+    set({ verdictStatus: 'COMPLETED', verdictHeldUsd: 0, verdictCostUsd: 9 });
+    await check(ORG, 'full', 7);
+    const err = await refusal(() => check(ORG, 'full', 14));
+    expect(err).toMatchObject({
+      code: 'INSUFFICIENT_CREDITS',
+      details: { heldCredits: 190, remainingCredits: 110 },
+    });
   });
 
   it('counts, for a review checked as it is claimed, only the verdicts of comparisons made before it', async () => {
