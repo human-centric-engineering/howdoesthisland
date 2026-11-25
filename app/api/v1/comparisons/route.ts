@@ -63,18 +63,26 @@ export const POST = withAuth(async (request: NextRequest, session) => {
   const prepared = await prepareComparison(body);
   try {
     if (prepared.judges.length > 0) {
-      // Held first, so a set the locked budget check refuses counts none of
-      // its drafts against the per-user cap. A set the cap then refuses
-      // releases its holds below.
-      await holdComparisonBudget(body, prepared);
-      // Each draft is a review against the per-user cap: room checked and
-      // every draft counted with no await between, so no other request can
-      // take the room in the meantime, and a set the cap refuses counts none.
+      // Each draft is a review against the per-user cap. A set without room
+      // is refused before it holds anything, so it never holds budget another
+      // request in the workspace could have used.
       const key = `user:${session.user.id}`;
-      const room = aiAssessmentLimiter.peek(key);
-      if (room.remaining < body.drafts.length) {
-        return createRateLimitResponse({ ...room, success: false, remaining: 0 });
-      }
+      const refusedByCap = () => {
+        const room = aiAssessmentLimiter.peek(key);
+        return room.remaining < body.drafts.length
+          ? createRateLimitResponse({ ...room, success: false, remaining: 0 })
+          : null;
+      };
+      const early = refusedByCap();
+      if (early) return early;
+      // Held before any draft is counted, so a set the locked budget check
+      // refuses counts none of them.
+      await holdComparisonBudget(body, prepared);
+      // Room checked again and every draft counted with no await between, so
+      // room another request took during the hold is not counted twice. A set
+      // refused here releases its holds below.
+      const late = refusedByCap();
+      if (late) return late;
       body.drafts.forEach(() => aiAssessmentLimiter.check(key));
     }
     const comparison = await createComparison(body, prepared, {

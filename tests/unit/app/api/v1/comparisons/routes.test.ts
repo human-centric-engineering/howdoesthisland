@@ -585,6 +585,19 @@ describe('POST /api/v1/comparisons — the budget, for every draft together', ()
     expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(before);
   });
 
+  it('refuses with 429 a set the cap has no room for before holding any budget', async () => {
+    // The cap is 6: five used leave room for one of two drafts.
+    budget(0);
+    for (let i = 0; i < 5; i += 1) aiAssessmentLimiter.check(`user:${ALICE}`);
+
+    const res = await post({ profile: 'full', drafts: drafts(DRAFT_A, DRAFT_B) });
+
+    expect(res.status).toBe(429);
+    expect(fake.db.budgetHold.create).not.toHaveBeenCalled();
+    expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(1);
+    expect(fake.sets).toEqual([]);
+  });
+
   it('refuses with 429 a set whose room another request took while it waited on the budget lock', async () => {
     // The cap is 6. While this request waits for the lock, another counts five.
     budget(0);

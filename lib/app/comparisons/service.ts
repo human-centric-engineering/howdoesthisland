@@ -64,8 +64,8 @@ export interface PreparedComparison extends ResolvedReviewOptions {
  * Everything that can be refused before anything is held or written: the
  * options (as a single review's), each draft's text, and every draft's
  * estimate together against the workspace's credits and monthly budget (402).
- * Holds nothing: once this has passed, the route holds with
- * {@link holdComparisonBudget}, then counts the drafts against the per-user cap.
+ * Holds nothing: once this has passed, the route checks the per-user cap,
+ * holds with {@link holdComparisonBudget}, then counts the drafts against it.
  */
 export async function prepareComparison(body: CreateComparisonBody): Promise<PreparedComparison> {
   const options = await resolveReviewOptions(body);
@@ -74,9 +74,7 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
       await refusingAsApi(() => assessableText(draft.text));
     } catch (err) {
       // Which draft to fix, by its place in `drafts`.
-      if (err instanceof APIError) {
-        throw new APIError(err.message, err.code, err.status, { ...err.details, position });
-      }
+      if (err instanceof APIError) err.details = { ...err.details, position };
       throw err;
     }
   }

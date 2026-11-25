@@ -290,6 +290,12 @@ describe('enqueueAssessments (t-87)', () => {
       timeout: 15_000,
     });
   });
+
+  it('leaves a single review on the transaction defaults', async () => {
+    await runAsOrg(ORG, () => enqueueAssessments([input()], async () => undefined));
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), undefined);
+  });
 });
 
 describe('startAssessmentInBackground', () => {

@@ -91,11 +91,12 @@ claimed (t-53), so a draft that waited while other spend landed can end `failed`
 with the budget's `errorCode`, and the comparison reads `partial`.
 
 **Each draft counts as a review** against the per-user cap on reviews that call
-AI reviewers (`AI_ASSESSMENTS_PER_MINUTE`). The route takes the budget holds
-first, so a set the locked budget check refuses counts none. It then checks
-there is room for every draft and counts them all with no await between, so two
-requests cannot both take the last of the room, and a set the cap refuses (429
-`RATE_LIMIT_EXCEEDED`) counts none and releases its holds. Drafts that call no AI reviewer (the `quick` profile) count nothing and
+AI reviewers (`AI_ASSESSMENTS_PER_MINUTE`). A set without room is refused (429
+`RATE_LIMIT_EXCEEDED`) before it holds any budget. Otherwise the route takes the
+budget holds before counting any draft, so a set the locked budget check refuses
+counts none. It then checks the room again and counts every draft with no await
+between, so two requests cannot both take the last of the room; a set refused
+then counts none and releases its holds. Drafts that call no AI reviewer (the `quick` profile) count nothing and
 hold no budget.
 
 Each draft is charged in CopyCredits as its review ends, as any review is.

@@ -74,9 +74,10 @@ export async function enqueueAssessment(
 
 /**
  * Sized for a comparison's five drafts of up to 40k characters each, written
- * in one transaction: Prisma's 5s default is for one review's rows.
+ * in one transaction: Prisma's 5s default is for one review's rows, which a
+ * single review keeps.
  */
-const ENQUEUE_TRANSACTION = { maxWait: 10_000, timeout: 15_000 };
+const SEVERAL_TRANSACTION = { maxWait: 10_000, timeout: 15_000 };
 
 /** One input checked as far as the store can, ready to write. */
 interface CheckedInput {
@@ -136,63 +137,66 @@ export async function enqueueAssessments<T>(
   for (const input of inputs) checked.push(await checkInput(input, engineOf));
 
   // One transaction, so a content row never exists without its assessment.
-  const written = await prisma.$transaction(async (tx) => {
-    // Checked again here: a page fetch or file read can take long enough for
-    // the project to be archived since `projectForReview` passed it (t-70).
-    // Not a lock: an archive committing between this read and the inserts
-    // still lands, as if the review had come just before it.
-    const projectIds = new Set(inputs.flatMap((i) => i.content.projectId ?? []));
-    for (const projectId of projectIds) {
-      const live = await tx.project.findFirst({
-        where: { id: projectId, orgId, archivedAt: null },
-        select: { id: true },
-      });
-      if (!live) {
-        throw new AssessmentInputError(
-          'project_archived',
-          'This project was archived while the review was being prepared. Restore it to review copy in it.'
-        );
+  const written = await prisma.$transaction(
+    async (tx) => {
+      // Checked again here: a page fetch or file read can take long enough for
+      // the project to be archived since `projectForReview` passed it (t-70).
+      // Not a lock: an archive committing between this read and the inserts
+      // still lands, as if the review had come just before it.
+      const projectIds = new Set(inputs.flatMap((i) => i.content.projectId ?? []));
+      for (const projectId of projectIds) {
+        const live = await tx.project.findFirst({
+          where: { id: projectId, orgId, archivedAt: null },
+          select: { id: true },
+        });
+        if (!live) {
+          throw new AssessmentInputError(
+            'project_archived',
+            'This project was archived while the review was being prepared. Restore it to review copy in it.'
+          );
+        }
       }
-    }
-    const enqueued: EnqueuedAssessment[] = [];
-    for (const { input, text, textSha256, versionId, judges } of checked) {
-      const userId = input.userId ?? null;
-      const projectId = input.content.projectId ?? null;
-      const content = await tx.content.create({
-        data: {
-          orgId,
-          projectId,
-          title: input.content.title ?? null,
-          sourceKind: input.content.sourceKind,
-          sourceUrl: input.content.sourceUrl ?? null,
-          fileName: input.content.fileName ?? null,
-          text,
-          textSha256,
-          wordCount: countWords(text),
-          createdByUserId: userId,
-        },
-        select: { id: true },
-      });
-      const assessment = await tx.assessment.create({
-        data: {
-          orgId,
-          contentId: content.id,
-          projectId,
-          frameworkVersionId: versionId,
-          profile: storedProfileName(input.profile),
-          judges: [...judges],
-          context: input.context,
-          ...(input.overlay ? { overlay: input.overlay } : {}),
-          requestedVia: input.requestedVia,
-          apiKeyId: input.apiKeyId ?? null,
-          createdByUserId: userId,
-        },
-        select: { id: true, contentId: true },
-      });
-      enqueued.push({ assessmentId: assessment.id, contentId: assessment.contentId, judges });
-    }
-    return { enqueued, also: await alsoWrite(tx, enqueued) };
-  }, ENQUEUE_TRANSACTION);
+      const enqueued: EnqueuedAssessment[] = [];
+      for (const { input, text, textSha256, versionId, judges } of checked) {
+        const userId = input.userId ?? null;
+        const projectId = input.content.projectId ?? null;
+        const content = await tx.content.create({
+          data: {
+            orgId,
+            projectId,
+            title: input.content.title ?? null,
+            sourceKind: input.content.sourceKind,
+            sourceUrl: input.content.sourceUrl ?? null,
+            fileName: input.content.fileName ?? null,
+            text,
+            textSha256,
+            wordCount: countWords(text),
+            createdByUserId: userId,
+          },
+          select: { id: true },
+        });
+        const assessment = await tx.assessment.create({
+          data: {
+            orgId,
+            contentId: content.id,
+            projectId,
+            frameworkVersionId: versionId,
+            profile: storedProfileName(input.profile),
+            judges: [...judges],
+            context: input.context,
+            ...(input.overlay ? { overlay: input.overlay } : {}),
+            requestedVia: input.requestedVia,
+            apiKeyId: input.apiKeyId ?? null,
+            createdByUserId: userId,
+          },
+          select: { id: true, contentId: true },
+        });
+        enqueued.push({ assessmentId: assessment.id, contentId: assessment.contentId, judges });
+      }
+      return { enqueued, also: await alsoWrite(tx, enqueued) };
+    },
+    inputs.length > 1 ? SEVERAL_TRANSACTION : undefined
+  );
 
   noteMaintenanceWork('app:assessment-queued');
   return written;
