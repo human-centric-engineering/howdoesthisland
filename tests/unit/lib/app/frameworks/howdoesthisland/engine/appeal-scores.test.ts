@@ -21,9 +21,12 @@ describe('appealScores', () => {
 
     const scores = engine.appealScores(stored);
 
-    expect(scores?.map((s) => s.appeal)).toEqual(['ethos', 'pathos', 'logos', 'kairos']);
-    const { scores: own } = result as { scores: Record<string, number> };
-    expect(scores).toEqual(scores?.map((s) => ({ appeal: s.appeal, score: own[s.appeal] })));
+    expect(scores).toEqual([
+      { appeal: 'ethos', score: result.scores.ethos },
+      { appeal: 'pathos', score: result.scores.pathos },
+      { appeal: 'logos', score: result.scores.logos },
+      { appeal: 'kairos', score: result.scores.kairos },
+    ]);
   });
 
   it('is null for a result missing an appeal, or one that is not a result at all', () => {
