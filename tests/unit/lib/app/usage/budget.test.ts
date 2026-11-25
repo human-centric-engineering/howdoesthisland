@@ -44,6 +44,14 @@ interface RewriteRow {
   costUsd: number;
   createdAt: Date;
 }
+interface SetRow {
+  id: string;
+  orgId: string;
+  verdictStatus: string;
+  verdictHeldUsd: number;
+  verdictCostUsd: number;
+  createdAt: Date;
+}
 interface CostRow {
   orgId: string;
   totalCostUsd: number;
@@ -72,6 +80,8 @@ const state = vi.hoisted(() => ({
   rewrites: [] as RewriteRow[],
   /** Set to make the next rewrite insert fail. */
   rewriteCreateFails: false,
+  /** Comparisons, for their verdicts (t-88). */
+  sets: [] as SetRow[],
   costRows: [] as CostRow[],
   /** The keys the advisory lock was taken on, in order. */
   locked: [] as string[],
@@ -134,7 +144,8 @@ vi.mock('@/lib/db/client', () => {
     },
     budgetHold: {
       findMany: vi.fn(async ({ where }: { where: Where }) =>
-        state.holds.filter((h) => matches({ ...h }, where)).map((h) => ({ ...h }))
+        // `extraUsd` defaults to 0 (t-88), for a hold seeded without it.
+        state.holds.filter((h) => matches({ ...h }, where)).map((h) => ({ extraUsd: 0, ...h }))
       ),
       create: vi.fn(async ({ data }: { data: Omit<HoldRow, 'id'> }) => {
         state.seq += 1;
@@ -168,6 +179,22 @@ vi.mock('@/lib/db/client', () => {
           state.rewrites.push(row);
           return row;
         }
+      ),
+    },
+    assessmentSet: {
+      aggregate: vi.fn(async ({ where }: { where: Where }) => {
+        const rows = state.sets.filter((r) => matches({ ...r }, where));
+        return {
+          _sum: {
+            verdictHeldUsd: rows.length ? rows.reduce((n, r) => n + r.verdictHeldUsd, 0) : null,
+          },
+        };
+      }),
+      findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
+        newestFirst(
+          state.sets.filter((r) => matches({ ...r }, where)),
+          take ?? Infinity
+        ).map((r) => ({ verdictCostUsd: r.verdictCostUsd }))
       ),
     },
     assessment: {
@@ -254,7 +281,9 @@ import {
   KEPT_NOWHERE_SCAN,
   KEPT_NOWHERE_TAIL,
   estimateRewriteCost,
+  estimateVerdictCost,
   REWRITE_HISTORY,
+  VERDICT_HISTORY,
   reserveComparisonBudget,
   reserveReviewBudget,
   reserveRewriteBudget,
@@ -327,6 +356,7 @@ beforeEach(() => {
     holds: [],
     rewrites: [],
     rewriteCreateFails: false,
+    sets: [],
     costRows: [],
     locked: [],
   });
@@ -1953,5 +1983,114 @@ describe('a comparison’s drafts, checked together (t-87)', () => {
   it('holds nothing for drafts that call no judge', async () => {
     expect(await reserveComparisonBudget(ORG, 'quick', 0, 3)).toEqual([]);
     expect(state.locked).toEqual([]);
+  });
+});
+
+describe('a comparison’s verdict, held with its drafts (t-88)', () => {
+  const slots = (n: number) => Array.from({ length: n }, (_, i) => `judge_${i}`);
+  const set = (over: Partial<SetRow>): SetRow => {
+    const row: SetRow = {
+      id: `set-${state.sets.length + 1}`,
+      orgId: ORG,
+      verdictStatus: 'WAITING',
+      verdictHeldUsd: 0,
+      verdictCostUsd: 0,
+      createdAt: new Date(),
+      ...over,
+    };
+    state.sets.push(row);
+    return row;
+  };
+
+  beforeEach(() => {
+    state.budget = 10;
+    // An estimate of $1.00 a 7-judge review, and an editor that costs nothing.
+    for (let i = 0; i < 3; i += 1) review(1, { judges: slots(7) });
+  });
+
+  it('refuses the set whole when its drafts fit but its verdict beside them does not', async () => {
+    state.spent = 7.5;
+    const err = await refusal(async () => {
+      await reserveComparisonBudget(ORG, 'full', 7, 2, undefined, 0.6);
+    });
+    expect(err).toMatchObject({
+      code: 'BUDGET_EXCEEDED',
+      details: { estimateUsd: 2.6, remainingUsd: 2.5 },
+    });
+    expect(state.holds).toEqual([]);
+    // assertReviewFits, before anything is held, the same.
+    await expect(assertReviewFits(ORG, 'full', 7, true, 2, 0.6)).rejects.toMatchObject({
+      code: 'BUDGET_EXCEEDED',
+    });
+    // Without the verdict, the drafts alone fit.
+    expect(await assertReviewFits(ORG, 'full', 7, true, 2)).not.toBeNull();
+  });
+
+  it('holds the verdict’s part on the first hold, which a later check counts', async () => {
+    state.spent = 5;
+    await reserveComparisonBudget(ORG, 'full', 7, 2, undefined, 0.6);
+    expect(state.holds.map((h) => (h as HoldRow & { extraUsd: number }).extraUsd)).toEqual([
+      0.6, 0,
+    ]);
+    const err = await refusal(() => check(ORG, 'full', 21));
+    expect(err.details).toMatchObject({ inFlightUsd: 2.6 });
+  });
+
+  it('counts a stored comparison’s verdict while it is waiting or running, and not once it has ended', async () => {
+    state.spent = 5;
+    set({ verdictStatus: 'WAITING', verdictHeldUsd: 0.5 });
+    set({ verdictStatus: 'RUNNING', verdictHeldUsd: 0.25 });
+    for (const verdictStatus of ['COMPLETED', 'FAILED', 'SKIPPED']) {
+      set({ verdictStatus, verdictHeldUsd: 9 });
+    }
+    set({ orgId: 'org-b', verdictHeldUsd: 9 });
+    const err = await refusal(() => check(ORG, 'full', 7 * 5));
+    expect(err.details).toMatchObject({ inFlightUsd: 0.75, remainingUsd: 4.25 });
+  });
+
+  it('counts, for a review checked as it is claimed, only the verdicts of comparisons made before it', async () => {
+    state.spent = 8;
+    const claimed = { id: 'claimed', createdAt: new Date(Date.now() - 1_000) };
+    set({ verdictHeldUsd: 0.5, createdAt: new Date(Date.now() - 60_000) });
+    set({ verdictHeldUsd: 5, createdAt: new Date() });
+    // $2 left less the earlier verdict's $0.50: a 7-judge review at $1 fits.
+    expect(await budgetRefusal(ORG, 'full', 7, claimed)).toBeNull();
+    expect(await budgetRefusal(ORG, 'full', 14, claimed)).toMatchObject({
+      details: { inFlightUsd: 0.5 },
+    });
+  });
+
+  describe('estimateVerdictCost', () => {
+    it('is the median of the last verdicts that cost something, failed ones too', async () => {
+      const at = (i: number) => new Date(Date.UTC(2026, 10, 1, 0, i));
+      // The oldest is past the history and does not count.
+      set({ verdictStatus: 'COMPLETED', verdictCostUsd: 100, createdAt: at(0) });
+      for (let i = 1; i <= VERDICT_HISTORY; i += 1) {
+        set({
+          verdictStatus: i % 2 ? 'COMPLETED' : 'FAILED',
+          verdictCostUsd: i / 100,
+          createdAt: at(i),
+        });
+      }
+      set({ verdictStatus: 'SKIPPED', verdictCostUsd: 50, createdAt: at(99) });
+      const ceiling = vi.fn(async () => 1);
+      expect(await estimateVerdictCost(ORG, ceiling)).toBe(0.105);
+      expect(ceiling).not.toHaveBeenCalled();
+    });
+
+    it('with none, is the ceiling; nothing when the ceiling is nothing or cannot be read', async () => {
+      expect(await estimateVerdictCost(ORG, async () => 0.3)).toBe(0.3);
+      expect(await estimateVerdictCost(ORG, async () => null)).toBe(0);
+      expect(await estimateVerdictCost(ORG)).toBe(0);
+      expect(
+        await estimateVerdictCost(ORG, async () => {
+          throw new Error('binding unreadable');
+        })
+      ).toBe(0);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Verdict cost ceiling unreadable; holding nothing for it',
+        expect.objectContaining({ orgId: ORG })
+      );
+    });
   });
 });
