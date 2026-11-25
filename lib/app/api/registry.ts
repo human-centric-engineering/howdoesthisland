@@ -618,6 +618,16 @@ const comparisonDraftSchema = z.object({
 
 const comparisonAppealScoreSchema = z.object({ appeal: z.string(), score: z.number() });
 
+const VERDICT_STATES = ['waiting', 'running', 'completed', 'failed', 'skipped'] as const;
+
+/** `VerdictSummary` in `views.ts` (t-88). */
+const comparisonVerdictSummarySchema = z.object({
+  status: z.enum(VERDICT_STATES),
+  draft: z.number().int().nullable().meta({
+    description: 'The position of the draft that lands better, once `completed`; `null` before.',
+  }),
+});
+
 /** `ComparisonSummary` in `views.ts`. */
 export const comparisonSummarySchema = z.object({
   id: z.string(),
@@ -630,6 +640,7 @@ export const comparisonSummarySchema = z.object({
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
   createdAt: isoDateTime,
   drafts: z.array(comparisonDraftSchema),
+  verdict: comparisonVerdictSummarySchema,
 });
 
 /** `ComparisonDetail` in `views.ts`. */
@@ -663,6 +674,24 @@ export const comparisonDetailSchema = comparisonSummarySchema.extend({
       })
     )
     .meta({ description: 'Per appeal, once at least two drafts are scored; empty before.' }),
+  verdict: comparisonVerdictSummarySchema
+    .extend({
+      why: z.string().nullable(),
+      appeals: z
+        .array(z.object({ appeal: z.string(), why: z.string() }))
+        .meta({ description: 'The appeals that decide it, most telling first; empty before.' }),
+      reason: z.string().nullable().meta({
+        description:
+          'Why there is none: `too_few_completed`, `too_few_judges` or `predates_verdicts` when `skipped`; the call’s code, or `lost`, when `failed`.',
+      }),
+      model: z.string().nullable(),
+      costUsd: z.number(),
+      completedAt: isoDateTime.nullable(),
+    })
+    .meta({
+      description:
+        "The editor's verdict on which draft lands better with this reader, asked for once every draft's review has ended and two or more completed.",
+    }),
 });
 
 /** What `remove()` in `lib/app/assessments/api/service.ts` returns. */
@@ -1079,7 +1108,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'GET',
     path: '/api/v1/comparisons/{id}',
     summary:
-      "Get one comparison: each draft's state and scores and, once two are scored, per appeal each draft's difference from the best and the leaders. A draft whose review was deleted or purged reads as `purged`.",
+      "Get one comparison: each draft's state and scores; once two are scored, per appeal each draft's difference from the best and the leaders; and the editor's verdict on which draft lands better, once every draft's review has ended. A draft whose review was deleted or purged reads as `purged`.",
     auth: ASSESS,
     request: { params: comparisonIdParamSchema },
     response: { status: 200, data: comparisonDetailSchema },

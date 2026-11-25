@@ -112,6 +112,7 @@ import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/priva
 import { requireOrgId } from '@/lib/tenancy/context';
 import { budgetRefusal } from '@/lib/app/usage/budget';
 import { chargeEndedReview } from '@/lib/app/credits/charge';
+import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
 import {
   buildProjectContext,
   parseProjectContext,
@@ -214,6 +215,9 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     );
   }
   startNextQueued(orgId, assessmentId);
+  // A comparison waiting on this draft (t-88): its verdict, once every draft is final.
+  if (outcome !== 'requeued' && outcome !== 'lease_lost')
+    startVerdictsAfterReview(orgId, assessmentId);
   return outcome;
 }
 
@@ -861,6 +865,8 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
     });
     if (idle.count === 1) {
       await chargeEndedReview(tx, assessmentId);
+      // No run will end it: a comparison waiting on it starts its verdict here (t-88).
+      startVerdictsAfterReview(orgId, assessmentId);
       return true;
     }
     const { count } = await tx.assessment.updateMany({

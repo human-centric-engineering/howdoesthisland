@@ -39,6 +39,7 @@ import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
 import { purgeExpiredContent } from '@/lib/app/retention/purge';
 import { recoverRewrites } from '@/lib/app/rewrites/recover';
+import { recoverVerdicts } from '@/lib/app/comparisons/verdict';
 
 /** The signup-workspace sweep's name, as the tick logs it. */
 export const SIGNUP_WORKSPACE_SWEEP_JOB = 'app:signup-workspace-sweep';
@@ -48,6 +49,9 @@ export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
 
 /** The rewrite recovery job's name, as the tick logs it. */
 export const REWRITE_RECOVERY_JOB = 'app:rewrite-recovery';
+
+/** The comparison-verdict recovery job's name, as the tick logs it. */
+export const VERDICT_RECOVERY_JOB = 'app:comparison-verdict-recovery';
 
 /** The retention purge's name, as the tick logs it. */
 export const RETENTION_PURGE_JOB = 'app:retention-purge';
@@ -84,6 +88,17 @@ export function initAppJobs(): void {
     intervalMs: 15 * 60 * 1000,
     scope: 'per-org',
     run: () => recoverRewrites(),
+  });
+
+  // Start comparison verdicts that are due and have none (t-88): the last
+  // draft ended in a process that died before starting it, or by a delete,
+  // or the verdict's own process died. Until then each holds its estimate of
+  // the workspace's budget. Per workspace, at the same interval.
+  registerAppJob({
+    name: VERDICT_RECOVERY_JOB,
+    intervalMs: 15 * 60 * 1000,
+    scope: 'per-org',
+    run: () => recoverVerdicts(),
   });
 
   // Delete content and assessments past the workspace's window, and judge

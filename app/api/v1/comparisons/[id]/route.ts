@@ -3,8 +3,9 @@
  *
  * GET    /api/v1/comparisons/{id} — each draft's state and scores, and per
  *        appeal each draft's difference from the best, with the leaders, once
- *        two drafts are scored. A draft whose review was deleted or purged
- *        reads as `purged`.
+ *        two drafts are scored; and the editor's verdict on which draft lands
+ *        better, once every draft's review has ended (t-88). A draft whose
+ *        review was deleted or purged reads as `purged`.
  * DELETE /api/v1/comparisons/{id} — delete the comparison; its drafts'
  *        reviews stay in the workspace's history.
  *

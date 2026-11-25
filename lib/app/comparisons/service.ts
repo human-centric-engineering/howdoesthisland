@@ -46,6 +46,11 @@ import {
 } from '@/lib/app/usage/budget';
 import type { CreateComparisonBody } from '@/lib/app/comparisons/validations';
 import { readComparison, type ComparisonDetail } from '@/lib/app/comparisons/views';
+import {
+  estimateComparisonVerdict,
+  verdictRuns,
+  type VerdictSkipReason,
+} from '@/lib/app/comparisons/verdict';
 
 /** A request checked as far as it can be without writing anything. */
 export interface PreparedComparison extends ResolvedReviewOptions {
@@ -58,12 +63,18 @@ export interface PreparedComparison extends ResolvedReviewOptions {
   holds: BudgetHold[];
   /** The cost per judge the budget check read, for the hold's check to reuse. */
   rate: ReviewRate | null;
+  /**
+   * What the editor's verdict is held at, in USD (t-88): checked and held
+   * with the drafts, then kept on the comparison until its verdict ends.
+   */
+  verdictUsd: number;
 }
 
 /**
  * Everything that can be refused before anything is held or written: the
  * options (as a single review's), each draft's text, and every draft's
- * estimate together against the workspace's credits and monthly budget (402).
+ * estimate with the verdict's together against the workspace's credits and
+ * monthly budget (402).
  * Holds nothing: once this has passed, the route checks the per-user cap,
  * holds with {@link holdComparisonBudget}, then counts the drafts against it.
  */
@@ -78,14 +89,23 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
       throw err;
     }
   }
+  const orgId = requireOrgId();
+  const verdictUsd = await estimateComparisonVerdict(
+    orgId,
+    options.resolved.engine,
+    options.ctx,
+    body.drafts,
+    options.judges
+  );
   const rate = await assertReviewFits(
-    requireOrgId(),
+    orgId,
     storedProfileName(options.profile),
     options.judges.length,
     true,
-    body.drafts.length
+    body.drafts.length,
+    verdictUsd
   );
-  return { ...options, holds: [], rate };
+  return { ...options, holds: [], rate, verdictUsd };
 }
 
 /**
@@ -103,7 +123,8 @@ export async function holdComparisonBudget(
     storedProfileName(prepared.profile),
     prepared.judges.length,
     body.drafts.length,
-    prepared.rate ?? undefined
+    prepared.rate ?? undefined,
+    prepared.verdictUsd
   );
 }
 
@@ -154,6 +175,13 @@ export async function createComparison(
               judges: [...prepared.judges],
               context,
               createdByUserId: caller.userId,
+              // Held from here until it ends (t-88); one that will not run holds nothing.
+              ...(verdictRuns(prepared.judges)
+                ? { verdictHeldUsd: prepared.verdictUsd }
+                : {
+                    verdictStatus: 'SKIPPED' as const,
+                    verdictReason: 'too_few_judges' satisfies VerdictSkipReason,
+                  }),
             },
             select: { id: true },
           });

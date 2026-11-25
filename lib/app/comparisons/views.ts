@@ -19,10 +19,16 @@
  * `appeals` is empty. The appeals are the framework's
  * (`FrameworkEngine.appealScores`), read from each review's stored result.
  *
+ * **The verdict** (t-88, `verdict.ts`): where the editor's verdict is, and
+ * once written, which draft lands better, why, and the appeals that decide
+ * it; with none, why (`reason`). The list carries its state and the draft
+ * it chose.
+ *
  * Every read runs in the caller's tenant context and names `orgId`, so
  * another workspace's comparison is not found.
  */
 import type { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import type { AppealScore } from '@/lib/app/frameworks/engine';
@@ -60,6 +66,30 @@ export type AppealComparison = {
   drafts: { position: number; score: number | null; delta: number | null }[];
 };
 
+/** Where the editor's verdict is (`ComparisonVerdictStatus`, lower-cased). */
+export type VerdictState = 'waiting' | 'running' | 'completed' | 'failed' | 'skipped';
+
+export type VerdictSummary = {
+  status: VerdictState;
+  /** The position of the draft that lands better, once `completed`. */
+  draft: number | null;
+};
+
+export type VerdictDetail = VerdictSummary & {
+  /** Why it lands better with this reader, once `completed`. */
+  why: string | null;
+  /** The appeals that decide it, most telling first, once `completed`. */
+  appeals: { appeal: string; why: string }[];
+  /**
+   * Why there is none: for `skipped`, `too_few_completed`, `too_few_judges`
+   * or `predates_verdicts`; for `failed`, the call's code or `lost`.
+   */
+  reason: string | null;
+  model: string | null;
+  costUsd: number;
+  completedAt: Date | null;
+};
+
 export type ComparisonSummary = {
   id: string;
   kind: 'comparison';
@@ -73,14 +103,17 @@ export type ComparisonSummary = {
   project: { id: string; name: string } | null;
   createdAt: Date;
   drafts: DraftSummary[];
+  verdict: VerdictSummary;
 };
 
-export type ComparisonDetail = Omit<ComparisonSummary, 'drafts'> & {
+export type ComparisonDetail = Omit<ComparisonSummary, 'drafts' | 'verdict'> & {
   /** Who the drafts are for, defaults applied: what every draft was given. */
   context: unknown;
   drafts: DraftDetail[];
   /** Per appeal, in the framework's order, once two drafts are scored: see the file header. */
   appeals: AppealComparison[];
+  /** The editor's verdict on which draft lands better: see the file header. */
+  verdict: VerdictDetail;
 };
 
 const memberAssessment = { status: true, overall: true, band: true } as const;
@@ -92,6 +125,8 @@ const summarySelect = {
   profile: true,
   judges: true,
   createdAt: true,
+  verdictStatus: true,
+  verdict: true,
   frameworkVersion: { select: { version: true, framework: { select: { slug: true } } } },
   members: {
     orderBy: { position: 'asc' },
@@ -108,6 +143,10 @@ const detailSelect = {
   ...summarySelect,
   frameworkVersionId: true,
   context: true,
+  verdictReason: true,
+  verdictModel: true,
+  verdictCostUsd: true,
+  verdictCompletedAt: true,
   members: {
     orderBy: { position: 'asc' },
     select: {
@@ -161,6 +200,41 @@ export function compareAppeals(drafts: readonly DraftDetail[]): AppealComparison
   });
 }
 
+/** The verdict as `verdict.ts` stores it; anything else reads as none. */
+const storedVerdict = z.object({
+  draft: z.number().int(),
+  why: z.string(),
+  appeals: z.array(z.object({ appeal: z.string(), why: z.string() })),
+});
+
+const VERDICT_STATE: Record<SummaryRow['verdictStatus'], VerdictState> = {
+  WAITING: 'waiting',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  SKIPPED: 'skipped',
+};
+
+function verdictSummary(row: Pick<SummaryRow, 'verdictStatus' | 'verdict'>): VerdictSummary {
+  const status = VERDICT_STATE[row.verdictStatus];
+  const stored = status === 'completed' ? storedVerdict.safeParse(row.verdict) : null;
+  return { status, draft: stored?.success ? stored.data.draft : null };
+}
+
+function verdictDetail(row: DetailRow): VerdictDetail {
+  const parsed = row.verdictStatus === 'COMPLETED' ? storedVerdict.safeParse(row.verdict) : null;
+  const stored = parsed?.success ? parsed.data : null;
+  return {
+    ...verdictSummary(row),
+    why: stored?.why ?? null,
+    appeals: stored?.appeals ?? [],
+    reason: row.verdictReason,
+    model: row.verdictModel,
+    costUsd: row.verdictCostUsd,
+    completedAt: row.verdictCompletedAt,
+  };
+}
+
 /** Everything a comparison answers but its drafts, which its state is read from. */
 function header(row: SummaryRow, drafts: readonly { status: DraftState }[]) {
   return {
@@ -178,7 +252,7 @@ function header(row: SummaryRow, drafts: readonly { status: DraftState }[]) {
 
 function summaryView(row: SummaryRow): ComparisonSummary {
   const drafts = row.members.map(draftSummary);
-  return { ...header(row, drafts), drafts };
+  return { ...header(row, drafts), drafts, verdict: verdictSummary(row) };
 }
 
 /** One of this workspace's comparisons, or `null`. */
@@ -202,6 +276,7 @@ export async function readComparison(id: string): Promise<ComparisonDetail | nul
     context: row.context,
     drafts,
     appeals: compareAppeals(drafts),
+    verdict: verdictDetail(row),
   };
 }
 

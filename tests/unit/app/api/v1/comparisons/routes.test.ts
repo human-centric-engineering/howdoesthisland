@@ -12,7 +12,10 @@
  * (skipping), the version catalogue, and the engine's `assemble()`: a stub
  * scoring each draft from `SCORES` by its text, so the appeals compared are
  * known. The rest of the engine is the real 0.5.1 one, `appealScores`
- * included.
+ * and the verdict's validation included. The verdict's request is a stub
+ * (the stub results have no findings to show), and the editor's call
+ * (`callAgent`) answers through that validation; its ceiling
+ * (`streamCeilingUsd`) is scripted (t-88).
  *
  * @see app/api/v1/comparisons/
  */
@@ -35,6 +38,8 @@ const mocks = vi.hoisted(() => ({
   apiKey: vi.fn(),
   runJudge: vi.fn(),
   runEditor: vi.fn(),
+  callAgent: vi.fn(),
+  streamCeilingUsd: vi.fn(),
   fetchPage: vi.fn(),
   engineForVersion: vi.fn(),
   loadOrgQuotas: vi.fn(),
@@ -90,6 +95,8 @@ vi.mock('@/lib/orchestration/maintenance/idle-gate', () => ({ noteMaintenanceWor
 vi.mock('@/lib/app/judges/run-judge', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/judges/run-judge')>()),
   runJudge: mocks.runJudge,
+  callAgent: mocks.callAgent,
+  streamCeilingUsd: mocks.streamCeilingUsd,
 }));
 vi.mock('@/lib/app/assessments/editor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/app/assessments/editor')>()),
@@ -178,7 +185,32 @@ const engine = {
     );
     return { scores: { overall, band: 'mixed', balance_index: 80, ...appeals } };
   }),
+  buildVerdictRequest: vi.fn(() => ({
+    prompt: 'Which draft lands better?',
+    schema: {},
+    schemaName: 'verdict',
+    maxTokens: 100,
+    timeoutMs: 1_000,
+  })),
 };
+
+/** What the editor answers for a verdict, unless a test says otherwise (t-88). */
+const VERDICT_REPLY = {
+  draft: 'draft_2',
+  why: 'It leads with who the reader is.',
+  appeals: [{ appeal: 'ethos', why: 'It sounds like a peer, not a pitch.' }],
+};
+
+/** The editor's call: checked by the engine's own validation, writing its cost row as the real one does. */
+async function editorCall(call: {
+  costMetadata: Record<string, string>;
+  validate: (raw: unknown) => { output: unknown; drops: unknown[] } | null;
+}) {
+  const checked = call.validate(VERDICT_REPLY);
+  if (!checked) throw new JudgeRunError('malformed', 'not a verdict');
+  fake.addCost(WS_A, 0.004, { ...call.costMetadata }, new Date());
+  return { ...checked, provider: 'openai', model: 'gpt-5', costUsd: 0.004 };
+}
 
 function reply(slot: string) {
   return {
@@ -301,6 +333,8 @@ beforeEach(() => {
   );
   mocks.runJudge.mockImplementation(async (slot: string) => reply(slot));
   mocks.runEditor.mockResolvedValue({ status: 'skipped', reason: 'too_few_judges' });
+  mocks.callAgent.mockImplementation(editorCall);
+  mocks.streamCeilingUsd.mockResolvedValue(null);
   // No monthly budget unless a test sets one.
   mocks.loadOrgQuotas.mockResolvedValue({});
   mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: 0 } });
@@ -627,6 +661,116 @@ describe('POST /api/v1/comparisons — the budget, for every draft together', ()
 
     expect(fake.sets).toHaveLength(1);
     expect(fake.holds).toEqual([]);
+  });
+});
+
+describe('the editor’s verdict (t-88)', () => {
+  it('is asked for once every draft has ended, and read back with the comparison and in the list', async () => {
+    const { id, verdict } = await compare({ drafts: drafts(DRAFT_A, DRAFT_B, DRAFT_C) });
+    expect(verdict).toMatchObject({ status: 'waiting', draft: null });
+    await settle();
+
+    expect(mocks.callAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.callAgent.mock.calls[0][0]).toMatchObject({
+      costMetadata: { editor: 'verdict', comparisonId: id },
+    });
+    const done = await readBack(id);
+    expect(done.verdict).toEqual({
+      status: 'completed',
+      draft: 1,
+      why: VERDICT_REPLY.why,
+      appeals: VERDICT_REPLY.appeals,
+      reason: null,
+      model: 'gpt-5',
+      costUsd: 0.004,
+      completedAt: expect.any(String),
+    });
+    const listed = comparisonSummarySchema.parse(
+      ((await json(await getList())).data as unknown as unknown[])[0]
+    );
+    expect(listed.verdict).toEqual({ status: 'completed', draft: 1 });
+    // Charged once, under its own reference.
+    expect(fake.credits.filter((c) => c.reference === `comparison-verdict:${id}`)).toHaveLength(1);
+  });
+
+  it('has none, saying why, when fewer than two drafts completed', async () => {
+    const { id } = await compare({ drafts: drafts(DRAFT_A, UNSCORABLE) });
+    await settle();
+
+    expect(mocks.callAgent).not.toHaveBeenCalled();
+    expect((await readBack(id)).verdict).toMatchObject({
+      status: 'skipped',
+      draft: null,
+      reason: 'too_few_completed',
+    });
+  });
+
+  it('has none, and holds nothing for one, when the drafts call too few AI reviewers for the editor', async () => {
+    const { id, verdict } = await compare({
+      judges: ['judge_ethos'],
+      drafts: drafts(DRAFT_A, DRAFT_B),
+    });
+    expect(verdict).toMatchObject({ status: 'skipped', reason: 'too_few_judges' });
+    await settle();
+    expect(mocks.callAgent).not.toHaveBeenCalled();
+    expect(mocks.streamCeilingUsd).not.toHaveBeenCalled();
+    expect(fake.sets[0]).toMatchObject({ verdictHeldUsd: 0 });
+    expect((await readBack(id)).verdict.status).toBe('skipped');
+  });
+
+  describe('its estimate, held with the drafts’', () => {
+    /** As the drafts' budget tests: a $10 cap with `spent` used, and $1 a draft. */
+    function budget(spent: number) {
+      mocks.loadOrgQuotas.mockResolvedValue({ monthlyBudgetUsd: 10 });
+      mocks.monthSpend.mockResolvedValue({ _sum: { totalCostUsd: spent } });
+      const judges = Array.from({ length: 9 }, (_, i) => `judge_${i}`);
+      for (let i = 0; i < 3; i += 1) fake.seed({ status: 'COMPLETED', costUsd: 1, judges });
+    }
+
+    it('refuses the whole set with 402 when the drafts fit but the verdict beside them does not', async () => {
+      budget(7.5);
+      // No verdict yet in this workspace: what this one can cost at most.
+      mocks.streamCeilingUsd.mockResolvedValue(0.6);
+
+      const res = await post({ profile: 'full', drafts: drafts(DRAFT_A, DRAFT_B) });
+
+      const body = await json(res);
+      expect(res.status).toBe(402);
+      expect(body.error).toMatchObject({
+        code: 'BUDGET_EXCEEDED',
+        details: { estimateUsd: 2.6, remainingUsd: 2.5 },
+      });
+      expect(fake.sets).toEqual([]);
+      expect(fake.holds).toEqual([]);
+    });
+
+    it('keeps the verdict’s estimate on the comparison once stored, held until the verdict ends', async () => {
+      budget(7);
+      mocks.streamCeilingUsd.mockResolvedValue(0.6);
+      let heldWhileWaiting: unknown;
+      // The first draft's judge: the set is stored, its verdict still to come.
+      mocks.runJudge.mockImplementationOnce(async (slot: string) => {
+        heldWhileWaiting = await fake.db.assessmentSet.aggregate({
+          where: { orgId: WS_A, verdictStatus: { in: ['WAITING', 'RUNNING'] } },
+        });
+        return reply(slot);
+      });
+
+      const created = await compare({
+        judges: undefined,
+        profile: 'full',
+        drafts: drafts(DRAFT_A, DRAFT_B),
+      });
+
+      expect(created.verdict.status).toBe('waiting');
+      expect(fake.sets[0]).toMatchObject({ verdictHeldUsd: 0.6 });
+      // The request's own holds are released; the comparison holds the verdict's part.
+      expect(fake.holds).toEqual([]);
+      await settle();
+      expect(heldWhileWaiting).toEqual({ _sum: { verdictHeldUsd: 0.6 } });
+      // Ended: no longer held.
+      expect(fake.sets[0]?.verdictStatus).toBe('COMPLETED');
+    });
   });
 });
 

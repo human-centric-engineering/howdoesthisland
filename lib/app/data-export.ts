@@ -188,7 +188,7 @@ export function initAppSubjectSources(): void {
         section: 'comparisons',
         disposition: 'export',
         description:
-          'Comparisons of drafts you started: who they were for, the AI reviewers, and each draft’s label and review.',
+          'Comparisons of drafts you started: who they were for, the AI reviewers, each draft’s label and review, and the editor’s verdict on which lands better.',
       },
     ],
     excluded: [
@@ -336,6 +336,8 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     // reviews themselves are in `assessments`, as they asked for each.
     prisma.assessmentSet.findMany({
       where: { createdByUserId: userId },
+      // The verdict's lease, budget hold and attempt count are its call's bookkeeping (t-88).
+      omit: { verdictLeaseExpiresAt: true, verdictHeldUsd: true, verdictAttempts: true },
       include: { members: { orderBy: { position: 'asc' } } },
       orderBy: { createdAt: 'asc' },
     }),
