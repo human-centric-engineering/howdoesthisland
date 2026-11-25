@@ -27,4 +27,5 @@ export const appProtectedRoutes: string[] = [
   '/assessments',
   '/usage',
   '/projects',
+  '/compare',
 ];

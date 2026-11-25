@@ -558,7 +558,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     risk: 'a stray path would put a public route behind auth on every install',
     // FORK (HowDoesThisLand): pinned to /home, the signed-in landing, and
     // /assess, where a review is started (t-78), /assessments, where a
-    // review's report lives (t-29), /usage (t-48) and /projects (t-71).
+    // review's report lives (t-29), /usage (t-48), /projects (t-71) and
+    // /compare, where a comparison is read (t-89).
     // Ledger: .context/app/platform-divergences.md row 2.
     assert: () =>
       expect(appProtectedRoutes).toEqual([
@@ -567,6 +568,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         '/assessments',
         '/usage',
         '/projects',
+        '/compare',
       ]),
   },
   {
