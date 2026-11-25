@@ -132,6 +132,16 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'which stays gated and has its own tests.',
   },
   {
+    // HowDoesThisLand (t-81, t-85), by name like the ones above.
+    pattern: 'scripts/app/smoke-rewrite-charge.ts',
+    reason:
+      'a tsx smoke run by hand against the real dev database: the budget ' +
+      'check’s advisory lock, the JSON-path filter on cost rows, recovery and ' +
+      'its charge in one transaction, as the restricted app role. Nothing ' +
+      'imports it. What it drives is lib/app/rewrites/ and ' +
+      'lib/app/usage/budget.ts, which stay gated and have their own tests.',
+  },
+  {
     // HowDoesThisLand (t-19), by name like the ones above.
     pattern: 'scripts/app/smoke-judge.ts',
     reason:

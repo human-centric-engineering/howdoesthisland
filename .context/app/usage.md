@@ -121,6 +121,10 @@ judge, from the workspace's own history:
 | `kept-nowhere` | No stored judge run: the median spend of the judges of the workspace's `store: false` reviews (t-51), from their cost rows summed by `ephemeralRun` and `judge`. A judge whose row carries an `error` is left out, as are calibration runs' rows. Read from the workspace's last 500 cost rows, at most 100 judges: no index reaches into the rows' metadata, so the read is bounded rather than filtered. |
 | `none`         | No history: `0`, so any positive remainder is enough.                                                                                                                                                                                                                                                                                                                                                      |
 
+A rewrite's estimate has bases of its own, `rewrites` and `ceiling` (t-86), in
+the same `details.basis` field: see "What it costs" in
+[`rewrites.md`](./rewrites.md#what-it-costs).
+
 The editor allowance is the median of what the reviews that tier read (the
 profile's, or else the workspace's last 20 completed) spent beyond their judge
 runs, over those the editor ran on: its call is on no judge run. The

@@ -40,8 +40,8 @@
  *
  * A rewrite that fails once started answers `failed` with `error` and
  * `errorCode` (the editor's: `refused`, `truncated`, `provider_error`,
- * `over_budget`, `rate_limited`, `agent_inactive`, …), and keeps what it had
- * written.
+ * `over_budget`, `rate_limited`, `agent_inactive`, …, or `timed_out` for one
+ * that ran past `REWRITE_CALL_MS`), and keeps what it had written.
  *
  * GET errors: 400 `VALIDATION_ERROR` (no `assessmentId`), 401, 403, 404
  * (no such review in this workspace).
@@ -58,12 +58,14 @@ import { listRewrites, startRewrite } from '@/lib/app/rewrites/service';
 import { createRewriteSchema, listRewritesQuerySchema } from '@/lib/app/rewrites/validations';
 
 /**
- * Long enough for the longest rewrite to finish under `after()`: the editor's
- * longest timeout (300s), the budget check's wait for its lock (up to 10s),
- * and the call's setup and ending write, with room to spare. A rewrite the
- * platform cuts off is ended and charged by recovery, for what its rows hold.
+ * Long enough for the longest rewrite to finish under `after()`: the call
+ * stops itself at `REWRITE_CALL_MS` (750s), sized for the editor's largest
+ * reply, and this leaves room for its ending write. 800s is the most a
+ * serverless host allows (Vercel Pro with fluid compute); a plan with a lower
+ * ceiling cuts it off sooner, and recovery ends and charges it then, for what
+ * its rows hold.
  */
-export const maxDuration = 360;
+export const maxDuration = 800;
 
 export const POST = withAuth(async (request: NextRequest, session) => {
   const body = await validateRequestBody(request, createRewriteSchema);

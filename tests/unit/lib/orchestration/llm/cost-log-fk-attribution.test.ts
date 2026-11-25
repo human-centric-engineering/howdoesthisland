@@ -333,11 +333,14 @@ const ALLOWED_CALL_SITES: readonly string[] = [
   // `.context/orchestration/capabilities.md` records.
   'lib/orchestration/knowledge/embedder.ts | agentId=spread((attribution?.agentId ? { agentId: attribution.agentId } : {})) | conversationId=spread((attribution?.conversationId ? { conversationId: attribution.conversationId } : {})) | workflowExecutionId=spread((attribution?.workflowExecutionId ? { workflowExecutionId: attribution.workflowExecutionId } : {})) | userId=spread((attribution?.userId ? { userId: attribution.userId } : {}))',
   // FORK (HowDoesThisLand): a judge's or the editor's run (t-19, t-25), in
-  // `callAgent`. `agent` is the row it just loaded by the org's slug;
-  // `call.userId` is the session's real `User.id` or nothing, never a
-  // synthetic visitor id (its docblock says so).
+  // `recordSpend`. `agentId` is the id of the agent row the call loaded by
+  // the org's slug; for a rewrite whose process died (t-85) it is read back
+  // from `Rewrite.callStart`, written from that row as the call started, so
+  // an agent deleted since makes the FK refuse the row (logged), never a
+  // wrong attribution. `call.userId` is the session's real `User.id` or
+  // nothing, never a synthetic visitor id (its docblock says so).
   // Ledger: .context/app/platform-divergences.md row 13.
-  'lib/app/judges/run-judge.ts | agentId=agent.id | conversationId=— | workflowExecutionId=— | userId=call.userId ?? null',
+  'lib/app/judges/run-judge.ts | agentId=agentId | conversationId=— | workflowExecutionId=— | userId=call.userId ?? null',
   // Keyword enrichment runs post-upload against a document, with no agent,
   // conversation or user in scope. Deliberate — see the doc note above.
   'lib/orchestration/knowledge/keyword-enricher.ts | agentId=— | conversationId=— | workflowExecutionId=— | userId=—',

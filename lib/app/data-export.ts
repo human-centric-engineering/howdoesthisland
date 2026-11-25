@@ -314,8 +314,9 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
     // they leave; this is their copy of what the editor wrote for them.
     prisma.rewrite.findMany({
       where: { createdByUserId: userId },
-      // The lease and the budget hold are the call's bookkeeping.
-      omit: { leaseExpiresAt: true, heldUsd: true },
+      // The lease, the budget hold and what its call is priced from are the
+      // call's bookkeeping.
+      omit: { leaseExpiresAt: true, heldUsd: true, callStart: true },
       orderBy: { createdAt: 'asc' },
     }),
   ]);

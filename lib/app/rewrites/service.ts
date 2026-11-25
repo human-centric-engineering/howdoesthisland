@@ -13,12 +13,17 @@
  * **How it runs.** {@link startRewrite} checks the request, then writes the
  * `RUNNING` row in the budget check's transaction (`reserveRewriteBudget`):
  * the row is the budget hold, so requests sent together cannot each spend
- * the same remainder. The call then runs on its own under
+ * the same remainder. A workspace with no rewrites ended yet holds what this
+ * one can cost at most, at the editor's price (t-86, `streamCeilingUsd`). The
+ * call then runs on its own under
  * `keepRunningAfterResponse`, not as part of the response: a reader that
  * stops listening does not stop it, and the draft is saved and charged all
  * the same. While it runs it saves what it has written and renews its lease
- * every {@link DRAFT_SAVE_MS}; a save that finds the row gone (its review was
- * deleted) stops the call.
+ * every {@link DRAFT_SAVE_MS}, and once as soon as it has its first piece; a
+ * save that finds the row gone (its review was deleted) stops the call, as
+ * does running past {@link REWRITE_CALL_MS}. As the call starts, the row
+ * keeps what it is priced from (`callStart`, t-85), so recovery can price one
+ * whose process dies before it writes its cost row.
  *
  * **How it ends.** One write: `COMPLETED` with the draft, or `FAILED` with
  * the reason and what was written by then, and in the same transaction the
@@ -47,11 +52,16 @@ import { LEASE_MS } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
 import { RewriteFocusUnknownError } from '@/lib/app/frameworks/engine';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
-import { JudgeRunError, streamAgent } from '@/lib/app/judges/run-judge';
+import {
+  JudgeRunError,
+  streamAgent,
+  streamCeilingUsd,
+  type StreamStart,
+} from '@/lib/app/judges/run-judge';
 import { parseProjectContext, renderProjectContext } from '@/lib/app/projects/context';
 import { EventChannel } from '@/lib/app/rewrites/channel';
-import { LOST_REWRITE_CODE } from '@/lib/app/rewrites/recover';
-import { DRAFT_SAVE_MS, REWRITE_COST_TAG } from '@/lib/app/rewrites/limits';
+import { LOST_REWRITE_CODE, settleRewriteCostRows } from '@/lib/app/rewrites/recover';
+import { DRAFT_SAVE_MS, REWRITE_CALL_MS, REWRITE_COST_TAG } from '@/lib/app/rewrites/limits';
 import type { CreateRewriteRequest } from '@/lib/app/rewrites/validations';
 import { REWRITE_VIEW_SELECT, toRewriteView, type RewriteView } from '@/lib/app/rewrites/views';
 import { reserveRewriteBudget } from '@/lib/app/usage/budget';
@@ -73,6 +83,14 @@ export interface StartedRewrite {
   /** The row once it ends, `completed` or `failed`. Never rejects. */
   done: Promise<RewriteView>;
 }
+
+/** Who a rewrite's call goes to, for its checks, its ceiling and its refusals. */
+const EDITOR_CALL = {
+  agentSlug: EDITOR_AGENT_SLUG,
+  role: 'editor',
+  name: 'editor',
+  target: 'the editor',
+} as const;
 
 /** A review that can be rewritten: finished, with a result to rewrite from. */
 const REWRITABLE = new Set(['COMPLETED', 'PARTIAL']);
@@ -183,18 +201,21 @@ export async function startRewrite(
 
   let row;
   try {
-    row = await reserveRewriteBudget(orgId, (tx, estimate) =>
-      tx.rewrite.create({
-        data: {
-          orgId,
-          assessmentId: review.id,
-          focus,
-          heldUsd: estimate.estimateUsd,
-          leaseExpiresAt: new Date(Date.now() + LEASE_MS),
-          createdByUserId: who.userId,
-        },
-        select: REWRITE_VIEW_SELECT,
-      })
+    row = await reserveRewriteBudget(
+      orgId,
+      (tx, estimate) =>
+        tx.rewrite.create({
+          data: {
+            orgId,
+            assessmentId: review.id,
+            focus,
+            heldUsd: estimate.estimateUsd,
+            leaseExpiresAt: new Date(Date.now() + LEASE_MS),
+            createdByUserId: who.userId,
+          },
+          select: REWRITE_VIEW_SELECT,
+        }),
+      () => streamCeilingUsd(EDITOR_CALL, request)
     );
   } catch (err) {
     // The review was deleted (or purged) since it was read: nothing was held.
@@ -285,19 +306,50 @@ async function drive(d: Drive): Promise<RewriteView> {
   };
   const timer = setInterval(save, DRAFT_SAVE_MS);
   timer.unref?.();
+  // Stopped once it has run too long, on any host, so its own cost row lands
+  // before recovery may price it from its draft (`REWRITE_LIFETIME_MS`).
+  let overran = false;
+  const deadline = setTimeout(
+    () => {
+      overran = true;
+      stop.abort();
+    },
+    Math.max(0, d.createdAt.getTime() + REWRITE_CALL_MS - Date.now())
+  );
+  deadline.unref?.();
+  // So recovery can price the call should this process die before it ends.
+  const keepStart = async (start: StreamStart) => {
+    try {
+      const { count } = await prisma.rewrite.updateMany({
+        where: { id: rewriteId, orgId: d.orgId, OR: ALIVE },
+        data: { callStart: { ...start, frameworkVersion: d.frameworkVersion } },
+      });
+      // Gone (its review was deleted) or ended another way: stop before paying.
+      if (count === 0) stop.abort();
+    } catch (err) {
+      // Not fatal: the call is still worth making, and charges itself as it
+      // ends. Only a process that died as well would go uncharged.
+      logger.warn('A rewrite could not keep what its call is priced from', {
+        rewriteId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
 
   let end: Ending;
   try {
     const reply = await streamAgent({
-      agentSlug: EDITOR_AGENT_SLUG,
-      role: 'editor',
-      name: 'editor',
-      target: 'the editor',
+      ...EDITOR_CALL,
       // A rewrite asks for little thinking, so the longest text's reply fits
       // the editor's ceiling with it (`lib/app/judges/agents.ts`).
       request: () => ({ prompt: d.prompt, maxTokens: d.maxTokens, reasoningEffort: 'low' }),
+      onStart: keepStart,
       onText: (piece) => {
+        // Saved at once, so a process that dies before the next save has a
+        // draft that says the provider answered, and how much (t-85).
+        const first = draft === '' && piece !== '';
         draft += piece;
+        if (first) save();
         d.channel?.push({ type: 'rewrite_text', text: piece });
       },
       costMetadata: { editor: REWRITE_COST_TAG, rewriteId },
@@ -315,9 +367,15 @@ async function drive(d: Drive): Promise<RewriteView> {
       errorCode: null,
     };
   } catch (err) {
-    end = failedEnding(rewriteId, draft, err);
+    // Only a failure the stop caused: one the call had already met (cut off
+    // at its ceiling, refused) as the deadline passed keeps its own reason.
+    end =
+      overran && err instanceof JudgeRunError && err.code === 'provider_error'
+        ? overranEnding(rewriteId, draft, err)
+        : failedEnding(rewriteId, draft, err);
   } finally {
     clearInterval(timer);
+    clearTimeout(deadline);
   }
   await saving;
 
@@ -335,6 +393,24 @@ interface Ending {
   costUsd: number;
   error: string | null;
   errorCode: string | null;
+}
+
+/** What a rewrite whose call ran past {@link REWRITE_CALL_MS} says. */
+export const OVERRAN_REWRITE = 'It ran too long and was stopped.';
+
+/** The ending of a call stopped at {@link REWRITE_CALL_MS}, priced as any stopped call. */
+function overranEnding(rewriteId: string, draft: string, err: JudgeRunError): Ending {
+  logger.warn('A rewrite ran too long and was stopped', { rewriteId });
+  const { spend } = err;
+  return {
+    status: 'FAILED',
+    draft,
+    provider: spend?.provider ?? null,
+    modelName: spend?.model ?? null,
+    costUsd: spend?.costUsd ?? 0,
+    error: OVERRAN_REWRITE,
+    errorCode: 'timed_out',
+  };
 }
 
 function failedEnding(rewriteId: string, draft: string, err: unknown): Ending {
@@ -408,6 +484,9 @@ async function endAndCharge(d: Drive, end: Ending): Promise<RewriteView> {
       where: { id: rewriteId, orgId, OR: ALIVE },
       data: { ...end, completedAt: new Date(), leaseExpiresAt: null },
     });
+    // Recovery's estimate, should it have priced this call meanwhile, gives
+    // way to the row the call wrote itself.
+    await settleRewriteCostRows(tx, orgId, rewriteId, d.createdAt);
     await chargeRewrite(tx, orgId, rewriteId, d.createdAt);
     const row = await tx.rewrite.findFirst({
       where: { id: rewriteId, orgId },

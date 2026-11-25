@@ -86,8 +86,10 @@ export const budgetRefusalDetailsSchema = z.object({
   /**
    * Where the cost per judge came from: the profile's reviews, recent judge
    * runs, the judges of recent `store: false` reviews (`kept-nowhere`), or none.
+   * A rewrite's: recent rewrites (`rewrites`), or with none what the request
+   * can cost at most at the editor's price (`ceiling`, t-86).
    */
-  basis: z.enum(['profile', 'judges', 'kept-nowhere', 'rewrites', 'none']),
+  basis: z.enum(['profile', 'judges', 'kept-nowhere', 'rewrites', 'ceiling', 'none']),
   /** What is left of the monthly budget once in-flight reviews are held back; `0` once none is. */
   remainingUsd: z.number(),
   /** What the workspace's other reviews in flight (starting, queued, running, or cancelled and finishing; stored or not) are estimated yet to spend. */

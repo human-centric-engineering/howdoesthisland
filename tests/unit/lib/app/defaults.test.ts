@@ -910,6 +910,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'scripts/app/smoke-framework-store.ts',
         // FORK (HowDoesThisLand): and the credit charge's race smoke (t-58).
         'scripts/app/smoke-credit-charge.ts',
+        // FORK (HowDoesThisLand): and the rewrite charge's smoke (t-81, t-85).
+        'scripts/app/smoke-rewrite-charge.ts',
         // FORK (HowDoesThisLand): and the judge smoke (t-19).
         'scripts/app/smoke-judge.ts',
         'scripts/app/frameworks/*.ts',

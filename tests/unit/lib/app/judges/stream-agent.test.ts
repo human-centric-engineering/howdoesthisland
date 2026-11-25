@@ -31,12 +31,41 @@ vi.mock('@/lib/orchestration/llm/agent-resolver', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/orchestration/llm/agent-resolver')>()),
   resolveAgentProviderAndModel: mocks.resolve,
 }));
+// The editor's model priced at $3 in and $15 out per million tokens, so a
+// ceiling's price is checked against arithmetic, not against `calculateCost`.
+vi.mock('@/lib/orchestration/llm/model-registry', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/orchestration/llm/model-registry')>();
+  return {
+    ...real,
+    getModel: (id: string) =>
+      id === 'claude-sonnet-5-5'
+        ? {
+            id,
+            name: 'Sonnet',
+            provider: 'anthropic',
+            tier: 'mid',
+            inputCostPerMillion: 3,
+            outputCostPerMillion: 15,
+            maxContext: 200_000,
+            supportsTools: true,
+          }
+        : real.getModel(id),
+  };
+});
 vi.mock('@/lib/orchestration/llm/provider-manager', () => ({
   getProvider: mocks.getProvider,
   isLocalProvider: mocks.isLocalProvider,
 }));
 
-import { JudgeRunError, streamAgent, type AgentStreamCall } from '@/lib/app/judges/run-judge';
+import {
+  JudgeRunError,
+  recordStoppedStream,
+  streamAgent,
+  streamCeilingUsd,
+  type AgentStreamCall,
+  type StreamStart,
+} from '@/lib/app/judges/run-judge';
+import { tokeniserForModel } from '@/lib/orchestration/llm/tokeniser';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
 import type { StreamChunk } from '@/lib/orchestration/llm/types';
 import { currentPrivacyScope, type PrivacyScope } from '@/lib/orchestration/privacy/scope';
@@ -396,5 +425,160 @@ describe('streamAgent failures after the call', () => {
     await run({ signal: controller.signal });
     const [, options] = chatStream.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
     expect(options.signal).toBe(controller.signal);
+  });
+});
+
+/** `parts` as the editor's model counts them. */
+const tokens = (...parts: string[]) =>
+  parts.reduce((sum, part) => sum + tokeniserForModel('claude-sonnet-5-5').count(part), 0);
+
+describe('streamAgent onStart (t-85)', () => {
+  it('hands over what the call is priced from, before the provider is asked', async () => {
+    const seen: string[] = [];
+    const onStart = vi.fn(async () => {
+      seen.push(`start, provider asked ${mocks.getProvider.mock.calls.length} times`);
+    });
+    await run({ onStart });
+
+    expect(seen).toEqual(['start, provider asked 0 times']);
+    expect(onStart).toHaveBeenCalledWith({
+      agentId: expect.stringMatching(/^agent-/),
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
+      isLocal: false,
+      promptTokens: tokens('You are the editor.', 'Rewrite this.'),
+    });
+  });
+
+  it('is not called for a call refused before anything is spent', async () => {
+    mocks.findUnique.mockResolvedValue(agentRow({ isActive: false }));
+    const onStart = vi.fn(async () => undefined);
+    await refusal(run({ onStart }));
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it('lets its throw through, before the provider is asked or anything recorded', async () => {
+    const err = await run({
+      onStart: async () => {
+        throw new Error('could not keep it');
+      },
+    }).then(
+      () => null,
+      (e: unknown) => e
+    );
+    expect(err).toEqual(new Error('could not keep it'));
+    expect(chatStream).not.toHaveBeenCalled();
+    expect(mocks.logCost).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordStoppedStream (t-85)', () => {
+  const START: StreamStart = {
+    agentId: 'agent-editor',
+    provider: 'anthropic',
+    model: 'claude-sonnet-5-5',
+    isLocal: false,
+    promptTokens: 5_000,
+  };
+  const tags = {
+    costMetadata: { editor: 'rewrite', rewriteId: 'rw-9' },
+    frameworkVersion: 'howdoesthisland@0.5.2',
+    userId: 'user-1',
+  };
+
+  it('writes the row a call stopped there would have: the kept prompt count and the reply, estimated', async () => {
+    const reply = 'A draft that got this far before the process died.';
+    const row = await runAsOrg(ORG, () => recordStoppedStream(START, reply, tags, 'lost'));
+
+    expect(row).toEqual({ id: 'cost-1', totalCostUsd: 0.021 });
+    expect(mocks.logCost).toHaveBeenCalledTimes(1);
+    expect(mocks.logCost.mock.calls[0][0]).toEqual({
+      agentId: 'agent-editor',
+      userId: 'user-1',
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
+      inputTokens: 5_000,
+      outputTokens: tokens(reply),
+      operation: 'chat',
+      isLocal: false,
+      metadata: {
+        editor: 'rewrite',
+        rewriteId: 'rw-9',
+        frameworkVersion: 'howdoesthisland@0.5.2',
+        attempts: 1,
+        error: 'lost',
+        estimated: true,
+      },
+    });
+    expect(tokens(reply)).toBeGreaterThan(0);
+  });
+
+  it('writes nothing for an empty reply: the provider may not have answered', async () => {
+    expect(await recordStoppedStream(START, '', tags, 'lost')).toBeNull();
+    expect(mocks.logCost).not.toHaveBeenCalled();
+  });
+
+  it('answers null when the write fails', async () => {
+    mocks.logCost.mockResolvedValue(null);
+    expect(await recordStoppedStream(START, 'Some.', tags, 'lost')).toBeNull();
+  });
+});
+
+describe('streamCeilingUsd (t-86)', () => {
+  const ceiling = (maxTokens = 12_000, prompt = 'Rewrite this.') =>
+    runAsOrg(ORG, () => streamCeilingUsd(call(), { prompt, maxTokens }));
+
+  /** The price of `input` tokens in and `output` out, at $3 and $15 a million. */
+  const price = (input: number, output: number) => (input * 3 + output * 15) / 1_000_000;
+
+  it('prices the prompt and the whole output ceiling at the agent’s binding', async () => {
+    const usd = await ceiling();
+    expect(usd).toBeCloseTo(price(tokens('You are the editor.', 'Rewrite this.'), 12_000), 12);
+    // The ceiling is most of it: 12,000 out at $15 a million is $0.18.
+    expect(usd).toBeGreaterThan(0.18);
+  });
+
+  it('scales with the request: a longer text’s ceiling costs more', async () => {
+    const short = await ceiling(8_192, 'Short.');
+    const long = await ceiling(20_000, 'Long. '.repeat(2_000));
+    expect(long).toBeGreaterThan(short ?? Infinity);
+  });
+
+  it('holds the ceiling to the agent’s own, as the call does', async () => {
+    mocks.findUnique.mockResolvedValue(agentRow({ maxTokens: 4_000 }));
+    expect(await ceiling(12_000)).toBeCloseTo(
+      price(tokens('You are the editor.', 'Rewrite this.'), 4_000),
+      12
+    );
+  });
+
+  it('is 0 for a local model', async () => {
+    mocks.isLocalProvider.mockResolvedValue(true);
+    expect(await ceiling()).toBe(0);
+  });
+
+  it('is null for a call that would be refused before it spent', async () => {
+    mocks.findUnique.mockResolvedValue(null);
+    expect(await ceiling()).toBeNull();
+    mocks.findUnique.mockResolvedValue(agentRow({ isActive: false }));
+    expect(await ceiling()).toBeNull();
+    mocks.findUnique.mockResolvedValue(agentRow());
+    mocks.resolve.mockResolvedValue({
+      providerSlug: 'anthropic',
+      model: 'claude-not-approved',
+      fallbacks: [],
+      provenance: { task: 'chat', primary: 'primary', fallbacks: 'system' },
+    });
+    expect(await ceiling()).toBeNull();
+  });
+
+  it('checks no budget and takes no rate-limit slot', async () => {
+    mocks.findUnique.mockResolvedValue(agentRow({ rateLimitRpm: 1 }));
+    await ceiling();
+    await ceiling();
+    expect(mocks.checkBudget).not.toHaveBeenCalled();
+    // The agent's one call a minute is still there for the call itself.
+    await run();
+    expect(chatStream).toHaveBeenCalledTimes(1);
   });
 });

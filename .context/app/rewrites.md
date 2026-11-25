@@ -34,7 +34,8 @@ from.
 A rewrite that fails after it started answers `failed`, with the editor's
 `errorCode` (`refused`, `truncated`, `provider_error`, `over_budget`,
 `rate_limited`, `agent_inactive`, `model_not_approved`, `lost` for one whose
-process died, `internal_error`) and the draft it had written by then.
+process died, `timed_out` for one whose call ran past `REWRITE_CALL_MS`,
+`internal_error`) and the draft it had written by then.
 
 ## What the editor reads
 
@@ -80,9 +81,12 @@ as in the prototype. t-83 turns those into fields.
    what it streamed has already been shown.
 4. **Kept on its own**: the call runs under `keepRunningAfterResponse`, not as
    part of the response, so a reader that stops listening does not stop it.
-   Every `DRAFT_SAVE_MS` (5s) it saves what it has written and renews its
-   lease. A save that finds the row gone (its review was deleted) stops the
-   call.
+   As the call starts, once its checks have passed, the row keeps what it is
+   priced from (`callStart`: the agent, provider, model, the prompt's token
+   count and the framework version, `lib/app/rewrites/call-start.ts`). It
+   saves what it has written and renews its lease as soon as it has the
+   first piece, then every `DRAFT_SAVE_MS` (5s). A save that finds the row
+   gone (its review was deleted) stops the call.
 5. **Ended**: one write, `COMPLETED` with the draft or `FAILED` with the reason
    and what was written, and the charge in the same transaction.
 
@@ -98,9 +102,24 @@ under the reference `rewrite:<id>` (`chargeRewrite`). Its cost rows carry
 charged once, when it ends, and a rewrite comes after.
 
 **The estimate** the check holds is the median cost of the workspace's last 20
-rewrites that ended and cost something, failed ones too (`basis: "rewrites"`), or `0` with none (`basis: "none"`),
-as for a workspace's first review. The editor's summary spend is no guide: a
-summary writes a few sentences, a rewrite the whole text. The refusals are a
+rewrites that ended and cost something, failed ones too (`basis: "rewrites"`).
+The editor's summary spend is no guide: a summary writes a few sentences, a
+rewrite the whole text.
+
+With none, it is what this request can cost at most (`basis: "ceiling"`, t-86):
+its prompt (the editor's instructions and the request, counted by the model's
+tokeniser) and its whole output ceiling (`rewriteMaxTokens(text)`, never above
+the approved entry's or the agent's), at the editor's price at its binding
+(`streamCeilingUsd`). So it scales with the text, and several first rewrites
+asked for together cannot each pass on a remainder that covers one. It is
+priced at the model's list rate, so near the most rather than a bound: a call
+served at a priority tier or writing to the prompt cache is billed above list.
+A first rewrite is charged what it cost, usually much less. It is
+`0` (`basis: "none"`) only when that is nothing: a local or unpriced model, or
+an editor that would refuse the call before it spent.
+
+A workspace's first review still holds `0` (`basis: "none"`): this changed
+rewrites only. The refusals are a
 review's (402 `INSUFFICIENT_CREDITS`, `BUDGET_EXCEEDED`, `details` the same),
 worded for a rewrite.
 
@@ -115,7 +134,8 @@ its ending replaces recovery's. The retention
 purge leaves a review alone while one of its rewrites runs.
 
 **A call stopped part-way** (its signal, a save that failed, a dropped
-connection) reports no usage, since a provider reports it in a stream's last
+connection, or running past `REWRITE_CALL_MS`, 750s after its row was written,
+on any host) reports no usage, since a provider reports it in a stream's last
 event. One that had answered at all is recorded at an estimate: the prompt and
 what it streamed, counted by the model's tokeniser, its row tagged
 `estimated: true`. Thinking is not counted, so the estimate is low, never
@@ -130,19 +150,76 @@ draft, and charges its cost rows in the same transaction. Until then it holds
 its estimate. One whose process was alive after all charges itself as it ends
 (above).
 
-**What it can miss.** A streamed call writes its cost row only as it ends, so
-one whose process died part-way through the stream (the platform cut it off,
-or the server stopped) left none: recovery charges it nothing, though the
-provider billed it. The monthly cap does not see it either. A review's judge
-call that dies with its process is missed the same way, but a rewrite is one
-large call, so this is the larger miss.
+Recovery leaves a rewrite that kept its call (`callStart`) alone until it is
+`REWRITE_LIFETIME_MS` (800s, the route's `maxDuration`) old. The call stops
+itself at `REWRITE_CALL_MS` (750s) on any host, writing its own cost row, so a
+rewrite recovery prices has a call that has stopped and will write no row
+after the estimate. One that kept no call is ended once its lease runs out:
+there is nothing to price, and no call to wait for.
+
+A pass claims a rewrite first (a lease of its own, `CLAIM_MS`), then writes
+any estimate, then ends and charges it in one transaction that matches only
+its claim. A save from a call that lived after all, or another pass, changes
+the claim, and the pass leaves the row. The estimate is written with no
+transaction open, so a pass needs one connection at a time. A pass that fails
+part-way leaves its claim to run out; the next finds its estimate and charges
+it without another. An estimate write that fails is left for the next pass
+too, for an hour (`PRICING_RETRY_MS`), unless the agent it names is gone
+(every pass would be refused): that one, or one still failing after the hour,
+is ended uncharged, and logged. A pass takes its batch from the rewrites due,
+so young ones that kept a call never keep a due one waiting.
+
+**One account of a call** (`settleRewriteCostRows`). Whatever charges a
+rewrite (recovery, or its call as it ends) first leaves it one account of its
+call: should the call's own cost row have landed beside recovery's estimate (a
+process that stalled past the lifetime, then recovered), the estimate is
+removed; should two passes each have written one, the later goes. So neither
+the charge nor the monthly cap counts a call twice. One already charged at the
+estimate stays charged at it (one reference): low, never high. Each pass also
+settles again the rewrites it ended `lost` in the last day, for a call whose
+own row landed after recovery ended it, and which never ended itself.
+
+**Priced when it left no row** (t-85). A streamed call writes its cost row only
+as it ends, so one whose process died part-way through the stream (the platform
+cut it off, or the server stopped) left none, though the provider billed it.
+When a lost rewrite has no cost row of its own, recovery writes the one the call
+would have written had it been stopped there (`recordStoppedStream`): the
+prompt's token count it kept (`callStart`) and its saved draft counted by the
+model's tokeniser, at its binding's price, tagged `estimated: true` and
+`error: "lost"`. Then it charges it, once, as any other. The monthly cap sees
+the row too.
+
+**What it can miss.**
+
+- **A rewrite with no saved draft is charged nothing.** The provider may not
+  have answered (it died before the call's checks passed, or while the model
+  was still thinking). As for a stopped call, a reply that is not known to
+  have started is not charged.
+- **The estimate is low.** Thinking is not counted, and nor is what it wrote
+  after its last save (up to 5s of it). As for a stopped call: low, never
+  high.
+- **A call whose process stalls past the lifetime** and then writes its own
+  cost row, after recovery charged its estimate, is charged the estimate (one
+  reference). Its estimate is removed when the call ends, so the cap counts
+  only its own row.
+- **A rewrite that kept no `callStart`** (that write failed, and is logged) is
+  charged nothing, as before t-85. Recovery logs one that saved a draft, since
+  the provider answered it.
+- **A review's judge call** that dies with its process is still missed: this
+  changed rewrites only.
 
 ## Limits
 
 - `REWRITES_PER_MINUTE` (10) per user, across sessions and keys: a
   handler-level sub-cap, as for reviews that call judges.
-- The route's `maxDuration` is 360s: the editor's longest timeout (300s), the
-  budget lock's wait (10s), and the setup and ending write.
+- `REWRITE_CALL_MS` (750s) stops a call still running then, on any host:
+  long enough for the editor's largest reply (32,768 tokens) at 45 tokens a
+  second, after the budget lock's wait (10s). Nothing else bounds a stream on
+  a long-running server; the provider's timeout covers the connection only.
+- The route's `maxDuration` is 800s, the most Vercel allows (Pro, fluid
+  compute), leaving 50s for the call's cost row before recovery may price it
+  (`REWRITE_LIFETIME_MS`). A plan with a lower ceiling cuts a long rewrite off
+  sooner; recovery ends and charges it.
 
 ## Data
 
@@ -157,5 +234,7 @@ org exports carry rewrites without the lease or the hold.
 `npm run smoke:rewrite-charge` (free, no AI call) runs in a fresh workspace
 as the restricted app role. It checks that a running rewrite's estimate is
 held by the next check, that a rewrite refused for credits writes no row, that
-recovery fails and charges a lost one once, from its own cost rows only, and
-that deleting the review takes its rewrites. It cleans up after itself.
+recovery fails and charges a lost one once, from its own cost rows only, that
+one that died mid-stream with no cost row is priced from its `callStart` and
+draft and charged once, that one that died with no draft is charged nothing,
+and that deleting the review takes its rewrites. It cleans up after itself.
