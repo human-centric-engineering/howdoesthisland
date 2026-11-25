@@ -181,8 +181,9 @@ show it.
   rate limit is worded for rewrites, without blaming the reader, since a burst
   of the workspace's requests answers it too (`rewriteRefusalOf`). A review of
   the draft refused for a retired model version says so, rather than to reload
-  (`reviewDraftRefusalOf`): the draft is reviewed with its original's version. A rewrite that
-  started and then failed shows the server's `error` and keeps what it wrote.
+  (`reviewDraftRefusalOf`): the draft is reviewed with its original's
+  version. A rewrite that started and then failed shows the server's `error`
+  and keeps what it wrote.
 
 ## When the process dies
 
