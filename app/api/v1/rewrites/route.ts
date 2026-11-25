@@ -13,6 +13,13 @@
  * `stream`. The editor reads the review's text, its context and result, and
  * its project's brief (as it is now) and the passages its AI reviewers read.
  *
+ * **Placeholders** (t-83). The editor writes each fact only the writer knows
+ * as `[ADD: …]`, and every rewrite answers them as `placeholders` (id, label,
+ * where each sits). `fromRewriteId` (a `completed` rewrite of the same review)
+ * with `answers` (by placeholder id) has the editor start from that draft and
+ * fill the answered ones, leaving the rest; `focus` defaults to that
+ * rewrite's. Answers are not saved anywhere but the new rewrite's draft.
+ *
  * - `stream: false` (the default): 200 with the rewrite once it ends,
  *   `completed` or `failed`.
  * - `stream: true`: Server-Sent Events. `rewrite` (the row, `running`), then
@@ -25,16 +32,19 @@
  * review is. While it runs, the budget check holds back its estimate.
  *
  * POST errors, before anything is written or spent:
- * - 400 `VALIDATION_ERROR` — the body does not fit, or `focus` is not one the
- *   review's framework has (`details.focus` lists them).
+ * - 400 `VALIDATION_ERROR` — the body does not fit, `focus` is not one the
+ *   review's framework has (`details.focus` lists them), or an answer names a
+ *   placeholder the earlier draft does not have (`details.answers`).
  * - 401 `UNAUTHORIZED`, 403 `FORBIDDEN` (an API key without `assess`).
  * - 402 `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` — as for a review: the
  *   rewrite's estimate (the median of the workspace's last billed rewrites,
  *   failed ones too, `basis: "rewrites"`, or `0` with none, `basis: "none"`) is more
  *   than what is left once reviews and rewrites in flight are held back.
- * - 404 `NOT_FOUND` — no such review in this workspace.
+ * - 404 `NOT_FOUND` — no such review in this workspace, or `fromRewriteId`
+ *   is not a rewrite of it.
  * - 409 `ASSESSMENT_NOT_REWRITABLE` — the review is not finished (`completed`
  *   or `partial`), or its framework version can no longer be run.
+ * - 409 `REWRITE_NOT_FINISHED` — `fromRewriteId` has not `completed`.
  * - 429 `RATE_LIMIT_EXCEEDED` — over `REWRITES_PER_MINUTE` rewrites per user,
  *   or a burst of requests kept the budget check from its lock.
  *

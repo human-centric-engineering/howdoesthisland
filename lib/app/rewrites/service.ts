@@ -10,6 +10,11 @@
  * searched again: that would cost a search per rewrite and could give
  * passages the judges never saw.
  *
+ * **Filling an earlier draft's gaps** (t-83). With `fromRewriteId` and
+ * `answers`, the editor starts from that rewrite's draft and fills the
+ * placeholders answered ({@link answeredRewrite}); the answers go nowhere
+ * else. Every row answers its draft's placeholders (`views.ts`).
+ *
  * **How it runs.** {@link startRewrite} checks the request, then writes the
  * `RUNNING` row in the budget check's transaction (`reserveRewriteBudget`):
  * the row is the budget hold, so requests sent together cannot each spend

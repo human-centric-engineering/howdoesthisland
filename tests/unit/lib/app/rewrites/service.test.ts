@@ -939,3 +939,144 @@ describe('getRewrite and listRewrites', () => {
     expect(err.status).toBe(404);
   });
 });
+
+describe('startRewrite: answering a rewrite’s placeholders (t-83)', () => {
+  const GAPPY = 'Ask [ADD: a client] about the [ADD: saving]. [ADD: A client] will tell you.';
+
+  /** A finished rewrite of `review` whose draft is {@link GAPPY}. */
+  async function gappyRewrite(review: Row, focus = 'pathos') {
+    streams([GAPPY]);
+    const first = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), focus, stream: false }, { userId: null })
+    );
+    const ended = await first.done;
+    mocks.streamAgent.mockClear();
+    streams(['Filled.']);
+    return ended;
+  }
+
+  it('reads the draft’s placeholders onto the rewrite, a repeated one once', async () => {
+    const review = finishedReview();
+    const ended = await gappyRewrite(review);
+    expect(ended.placeholders.map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: 'p1', label: 'a client' },
+      { id: 'p2', label: 'saving' },
+    ]);
+    expect(ended.placeholders[0].at).toHaveLength(2);
+    expect((await inOrg(() => getRewrite(ended.id))).placeholders).toEqual(ended.placeholders);
+  });
+
+  it('starts from that draft with each answer, leaving the unanswered, in its focus', async () => {
+    const review = finishedReview();
+    const earlier = await gappyRewrite(review);
+    const started = await inOrg(() =>
+      startRewrite(
+        {
+          assessmentId: String(review.id),
+          fromRewriteId: earlier.id,
+          answers: { p1: 'Leeds Plumbing' },
+          stream: false,
+        },
+        { userId: null }
+      )
+    );
+    const done = await started.done;
+
+    const { prompt } = theCall().request();
+    expect(prompt).toContain(`<earlier_draft>\n${GAPPY}\n</earlier_draft>`);
+    expect(prompt).toContain('<answers>\n- [ADD: a client]: Leeds Plumbing\n</answers>');
+    expect(prompt).toContain('Focus on raising pathos');
+    expect(done).toMatchObject({ status: 'completed', focus: 'pathos', draft: 'Filled.' });
+    // A rewrite of its own, the earlier one left as it was.
+    expect(fake.rewrites).toHaveLength(2);
+    expect(fake.rewrites.find((r) => r.id === earlier.id)?.draft).toBe(GAPPY);
+  });
+
+  it('takes a focus asked for over the earlier rewrite’s', async () => {
+    const review = finishedReview();
+    const earlier = await gappyRewrite(review);
+    const started = await inOrg(() =>
+      startRewrite(
+        {
+          assessmentId: String(review.id),
+          focus: 'logos',
+          fromRewriteId: earlier.id,
+          answers: { p2: '£400 a year' },
+          stream: false,
+        },
+        { userId: null }
+      )
+    );
+    await started.done;
+    expect(theCall().request().prompt).toContain('Focus on raising logos');
+  });
+
+  it('400s an answer to a placeholder the draft does not have, naming those it has', async () => {
+    const review = finishedReview();
+    const earlier = await gappyRewrite(review);
+    const err = await refusal(
+      inOrg(() =>
+        startRewrite(
+          {
+            assessmentId: String(review.id),
+            fromRewriteId: earlier.id,
+            answers: { p1: 'Leeds Plumbing', p9: 'nothing' },
+            stream: false,
+          },
+          { userId: null }
+        )
+      )
+    );
+    expect(err).toMatchObject({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      details: { answers: { unknown: ['p9'], placeholders: ['p1', 'p2'] } },
+    });
+    expect(mocks.reserve).toHaveBeenCalledTimes(1);
+    expect(fake.rewrites).toHaveLength(1);
+  });
+
+  it('404s a rewrite of another review, or another workspace’s', async () => {
+    const review = finishedReview();
+    const earlier = await gappyRewrite(review);
+    const other = finishedReview();
+    for (const [assessmentId, org] of [
+      [String(other.id), ORG],
+      [String(review.id), 'org-b'],
+    ] as const) {
+      const err = await refusal(
+        runAsOrg(org, () =>
+          startRewrite(
+            { assessmentId, fromRewriteId: earlier.id, answers: { p1: 'x' }, stream: false },
+            { userId: null }
+          )
+        )
+      );
+      expect(err.status).toBe(404);
+    }
+    expect(fake.rewrites).toHaveLength(1);
+  });
+
+  it('409s a rewrite that has not finished', async () => {
+    const review = finishedReview();
+    const earlier = await gappyRewrite(review);
+    const row = fake.rewrites.find((r) => r.id === earlier.id);
+    if (!row) throw new Error('no row');
+    row.status = 'FAILED';
+    const err = await refusal(
+      inOrg(() =>
+        startRewrite(
+          {
+            assessmentId: String(review.id),
+            fromRewriteId: earlier.id,
+            answers: { p1: 'x' },
+            stream: false,
+          },
+          { userId: null }
+        )
+      )
+    );
+    expect(err).toMatchObject({ status: 409, code: 'REWRITE_NOT_FINISHED' });
+    expect(fake.rewrites).toHaveLength(1);
+  });
+});
