@@ -201,6 +201,30 @@ describe('Compare drafts tab', () => {
     await userEvent.selectOptions(field('assess-profile'), 'quick');
     expect(screen.getByRole('note')).toHaveTextContent(/editor gives no verdict/);
   });
+
+  it('says one reviewer ticked gives no verdict, and two do', async () => {
+    renderWorkbench();
+    await openCompare();
+    await userEvent.selectOptions(field('assess-profile'), '__choose__');
+    const boxes = screen.getAllByRole('checkbox');
+    await userEvent.click(boxes[0]);
+    expect(screen.getByRole('note')).toHaveTextContent(/fewer than 2 .*editor gives no verdict/i);
+    await userEvent.click(boxes[1]);
+    expect(screen.queryByText(/editor gives no verdict/)).toBeNull();
+  });
+
+  it('names the comparison, not a review, when starting it fails without a reason', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(new Error('network down'));
+    renderWorkbench();
+    await openCompare();
+    await writeDraft(0, 'A');
+    await writeDraft(1, 'B');
+    await userEvent.click(compareButton(2));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The comparison could not be started. Try again in a moment.'
+    );
+  });
 });
 
 describe('Compare drafts kept in the browser', () => {

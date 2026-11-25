@@ -30,8 +30,9 @@ import {
 } from '@/lib/app/judges/run-judge';
 import { logger } from '@/lib/logging';
 
-/** The fewest judges a run asks for before the editor is asked to summarise it. */
-export const EDITOR_MIN_JUDGES = 2;
+import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/limits';
+
+export { EDITOR_MIN_JUDGES };
 
 /** Why the editor was not asked. */
 export type EditorSkipReason =

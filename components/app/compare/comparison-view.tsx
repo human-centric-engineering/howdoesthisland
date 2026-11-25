@@ -60,8 +60,7 @@ const appealColour = (id: string): string =>
   ['ethos', 'pathos', 'logos', 'kairos'].includes(id) ? `var(--hd-${id})` : 'var(--hd-ink)';
 
 const SKIPPED_FOR: Record<string, string> = {
-  too_few_completed:
-    'Fewer than two drafts finished their review, so there is nothing for the editor to weigh. The scores below are all there is.',
+  too_few_completed: `Fewer than two drafts were read by every one of their ${WORDS.aiReviewers}, so there is nothing for the editor to weigh. The scores below are all there is.`,
   too_few_judges: `These drafts were read by fewer than two ${WORDS.aiReviewers}, so the editor gives no verdict on them. Compare their scores below.`,
   predates_verdicts:
     'This comparison was made before the editor gave verdicts. Compare the scores below.',
@@ -167,7 +166,7 @@ function ScoreCell({
           <Badge variant="secondary">Best</Badge>
         ) : delta !== null ? (
           <span className="font-mono text-sm text-(--hd-muted) tabular-nums">
-            {Math.abs(Math.round(delta))} behind
+            {Math.round(Math.abs(delta)) === 0 ? '<1' : Math.round(Math.abs(delta))} behind
           </span>
         ) : null}
       </div>
@@ -201,7 +200,7 @@ function DraftHeader({ draft, winner }: { draft: ComparisonDraft; winner: boolea
 }
 
 export function ComparisonView({ comparison: initial, appealNames }: ComparisonViewProps) {
-  const { comparison, stale } = useComparison(initial);
+  const { comparison, stale, ended } = useComparison(initial);
   const { drafts, appeals, verdict } = comparison;
   const winnerAt = verdict.status === 'completed' ? verdict.draft : null;
 
@@ -245,7 +244,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
           ) : null}
           .
         </p>
-        {isMoving(comparison) && done < drafts.length ? (
+        {isMoving(comparison) && ended === null && done < drafts.length ? (
           <p className="mt-3 flex items-center gap-2" aria-live="polite">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             {done} of {drafts.length} drafts reviewed
@@ -255,6 +254,13 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
           <p role="status" className="mt-3 text-sm">
             This page could not check for progress just now, so it may be behind. It keeps trying;
             reload the page to check yourself.
+          </p>
+        ) : null}
+        {ended ? (
+          <p role="status" className="mt-3 text-sm">
+            {ended === 'gone'
+              ? 'This comparison has been deleted, so this page has stopped checking for progress.'
+              : 'You are no longer signed in, so this page has stopped checking for progress. Sign in again to see it.'}
           </p>
         ) : null}
       </header>

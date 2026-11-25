@@ -13,11 +13,12 @@
  *
  * A read that fails, or a reply that does not parse, keeps what is shown and
  * tries again at the next tick; after {@link MAX_MISSES} in a row it says so
- * (`stale`), and keeps trying. A tab in the background is not read; it is
+ * (`stale`), and keeps trying. A read answered 404 (the comparison is gone)
+ * or 401/403 (the session ended) stops the reads for good (`ended`). A tab in the background is not read; it is
  * read as soon as it is shown again.
  */
 import { useEffect, useState } from 'react';
-import { apiClient } from '@/lib/api/client';
+import { APIClientError, apiClient } from '@/lib/api/client';
 import { logger } from '@/lib/logging';
 import {
   comparisonEndpoint,
@@ -31,10 +32,25 @@ export const POLL_MS = 4_000;
 /** Failed reads in a row before the page says it may be out of date. */
 export const MAX_MISSES = 3;
 
-export function useComparison(initial: Comparison): { comparison: Comparison; stale: boolean } {
+/** Why the reads stopped before the comparison did. */
+export type Ended = 'gone' | 'signed_out';
+
+function endedBy(err: unknown): Ended | null {
+  if (!(err instanceof APIClientError)) return null;
+  if (err.status === 404) return 'gone';
+  if (err.status === 401 || err.status === 403) return 'signed_out';
+  return null;
+}
+
+export function useComparison(initial: Comparison): {
+  comparison: Comparison;
+  stale: boolean;
+  ended: Ended | null;
+} {
   const [comparison, setComparison] = useState(initial);
   const [misses, setMisses] = useState(0);
-  const moving = isMoving(comparison);
+  const [ended, setEnded] = useState<Ended | null>(null);
+  const moving = isMoving(comparison) && ended === null;
   const id = comparison.id;
 
   useEffect(() => {
@@ -56,8 +72,11 @@ export function useComparison(initial: Comparison): { comparison: Comparison; st
           logger.warn('Comparison: a reply this page cannot read', { comparisonId: id });
           setMisses((n) => n + 1);
         }
-      } catch {
-        if (!stopped) setMisses((n) => n + 1);
+      } catch (err) {
+        if (stopped) return;
+        const why = endedBy(err);
+        if (why) setEnded(why);
+        else setMisses((n) => n + 1);
       } finally {
         inFlight = false;
       }
@@ -75,5 +94,5 @@ export function useComparison(initial: Comparison): { comparison: Comparison; st
     };
   }, [id, moving]);
 
-  return { comparison, stale: misses >= MAX_MISSES };
+  return { comparison, stale: ended === null && misses >= MAX_MISSES, ended };
 }

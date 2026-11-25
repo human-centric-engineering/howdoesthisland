@@ -25,7 +25,7 @@ import {
   MAX_REVIEW_FILE_BYTES,
   MAX_URL_CHARS,
 } from '@/lib/app/assessments/limits';
-import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/validations';
+import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/limits';
 import { USAGE_PAGE } from '@/lib/app/usage/wire';
 import { WORDS } from '@/lib/app/reports/words';
 import {

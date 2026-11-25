@@ -9,13 +9,9 @@
 import { z } from 'zod';
 import { contextField, textField, versionChoice } from '@/lib/app/assessments/api/validations';
 
-/** The fewest drafts a comparison takes. */
-export const MIN_DRAFTS = 2;
-/** The most: each is a review, so a comparison costs up to this many. */
-export const MAX_DRAFTS = 5;
+import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/limits';
 
-/** What a writer calls a draft ("Subject line A"); shown beside its scores. */
-export const DRAFT_LABEL_MAX = 80;
+export { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS };
 
 const draftSchema = z.strictObject({
   /** Pasted copy; checked against the length limit with its own message (`assessableText`). */

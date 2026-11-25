@@ -25,7 +25,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
 import { ComparisonView } from '@/components/app/compare/comparison-view';
 import { comparisonSchema } from '@/components/app/compare/schemas';
 import { MAX_MISSES, POLL_MS } from '@/components/app/compare/use-comparison';
-import { apiClient } from '@/lib/api/client';
+import { APIClientError, apiClient } from '@/lib/api/client';
 import {
   APPEAL_NAMES,
   aComparison,
@@ -80,6 +80,14 @@ describe('ComparisonView side by side', () => {
     expect(cell('Overall', 'Draft 2')).toHaveTextContent('Best');
     expect(cell('Overall', 'Draft 2')).toHaveTextContent('Lands well');
     expect(cell('Overall', 'Subject C')).toHaveTextContent('23 behind');
+  });
+
+  it('says a draft less than a point behind is under one behind, not 0', () => {
+    const wire = aComparison();
+    wire.appeals[0].drafts[0] = { position: 0, score: 71.7, delta: -0.3 };
+    renderView(wire);
+    expect(cell('Credibility', 'Subject A')).toHaveTextContent('<1 behind');
+    expect(cell('Credibility', 'Subject A')).not.toHaveTextContent('0 behind');
   });
 
   it('names the appeals in the framework’s order, by their names', () => {
@@ -154,7 +162,7 @@ describe('ComparisonView verdict', () => {
   });
 
   it.each([
-    ['too_few_completed', /Fewer than two drafts finished/],
+    ['too_few_completed', /Fewer than two drafts were read by every one/],
     ['too_few_judges', /fewer than two AI reviewers/],
     ['predates_verdicts', /made before the editor gave verdicts/],
   ])('says why there is none when skipped for %s', (reason, text) => {
@@ -249,6 +257,21 @@ describe('ComparisonView while it runs', () => {
     vi.mocked(apiClient.get).mockResolvedValue(aRunningComparison());
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it.each([
+    [404, /has been deleted/],
+    [401, /no longer signed in/],
+  ])('stops reading after a %i, and says why', async (status, says) => {
+    vi.useFakeTimers();
+    vi.mocked(apiClient.get).mockRejectedValue(new APIClientError('No', 'X', status));
+    renderView(aRunningComparison());
+
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
+    expect(screen.getByRole('status')).toHaveTextContent(says);
+    expect(screen.queryByText(/drafts reviewed/)).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 5));
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 
   it('counts a reply it cannot read as a failed read', async () => {

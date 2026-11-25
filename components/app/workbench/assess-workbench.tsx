@@ -42,8 +42,12 @@ import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useLocalStorage } from '@/lib/hooks/use-local-storage';
 import { sendUpload } from '@/lib/app/intake/send-upload';
-import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
-import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/validations';
+import {
+  EDITOR_MIN_JUDGES,
+  MAX_CONTENT_CHARS,
+  MAX_REVIEW_FILE_BYTES,
+} from '@/lib/app/assessments/limits';
+import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/limits';
 import { WORDS } from '@/lib/app/reports/words';
 import { SettingPicker } from '@/components/app/projects/setting-picker';
 import { BriefInvite, hasBrief } from '@/components/app/projects/brief-invite';
@@ -68,6 +72,7 @@ import {
   fixedByProject,
   problemsOf,
   readDraft,
+  tickedReviewers,
   refusalOf,
   jsonSourceOf,
   requestOptionsOf,
@@ -139,8 +144,11 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
   const [sending, setSending] = useState(false);
   const [started, setStarted] = useState<CreatedReview | null>(null);
   const [usagePage, setUsagePage] = useState<string | null>(null);
+  const comparing = draft.source === 'compare';
   const save = useSaveFailure({
-    fallback: `The ${WORDS.review} could not be started. Try again in a moment.`,
+    fallback: comparing
+      ? 'The comparison could not be started. Try again in a moment.'
+      : `The ${WORDS.review} could not be started. Try again in a moment.`,
   });
 
   const fixed = fixedByProject(project, catalogue);
@@ -159,7 +167,14 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
 
   const setCompareDraft = (i: number, patch: Partial<CompareDraft>) =>
     update({ drafts: draft.drafts.map((d, j) => (j === i ? { ...d, ...patch } : d)) });
-  const comparing = draft.source === 'compare';
+  // The editor weighs drafts read by at least EDITOR_MIN_JUDGES reviewers.
+  // The catalogue names each reviewer set but not its slots, so of the sets
+  // only the quick scan (no reviewers) is known to fall short here.
+  const noVerdict =
+    comparing &&
+    (draft.profile === QUICK_PROFILE ||
+      (draft.profile === CHOOSE_REVIEWERS &&
+        tickedReviewers(draft, catalogue).length < EDITOR_MIN_JUDGES));
 
   const onSubmit = async (e?: BaseSyntheticEvent) => {
     e?.preventDefault();
@@ -567,10 +582,11 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
           </fieldset>
         ) : null}
 
-        {comparing && draft.profile === QUICK_PROFILE ? (
+        {noVerdict ? (
           <p role="note" className="text-sm text-(--hd-muted)">
-            With the quick scan alone, the drafts are scored but the editor gives no verdict on
-            which lands better.
+            {draft.profile === QUICK_PROFILE
+              ? 'With the quick scan alone, the drafts are scored but the editor gives no verdict on which lands better.'
+              : `With fewer than ${EDITOR_MIN_JUDGES} ${WORDS.aiReviewers}, the drafts are scored but the editor gives no verdict on which lands better.`}
           </p>
         ) : null}
 
