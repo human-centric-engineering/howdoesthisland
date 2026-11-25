@@ -6,7 +6,7 @@
  * the review's framework version once that is known (`rewriteFocuses()`).
  */
 import { z } from 'zod';
-import { MAX_PLACEHOLDERS } from '@/lib/app/frameworks/placeholders';
+import { holdsPlaceholder, MAX_PLACEHOLDERS } from '@/lib/app/frameworks/placeholders';
 
 const id = z.string().min(1).max(64);
 
@@ -19,7 +19,15 @@ export const MAX_ANSWER_CHARS = 500;
  * placeholders once it is read.
  */
 const answersSchema = z
-  .record(z.string().min(1).max(16), z.string().trim().min(1).max(MAX_ANSWER_CHARS))
+  .record(
+    z.string().min(1).max(16),
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_ANSWER_CHARS)
+      .refine((answer) => !holdsPlaceholder(answer), 'An answer cannot be a placeholder itself.')
+  )
   .refine((answers) => Object.keys(answers).length > 0, 'Answer at least one placeholder.')
   .refine(
     (answers) => Object.keys(answers).length <= MAX_PLACEHOLDERS,

@@ -35,6 +35,14 @@ describe('createRewriteSchema: answers', () => {
     expect(withAnswers({ p1: 'x'.repeat(MAX_ANSWER_CHARS) })).toBe(true);
   });
 
+  it('refuses an answer that is itself a placeholder, which would be asked for again', () => {
+    const withAnswer = (p1: string) =>
+      createRewriteSchema.safeParse({ ...base, fromRewriteId: 'rw_1', answers: { p1 } }).success;
+    expect(withAnswer('see [ADD: pricing page]')).toBe(false);
+    expect(withAnswer('see [add:x]')).toBe(false);
+    expect(withAnswer('see [our pricing page]')).toBe(true);
+  });
+
   it(`refuses more than ${MAX_PLACEHOLDERS} answers`, () => {
     const answers = (n: number) =>
       Object.fromEntries(Array.from({ length: n }, (_, i) => [`p${i + 1}`, 'x']));

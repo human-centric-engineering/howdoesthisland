@@ -45,6 +45,9 @@
  * - 409 `ASSESSMENT_NOT_REWRITABLE` — the review is not finished (`completed`
  *   or `partial`), or its framework version can no longer be run.
  * - 409 `REWRITE_NOT_FINISHED` — `fromRewriteId` has not `completed`.
+ * - 409 `REWRITE_TOO_LONG_TO_FILL` — its draft is over `MAX_FILL_DRAFT_CHARS`.
+ * - 400 also for a `focus` other than `fromRewriteId`'s, or an answer that is
+ *   itself a placeholder (`[ADD:`).
  * - 429 `RATE_LIMIT_EXCEEDED` — over `REWRITES_PER_MINUTE` rewrites per user,
  *   or a burst of requests kept the budget check from its lock.
  *

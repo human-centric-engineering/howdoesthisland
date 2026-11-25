@@ -56,7 +56,7 @@ import { isForeignKeyFailure } from '@/lib/app/assessments/prisma-errors';
 import { LEASE_MS } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
 import { RewriteFocusUnknownError, type RewriteFollowUp } from '@/lib/app/frameworks/engine';
-import { parsePlaceholders } from '@/lib/app/frameworks/placeholders';
+import { MAX_FILL_DRAFT_CHARS, parsePlaceholders } from '@/lib/app/frameworks/placeholders';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import {
   JudgeRunError,
@@ -172,6 +172,14 @@ export async function startRewrite(
 
   const earlier = await answeredRewrite(review.id, body);
   const focuses = engine.rewriteFocuses();
+  // A fill starts from its draft and changes nothing else, so it cannot aim
+  // somewhere new: another focus would contradict that.
+  if (earlier && body.focus !== undefined && body.focus !== earlier.focus) {
+    throw new ValidationError(
+      `A fill keeps its rewrite’s focus, "${earlier.focus}": leave focus out, or rewrite afresh.`,
+      { focus: [earlier.focus] }
+    );
+  }
   const focus = body.focus ?? earlier?.focus ?? focuses[0];
   if (!focuses.includes(focus)) {
     throw new ValidationError(
@@ -280,6 +288,14 @@ async function answeredRewrite(
     throw new APIError(
       'Only a finished rewrite’s placeholders can be answered.',
       'REWRITE_NOT_FINISHED',
+      409
+    );
+  }
+  if (row.draft.length > MAX_FILL_DRAFT_CHARS) {
+    // Given whole or not at all: a cut draft would come back without its end.
+    throw new APIError(
+      'This rewrite is too long to fill its gaps. Copy it and fill them by hand.',
+      'REWRITE_TOO_LONG_TO_FILL',
       409
     );
   }

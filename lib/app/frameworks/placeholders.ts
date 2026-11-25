@@ -29,6 +29,17 @@ export const MAX_PLACEHOLDERS = 30;
 /** The longest a placeholder's label may be and still be offered. */
 export const MAX_PLACEHOLDER_LABEL = 200;
 
+/**
+ * The longest draft whose gaps can be filled (t-83): twice the longest text a
+ * review takes, room for a rewrite half as long again. A fill gives the
+ * editor its draft whole, so one longer is refused rather than cut, and a
+ * chain of fills, each from the last, cannot grow its prompt past this.
+ */
+export const MAX_FILL_DRAFT_CHARS = 80_000;
+
+/** An answer may not itself be a gap: the editor would copy it in, and it would be asked for again. */
+export const holdsPlaceholder = (text: string): boolean => /\[ADD:/i.test(text);
+
 /** A gap in a draft: what the writer is asked for, and where it sits. */
 export interface Placeholder {
   /** `p1`, `p2`, …: what an answer is keyed to. */

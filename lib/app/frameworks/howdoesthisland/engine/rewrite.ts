@@ -41,7 +41,7 @@ import {
   type RewriteFollowUp,
   type RewriteRequest,
 } from '@/lib/app/frameworks/engine';
-import { placeholderText } from '@/lib/app/frameworks/placeholders';
+import { MAX_FILL_DRAFT_CHARS, placeholderText } from '@/lib/app/frameworks/placeholders';
 import {
   APPEALS,
   type Appeal,
@@ -49,7 +49,6 @@ import {
 } from '@/lib/app/frameworks/howdoesthisland/engine/model';
 import {
   audienceText,
-  CONTENT_LIMIT,
   contentBlock,
   projectBlock,
 } from '@/lib/app/frameworks/howdoesthisland/engine/prompts';
@@ -120,11 +119,11 @@ function recommendationLines(m: EngineModel, result: Assessment, focus: RewriteF
 }
 
 /**
- * The longest earlier draft a second pass reads: twice the text's limit, room
- * for a draft half as long again as the longest text. A chain of passes, each
- * from the last, cannot grow its prompt or its ceiling past this.
+ * The longest earlier draft a second pass reads (`MAX_FILL_DRAFT_CHARS`): the
+ * rewrites API refuses a fill from a longer one, so this cut only guards a
+ * caller that does not check.
  */
-export const MAX_EARLIER_DRAFT = 2 * CONTENT_LIMIT;
+export const MAX_EARLIER_DRAFT = MAX_FILL_DRAFT_CHARS;
 
 /** The fences a second pass's prompt uses: none may open or close inside its data. */
 const FENCE_TAGS = 'earlier_draft|answers|content|project_context';
@@ -142,11 +141,11 @@ function withoutFences(text: string): string {
   return out;
 }
 
-/** The second pass's block: the earlier draft, and the writer's answers to its gaps. */
 /** The earlier draft as a second pass reads it: cut at {@link MAX_EARLIER_DRAFT}, and marked when cut. */
 const earlierDraft = (draft: string): string =>
   draft.length > MAX_EARLIER_DRAFT ? draft.slice(0, MAX_EARLIER_DRAFT) + '\n[truncated]' : draft;
 
+/** The second pass's block: the earlier draft, and the writer's answers to its gaps. */
 function followUpBlock(followUp: RewriteFollowUp): string {
   const answers = followUp.answers
     .map(
@@ -251,9 +250,9 @@ ${contentBlock(text)}
 </content>`;
 
   // A second pass writes the earlier draft again, which can run longer than
-  // the text: up to half as long again, so past the text's limit. It is the
-  // editor's own output, bounded by its earlier ceiling, so it is given whole
-  // (not cut as the text is) and sized from its own length.
+  // the text: up to half as long again, so past the text's limit. It is not
+  // cut at the text's limit, only at MAX_EARLIER_DRAFT, and the ceiling is
+  // sized from it.
   const maxTokens = Math.max(
     rewriteMaxTokens(text),
     opts.followUp ? ceilingFor(Math.min(opts.followUp.draft.length, MAX_EARLIER_DRAFT)) : 0

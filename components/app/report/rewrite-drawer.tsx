@@ -118,8 +118,13 @@ export function RewriteDrawer({
   const [reviewing, setReviewing] = useState(false);
   const [usagePage, setUsagePage] = useState<string | null>(null);
   const [origin, setOrigin] = useState<Origin>('write');
-  /** What the writer has typed for the shown draft's placeholders, by id. */
-  const [typed, setTyped] = useState<Record<string, string>>({});
+  /**
+   * What the writer has typed for each rewrite's placeholders: by rewrite,
+   * then by placeholder id. Keyed by rewrite, as ids repeat across drafts, so
+   * answers never show under another draft's gaps, and a fill that fails
+   * leaves them on the draft they answered.
+   */
+  const [answersBy, setAnswersBy] = useState<Record<string, Record<string, string>>>({});
   const [reviewUsagePage, setReviewUsagePage] = useState<string | null>(null);
   const rewrite = useSaveFailure({ fallback: 'The rewrite could not be started. Try again.' });
   const review = useSaveFailure({
@@ -184,8 +189,6 @@ export function RewriteDrawer({
    * ends, the stored draft is the whole of it.
    */
   const follow = async (r: RewriteWire, signal: AbortSignal) => {
-    // Answers typed for another draft's gaps are not this one's: ids repeat.
-    setTyped({});
     setShown(r);
     setDraft((d) => (r.draft.length > d.length ? r.draft : d));
     setPhase('writing');
@@ -241,7 +244,7 @@ export function RewriteDrawer({
     setShown(null);
     setDraft('');
     setCopied(false);
-    setTyped({});
+    setAnswersBy({});
     setOrigin('write');
     rewrite.clear();
     review.clear();
@@ -282,7 +285,6 @@ export function RewriteDrawer({
         {
           onStart: (r) => {
             setShown(r);
-            setTyped({});
             remember(r);
           },
           onText: (text) => setDraft((d) => d + text),
@@ -329,7 +331,7 @@ export function RewriteDrawer({
 
   /** The next rewrite, from the shown one's draft with the gaps the writer filled. */
   const fill = (from: RewriteWire) => {
-    const answers = answersFor(from.placeholders, typed);
+    const answers = answersFor(from.placeholders, answersBy[from.id] ?? {});
     if (Object.keys(answers).length === 0) return;
     void write({ focus: from.focus, fromRewriteId: from.id, answers }, 'fill');
   };
@@ -338,8 +340,6 @@ export function RewriteDrawer({
     rewrite.clear();
     review.clear();
     setOrigin('write');
-    // Answers typed for the rewrite shown stay while it is shown.
-    if (r.id !== shown?.id) setTyped({});
     setUsagePage(null);
     setReviewUsagePage(null);
     setCopied(false);
@@ -390,6 +390,7 @@ export function RewriteDrawer({
   const writing = phase === 'writing';
   const finished = phase === 'ended' && shown?.status === 'completed';
   const gaps = finished && shown ? shown.placeholders : [];
+  const typed = (shown && answersBy[shown.id]) || {};
   const answered = shown ? Object.keys(answersFor(shown.placeholders, typed)).length : 0;
 
   const refusal = (
@@ -545,7 +546,10 @@ export function RewriteDrawer({
                   disabled={writing || reviewing}
                   onChange={(e) => {
                     const value = e.target.value;
-                    setTyped((t) => ({ ...t, [g.id]: value }));
+                    setAnswersBy((by) => ({
+                      ...by,
+                      [shown.id]: { ...by[shown.id], [g.id]: value },
+                    }));
                   }}
                 />
               </div>

@@ -41,6 +41,7 @@ vi.mock('@/lib/app/usage/budget', () => ({ reserveRewriteBudget: mocks.reserve }
 
 import { APIError } from '@/lib/api/errors';
 import { LEASE_MS } from '@/lib/app/assessments/limits';
+import { MAX_FILL_DRAFT_CHARS } from '@/lib/app/frameworks/placeholders';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import type { Assessment } from '@/lib/app/frameworks/howdoesthisland/engine/types';
 import {
@@ -995,23 +996,54 @@ describe('startRewrite: answering a rewrite’s placeholders (t-83)', () => {
     expect(fake.rewrites.find((r) => r.id === earlier.id)?.draft).toBe(GAPPY);
   });
 
-  it('takes a focus asked for over the earlier rewrite’s', async () => {
+  it('400s a focus other than the earlier rewrite’s, and takes its own', async () => {
     const review = finishedReview();
     const earlier = await gappyRewrite(review);
-    const started = await inOrg(() =>
-      startRewrite(
-        {
-          assessmentId: String(review.id),
-          focus: 'logos',
-          fromRewriteId: earlier.id,
-          answers: { p2: '£400 a year' },
-          stream: false,
-        },
-        { userId: null }
+    const ask = (focus: string) =>
+      inOrg(() =>
+        startRewrite(
+          {
+            assessmentId: String(review.id),
+            focus,
+            fromRewriteId: earlier.id,
+            answers: { p2: '£400 a year' },
+            stream: false,
+          },
+          { userId: null }
+        )
+      );
+    const err = await refusal(ask('logos'));
+    expect(err).toMatchObject({ status: 400, details: { focus: ['pathos'] } });
+    expect(fake.rewrites).toHaveLength(1);
+
+    await (
+      await ask('pathos')
+    ).done;
+    expect(theCall().request().prompt).toContain('Focus on raising pathos');
+  });
+
+  it('409s a draft too long to give the editor whole, holding nothing', async () => {
+    const review = finishedReview();
+    const earlier = await gappyRewrite(review);
+    const row = fake.rewrites.find((r) => r.id === earlier.id);
+    if (!row) throw new Error('no row');
+    row.draft = `${'x'.repeat(MAX_FILL_DRAFT_CHARS)} [ADD: a client]`;
+    const err = await refusal(
+      inOrg(() =>
+        startRewrite(
+          {
+            assessmentId: String(review.id),
+            fromRewriteId: earlier.id,
+            answers: { p1: 'x' },
+            stream: false,
+          },
+          { userId: null }
+        )
       )
     );
-    await started.done;
-    expect(theCall().request().prompt).toContain('Focus on raising logos');
+    expect(err).toMatchObject({ status: 409, code: 'REWRITE_TOO_LONG_TO_FILL' });
+    expect(mocks.reserve).toHaveBeenCalledTimes(1);
+    expect(fake.rewrites).toHaveLength(1);
   });
 
   it('400s an answer to a placeholder the draft does not have, naming those it has', async () => {

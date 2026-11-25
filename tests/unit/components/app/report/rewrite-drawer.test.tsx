@@ -764,6 +764,34 @@ describe('RewriteDrawer', () => {
       expect(gap('monthly price')).toHaveValue('£20');
     });
 
+    it('keeps what was typed on its draft when a fill starts and then fails', async () => {
+      const failed = row({
+        id: 'rw_failed',
+        focus: 'pathos',
+        status: 'failed',
+        draft: 'From £20',
+        error: 'Timed out.',
+        errorCode: 'timed_out',
+      });
+      routes.post = () =>
+        streamed([
+          frame({ type: 'rewrite', rewrite: row({ id: 'rw_failed', focus: 'pathos' }) }),
+          frame({ type: 'rewrite_done', rewrite: failed }),
+        ]);
+      await openGappy();
+      fireEvent.change(gap('monthly price'), { target: { value: '£20' } });
+      fireEvent.click(fillButton());
+      expect(await screen.findByText('Timed out.')).toBeInTheDocument();
+
+      // Back on the draft it answered, the answer is still there.
+      const gappyButton = screen
+        .getAllByRole('button', { name: /Pathos · / })
+        .find((b) => b.textContent?.includes('Done'));
+      if (!gappyButton) throw new Error('the gappy rewrite is not listed');
+      fireEvent.click(gappyButton);
+      expect(await screen.findByLabelText('monthly price')).toHaveValue('£20');
+    });
+
     it('keeps what was typed when the rewrite shown is picked again from the list', async () => {
       await openGappy();
       fireEvent.change(gap('monthly price'), { target: { value: '£20' } });

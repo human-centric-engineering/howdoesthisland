@@ -943,6 +943,12 @@ export const APP_ROUTES: readonly RouteContract[] = [
           "The rewrite `fromRewriteId` names has not `completed`: only a finished draft's placeholders can be answered.",
       },
       {
+        status: 409,
+        code: 'REWRITE_TOO_LONG_TO_FILL',
+        description:
+          'The rewrite `fromRewriteId` names is over 80,000 characters: a fill gives the editor the draft whole, so a longer one is refused rather than cut.',
+      },
+      {
         status: 404,
         code: 'NOT_FOUND',
         description:

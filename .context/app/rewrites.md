@@ -77,15 +77,22 @@ used for an answered fact is listed with the answer, so every place it sits
 is filled. The fence tags (`earlier_draft`, `answers`, `content`,
 `project_context`) are stripped from the draft and the answers.
 
-The earlier draft is not cut at the text's limit: a rewrite may run to half
-as long again. It is cut at `MAX_EARLIER_DRAFT` (twice the text's limit,
-marked when cut), and the ceiling is sized from whichever is longer, the text
-or that draft, so a chain of passes, each from the last, cannot grow its
-prompt or its ceiling.
+The earlier draft is given whole, not cut at the text's limit: a rewrite may
+run to half as long again. A draft over `MAX_FILL_DRAFT_CHARS` (80,000, twice
+the text's limit) is refused (409 `REWRITE_TOO_LONG_TO_FILL`) rather than cut,
+since a cut draft would come back without its end; so a chain of fills, each
+from the last, cannot grow its prompt or its ceiling. The ceiling is sized
+from whichever is longer, the text or that draft.
+
+A fill keeps its rewrite's focus: another is a 400 (`details.focus`), since
+the editor is told to change nothing but the gaps. An answer that is itself a
+placeholder (`[ADD:`) is a 400: the editor would copy it in, and it would be
+asked for again.
 
 Refusals, before anything is held: 404 for a rewrite that is not this
 review's in this workspace, 409 `REWRITE_NOT_FINISHED` for one not
-`completed`, 400 for an answer to an id the draft does not have
+`completed`, 409 `REWRITE_TOO_LONG_TO_FILL` (above), 400 for an answer to an
+id the draft does not have
 (`details.answers.unknown`, with its ids in `details.answers.placeholders`).
 
 **Answers are not saved.** They reach the new draft and nothing else, not
@@ -247,7 +254,8 @@ show it.
   draft with the answers (`fromRewriteId`, `answers`, the draft's focus); the
   ones left blank are fields again on the new draft. A fill refused before it
   starts puts the draft and what was typed back, with the refusal beside its
-  button.
+  button. What was typed is kept by the rewrite it answers, so it never shows
+  under another draft's gaps, and a fill that fails leaves it on its draft.
 - **No brief** (t-83): on a review whose project has no brief, or that is in
   no project, the drawer says what a brief adds, with an example, and links
   to writing one (`components/app/projects/brief-invite.tsx`). The report
