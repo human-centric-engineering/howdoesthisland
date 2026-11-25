@@ -184,6 +184,8 @@ export function RewriteDrawer({
    * ends, the stored draft is the whole of it.
    */
   const follow = async (r: RewriteWire, signal: AbortSignal) => {
+    // Answers typed for another draft's gaps are not this one's: ids repeat.
+    setTyped({});
     setShown(r);
     setDraft((d) => (r.draft.length > d.length ? r.draft : d));
     setPhase('writing');
@@ -240,6 +242,7 @@ export function RewriteDrawer({
     setDraft('');
     setCopied(false);
     setTyped({});
+    setOrigin('write');
     rewrite.clear();
     review.clear();
   };

@@ -280,9 +280,17 @@ describe('buildRewriteRequest: filling an earlier draft (t-83)', () => {
     expect(prompt()).not.toContain('<answers>');
   });
 
-  it('sizes its ceiling for the earlier draft when that is the longer', () => {
+  it('sizes its ceiling from the whole earlier draft, past the text’s limit', () => {
     const long = 'b'.repeat(60_000);
-    expect(second({ draft: long, answers: [] }).maxTokens).toBe(rewriteMaxTokens(long));
+    // Half as long again, at three characters a token, plus thinking: not cut at the text's limit.
+    expect(second({ draft: long, answers: [] }).maxTokens).toBe(30_000 + REWRITE_THINKING_TOKENS);
     expect(second().maxTokens).toBe(rewriteMaxTokens(TEXT));
+  });
+
+  it('gives a long earlier draft whole, gaps past the text’s limit included', () => {
+    const long = `${'c'.repeat(45_000)} [ADD: the tail fact]`;
+    const p = second({ draft: long, answers: [] }).prompt;
+    expect(p).toContain(`<earlier_draft>\n${long}\n</earlier_draft>`);
+    expect(p).not.toContain('[truncated]\n</earlier_draft>');
   });
 });

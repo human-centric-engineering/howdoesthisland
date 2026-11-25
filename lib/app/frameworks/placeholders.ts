@@ -52,7 +52,8 @@ export function parsePlaceholders(draft: string): Placeholder[] {
   const found: Placeholder[] = [];
   const byFact = new Map<string, Placeholder>();
   for (const match of draft.matchAll(PATTERN)) {
-    const label = match[1].replace(/\s+/g, ' ');
+    // Trimmed again: the pattern strips spaces and tabs only, not NBSP or `\r`.
+    const label = match[1].replace(/\s+/g, ' ').trim();
     if (label === '' || label.length > MAX_PLACEHOLDER_LABEL) continue;
     const at = { start: match.index, end: match.index + match[0].length };
     const key = sameFact(label);

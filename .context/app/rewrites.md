@@ -72,8 +72,11 @@ prompt again, plus the earlier draft and each answer against its placeholder
 as the draft wrote it, both fenced and data. The editor starts from that
 draft, puts each answer where its gap is, and leaves the unanswered ones as
 they are, so they come back as placeholders again. One step, not a
-conversation; the earlier rewrite is left as it was. Its ceiling is sized
-from the earlier draft when that is longer than the text.
+conversation; the earlier rewrite is left as it was. The earlier draft is
+given whole, not cut at the text's limit as the text is: a rewrite may run to
+half as long again, and it is the editor's own output, bounded by its earlier
+ceiling. The ceiling is sized from whichever is longer, the text or that
+draft.
 
 Refusals, before anything is held: 404 for a rewrite that is not this
 review's in this workspace, 409 `REWRITE_NOT_FINISHED` for one not
@@ -242,7 +245,10 @@ show it.
   no project, the drawer says what a brief adds, with an example, and links
   to writing one (`components/app/projects/brief-invite.tsx`). The report
   page reads the project once to know (a project it cannot read invites
-  nothing). The `/assess` workbench shows the same before a review starts,
+  nothing). For a review in no project it also says that a review cannot be
+  moved into one once it has run, so its rewrites will never have a brief: a
+  new review of the copy in a project with one will. The `/assess` workbench
+  shows the same before a review starts,
   for no project or a project with no brief. Neither ever stops a run.
 - **Refusals** show beside the button pressed, with `<SaveError>`. Credit and
   budget refusals use the assess page's `refusalOf`, with the usage link; the

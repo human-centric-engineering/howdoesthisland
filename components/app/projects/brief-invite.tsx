@@ -10,10 +10,8 @@
  */
 import Link from 'next/link';
 import { WORDS } from '@/lib/app/reports/words';
-import type { Brief } from '@/lib/app/projects/validations';
-
 /** Whether a brief says anything: any one of its parts written. */
-export function hasBrief(brief: Brief | null | undefined): boolean {
+export function hasBrief(brief: Readonly<Record<string, unknown>> | null | undefined): boolean {
   return Object.values(brief ?? {}).some((part) => typeof part === 'string' && part.trim() !== '');
 }
 
@@ -46,6 +44,13 @@ export function BriefInvite({
         you sound, in your own words. With one, a rewrite uses the facts you have given rather than
         leaving gaps for you to fill.
       </p>
+      {!projectId && runs === 'rewrite' ? (
+        <p>
+          A {WORDS.review} stays outside a project once it has run, so this one&rsquo;s rewrites
+          cannot use a brief. Make a project, write its brief, and {WORDS.review} the copy in it:
+          that {WORDS.review}&rsquo;s rewrites will.
+        </p>
+      ) : null}
       <p className="text-(--hd-muted)">
         For example: &ldquo;Bookkeeping for sole traders, from &pound;20 a month. 300 clients across
         Yorkshire, most of them plumbers and electricians.&rdquo;

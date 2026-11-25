@@ -73,6 +73,14 @@ describe('parsePlaceholders', () => {
     expect(parsePlaceholders('[ADD:\tthe   price\t]')[0].label).toBe('the price');
   });
 
+  it('trims whitespace the pattern does not, so a blank one is passed over and repeats merge', () => {
+    expect(parsePlaceholders('[ADD:\u00a0]')).toEqual([]);
+    const got = parsePlaceholders('[ADD: client name\r] and [ADD: client name]');
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ label: 'client name' });
+    expect(got[0].at).toHaveLength(2);
+  });
+
   it(`offers at most ${MAX_PLACEHOLDERS}, still placing repeats of those it offers`, () => {
     const many = Array.from({ length: MAX_PLACEHOLDERS + 2 }, (_, i) => `[ADD: fact ${i}]`);
     const draft = `${many.join(' ')} [ADD: fact 0]`;

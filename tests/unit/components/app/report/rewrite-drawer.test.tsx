@@ -685,6 +685,37 @@ describe('RewriteDrawer', () => {
       expect(screen.queryByRole('heading', { name: 'Facts the editor needs' })).toBeNull();
     });
 
+    it('clears what was typed when a fill whose stream dropped is found and followed', async () => {
+      // The fill answered p1; its draft's remaining gap is now p1 too, for another fact.
+      const filled = row({
+        id: 'rw_filled',
+        focus: 'pathos',
+        status: 'completed',
+        draft: 'From £20 a month, across [ADD: number of clients] clients.',
+        placeholders: [{ id: 'p1', label: 'number of clients', at: [{ start: 25, end: 51 }] }],
+      });
+      let listed = 0;
+      routes.list = () =>
+        listed++ === 0
+          ? ok([gappy(), earlierRow])
+          : ok([row({ id: 'rw_filled', focus: 'pathos' }), gappy(), earlierRow]);
+      routes.post = () => streamed([], 'error');
+      routes.read = () => ok(filled);
+      render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      const [newest] = await screen.findAllByRole('button', { name: /Pathos · / });
+      fireEvent.click(newest);
+      await screen.findByRole('heading', { name: 'Facts the editor needs' });
+      fireEvent.change(gap('monthly price'), { target: { value: '£20' } });
+      fireEvent.click(fillButton());
+
+      await waitFor(() => expect(draftBox()?.textContent).toBe(filled.draft));
+      expect(calls('POST', '/api/v1/rewrites')).toHaveLength(1);
+      // The old p1's answer is not offered as the new p1's.
+      expect(await screen.findByLabelText('number of clients')).toHaveValue('');
+      expect(fillButton()).toBeDisabled();
+    });
+
     it('puts back the draft and what was typed when the fill is refused, and shows the refusal beside Fill', async () => {
       routes.post = () =>
         refused(402, 'INSUFFICIENT_CREDITS', 'This needs 40 CopyCredits; the workspace has 12.', {

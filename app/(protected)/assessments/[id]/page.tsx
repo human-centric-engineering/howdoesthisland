@@ -3,7 +3,8 @@ import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
 import { apiReportSource, loadReport } from '@/lib/app/reports/load';
 import { loadServerData } from '@/lib/api/server-load';
-import { projectSchema } from '@/lib/app/projects/wire';
+import { z } from 'zod';
+import { logger } from '@/lib/logging';
 import { catalogueEndpoint, projectEndpoint } from '@/components/app/projects/schemas';
 import { hasBrief } from '@/components/app/projects/brief-invite';
 import { assessCatalogueSchema } from '@/components/app/workbench/schemas';
@@ -32,7 +33,12 @@ export const metadata: Metadata = { title: 'Report' };
  * One still running shows its live progress, then the report once it is
  * final (t-78).
  */
-const briefOfProject = projectSchema.pick({ brief: true });
+/**
+ * Only the brief, read loosely: whether any part is written is all the
+ * drawer needs, so a stored brief the request schema would now refuse (a
+ * part over a lowered limit, say) still counts.
+ */
+const briefOfProject = z.object({ brief: z.record(z.string(), z.unknown()).nullish() });
 
 /**
  * What the rewrite drawer invites, for a review in `projectId`: a brief, when
@@ -44,8 +50,15 @@ async function briefInviteFor(
 ): Promise<{ projectId: string | null } | null> {
   if (!projectId) return { projectId: null };
   const read = await loadServerData<unknown>(projectEndpoint(projectId), { expected: [404] });
-  const parsed = read.ok ? briefOfProject.safeParse(read.data) : null;
-  if (!parsed?.success) return null;
+  if (!read.ok) return null;
+  const parsed = briefOfProject.safeParse(read.data);
+  if (!parsed.success) {
+    logger.warn('Report: the project did not parse for the brief invitation', {
+      projectId,
+      issues: parsed.error.issues.slice(0, 5),
+    });
+    return null;
+  }
   return hasBrief(parsed.data.brief) ? null : { projectId };
 }
 

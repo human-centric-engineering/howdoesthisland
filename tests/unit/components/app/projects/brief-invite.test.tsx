@@ -63,4 +63,14 @@ describe('BriefInvite', () => {
     render(<BriefInvite projectId={null} runs="review" />);
     expect(screen.getByText(/the review runs all the same/)).toBeInTheDocument();
   });
+
+  it('tells a rewrite of a review in no project that only a new review in a project gets a brief', () => {
+    const { unmount } = render(<BriefInvite projectId={null} runs="rewrite" />);
+    expect(screen.getByText(/so this one’s rewrites cannot use a brief/)).toBeInTheDocument();
+    unmount();
+    // Not said where it is not so: a review not yet run, or a project that can take a brief.
+    render(<BriefInvite projectId={null} runs="review" />);
+    render(<BriefInvite projectId="proj-1" runs="rewrite" />);
+    expect(screen.queryByText(/cannot use a brief/)).not.toBeInTheDocument();
+  });
 });

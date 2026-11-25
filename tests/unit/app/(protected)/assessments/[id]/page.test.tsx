@@ -32,6 +32,8 @@ vi.mock('@/lib/app/reports/load', () => ({ loadReport, apiReportSource }));
 const loadServerData = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api/server-load', () => ({ loadServerData }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
+const logger = vi.hoisted(() => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger }));
 
 import ReportPage, { metadata } from '@/app/(protected)/assessments/[id]/page';
 
@@ -42,6 +44,7 @@ beforeEach(() => {
   getServerSession.mockReset().mockResolvedValue({ user: { id: 'u1' }, session: { id: 's1' } });
   clearInvalidSession.mockClear();
   loadReport.mockReset();
+  logger.warn.mockClear();
   loadServerData
     .mockReset()
     .mockResolvedValue({ ok: true, data: anAssessCatalogue(), meta: undefined });
@@ -275,6 +278,26 @@ describe('/assessments/[id]', () => {
       openDrawer();
       expect(screen.getByRole('button', { name: 'Write a rewrite' })).toBeInTheDocument();
       expect(invite()).toBeNull();
+      // Said, so drift in the project's answer is seen.
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Report: the project did not parse for the brief invitation',
+        expect.objectContaining({ projectId: 'prj_1' })
+      );
+    });
+
+    it('counts a stored brief the request schema would now refuse', async () => {
+      loadReport.mockResolvedValue(readyLoad('prj_1'));
+      loadServerData.mockResolvedValue({
+        ok: true,
+        // A part past today's limit, and a part since renamed.
+        data: project({ offer: 'x'.repeat(5_000), tagline: 'Old part' }),
+        meta: undefined,
+      });
+      render(await ReportPage({ params }));
+      openDrawer();
+      expect(screen.getByRole('button', { name: 'Write a rewrite' })).toBeInTheDocument();
+      expect(invite()).toBeNull();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
   });
 
