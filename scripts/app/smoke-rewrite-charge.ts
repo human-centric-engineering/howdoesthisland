@@ -166,9 +166,13 @@ async function main(): Promise<number> {
       check(again.credits === 0, 'charging it again takes nothing');
       check((await getCreditBalance(org.id)) === 76, 'the balance is 76');
 
-      // Ended, it holds nothing: a rewrite fits again.
+      // Ended, it holds nothing: a rewrite fits again. Billed, it is history
+      // too: the estimate is the median of $0.50 and its $0.0301.
       const third = await ask();
-      check(third.heldUsd === 0.5, 'with the lost one ended, the next rewrite fits');
+      check(
+        third.heldUsd === 0.26505,
+        `with the lost one ended, the next rewrite fits, holding the median of both (${third.heldUsd})`
+      );
 
       await prisma.assessment.delete({ where: { id: review.id } });
       const left = await prisma.rewrite.count({ where: { orgId: org.id } });
