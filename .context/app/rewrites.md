@@ -169,8 +169,9 @@ show it.
   before the list arrived, writing reads it first; with no list at all, a drop
   is matched to nothing. Otherwise it says the connection dropped. While a
   rewrite streams, the list is held still: reopening another would stop the
-  stream and lose from view what was not yet saved. Closing the drawer mid-draft stops only the
-  reading: the rewrite is listed, writing, on the next open.
+  stream and lose from view what was not yet saved. Closing the drawer
+  mid-draft stops only the reading: the rewrite is listed, writing, on the
+  next open.
 - **The list** is each read laid under the rows the drawer has seen since
   (`mergeRewrites`), so a read that lands after a rewrite started does not
   hide it, and only the latest read's answer is shown.
