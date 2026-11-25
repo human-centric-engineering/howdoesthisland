@@ -165,15 +165,19 @@ show it.
   newest running rewrite of the focus asked for that was not listed before the
   request and is no older than it (`startedSince`; a minute's slack for clock
   skew). Someone else starting the same focus on the same review in that
-  minute would still match: nothing on the row says who started it. Otherwise
-  it says the connection dropped. Closing the drawer mid-draft stops only the
+  minute would still match: nothing on the row says who started it. Pressed
+  before the list arrived, writing reads it first; with no list at all, a drop
+  is matched to nothing. Otherwise it says the connection dropped. While a
+  rewrite streams, the list is held still: reopening another would stop the
+  stream and lose from view what was not yet saved. Closing the drawer mid-draft stops only the
   reading: the rewrite is listed, writing, on the next open.
 - **The list** is each read laid under the rows the drawer has seen since
   (`mergeRewrites`), so a read that lands after a rewrite started does not
   hide it, and only the latest read's answer is shown.
 - **Copy** copies the draft. **Review this draft** reads the review
   (`GET /api/v1/assessments/{id}`) and starts a review of the draft with the
-  same model version, reader context, project and AI reviewers (a quick review
+  same model version, reader context, project and AI reviewers, and its title
+  marked "(rewrite)" (a quick review
   is reviewed quickly again: `judges` takes at least one), then opens it. In
   t-84 that becomes a comparison with the original.
 - **Refusals** show beside the button pressed, with `<SaveError>`. Credit and
