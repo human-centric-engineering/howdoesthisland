@@ -22,7 +22,7 @@
  * Runs in the caller's tenant context (the route's guard). Every refusal is
  * an `APIError`.
  */
-import { NotFoundError } from '@/lib/api/errors';
+import { APIError, NotFoundError } from '@/lib/api/errors';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { prisma } from '@/lib/db/client';
 import {
@@ -64,12 +64,22 @@ export interface PreparedComparison extends ResolvedReviewOptions {
  * Everything that can be refused before anything is held or written: the
  * options (as a single review's), each draft's text, and every draft's
  * estimate together against the workspace's credits and monthly budget (402).
- * Holds nothing: the route counts the drafts against the per-user cap once
- * this has passed, then holds with {@link holdComparisonBudget}.
+ * Holds nothing: once this has passed, the route holds with
+ * {@link holdComparisonBudget}, then counts the drafts against the per-user cap.
  */
 export async function prepareComparison(body: CreateComparisonBody): Promise<PreparedComparison> {
   const options = await resolveReviewOptions(body);
-  for (const draft of body.drafts) await refusingAsApi(() => assessableText(draft.text));
+  for (const [position, draft] of body.drafts.entries()) {
+    try {
+      await refusingAsApi(() => assessableText(draft.text));
+    } catch (err) {
+      // Which draft to fix, by its place in `drafts`.
+      if (err instanceof APIError) {
+        throw new APIError(err.message, err.code, err.status, { ...err.details, position });
+      }
+      throw err;
+    }
+  }
   const rate = await assertReviewFits(
     requireOrgId(),
     storedProfileName(options.profile),

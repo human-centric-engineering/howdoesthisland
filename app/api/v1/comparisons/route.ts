@@ -18,7 +18,8 @@
  * `CONTEXT_INVALID`, `PROFILE_UNKNOWN`, `PROJECT_FRAMEWORK_MISMATCH`,
  * `OVERLAY_INVALID`; 404 `FRAMEWORK_NOT_FOUND`, `FRAMEWORK_VERSION_NOT_FOUND`,
  * `PROJECT_NOT_FOUND`; 409 `PROJECT_ARCHIVED`), and for any draft's text (400
- * `CONTENT_EMPTY`, 422 `TEXT_TOO_LONG`). Fewer than 2 or more than 5 drafts is
+ * `CONTENT_EMPTY`, 422 `TEXT_TOO_LONG`, with the draft's index in `drafts` as
+ * `details.position`). Fewer than 2 or more than 5 drafts is
  * 400 `VALIDATION_ERROR`. 402 `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` when
  * the workspace cannot cover every draft's estimate together: nothing is
  * stored, and no draft is reviewed. 429 `RATE_LIMIT_EXCEEDED` when the drafts
@@ -62,17 +63,18 @@ export const POST = withAuth(async (request: NextRequest, session) => {
   const prepared = await prepareComparison(body);
   try {
     if (prepared.judges.length > 0) {
-      // Each draft is a review against the per-user cap. Checked for room
-      // first, so a set the cap refuses counts none of its drafts.
+      // Held first, so a set the locked budget check refuses counts none of
+      // its drafts against the per-user cap. A set the cap then refuses
+      // releases its holds below.
+      await holdComparisonBudget(body, prepared);
+      // Each draft is a review against the per-user cap: room checked and
+      // every draft counted with no await between, so no other request can
+      // take the room in the meantime, and a set the cap refuses counts none.
       const key = `user:${session.user.id}`;
       const room = aiAssessmentLimiter.peek(key);
       if (room.remaining < body.drafts.length) {
         return createRateLimitResponse({ ...room, success: false, remaining: 0 });
       }
-      // Held only now, so a request refused above holds nothing meanwhile,
-      // and before the drafts are counted, so a set the budget refuses
-      // counts none of them.
-      await holdComparisonBudget(body, prepared);
       body.drafts.forEach(() => aiAssessmentLimiter.check(key));
     }
     const comparison = await createComparison(body, prepared, {

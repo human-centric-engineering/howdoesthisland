@@ -29,7 +29,8 @@ single review uses), so every draft gets the same version, the same context with
 the project's defaults applied, the same overlay and the same judges. A refusal
 of an option is the review's (`CONTEXT_INVALID`, `PROFILE_UNKNOWN`,
 `PROJECT_ARCHIVED`, …). A draft whose text is empty or too long refuses the
-whole set (`CONTENT_EMPTY`, `TEXT_TOO_LONG`). A file or a page is not taken:
+whole set (`CONTENT_EMPTY`, `TEXT_TOO_LONG`), with the draft's place in
+`drafts` as `details.position`. A file or a page is not taken:
 drafts are pasted.
 
 ## Each draft is an ordinary review
@@ -90,9 +91,11 @@ claimed (t-53), so a draft that waited while other spend landed can end `failed`
 with the budget's `errorCode`, and the comparison reads `partial`.
 
 **Each draft counts as a review** against the per-user cap on reviews that call
-AI reviewers (`AI_ASSESSMENTS_PER_MINUTE`). The route checks there is room for
-all of them first, so a set the cap refuses (429 `RATE_LIMIT_EXCEEDED`) counts
-none. Drafts that call no AI reviewer (the `quick` profile) count nothing and
+AI reviewers (`AI_ASSESSMENTS_PER_MINUTE`). The route takes the budget holds
+first, so a set the locked budget check refuses counts none. It then checks
+there is room for every draft and counts them all with no await between, so two
+requests cannot both take the last of the room, and a set the cap refuses (429
+`RATE_LIMIT_EXCEEDED`) counts none and releases its holds. Drafts that call no AI reviewer (the `quick` profile) count nothing and
 hold no budget.
 
 Each draft is charged in CopyCredits as its review ends, as any review is.

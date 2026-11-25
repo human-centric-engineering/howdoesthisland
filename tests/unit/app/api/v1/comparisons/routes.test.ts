@@ -470,7 +470,10 @@ describe('POST /api/v1/comparisons', () => {
     const res = await post({ judges: TWO, drafts: [{ text: DRAFT_A }, { text: '   ' }] });
 
     expect(res.status).toBe(400);
-    expect((await json(res)).error?.code).toBe('CONTENT_EMPTY');
+    expect((await json(res)).error).toMatchObject({
+      code: 'CONTENT_EMPTY',
+      details: { position: 1 },
+    });
     expect(fake.assessments).toEqual([]);
     expect(fake.sets).toEqual([]);
   });
@@ -580,6 +583,24 @@ describe('POST /api/v1/comparisons — the budget, for every draft together', ()
     // Only the rival's holds: this request holds none.
     expect(fake.holds.map((h) => h.id)).toEqual(['rival-0', 'rival-1']);
     expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(before);
+  });
+
+  it('refuses with 429 a set whose room another request took while it waited on the budget lock', async () => {
+    // The cap is 6. While this request waits for the lock, another counts five.
+    budget(0);
+    fake.db.budgetHold.deleteMany.mockImplementationOnce(async () => {
+      for (let i = 0; i < 5; i += 1) aiAssessmentLimiter.check(`user:${ALICE}`);
+      return { count: 0 };
+    });
+
+    const res = await post({ profile: 'full', drafts: drafts(DRAFT_A, DRAFT_B) });
+
+    expect(res.status).toBe(429);
+    expect((await json(res)).error?.code).toBe('RATE_LIMIT_EXCEEDED');
+    // None of this set counted, and its holds are released.
+    expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(1);
+    expect(fake.holds).toEqual([]);
+    expect(fake.sets).toEqual([]);
   });
 
   it('starts the set when every draft fits, and releases its holds once they are stored', async () => {
