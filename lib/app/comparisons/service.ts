@@ -46,6 +46,11 @@ import {
 } from '@/lib/app/usage/budget';
 import type { CreateComparisonBody } from '@/lib/app/comparisons/validations';
 import { readComparison, type ComparisonDetail } from '@/lib/app/comparisons/views';
+import {
+  estimateComparisonVerdict,
+  verdictRuns,
+  type VerdictSkipReason,
+} from '@/lib/app/comparisons/verdict';
 
 /** A request checked as far as it can be without writing anything. */
 export interface PreparedComparison extends ResolvedReviewOptions {
@@ -58,12 +63,18 @@ export interface PreparedComparison extends ResolvedReviewOptions {
   holds: BudgetHold[];
   /** The cost per judge the budget check read, for the hold's check to reuse. */
   rate: ReviewRate | null;
+  /**
+   * What the editor's verdict is held at, in USD (t-88): checked and held
+   * with the drafts, then kept on the comparison until its verdict ends.
+   */
+  verdictUsd: number;
 }
 
 /**
  * Everything that can be refused before anything is held or written: the
  * options (as a single review's), each draft's text, and every draft's
- * estimate together against the workspace's credits and monthly budget (402).
+ * estimate with the verdict's together against the workspace's credits and
+ * monthly budget (402).
  * Holds nothing: once this has passed, the route checks the per-user cap,
  * holds with {@link holdComparisonBudget}, then counts the drafts against it.
  */
@@ -78,14 +89,32 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
       throw err;
     }
   }
+  const orgId = requireOrgId();
+  // The project's brief, which the verdict's call reads, for its ceiling.
+  const project =
+    options.projectId && verdictRuns(options.judges)
+      ? await prisma.project.findFirst({
+          where: { id: options.projectId, orgId },
+          select: { brief: true },
+        })
+      : null;
+  const verdictUsd = await estimateComparisonVerdict(
+    orgId,
+    options.resolved.engine,
+    options.ctx,
+    body.drafts,
+    options.judges,
+    project?.brief
+  );
   const rate = await assertReviewFits(
-    requireOrgId(),
+    orgId,
     storedProfileName(options.profile),
     options.judges.length,
     true,
-    body.drafts.length
+    body.drafts.length,
+    verdictUsd
   );
-  return { ...options, holds: [], rate };
+  return { ...options, holds: [], rate, verdictUsd };
 }
 
 /**
@@ -103,7 +132,8 @@ export async function holdComparisonBudget(
     storedProfileName(prepared.profile),
     prepared.judges.length,
     body.drafts.length,
-    prepared.rate ?? undefined
+    prepared.rate ?? undefined,
+    prepared.verdictUsd
   );
 }
 
@@ -154,9 +184,22 @@ export async function createComparison(
               judges: [...prepared.judges],
               context,
               createdByUserId: caller.userId,
+              // Held from here until it ends (t-88); one that will not run holds nothing.
+              ...(verdictRuns(prepared.judges)
+                ? { verdictHeldUsd: prepared.verdictUsd }
+                : {
+                    verdictStatus: 'SKIPPED' as const,
+                    verdictReason: 'too_few_judges' satisfies VerdictSkipReason,
+                  }),
             },
             select: { id: true },
           });
+          // The comparison holds the verdict's part from here: the request's
+          // hold stops holding it in the same commit, so no check counts it twice.
+          const [first] = prepared.holds;
+          if (first && verdictRuns(prepared.judges)) {
+            await tx.budgetHold.updateMany({ where: { id: first.id }, data: { extraUsd: 0 } });
+          }
           await tx.assessmentSetMember.createMany({
             data: enqueued.map((review, position) => ({
               orgId,
@@ -194,6 +237,8 @@ export async function getComparison(id: string): Promise<ComparisonDetail> {
 /**
  * Delete a comparison: the set and its drafts' places, not their reviews,
  * which stay in the workspace's history and are deleted as any review is.
+ * A verdict whose call is still running charges itself as it ends; one whose
+ * process was lost is charged by the recovery tick (`verdict.ts`).
  */
 export async function removeComparison(id: string): Promise<{ deleted: true }> {
   const { count } = await prisma.assessmentSet.deleteMany({

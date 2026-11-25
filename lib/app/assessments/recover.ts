@@ -40,6 +40,7 @@ import { MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { chargeEndedReview, chargeLapsedEphemeralRuns, uncharged } from '@/lib/app/credits/charge';
 import { logger } from '@/lib/logging';
 import { beginAssessment } from '@/lib/app/assessments/run';
+import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 
@@ -112,6 +113,9 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
         })
     );
   }
+  // A comparison waiting on a review given up on starts its verdict now (t-88),
+  // not at the verdict recovery's next tick.
+  for (const { id } of spent) startVerdictsAfterReview(orgId, id);
 
   // Cancelled reviews whose run died before its last write (`freePlace`).
   // Those from before charging began are left alone (`uncharged`).

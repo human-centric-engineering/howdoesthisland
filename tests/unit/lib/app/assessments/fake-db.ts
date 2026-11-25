@@ -55,6 +55,12 @@
  * `deleteMany` honours `members: { none: { assessmentId: { not: null } } }`
  * and takes its members with it (the cascade). An assessment deleted leaves
  * its member with `assessmentId: null` (SET NULL).
+ *
+ * For verdicts (t-88): a set is made with its verdict's defaults (`WAITING`,
+ * nothing held), its members' assessments carry their `content`, and it has
+ * `findFirst`, `updateMany` and `aggregate` (summing `verdictHeldUsd`). Its
+ * reads honour `members: { none: { assessment: { status } } }`, and
+ * `assessmentSetMember.findMany` honours `set: { … }`.
  */
 import { vi } from 'vitest';
 
@@ -174,11 +180,32 @@ export function createFakeDb() {
     members: setMembers
       .filter((m) => m.setId === row.id)
       .sort((x, y) => Number(x.position) - Number(y.position))
-      .map((m) => ({
-        ...m,
-        assessment: assessments.find((a) => a.id === m.assessmentId) ?? null,
-      })),
+      .map((m) => {
+        const assessment = assessments.find((a) => a.id === m.assessmentId);
+        return {
+          ...m,
+          assessment: assessment
+            ? { ...assessment, content: contents.find((c) => c.id === assessment.contentId) }
+            : null,
+        };
+      }),
   });
+
+  /** `where` on a set, with the `members: { none }` relation filter read against its members. */
+  const matchesSet = (row: Row, where: Row = {}): boolean => {
+    const { members: rel, ...own } = where as Row & {
+      members?: { none: Row & { assessment?: Row } };
+    };
+    if (!matches(row, own)) return false;
+    if (!rel) return true;
+    const { assessment: onReview, ...onMember } = rel.none;
+    return !setMembers.some((m) => {
+      if (m.setId !== row.id || !matches(m, onMember)) return false;
+      if (!onReview) return true;
+      const review = assessments.find((a) => a.id === m.assessmentId);
+      return review !== undefined && matches(review, onReview);
+    });
+  };
 
   type Order = { createdAt?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }[];
   const ordered = (rows: Row[], orderBy?: Order): Row[] => {
@@ -376,7 +403,8 @@ export function createFakeDb() {
     },
     budgetHold: {
       findMany: vi.fn(async ({ where }: { where?: Row }) =>
-        holds.filter((h) => matches(h, where)).map((h) => ({ ...h }))
+        // `extraUsd` defaults to 0 (t-88), for a hold seeded without it.
+        holds.filter((h) => matches(h, where)).map((h) => ({ extraUsd: 0, ...h }))
       ),
       create: vi.fn(async ({ data }: { data: Row }) => {
         seq += 1;
@@ -524,13 +552,49 @@ export function createFakeDb() {
     assessmentSet: {
       create: vi.fn(async ({ data }: { data: Row }) => {
         seq += 1;
-        const row: Row = { id: `set-${seq}`, createdAt: new Date(), ...data };
+        const row: Row = {
+          id: `set-${seq}`,
+          createdAt: new Date(),
+          verdictStatus: 'WAITING',
+          verdict: null,
+          verdictReason: null,
+          verdictHeldUsd: 0,
+          verdictCostUsd: 0,
+          verdictModel: null,
+          verdictAttempts: 0,
+          verdictLeaseExpiresAt: null,
+          verdictStartedAt: null,
+          verdictCompletedAt: null,
+          ...data,
+        };
         sets.push(row);
         return { id: row.id };
       }),
       findUnique: vi.fn(async ({ where }: { where: Row }) => {
-        const row = sets.find((r) => matches(r, where));
+        const row = sets.find((r) => matchesSet(r, where));
         return row ? setWithRelations(row) : null;
+      }),
+      findFirst: vi.fn(async ({ where }: { where: Row }) => {
+        const row = sets.find((r) => matchesSet(r, where));
+        return row ? setWithRelations(row) : null;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = sets.filter((r) => matchesSet(r, where));
+        for (const row of rows) apply(row, data);
+        return { count: rows.length };
+      }),
+      aggregate: vi.fn(async ({ where }: { where?: Row }) => {
+        const rows = sets.filter((r) => matchesSet(r, where));
+        return {
+          _sum: {
+            verdictHeldUsd: rows.length
+              ? rows.reduce((sum, r) => sum + Number(r.verdictHeldUsd), 0)
+              : null,
+            verdictCostUsd: rows.length
+              ? rows.reduce((sum, r) => sum + Number(r.verdictCostUsd), 0)
+              : null,
+          },
+        };
       }),
       findMany: vi.fn(
         async ({
@@ -545,7 +609,7 @@ export function createFakeDb() {
           orderBy?: Order;
         }) => {
           const rows = ordered(
-            sets.filter((r) => matches(r, where)),
+            sets.filter((r) => matchesSet(r, where)),
             orderBy
           );
           const from = skip ?? 0;
@@ -553,7 +617,7 @@ export function createFakeDb() {
         }
       ),
       count: vi.fn(
-        async ({ where }: { where?: Row }) => sets.filter((r) => matches(r, where)).length
+        async ({ where }: { where?: Row }) => sets.filter((r) => matchesSet(r, where)).length
       ),
       deleteMany: vi.fn(async ({ where }: { where: Row & { members?: { none: Row } } }) => {
         const { members: rel, ...own } = where;
@@ -578,6 +642,14 @@ export function createFakeDb() {
           setMembers.push({ id: `member-${seq}`, createdAt: new Date(), ...member });
         }
         return { count: data.length };
+      }),
+      findMany: vi.fn(async ({ where }: { where?: Row & { set?: Row } }) => {
+        const { set: onSet, ...own } = where ?? {};
+        return setMembers.filter((m) => {
+          if (!matches(m, own)) return false;
+          const set = sets.find((r) => r.id === m.setId);
+          return !onSet || (set !== undefined && matches(set, onSet));
+        });
       }),
     },
     aiKnowledgeDocument: {

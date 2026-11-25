@@ -20,7 +20,8 @@
  *   rows have been quiet for `CANCEL_GRACE_MS` ({@link chargeLapsedEphemeralRuns}).
  *
  * **Once.** The entry's reference is `assessment:<id>` or
- * `ephemeral-run:<runId>` (`rewrite:<id>` for a rewrite, t-81), and
+ * `ephemeral-run:<runId>` (`rewrite:<id>` for a rewrite, t-81;
+ * `comparison-verdict:<setId>` for a comparison's verdict, t-88), and
  * `(kind, reference)` is unique, so the insert
  * skips a duplicate rather than failing: two finishers racing, or a recovery
  * after a run already charged, charge once. Stored reviews are never claimed
@@ -61,6 +62,10 @@ export function ephemeralRunChargeReference(runId: string): string {
 
 export function rewriteChargeReference(rewriteId: string): string {
   return `rewrite:${rewriteId}`;
+}
+
+export function comparisonVerdictChargeReference(setId: string): string {
+  return `comparison-verdict:${setId}`;
 }
 
 async function charge(
@@ -127,6 +132,29 @@ export async function chargeRewrite(
   return charge(db, orgId, rewriteChargeReference(rewriteId), {
     createdAt: { gte: since },
     metadata: { path: ['rewriteId'], equals: rewriteId },
+  });
+}
+
+/**
+ * Charge a comparison's verdict (t-88) for its cost rows since `since` (the
+ * comparison's `createdAt`), which carry `comparisonId` and no
+ * `assessmentId`, so no draft's charge counted them: every attempt's, a
+ * restarted verdict's included. Call it from the write that ends the
+ * verdict, in that write's transaction, as for a rewrite; one whose
+ * comparison was made before its workspace's first credit entry is not
+ * charged, for the same reason.
+ */
+export async function chargeComparisonVerdict(
+  db: ChargeClient,
+  orgId: string,
+  setId: string,
+  since: Date
+): Promise<ReviewCharge> {
+  const first = await firstCreditEntryAt(orgId, db);
+  if (!first || since < first) return { credits: 0, spentUsd: 0 };
+  return charge(db, orgId, comparisonVerdictChargeReference(setId), {
+    createdAt: { gte: since },
+    metadata: { path: ['comparisonId'], equals: setId },
   });
 }
 

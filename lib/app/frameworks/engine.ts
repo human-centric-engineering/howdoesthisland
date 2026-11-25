@@ -16,7 +16,9 @@
  * for the same reason: a context's ids are the version's, and the editor's
  * pair (`buildEditorRequest`, `validateEditorReply`, t-25), because what the
  * editor is shown of a result, and which of its recommendations it may name,
- * are the framework's.
+ * are the framework's. f-compare added `appealScores` (t-87) and the
+ * verdict's pair (`buildVerdictRequest`, `validateVerdictReply`, t-88), for
+ * the same reason as the editor's.
  *
  * The slots themselves are not the engine's: they are the definition's static
  * `judges.slots` (`types.ts`), because each is a platform agent that exists
@@ -136,6 +138,35 @@ export interface AppealScore {
 }
 
 /**
+ * One finished review of a comparison's draft, as the editor's verdict
+ * reads it (t-88): the draft's place in the comparison (its id in the
+ * request and the reply), what the writer called it, its text, and the
+ * result this engine assembled for it.
+ */
+export interface VerdictDraft<Result = unknown> {
+  position: number;
+  label: string | null;
+  text: string;
+  result: Result;
+}
+
+/** The editor's call for a comparison's verdict (t-88): as a summary's. */
+export type VerdictRequest = EditorRequest;
+
+/**
+ * The editor's verdict on a comparison (t-88): which draft lands better with
+ * this reader, and why, the way a summary says how one text lands.
+ */
+export interface ComparisonVerdict {
+  /** The position of the draft that lands better: one of the drafts it was shown. */
+  draft: number;
+  /** Two or three sentences: why it lands better with this reader. */
+  why: string;
+  /** The appeals that decide it, most telling first: each the framework's id and one sentence. */
+  appeals: { appeal: string; why: string }[];
+}
+
+/**
  * A project's adjustment to a version's weights (D5, t-72) checked against
  * the bounds that version declares: the overlay the engine scores with (null
  * for none), or each problem by its dotted path in the overlay.
@@ -239,6 +270,26 @@ export interface FrameworkEngine<
     projectContext?: string | null,
     followUp?: RewriteFollowUp | null
   ): RewriteRequest;
+  /**
+   * The editor's call for a verdict on a comparison (t-88): which of `drafts`
+   * (two or more finished reviews, each assembled by this engine from its
+   * text and `ctx`) lands better with this reader. `projectContext` is the
+   * project's background, as for a summary. Added in f-compare.
+   */
+  buildVerdictRequest(
+    drafts: readonly VerdictDraft<Result>[],
+    ctx: Ctx,
+    projectContext?: string | null
+  ): VerdictRequest;
+  /**
+   * The editor's verdict (parsed, untrusted) checked against the drafts it
+   * was shown: refused whole when it names a draft that is not one of them,
+   * or an appeal the framework does not have.
+   */
+  validateVerdictReply(
+    reply: unknown,
+    drafts: readonly VerdictDraft<Result>[]
+  ): JudgeReplyValidation<ComparisonVerdict>;
   /**
    * A project's overlay (untrusted; absent is none) checked against this
    * version's bounds. A version that declares none refuses any overlay.

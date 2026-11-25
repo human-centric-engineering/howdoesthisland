@@ -4,17 +4,18 @@ Choosing between drafts (two subject lines, two versions of a proposal) means
 reviewing each the same way and reading the results together. A comparison does
 that: 2–5 drafts, reviewed with one framework version, context, project and set
 of AI reviewers, read back with each draft's difference from the best on every
-appeal. Built in t-87 (f-compare, app-plan §9). The editor's verdict on which
-draft lands better (t-88) and the side-by-side page (t-89) build on it.
+appeal, and the editor's verdict on which draft lands better. Built in t-87
+(f-compare, app-plan §9), with the verdict in t-88. The side-by-side page
+(t-89) builds on it.
 
 ## The API
 
-| Route                             | What it does                                                                |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| `POST /api/v1/comparisons`        | Review 2–5 drafts the same way. 202 at once; the reviews run as any review. |
-| `GET /api/v1/comparisons`         | The workspace's comparisons, newest first; `page`, `limit`, `projectId`.    |
-| `GET /api/v1/comparisons/{id}`    | One comparison: each draft's state and scores, and the per-appeal compare.  |
-| `DELETE /api/v1/comparisons/{id}` | Delete the comparison. Its drafts' reviews stay.                            |
+| Route                             | What it does                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /api/v1/comparisons`        | Review 2–5 drafts the same way. 202 at once; the reviews run as any review.                      |
+| `GET /api/v1/comparisons`         | The workspace's comparisons, newest first; `page`, `limit`, `projectId`.                         |
+| `GET /api/v1/comparisons/{id}`    | One comparison: each draft's state and scores, the per-appeal compare, and the editor's verdict. |
+| `DELETE /api/v1/comparisons/{id}` | Delete the comparison. Its drafts' reviews stay.                                                 |
 
 All four take a browser session or an API key with the `assess` scope, and are
 the workspace's: another workspace's id is a 404.
@@ -75,7 +76,95 @@ this one, `ethos`, `pathos`, `logos` and `kairos` from `result.scores`. A
 version no code runs any more lists its drafts with no appeals to compare.
 
 The list (`GET /api/v1/comparisons`) carries each comparison's state and its
-drafts' states and scores, from one query, not the per-appeal compare.
+drafts' states and scores, from one query, not the per-appeal compare. It
+carries the verdict's `status` and the `draft` it chose, not its reasons.
+
+## The editor's verdict
+
+Scores per appeal say where drafts differ, not which to send. Once every
+draft's review has ended, the editor reads the finished reviews and says which
+draft lands better with this reader, and why, the way it writes a review's
+summary (`lib/app/comparisons/verdict.ts`).
+
+`verdict` on the single read:
+
+| Field                             | Holds                                                              |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `status`                          | `waiting`, `running`, `completed`, `failed` or `skipped`.          |
+| `draft`                           | The position of the draft that lands better, once `completed`.     |
+| `why`                             | Two or three sentences on why it lands better with this reader.    |
+| `appeals`                         | The appeals that decide it, most telling first: `{ appeal, why }`. |
+| `reason`                          | Why there is none (below).                                         |
+| `model`, `costUsd`, `completedAt` | The call's model and cost, and when the verdict ended.             |
+
+**When it runs.** Once every draft is final (or purged) and at least two
+completed. A `partial` draft was reviewed by fewer AI reviewers than the
+others, so it is not shown to the editor: weighing it beside the rest would
+not be like for like. With fewer than two completed, the verdict is `skipped`
+with `reason` `too_few_completed`. A comparison whose drafts call fewer than
+two AI reviewers (`quick`, or one judge) gets none either (`too_few_judges`,
+decided when it is made, nothing held): the editor writes no summary for such
+a review, and a paid call to weigh them is not what a writer asking for a
+cheap review chose. Comparisons made before verdicts read `predates_verdicts`.
+
+**What the editor is shown.** Each completed draft, named by its place
+(`draft_1` is position 0) with its label: its scores and band, each judge's
+summary, the editor's own summary of it when there is one, the strengths the
+judges marked and the red flags, and its text, cut at 12,000 characters (each
+was read whole by its own review). Then the audience and the project's brief
+as it is now, as a rewrite reads it; not each draft's passages, which were
+found for its own text. The engine builds the request and checks the reply
+(`FrameworkEngine.buildVerdictRequest`, `validateVerdictReply`), so another
+framework writes its own. The reply is refused whole, spending the call's one
+retry, when it names a draft it was not shown or an appeal the framework does
+not have, or gives no reason or no appeal; an appeal given twice keeps its
+first. The prompt is new: the prototype has none.
+
+**Started by** the end of each draft's run (`run.ts`), a cancel that ends a
+queued draft, assessment recovery giving up on a draft, and the recovery tick (`app:comparison-verdict-recovery`, every
+15 minutes per workspace), which starts any due verdict that has none: one
+whose last draft ended in a process that died first, or by a delete. Starting
+claims it (`WAITING` → `RUNNING`, matching the attempt count it read), so of
+two starters one runs it; a verdict already ended, or running under a live
+lease, is left alone.
+
+**It survives the process ending.** The lease is renewed while the call
+runs. One whose lease ran out, and whose attempt began more than 15 minutes
+ago (longer than any call can live: two attempts at the approved entry's
+timeout), lost its process: recovery claims it again and asks again, up to
+three starts. Waiting out that lifetime keeps a live call whose renewals
+failed from running beside a second one, or landing cost rows after the
+verdict was charged. What earlier attempts spent is kept on the comparison
+(`verdictCostUsd`) as it is claimed again or set to wait, so the budget check
+counts it before the verdict is charged. Past them it ends `failed`, `reason` `lost`.
+A failure that passes (`rate_limited`, `provider_error`) goes back to
+`waiting`, its code in `reason`, and the recovery tick asks again while it has
+starts left. Any other failure ends `failed` with the call's code
+(`malformed`, `over_budget`, …), or `internal_error`.
+
+**Budget.** The verdict's estimate is checked and held with the drafts' at
+POST: a workspace that can cover the drafts but not the verdict beside them is
+refused whole (402). It is the median of the workspace's last 20 verdicts to
+end that cost something, or with none what this one can cost at most at
+the editor's price, its request built from each draft's free quick scan (the
+reviews do not exist yet: low by what the judges add, and the output ceiling
+dominates). The first budget hold carries it (`BudgetHold.extraUsd`); once
+stored, the comparison holds it (`verdictHeldUsd`) in every check while its
+verdict is `waiting` or `running`, and the hold stops carrying it in the same
+commit, so no check counts it twice.
+
+**Charge.** The write that ends the verdict charges its cost rows (tagged
+`comparisonId`, `editor: 'verdict'`, no `assessmentId`, so no draft's charge
+counts them) in the same transaction, under `comparison-verdict:<id>`: once,
+covering every attempt's rows. A call that ends after its verdict was claimed
+again does not charge; the attempt that ends it does. A call whose comparison
+was deleted under it charges, since nothing else will.
+
+**What it can miss.** A call whose process died mid-call wrote no cost row,
+though the provider may have billed it: that attempt is not charged, as a
+review's editor summary in a run that died is not. And a verdict whose ending
+could not be written twice is left `running` until its lease runs out, then
+asked again: the first answer is paid for and lost.
 
 ## The budget and the per-user cap
 
@@ -104,7 +193,11 @@ Each draft is charged in CopyCredits as its review ends, as any review is.
 ## Deleting and purging
 
 - **Deleting a comparison** deletes the set and its drafts' places. Their
-  reviews stay in the workspace's history.
+  reviews stay in the workspace's history. A verdict whose call is still
+  running charges itself as it ends. One whose process was lost (and a
+  verdict purged with its comparison) is charged by the recovery tick once its
+  cost rows have been quiet an hour, from when the comparison was made (its
+  rows carry it): nothing else can charge it once the row is gone.
 - **Deleting a draft's review** (`DELETE /api/v1/assessments/{id}`) leaves its
   place in the set: the member's link is `ON DELETE SET NULL`, and the draft
   reads as `purged`, its label kept. The set is not failed for it; with fewer
@@ -117,12 +210,13 @@ Each draft is charged in CopyCredits as its review ends, as any review is.
 
 ## Data
 
-| Model                 | Holds                                                          | On delete                                            |
-| --------------------- | -------------------------------------------------------------- | ---------------------------------------------------- |
-| `AssessmentSet`       | kind, project, version, profile, judges, context, who and when | the org's cascade; `createdByUserId` → user SET NULL |
-| `AssessmentSetMember` | the set, its position, label and review                        | with its set; its review SET NULL                    |
+| Model                 | Holds                                                                                                                  | On delete                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `AssessmentSet`       | kind, project, version, profile, judges, context, who and when; the verdict, its state, hold, lease, attempts and cost | the org's cascade; `createdByUserId` → user SET NULL |
+| `AssessmentSetMember` | the set, its position, label and review                                                                                | with its set; its review SET NULL                    |
 
 Both are tenant-owned (`org_isolation`). The maker's FK is hand-written, with a
 drift probe (`lib/app/db-drift.ts`). The subject export gives a person the
-comparisons they started, each with its drafts (their reviews are in their
-`assessments`); the org export gives both tables.
+comparisons they started, each with its drafts and its verdict (their reviews
+are in their `assessments`), without the verdict call's lease, hold and
+attempt count; the org export gives both tables.

@@ -21,9 +21,9 @@
  * `CONTENT_EMPTY`, 422 `TEXT_TOO_LONG`, with the draft's index in `drafts` as
  * `details.position`). Fewer than 2 or more than 5 drafts is
  * 400 `VALIDATION_ERROR`. 402 `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` when
- * the workspace cannot cover every draft's estimate together: nothing is
- * stored, and no draft is reviewed. 429 `RATE_LIMIT_EXCEEDED` when the drafts
- * would take the caller past `AI_ASSESSMENTS_PER_MINUTE` reviews that call
+ * the workspace cannot cover every draft's estimate, and the editor's verdict
+ * on them (t-88), together: nothing is stored, and no draft is reviewed. 429
+ * `RATE_LIMIT_EXCEEDED` when the drafts would take the caller past `AI_ASSESSMENTS_PER_MINUTE` reviews that call
  * AI reviewers: each draft counts as one review, and none is counted when the
  * set is refused this way. 401, 403 as every route.
  *

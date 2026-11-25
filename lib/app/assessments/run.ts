@@ -112,6 +112,7 @@ import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/priva
 import { requireOrgId } from '@/lib/tenancy/context';
 import { budgetRefusal } from '@/lib/app/usage/budget';
 import { chargeEndedReview } from '@/lib/app/credits/charge';
+import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
 import {
   buildProjectContext,
   parseProjectContext,
@@ -214,6 +215,9 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     );
   }
   startNextQueued(orgId, assessmentId);
+  // A comparison waiting on this draft (t-88): its verdict, once every draft is final.
+  if (outcome !== 'requeued' && outcome !== 'lease_lost')
+    startVerdictsAfterReview(orgId, assessmentId);
   return outcome;
 }
 
@@ -850,7 +854,7 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
   const orgId = requireOrgId();
   const open = { id: assessmentId, orgId, status: { in: ['QUEUED' as const, 'RUNNING' as const] } };
   const now = new Date();
-  return await prisma.$transaction(async (tx) => {
+  const ended = await prisma.$transaction(async (tx) => {
     // No run holds it (queued): nothing is left to land, so it ends here, and
     // is charged for what earlier runs spent. A lease run out is not taken
     // for no run: the run may be alive with its renewals failing, its judges
@@ -861,7 +865,7 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
     });
     if (idle.count === 1) {
       await chargeEndedReview(tx, assessmentId);
-      return true;
+      return 'idle' as const;
     }
     const { count } = await tx.assessment.updateMany({
       where: open,
@@ -872,8 +876,12 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
       // job charges it then, as it does one already run out).
       data: { status: 'CANCELLED', completedAt: now },
     });
-    return count === 1;
+    return count === 1 ? ('running' as const) : null;
   });
+  // No run will end it: a comparison waiting on it starts its verdict here
+  // (t-88), once the cancel is committed, so the start reads it final.
+  if (ended === 'idle') startVerdictsAfterReview(orgId, assessmentId);
+  return ended !== null;
 }
 
 /**

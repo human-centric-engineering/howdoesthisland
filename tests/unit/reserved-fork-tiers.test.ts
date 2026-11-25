@@ -264,6 +264,7 @@ describe('reserved fork tiers', () => {
       // FORK (HowDoesThisLand): comparisons of drafts (t-87).
       'model AssessmentSet {',
       'enum AssessmentSetKind {',
+      'enum ComparisonVerdictStatus {',
       'model AssessmentSetMember {',
     ]);
   });

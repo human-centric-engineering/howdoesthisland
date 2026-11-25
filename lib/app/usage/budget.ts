@@ -151,6 +151,13 @@
  * it takes one hold per draft, each released as that draft's review is
  * stored, which is then held in its place as any queued review is.
  *
+ * **A comparison's verdict** (t-88) is checked with its drafts: the
+ * estimate is theirs plus the verdict's ({@link estimateVerdictCost}), and
+ * the first hold carries the verdict's part (`extraUsd`). The comparison is
+ * stored with it (`verdictHeldUsd`) in the same transaction as its drafts,
+ * and holds it in every check while its verdict is `WAITING` or `RUNNING`,
+ * until the verdict ends and is charged or is skipped.
+ *
  * **Rewrites** (t-81). A running rewrite holds its estimate (`heldUsd`, the
  * median of the workspace's last billed rewrites, or with none what the
  * request can cost at most, t-86) in every check, a
@@ -429,9 +436,9 @@ async function inFlightCost(
       // may be this review's own until its request releases it.
       ...(self ? { stored: false, createdAt: { lt: self.createdAt } } : {}),
     },
-    select: { judges: true, stored: true },
+    select: { judges: true, stored: true, extraUsd: true },
   });
-  const held = holds.reduce((sum, h) => sum + heldCost(rate, h.judges, h.stored), 0);
+  const held = holds.reduce((sum, h) => sum + heldCost(rate, h.judges, h.stored) + h.extraUsd, 0);
   const since = await uncharged(orgId, now, db);
   const open = await db.assessment.findMany({
     where: {
@@ -479,15 +486,32 @@ async function inFlightCost(
     select: { heldUsd: true },
   });
   const rewriting = rewrites.reduce((sum, r) => sum + r.heldUsd, 0);
-  const yet = live.reduce((sum, r) => {
-    const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
-    const unsettled = Math.max(0, r.judges.length - done);
-    const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
-    if (r.status !== 'CANCELLED') return sum + unsettled * rate.perJudgeUsd + editor;
-    const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
-    return sum + Math.max(judges, editor);
-  }, held + rewriting);
-  return { yet, spent: open.reduce((sum, r) => sum + r.costUsd, 0) };
+  // Comparisons whose verdict is still to come or running (t-88): each holds
+  // its estimate until the verdict ends and is charged, or is skipped.
+  const verdicts = await db.assessmentSet.aggregate({
+    where: {
+      orgId,
+      verdictStatus: { in: ['WAITING', 'RUNNING'] },
+      ...(self ? { createdAt: { lt: self.createdAt } } : {}),
+    },
+    _sum: { verdictHeldUsd: true, verdictCostUsd: true },
+  });
+  const verdicting = verdicts._sum.verdictHeldUsd ?? 0;
+  // What their earlier attempts spent, kept as each is claimed or set to
+  // wait for a retry: not charged in credits until the verdict ends.
+  const verdictSpent = verdicts._sum.verdictCostUsd ?? 0;
+  const yet = live.reduce(
+    (sum, r) => {
+      const done = runs.filter((run) => run.assessmentId === r.id && settled(run)).length;
+      const unsettled = Math.max(0, r.judges.length - done);
+      const editor = r.judges.length >= EDITOR_MIN_JUDGES ? rate.editorUsd : 0;
+      if (r.status !== 'CANCELLED') return sum + unsettled * rate.perJudgeUsd + editor;
+      const judges = Math.min(JUDGES_IN_FLIGHT, unsettled) * rate.perJudgeUsd;
+      return sum + Math.max(judges, editor);
+    },
+    held + rewriting + verdicting
+  );
+  return { yet, spent: open.reduce((sum, r) => sum + r.costUsd, verdictSpent) };
 }
 
 /** A stored review checked again as it is claimed (t-53). */
@@ -657,12 +681,14 @@ function refusalFor(
   judgeCount: number,
   inFlight: InFlight,
   stored: boolean,
-  reviews = 1
+  reviews = 1,
+  /** Beyond the reviews, in USD: a comparison's verdict (t-88). */
+  extraUsd = 0
 ): BudgetRefusal | null {
   const { rate } = budget;
   return refusalForCost(
     budget,
-    reviews * heldCost(rate, judgeCount, stored),
+    reviews * heldCost(rate, judgeCount, stored) + extraUsd,
     rate.basis,
     inFlight,
     reviews > 1 ? COMPARISON_WORDS : REVIEW_WORDS
@@ -756,7 +782,8 @@ export async function budgetRefusal(
  * Throw 402 `INSUFFICIENT_CREDITS` or `BUDGET_EXCEEDED` when
  * {@link budgetRefusal} would refuse a review of `profile` calling
  * `judgeCount` judges, or `reviews` of them together (a comparison's drafts,
- * t-87): refused whole when their estimates together do not fit. Holds
+ * t-87) with `extraUsd` beside them (its verdict, t-88): refused whole when
+ * their estimates together do not fit. Holds
  * nothing: a request checked before its other refusals, which
  * {@link reserveReviewBudget} or {@link reserveComparisonBudget} checks
  * again. Answers the rate it read, for that check to reuse; `null` when it
@@ -767,14 +794,15 @@ export async function assertReviewFits(
   profile: string,
   judgeCount: number,
   stored: boolean,
-  reviews = 1
+  reviews = 1,
+  extraUsd = 0
 ): Promise<ReviewRate | null> {
   if (judgeCount === 0) return null;
   const budget = await readBudget(orgId, profile);
   if (!budget) return null;
   let refusal: BudgetRefusal | null;
   if (usedUp(budget)) {
-    refusal = refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored, reviews);
+    refusal = refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored, reviews, extraUsd);
   } else {
     try {
       const inFlight = await inFlightCost(prisma, orgId, budget.rate, new Date());
@@ -783,7 +811,8 @@ export async function assertReviewFits(
         judgeCount,
         inFlight,
         stored,
-        reviews
+        reviews,
+        extraUsd
       );
     } catch (err) {
       return unreadable(orgId, err);
@@ -908,9 +937,10 @@ export async function reserveReviewBudget(
 
 /**
  * {@link reserveReviewBudget} for a comparison's `drafts` stored reviews
- * (t-87), each of `profile` calling `judgeCount` judges: checked together
- * under the lock, so the set is refused whole (402) when their estimates
- * together do not fit, and held as one hold per draft. The caller releases
+ * (t-87), each of `profile` calling `judgeCount` judges, and its verdict's
+ * `verdictUsd` (t-88): checked together under the lock, so the set is
+ * refused whole (402) when their estimates together do not fit, and held as
+ * one hold per draft, the first carrying the verdict's. The caller releases
  * each once its review is stored, and all of them however the request ends.
  * Empty when nothing is held, as {@link reserveReviewBudget}'s `null`.
  */
@@ -919,9 +949,10 @@ export async function reserveComparisonBudget(
   profile: string,
   judgeCount: number,
   drafts: number,
-  rate?: ReviewRate
+  rate?: ReviewRate,
+  verdictUsd = 0
 ): Promise<BudgetHold[]> {
-  return reserveHolds(orgId, profile, judgeCount, true, drafts, rate);
+  return reserveHolds(orgId, profile, judgeCount, true, drafts, rate, verdictUsd);
 }
 
 /** Check `reviews` reviews together and hold one hold for each: see {@link reserveReviewBudget}. */
@@ -931,14 +962,15 @@ async function reserveHolds(
   judgeCount: number,
   stored: boolean,
   reviews: number,
-  rate?: ReviewRate
+  rate?: ReviewRate,
+  extraUsd = 0
 ): Promise<BudgetHold[]> {
   if (judgeCount === 0) return [];
   const budget = await readBudget(orgId, profile, rate);
   if (!budget) return [];
   // Nothing left: refused whatever is held, so no lock to wait for.
   const spentUp = usedUp(budget)
-    ? refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored, reviews)
+    ? refusalFor(budget, judgeCount, NONE_IN_FLIGHT, stored, reviews, extraUsd)
     : null;
   if (spentUp) refuse(spentUp);
 
@@ -965,7 +997,8 @@ async function reserveHolds(
         judgeCount,
         inFlight,
         stored,
-        reviews
+        reviews,
+        extraUsd
       );
       if (refusal) return { refusal };
       const ids: string[] = [];
@@ -975,6 +1008,8 @@ async function reserveHolds(
             orgId,
             judges: judgeCount,
             stored,
+            // The first carries what the request holds beyond its reviews.
+            extraUsd: n === 0 ? extraUsd : 0,
             // Read under the lock, so a claim check orders it after every
             // review it counted (see "Again when it is claimed").
             createdAt: now,
@@ -1042,6 +1077,40 @@ export async function estimateRewriteCost(
   }
   const most = usd((await ceiling?.()) ?? 0);
   return most > 0 ? { estimateUsd: most, basis: 'ceiling' } : { estimateUsd: 0, basis: 'none' };
+}
+
+/** Ended verdicts the verdict estimate reads, most recent first (t-88). */
+export const VERDICT_HISTORY = 20;
+
+/**
+ * What a comparison's verdict is likely to cost this workspace (t-88), in
+ * USD: the median cost of the last {@link VERDICT_HISTORY} of its verdicts to end
+ * that cost something, failed ones too. With none, what this verdict can cost
+ * at most (`ceiling`), as a workspace's first rewrites are held; `0` when
+ * that is nothing or there is no `ceiling` to ask, or it cannot be worked
+ * out (logged: the per-call gate still applies).
+ */
+export async function estimateVerdictCost(
+  orgId: string,
+  ceiling?: () => Promise<number | null>
+): Promise<number> {
+  try {
+    const past = await prisma.assessmentSet.findMany({
+      where: { orgId, verdictStatus: { in: ['COMPLETED', 'FAILED'] }, verdictCostUsd: { gt: 0 } },
+      // By when each ended: a verdict recovery finished late is recent spend.
+      orderBy: { verdictCompletedAt: 'desc' },
+      take: VERDICT_HISTORY,
+      select: { verdictCostUsd: true },
+    });
+    if (past.length > 0) return usd(median(past.map((r) => r.verdictCostUsd)));
+    return usd((await ceiling?.()) ?? 0);
+  } catch (err) {
+    logger.warn('Verdict cost estimate unreadable; holding nothing for it', {
+      orgId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
 }
 
 /**

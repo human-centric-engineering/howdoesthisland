@@ -299,6 +299,8 @@ model BudgetHold {
   judges         Int
   /// A stored review, which the editor runs on once it calls enough judges.
   stored         Boolean
+  /// What it holds beyond its judges, in USD: a comparison's verdict (t-88).
+  extraUsd       Float    @default(0)
   leaseExpiresAt DateTime
   createdAt      DateTime @default(now())
 
@@ -758,13 +760,51 @@ model AssessmentSet {
   updatedAt          DateTime              @updatedAt
   members            AssessmentSetMember[]
 
+  /// The editor's verdict on which draft lands better (t-88,
+  /// `lib/app/comparisons/verdict.ts`): asked for once every member is final
+  /// and two or more completed.
+  verdictStatus         ComparisonVerdictStatus @default(WAITING)
+  /// What the editor said (`ComparisonVerdict`), once `COMPLETED`.
+  verdict               Json?
+  /// Why there is none: the reason for `SKIPPED`, the call's code for `FAILED`.
+  verdictReason         String?
+  /// What the budget check holds back for the verdict while `WAITING` or
+  /// `RUNNING`, in USD: its estimate when the comparison was asked for.
+  verdictHeldUsd        Float                   @default(0)
+  /// What its call cost, from its cost rows (tagged `comparisonId`).
+  verdictCostUsd        Float                   @default(0)
+  verdictModel          String?
+  /// How many times its call was started: recovery starts it again after a lost process.
+  verdictAttempts       Int                     @default(0)
+  /// Renewed while its call runs. A `RUNNING` verdict whose lease ran out lost its process.
+  verdictLeaseExpiresAt DateTime?
+  /// When its latest attempt was claimed: a lapsed lease is taken for a lost
+  /// process only once the attempt is older than any call can live.
+  verdictStartedAt      DateTime?
+  verdictCompletedAt    DateTime?
+
   @@index([orgId, kind, createdAt])
   @@index([projectId])
+  /// The budget check's in-flight read and recovery's sweep (t-88).
+  @@index([orgId, verdictStatus])
   @@map("app_assessment_set")
 }
 
 enum AssessmentSetKind {
   COMPARISON
+}
+
+/// Where a comparison's verdict is (t-88). `WAITING` for its drafts' reviews
+/// to end; `RUNNING` while the editor is asked; then `COMPLETED`, `FAILED`
+/// (the call failed, or its process was lost too often), or `SKIPPED` (there
+/// was nothing to weigh: fewer than two drafts completed, or too few AI
+/// reviewers for the editor to run).
+enum ComparisonVerdictStatus {
+  WAITING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
 }
 
 /// One draft of a set. `assessmentId` is SET NULL, so a review deleted or
