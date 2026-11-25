@@ -230,7 +230,7 @@ describe('collectAppSubjectData', () => {
     expect(data.codeRedemptions).toEqual([{ id: 'redemption-1' }]);
   });
 
-  it('reads the rewrites they asked for, without the lease or the budget hold', async () => {
+  it('reads the rewrites they asked for, without the lease, the budget hold or what its call is priced from', async () => {
     vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.rewrite.findMany).mockResolvedValue([{ id: 'rewrite-1' }] as never);
 
@@ -238,7 +238,7 @@ describe('collectAppSubjectData', () => {
 
     expect(vi.mocked(prisma.rewrite.findMany)).toHaveBeenCalledWith({
       where: { createdByUserId: 'user-1' },
-      omit: { leaseExpiresAt: true, heldUsd: true },
+      omit: { leaseExpiresAt: true, heldUsd: true, callStart: true },
       orderBy: { createdAt: 'asc' },
     });
     expect(data.rewrites).toEqual([{ id: 'rewrite-1' }]);

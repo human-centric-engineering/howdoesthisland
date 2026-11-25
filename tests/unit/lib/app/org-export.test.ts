@@ -73,7 +73,7 @@ describe('initAppOrgSources', () => {
       'Rewrite',
       'rewrites',
       () => prisma.rewrite.findMany,
-      { omit: { leaseExpiresAt: true, heldUsd: true } },
+      { omit: { leaseExpiresAt: true, heldUsd: true, callStart: true } },
     ],
   ] as const)('declares %s, fetched for the exported org', async (model, section, read, extra) => {
     const rows = [{ id: 'row-1', orgId: 'org-1' }];
