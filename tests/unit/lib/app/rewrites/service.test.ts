@@ -984,7 +984,10 @@ describe('startRewrite: answering a rewrite’s placeholders (t-83)', () => {
 
     const { prompt } = theCall().request();
     expect(prompt).toContain(`<earlier_draft>\n${GAPPY}\n</earlier_draft>`);
-    expect(prompt).toContain('<answers>\n- [ADD: a client]: Leeds Plumbing\n</answers>');
+    // Each spelling of the fact is answered, so both places it sits are filled.
+    expect(prompt).toContain(
+      '<answers>\n- [ADD: a client]: Leeds Plumbing\n- [ADD: A client]: Leeds Plumbing\n</answers>'
+    );
     expect(prompt).toContain('Focus on raising pathos');
     expect(done).toMatchObject({ status: 'completed', focus: 'pathos', draft: 'Filled.' });
     // A rewrite of its own, the earlier one left as it was.

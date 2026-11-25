@@ -750,16 +750,26 @@ describe('RewriteDrawer', () => {
       expect(draftBox()?.textContent).toBe(gappy().draft);
     });
 
-    it('shows a refused plain rewrite beside Write a rewrite, not beside Fill', async () => {
+    it('shows a refused plain rewrite beside Write a rewrite, and puts back the draft and what was typed', async () => {
       routes.post = () => refused(402, 'INSUFFICIENT_CREDITS', 'Add credits.');
       await openGappy();
+      fireEvent.change(gap('monthly price'), { target: { value: '£20' } });
       const write = screen.getByRole('button', { name: 'Write a rewrite' });
       fireEvent.click(write);
 
       const message = await screen.findByText('Add credits.');
       expect(write.parentElement).toContainElement(message);
-      // A plain rewrite replaces the shown draft for its attempt, so no fields remain to host it.
-      expect(screen.queryByRole('button', { name: 'Fill these and rewrite' })).toBeNull();
+      expect(fillButton().parentElement).not.toContainElement(message);
+      expect(draftBox()?.textContent).toBe(gappy().draft);
+      expect(gap('monthly price')).toHaveValue('£20');
+    });
+
+    it('keeps what was typed when the rewrite shown is picked again from the list', async () => {
+      await openGappy();
+      fireEvent.change(gap('monthly price'), { target: { value: '£20' } });
+      const [newest] = screen.getAllByRole('button', { name: /Pathos · / });
+      fireEvent.click(newest);
+      expect(gap('monthly price')).toHaveValue('£20');
     });
   });
 

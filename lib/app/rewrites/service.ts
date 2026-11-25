@@ -299,12 +299,16 @@ async function answeredRewrite(
     focus: row.focus,
     followUp: {
       draft: row.draft,
+      // Each spelling the draft used for the fact, so every place it sits is
+      // filled, not only the first.
       answers: placeholders
         .filter((p) => Object.hasOwn(answers, p.id))
-        .map((p) => ({
-          placeholder: row.draft.slice(p.at[0].start, p.at[0].end),
-          answer: answers[p.id],
-        })),
+        .flatMap((p) =>
+          [...new Set(p.at.map((at) => row.draft.slice(at.start, at.end)))].map((placeholder) => ({
+            placeholder,
+            answer: answers[p.id],
+          }))
+        ),
     },
   };
 }

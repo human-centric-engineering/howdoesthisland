@@ -253,9 +253,9 @@ export function RewriteDrawer({
     setOrigin(from);
     setUsagePage(null);
     setCopied(false);
-    // A fill refused before it starts puts back the draft it was filling,
-    // with what was typed, so the refusal shows beside its button.
-    const prior = from === 'fill' && shown ? { rewrite: shown, draft } : null;
+    // A run refused before it starts puts back the draft shown, with what was
+    // typed for its gaps: a fill's refusal then shows beside its button.
+    const prior = shown && phase === 'ended' ? { rewrite: shown, draft } : null;
     const notStarted = () => {
       if (prior) {
         setShown(prior.rewrite);
@@ -338,7 +338,8 @@ export function RewriteDrawer({
     rewrite.clear();
     review.clear();
     setOrigin('write');
-    setTyped({});
+    // Answers typed for the rewrite shown stay while it is shown.
+    if (r.id !== shown?.id) setTyped({});
     setUsagePage(null);
     setReviewUsagePage(null);
     setCopied(false);

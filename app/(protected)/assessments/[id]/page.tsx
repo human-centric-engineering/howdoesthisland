@@ -50,6 +50,9 @@ async function briefInviteFor(
 ): Promise<{ projectId: string | null } | null> {
   if (!projectId) return { projectId: null };
   const read = await loadServerData<unknown>(projectEndpoint(projectId), { expected: [404] });
+  // A failed read (gone, or the API down) invites nothing: with no project
+  // to link to, or no word on its brief, saying it has none could be wrong.
+  // `loadServerData` logs any failure but a 404.
   if (!read.ok) return null;
   const parsed = briefOfProject.safeParse(read.data);
   if (!parsed.success) {

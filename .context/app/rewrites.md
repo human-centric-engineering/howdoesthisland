@@ -72,11 +72,16 @@ prompt again, plus the earlier draft and each answer against its placeholder
 as the draft wrote it, both fenced and data. The editor starts from that
 draft, puts each answer where its gap is, and leaves the unanswered ones as
 they are, so they come back as placeholders again. One step, not a
-conversation; the earlier rewrite is left as it was. The earlier draft is
-given whole, not cut at the text's limit as the text is: a rewrite may run to
-half as long again, and it is the editor's own output, bounded by its earlier
-ceiling. The ceiling is sized from whichever is longer, the text or that
-draft.
+conversation; the earlier rewrite is left as it was. Each spelling the draft
+used for an answered fact is listed with the answer, so every place it sits
+is filled. The fence tags (`earlier_draft`, `answers`, `content`,
+`project_context`) are stripped from the draft and the answers.
+
+The earlier draft is not cut at the text's limit: a rewrite may run to half
+as long again. It is cut at `MAX_EARLIER_DRAFT` (twice the text's limit,
+marked when cut), and the ceiling is sized from whichever is longer, the text
+or that draft, so a chain of passes, each from the last, cannot grow its
+prompt or its ceiling.
 
 Refusals, before anything is held: 404 for a rewrite that is not this
 review's in this workspace, 409 `REWRITE_NOT_FINISHED` for one not
@@ -87,7 +92,9 @@ review's in this workspace, 409 `REWRITE_NOT_FINISHED` for one not
 the project's brief: keeping them for next time is `f-coached-rewrite`.
 
 **A fact already given is not a gap.** With project context, the prompt
-tells the editor to use a fact it gives rather than leave a placeholder.
+tells the editor to use a fact it gives rather than leave a placeholder. Not
+on a second pass: there the writer's answers say which gaps to fill, and a gap
+they left is left, as the drawer says.
 That the prompt carries the fact and the rule is tested; whether a model
 obeys is a paid check, parked for the end-of-project task.
 

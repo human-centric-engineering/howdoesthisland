@@ -943,12 +943,6 @@ export const APP_ROUTES: readonly RouteContract[] = [
           "The rewrite `fromRewriteId` names has not `completed`: only a finished draft's placeholders can be answered.",
       },
       {
-        status: 400,
-        code: 'VALIDATION_ERROR',
-        description:
-          'The body does not fit (`fromRewriteId` and `answers` go together); `focus` is not one the framework has (`details.focus` lists them); or an answer names a placeholder the earlier draft does not have (`details.answers.unknown`, with the ids it has in `details.answers.placeholders`).',
-      },
-      {
         status: 404,
         code: 'NOT_FOUND',
         description:
