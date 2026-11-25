@@ -13,6 +13,15 @@ export const rewriteSchema = z.object({
   focus: z.string(),
   status: z.enum(['running', 'completed', 'failed']),
   draft: z.string(),
+  /** The draft's gaps, `[ADD: …]`, each once: `Placeholder` in `placeholders.ts` (t-83). */
+  placeholders: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      /** Each place it sits, as `[start, end)` offsets into `draft`. */
+      at: z.array(z.object({ start: z.number().int(), end: z.number().int() })),
+    })
+  ),
   error: z.string().nullable(),
   errorCode: z.string().nullable(),
   model: z.string().nullable(),

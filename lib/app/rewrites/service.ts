@@ -50,7 +50,8 @@ import { engineForVersion } from '@/lib/app/assessments/engine';
 import { isForeignKeyFailure } from '@/lib/app/assessments/prisma-errors';
 import { LEASE_MS } from '@/lib/app/assessments/limits';
 import { chargeRewrite } from '@/lib/app/credits/charge';
-import { RewriteFocusUnknownError } from '@/lib/app/frameworks/engine';
+import { RewriteFocusUnknownError, type RewriteFollowUp } from '@/lib/app/frameworks/engine';
+import { parsePlaceholders } from '@/lib/app/frameworks/placeholders';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import {
   JudgeRunError,
@@ -164,8 +165,9 @@ export async function startRewrite(
   if (!loaded) throw notRewritable('This review’s framework version can no longer be run.');
   const { engine, label } = loaded;
 
+  const earlier = await answeredRewrite(review.id, body);
   const focuses = engine.rewriteFocuses();
-  const focus = body.focus ?? focuses[0];
+  const focus = body.focus ?? earlier?.focus ?? focuses[0];
   if (!focuses.includes(focus)) {
     throw new ValidationError(
       `"${focus}" is not a rewrite focus: use one of ${focuses.join(', ')}.`,
@@ -188,7 +190,8 @@ export async function startRewrite(
       review.context,
       review.result,
       focus,
-      projectContext
+      projectContext,
+      earlier?.followUp ?? null
     );
   } catch (err) {
     if (err instanceof RewriteFocusUnknownError) throw err;
@@ -242,6 +245,63 @@ export async function startRewrite(
   });
   keepRunningAfterResponse(done, 'app: rewrite', { rewriteId: row.id });
   return { rewrite, events: channel ?? NO_EVENTS, done };
+}
+
+/** What a request to fill an earlier rewrite's gaps needs from it: its focus, and the second pass. */
+interface AnsweredRewrite {
+  focus: string;
+  followUp: RewriteFollowUp;
+}
+
+/**
+ * The earlier rewrite a request's `answers` fill (t-83), or `null` for a
+ * request without one. Throws 404 for one that is not a rewrite of this
+ * review in this workspace, 409 `REWRITE_NOT_FINISHED` for one not
+ * `completed`, and 400 for an answer to a placeholder its draft does not
+ * have (`details.answers` names them, with the ids it has). Each answered
+ * placeholder goes to the editor as the draft wrote it.
+ */
+async function answeredRewrite(
+  assessmentId: string,
+  body: CreateRewriteRequest
+): Promise<AnsweredRewrite | null> {
+  if (body.fromRewriteId === undefined || body.answers === undefined) return null;
+  const row = await prisma.rewrite.findFirst({
+    where: { id: body.fromRewriteId, assessmentId, orgId: requireOrgId() },
+    select: { status: true, draft: true, focus: true },
+  });
+  if (!row) throw new NotFoundError('Rewrite not found for this review');
+  if (row.status !== 'COMPLETED') {
+    throw new APIError(
+      'Only a finished rewrite’s placeholders can be answered.',
+      'REWRITE_NOT_FINISHED',
+      409
+    );
+  }
+  const placeholders = parsePlaceholders(row.draft);
+  const ids = new Set(placeholders.map((p) => p.id));
+  const answers = body.answers;
+  const unknown = Object.keys(answers).filter((key) => !ids.has(key));
+  if (unknown.length > 0) {
+    throw new ValidationError(
+      `This rewrite has no placeholder ${unknown.join(', ')}: answer one of ${
+        placeholders.map((p) => p.id).join(', ') || 'none (it has none)'
+      }.`,
+      { answers: { unknown, placeholders: [...ids] } }
+    );
+  }
+  return {
+    focus: row.focus,
+    followUp: {
+      draft: row.draft,
+      answers: placeholders
+        .filter((p) => Object.hasOwn(answers, p.id))
+        .map((p) => ({
+          placeholder: row.draft.slice(p.at[0].start, p.at[0].end),
+          answer: answers[p.id],
+        })),
+    },
+  };
 }
 
 /** The events of a request that did not ask to stream: none. */
@@ -504,6 +564,7 @@ function missing(d: Drive, end: Ending): RewriteView {
     focus: d.focus,
     status: end.status === 'COMPLETED' ? 'completed' : 'failed',
     draft: end.draft,
+    placeholders: parsePlaceholders(end.draft),
     error: end.error,
     errorCode: end.errorCode,
     model: end.modelName,

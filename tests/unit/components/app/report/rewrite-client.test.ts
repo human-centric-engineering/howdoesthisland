@@ -31,6 +31,7 @@ const row = (over: Partial<RewriteWire> = {}): RewriteWire => ({
   focus: 'balanced',
   status: 'running',
   draft: '',
+  placeholders: [],
   error: null,
   errorCode: null,
   model: 'm',

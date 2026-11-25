@@ -2,6 +2,7 @@
  * A rewrite as the API answers it (t-81).
  */
 import type { RewriteStatus } from '@prisma/client';
+import { parsePlaceholders, type Placeholder } from '@/lib/app/frameworks/placeholders';
 
 export type RewriteState = 'running' | 'completed' | 'failed';
 
@@ -12,6 +13,12 @@ export interface RewriteView {
   status: RewriteState;
   /** What has been written so far while `running` (saved every few seconds), then the whole draft. */
   draft: string;
+  /**
+   * The gaps the draft leaves for facts only the writer knows (t-83), read
+   * from it: each `[ADD: …]` once, in order. Answer them with a new rewrite's
+   * `fromRewriteId` and `answers`.
+   */
+  placeholders: Placeholder[];
   /** Why it failed, for `failed`. */
   error: string | null;
   errorCode: string | null;
@@ -61,6 +68,7 @@ export function toRewriteView(row: {
     focus: row.focus,
     status: STATE[row.status],
     draft: row.draft,
+    placeholders: parsePlaceholders(row.draft),
     error: row.error,
     errorCode: row.errorCode,
     model: row.modelName,

@@ -149,8 +149,8 @@ export function createHowDoesThisLandEngine(
       buildEditorRequest(m, text, ctx, result, { ...options, projectContext }),
     validateEditorReply: (reply, result) => validateEditorReply(reply, result),
     rewriteFocuses: () => REWRITE_FOCUSES,
-    buildRewriteRequest: (text, ctx, result, focus, projectContext = null) =>
-      buildRewriteRequest(m, text, ctx, result, focus, { ...options, projectContext }),
+    buildRewriteRequest: (text, ctx, result, focus, projectContext = null, followUp = null) =>
+      buildRewriteRequest(m, text, ctx, result, focus, { ...options, projectContext, followUp }),
     parseOverlay: (input) => parseOverlay(m, input),
     withOverlay: (overlay) => createHowDoesThisLandEngine(model, { ...options, overlay }),
   };
