@@ -50,6 +50,7 @@ interface SetRow {
   verdictStatus: string;
   verdictHeldUsd: number;
   verdictCostUsd: number;
+  verdictCompletedAt?: Date | null;
   createdAt: Date;
 }
 interface CostRow {
@@ -190,9 +191,12 @@ vi.mock('@/lib/db/client', () => {
           },
         };
       }),
+      // Ordered by when each verdict ended (`verdictCompletedAt`), as the estimate asks.
       findMany: vi.fn(async ({ where, take }: { where: Where; take?: number }) =>
         newestFirst(
-          state.sets.filter((r) => matches({ ...r }, where)),
+          state.sets
+            .filter((r) => matches({ ...r }, where))
+            .map((r) => ({ ...r, createdAt: r.verdictCompletedAt ?? new Date(0) })),
           take ?? Infinity
         ).map((r) => ({ verdictCostUsd: r.verdictCostUsd }))
       ),
@@ -2063,13 +2067,20 @@ describe('a comparison’s verdict, held with its drafts (t-88)', () => {
   describe('estimateVerdictCost', () => {
     it('is the median of the last verdicts that cost something, failed ones too', async () => {
       const at = (i: number) => new Date(Date.UTC(2026, 10, 1, 0, i));
-      // The oldest is past the history and does not count.
-      set({ verdictStatus: 'COMPLETED', verdictCostUsd: 100, createdAt: at(0) });
+      // The earliest to end is past the history and does not count, though its
+      // comparison is the newest: the history is by when each verdict ended.
+      set({
+        verdictStatus: 'COMPLETED',
+        verdictCostUsd: 100,
+        createdAt: at(50),
+        verdictCompletedAt: at(0),
+      });
       for (let i = 1; i <= VERDICT_HISTORY; i += 1) {
         set({
           verdictStatus: i % 2 ? 'COMPLETED' : 'FAILED',
           verdictCostUsd: i / 100,
           createdAt: at(i),
+          verdictCompletedAt: at(i),
         });
       }
       set({ verdictStatus: 'SKIPPED', verdictCostUsd: 50, createdAt: at(99) });

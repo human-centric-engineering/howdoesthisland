@@ -46,6 +46,7 @@ import {
 } from '@/lib/app/usage/budget';
 import type { CreateComparisonBody } from '@/lib/app/comparisons/validations';
 import { readComparison, type ComparisonDetail } from '@/lib/app/comparisons/views';
+import { chargeComparisonVerdict } from '@/lib/app/credits/charge';
 import {
   estimateComparisonVerdict,
   verdictRuns,
@@ -90,12 +91,21 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
     }
   }
   const orgId = requireOrgId();
+  // The project's brief, which the verdict's call reads, for its ceiling.
+  const project =
+    options.projectId && verdictRuns(options.judges)
+      ? await prisma.project.findFirst({
+          where: { id: options.projectId, orgId },
+          select: { brief: true },
+        })
+      : null;
   const verdictUsd = await estimateComparisonVerdict(
     orgId,
     options.resolved.engine,
     options.ctx,
     body.drafts,
-    options.judges
+    options.judges,
+    project?.brief
   );
   const rate = await assertReviewFits(
     orgId,
@@ -222,11 +232,30 @@ export async function getComparison(id: string): Promise<ComparisonDetail> {
 /**
  * Delete a comparison: the set and its drafts' places, not their reviews,
  * which stay in the workspace's history and are deleted as any review is.
+ *
+ * A verdict whose process died while it ran (`RUNNING`, its lease run out)
+ * is charged first, in the same transaction: recovery would have charged it,
+ * and once the row is gone nothing can. One whose call is still alive is
+ * left to that call, which charges itself as it ends (`verdict.ts`): charged
+ * here, its own rows, landing later, would find the reference taken.
  */
 export async function removeComparison(id: string): Promise<{ deleted: true }> {
-  const { count } = await prisma.assessmentSet.deleteMany({
-    where: { id, orgId: requireOrgId(), kind: 'COMPARISON' },
+  const orgId = requireOrgId();
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const set = await tx.assessmentSet.findFirst({
+      where: { id, orgId, kind: 'COMPARISON' },
+      select: { createdAt: true, verdictStatus: true, verdictLeaseExpiresAt: true },
+    });
+    if (!set) throw new NotFoundError('Comparison not found');
+    const lost =
+      set.verdictStatus === 'RUNNING' &&
+      (set.verdictLeaseExpiresAt === null || set.verdictLeaseExpiresAt < now);
+    if (lost) await chargeComparisonVerdict(tx, orgId, id, set.createdAt);
+    const { count } = await tx.assessmentSet.deleteMany({
+      where: { id, orgId, kind: 'COMPARISON' },
+    });
+    if (count === 0) throw new NotFoundError('Comparison not found');
+    return { deleted: true as const };
   });
-  if (count === 0) throw new NotFoundError('Comparison not found');
-  return { deleted: true };
 }

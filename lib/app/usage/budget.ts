@@ -1081,7 +1081,7 @@ export const VERDICT_HISTORY = 20;
 
 /**
  * What a comparison's verdict is likely to cost this workspace (t-88), in
- * USD: the median cost of its last {@link VERDICT_HISTORY} ended verdicts
+ * USD: the median cost of the last {@link VERDICT_HISTORY} of its verdicts to end
  * that cost something, failed ones too. With none, what this verdict can cost
  * at most (`ceiling`), as a workspace's first rewrites are held; `0` when
  * that is nothing or there is no `ceiling` to ask, or it cannot be worked
@@ -1093,7 +1093,8 @@ export async function estimateVerdictCost(
 ): Promise<number> {
   const past = await prisma.assessmentSet.findMany({
     where: { orgId, verdictStatus: { in: ['COMPLETED', 'FAILED'] }, verdictCostUsd: { gt: 0 } },
-    orderBy: { createdAt: 'desc' },
+    // By when each ended: a verdict recovery finished late is recent spend.
+    orderBy: { verdictCompletedAt: 'desc' },
     take: VERDICT_HISTORY,
     select: { verdictCostUsd: true },
   });

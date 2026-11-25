@@ -121,7 +121,7 @@ not have, or gives no reason or no appeal; an appeal given twice keeps its
 first. The prompt is new: the prototype has none.
 
 **Started by** the end of each draft's run (`run.ts`), a cancel that ends a
-queued draft, and the recovery tick (`app:comparison-verdict-recovery`, every
+queued draft, assessment recovery giving up on a draft, and the recovery tick (`app:comparison-verdict-recovery`, every
 15 minutes per workspace), which starts any due verdict that has none: one
 whose last draft ended in a process that died first, or by a delete. Starting
 claims it (`WAITING` → `RUNNING`, matching the attempt count it read), so of
@@ -136,8 +136,8 @@ A call that fails ends `failed` with the call's code (`malformed`,
 
 **Budget.** The verdict's estimate is checked and held with the drafts' at
 POST: a workspace that can cover the drafts but not the verdict beside them is
-refused whole (402). It is the median of the workspace's last 20 ended
-verdicts that cost something, or with none what this one can cost at most at
+refused whole (402). It is the median of the workspace's last 20 verdicts to
+end that cost something, or with none what this one can cost at most at
 the editor's price, its request built from each draft's free quick scan (the
 reviews do not exist yet: low by what the judges add, and the output ceiling
 dominates). The first budget hold carries it (`BudgetHold.extraUsd`); once
@@ -184,7 +184,10 @@ Each draft is charged in CopyCredits as its review ends, as any review is.
 ## Deleting and purging
 
 - **Deleting a comparison** deletes the set and its drafts' places. Their
-  reviews stay in the workspace's history.
+  reviews stay in the workspace's history. A verdict whose process died while
+  it ran is charged first, in the same transaction, since nothing could charge
+  it once the row is gone; one whose call is still alive charges itself as it
+  ends.
 - **Deleting a draft's review** (`DELETE /api/v1/assessments/{id}`) leaves its
   place in the set: the member's link is `ON DELETE SET NULL`, and the draft
   reads as `purged`, its label kept. The set is not failed for it; with fewer

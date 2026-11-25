@@ -40,10 +40,14 @@ import { LEASE_MS, MAX_ATTEMPTS } from '@/lib/app/assessments/limits';
 import {
   estimateComparisonVerdict,
   recoverVerdicts,
+  verdictProjectContext,
   startVerdict,
   startVerdictsAfterReview,
 } from '@/lib/app/comparisons/verdict';
 import { readComparison } from '@/lib/app/comparisons/views';
+import { removeComparison } from '@/lib/app/comparisons/service';
+import { cancelAssessment } from '@/lib/app/assessments/run';
+import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { comparisonVerdictChargeReference } from '@/lib/app/credits/charge';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
@@ -392,6 +396,86 @@ describe('the verdict’s failure and charge', () => {
   });
 });
 
+describe('round-1 review fixes', () => {
+  it('charges, as it skips, a verdict an earlier attempt called before its drafts were deleted', async () => {
+    const set = comparison([review('COMPLETED'), null], {
+      verdictStatus: 'RUNNING',
+      verdictAttempts: 1,
+      verdictLeaseExpiresAt: new Date(NOW.getTime() - 1_000),
+    });
+    fake.addCost(ORG, 0.04, { editor: 'verdict', comparisonId: set.id }, NOW);
+
+    expect(await runAsOrg(ORG, () => startVerdict(set.id as string, NOW))).toBe('skipped');
+
+    expect(fake.sets[0]).toMatchObject({
+      verdictStatus: 'SKIPPED',
+      verdictReason: 'too_few_completed',
+      verdictCostUsd: 0.04,
+    });
+    expect(charges()).toEqual([
+      expect.objectContaining({ reference: comparisonVerdictChargeReference(set.id as string) }),
+    ]);
+  });
+
+  it('charges a lost verdict when its comparison is deleted, and leaves a live one to its call', async () => {
+    const lost = comparison([review('COMPLETED'), review('COMPLETED')], {
+      verdictStatus: 'RUNNING',
+      verdictAttempts: 1,
+      verdictLeaseExpiresAt: new Date(Date.now() - 1_000),
+    });
+    const live = comparison([review('COMPLETED'), review('COMPLETED')], {
+      verdictStatus: 'RUNNING',
+      verdictAttempts: 1,
+      verdictLeaseExpiresAt: new Date(Date.now() + LEASE_MS),
+    });
+    for (const set of [lost, live]) {
+      fake.addCost(ORG, 0.04, { editor: 'verdict', comparisonId: set.id }, NOW);
+    }
+
+    await runAsOrg(ORG, () => removeComparison(lost.id as string));
+    await runAsOrg(ORG, () => removeComparison(live.id as string));
+
+    expect(fake.sets).toEqual([]);
+    expect(charges().map((c) => c.reference)).toEqual([
+      comparisonVerdictChargeReference(lost.id as string),
+    ]);
+  });
+
+  it('starts the verdict once a cancel ends the last queued draft', async () => {
+    const queued = review('QUEUED');
+    comparison([review('COMPLETED'), review('COMPLETED'), queued]);
+    expect(await runAsOrg(ORG, () => cancelAssessment(queued.id as string))).toBe(true);
+    await settle();
+    await settle();
+    expect(mocks.callAgent).toHaveBeenCalledTimes(1);
+    expect(fake.sets[0]?.verdictStatus).toBe('COMPLETED');
+  });
+
+  it('starts the verdict once assessment recovery gives up on the last draft', async () => {
+    const stalled = review('RUNNING');
+    stalled.attempts = MAX_ATTEMPTS;
+    stalled.leaseExpiresAt = new Date(Date.now() - 1_000);
+    comparison([review('COMPLETED'), review('COMPLETED'), stalled]);
+    await runAsOrg(ORG, () => recoverAssessments());
+    await settle();
+    await settle();
+    expect(stalled.status).toBe('FAILED');
+    expect(mocks.callAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('still starts the other comparisons when one cannot be started', async () => {
+    const last = review('COMPLETED');
+    comparison([review('COMPLETED'), last]);
+    comparison([review('COMPLETED'), last]);
+    fake.db.assessmentSet.findFirst.mockRejectedValueOnce(new Error('connection reset'));
+    await runAsOrg(ORG, async () => startVerdictsAfterReview(ORG, last.id as string));
+    await settle();
+    await settle();
+    expect(mocks.callAgent).toHaveBeenCalledTimes(1);
+    expect(fake.sets.map((x) => x.verdictStatus)).toEqual(['WAITING', 'COMPLETED']);
+  });
+});
+
 describe('recoverVerdicts: the recovery tick', () => {
   it('starts a due verdict that has none, and a second pass does not start it again', async () => {
     // Its last draft ended in a process that died before starting it.
@@ -483,8 +567,18 @@ describe('estimateComparisonVerdict', () => {
         { position: 0, label: null, text: 'Draft A.', result: { quick: 'Draft A.' } },
         { position: 1, label: 'B', text: 'Draft B.', result: { quick: 'Draft B.' } },
       ],
-      {}
+      {},
+      null
     );
+  });
+
+  it('builds its ceiling with the project’s brief, as the call will read it', async () => {
+    mocks.streamCeilingUsd.mockResolvedValue(0.2);
+    const brief = { offer: 'A bike-sharing app for commuters.' };
+    await estimateComparisonVerdict(ORG, engine as never, {}, drafts, ['a', 'b'], brief);
+    const projectContext = (engine.buildVerdictRequest.mock.calls[0] as unknown[])[2];
+    expect(projectContext).toEqual(verdictProjectContext(brief));
+    expect(projectContext).toContain('A bike-sharing app for commuters.');
   });
 
   it('is nothing for drafts with too few AI reviewers for the editor, and holds nothing when the ceiling fails', async () => {

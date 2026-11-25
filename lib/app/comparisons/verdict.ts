@@ -21,8 +21,8 @@
  * writes no summary for such a review, and a paid call to weigh them is not
  * what a writer asking for a cheap review chose.
  *
- * **Started by** the end of each draft's run (`run.ts`, and a cancel that
- * ends a queued draft), and by the recovery tick ({@link recoverVerdicts}),
+ * **Started by** the end of each draft's run (`run.ts`, a cancel that ends a
+ * queued draft, and assessment recovery giving up on one), and by the recovery tick ({@link recoverVerdicts}),
  * which starts any due verdict that has none: one whose last draft ended in
  * a process that died before starting it, or ended by a delete. A claim
  * moves it `WAITING` → `RUNNING` under a lease, matching the attempt count it
@@ -104,7 +104,9 @@ export async function estimateComparisonVerdict(
   engine: FrameworkEngine,
   ctx: unknown,
   drafts: readonly { text: string; label?: string | null }[],
-  judges: readonly string[]
+  judges: readonly string[],
+  /** The comparison's project's brief, as the call will read it. */
+  projectBrief?: unknown
 ): Promise<number> {
   if (!verdictRuns(judges)) return 0;
   return estimateVerdictCost(orgId, async () => {
@@ -114,8 +116,21 @@ export async function estimateComparisonVerdict(
       text: d.text,
       result: engine.assemble(d.text, ctx, engine.quickScan(d.text, ctx)),
     }));
-    return streamCeilingUsd(EDITOR_CALL, engine.buildVerdictRequest(shown, ctx));
+    return streamCeilingUsd(
+      EDITOR_CALL,
+      engine.buildVerdictRequest(shown, ctx, verdictProjectContext(projectBrief))
+    );
   });
+}
+
+/**
+ * The project's background a verdict reads: its brief as it is now, as a
+ * rewrite reads it. Not each draft's passages, which were found for its own
+ * text, so none stands for them all. `null` with no project or brief.
+ */
+export function verdictProjectContext(brief: unknown): string | null {
+  if (brief === undefined || brief === null) return null;
+  return renderProjectContext(parseProjectContext({ documents: [], passages: [], brief }));
 }
 
 /** The comparison as a verdict reads it. */
@@ -189,16 +204,15 @@ export async function startVerdict(setId: string, now: Date = new Date()): Promi
 
   const drafts = completedDrafts(set);
   if (drafts.length < 2) {
-    const { count } = await prisma.assessmentSet.updateMany({
-      where: mine,
-      data: {
-        verdictStatus: 'SKIPPED',
-        verdictReason: 'too_few_completed' satisfies VerdictSkipReason,
-        verdictCompletedAt: now,
-        verdictLeaseExpiresAt: null,
-      },
+    // Through `end`, so a verdict an earlier attempt already called (its
+    // drafts deleted since its process died) is charged for what it spent.
+    const ended = await end(orgId, set, mine, {
+      status: 'SKIPPED',
+      verdict: null,
+      reason: 'too_few_completed' satisfies VerdictSkipReason,
+      model: null,
     });
-    return count === 1 ? 'skipped' : 'not_due';
+    return ended ? 'skipped' : 'not_due';
   }
   if (set.verdictAttempts >= MAX_ATTEMPTS) {
     const ended = await end(orgId, set, mine, {
@@ -261,7 +275,14 @@ export function startVerdictsAfterReview(orgId: string, assessmentId: string): v
         where: { orgId, assessmentId, set: { verdictStatus: 'WAITING' } },
         select: { setId: true },
       });
-      for (const { setId } of sets) await startVerdict(setId);
+      for (const { setId } of sets) {
+        try {
+          await startVerdict(setId);
+        } catch (err) {
+          // Left for the recovery tick; the other comparisons still start.
+          logger.error('A comparison verdict could not be started', err, { setId });
+        }
+      }
     },
     'app: comparison verdict start',
     { assessmentId }
@@ -306,7 +327,7 @@ export async function recoverVerdicts(
 
 /** How a verdict's call ended. */
 interface Ending {
-  status: 'COMPLETED' | 'FAILED';
+  status: 'COMPLETED' | 'FAILED' | 'SKIPPED';
   verdict: ComparisonVerdict | null;
   reason: string | null;
   model: string | null;
@@ -372,13 +393,7 @@ async function ask(set: VerdictSet, drafts: VerdictDraft[]): Promise<Ending> {
     return { status: 'FAILED', verdict: null, reason: 'internal_error', model: null };
   }
   const { engine, label } = loaded;
-  // The project's brief as it is now, as a rewrite reads it: each draft's
-  // passages were found for its own text, so none stands for them all.
-  const projectContext = set.project
-    ? renderProjectContext(
-        parseProjectContext({ documents: [], passages: [], brief: set.project.brief })
-      )
-    : null;
+  const projectContext = verdictProjectContext(set.project?.brief);
   try {
     const reply = await callAgent({
       ...EDITOR_CALL,
