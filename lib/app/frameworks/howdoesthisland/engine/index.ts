@@ -32,6 +32,7 @@
  */
 import type { FrameworkEngine } from '@/lib/app/frameworks/engine';
 import { assemble } from '@/lib/app/frameworks/howdoesthisland/engine/assemble';
+import { appealScores } from '@/lib/app/frameworks/howdoesthisland/engine/appeal-scores';
 import {
   buildEditorRequest,
   validateEditorReply,
@@ -149,6 +150,7 @@ export function createHowDoesThisLandEngine(
       buildEditorRequest(m, text, ctx, result, { ...options, projectContext }),
     validateEditorReply: (reply, result) => validateEditorReply(reply, result),
     rewriteFocuses: () => REWRITE_FOCUSES,
+    appealScores: (result) => appealScores(result),
     buildRewriteRequest: (text, ctx, result, focus, projectContext = null, followUp = null) =>
       buildRewriteRequest(m, text, ctx, result, focus, { ...options, projectContext, followUp }),
     parseOverlay: (input) => parseOverlay(m, input),

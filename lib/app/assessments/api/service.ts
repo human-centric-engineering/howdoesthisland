@@ -130,7 +130,7 @@ export function judgesFor(resolved: VersionToScore, profile: JudgeProfile): read
 
 /** The context as the row stores it: the engine's parse, which is plain JSON by construction. */
 const jsonObject = z.record(z.string(), z.json());
-function storedContext(ctx: unknown): z.infer<typeof jsonObject> {
+export function storedContext(ctx: unknown): z.infer<typeof jsonObject> {
   return jsonObject.parse(JSON.parse(JSON.stringify(ctx)));
 }
 
@@ -211,6 +211,38 @@ export interface PreparedAssessment {
  * held budget another request was refused for.
  */
 export async function prepareAssessment(body: AssessmentRequest): Promise<PreparedAssessment> {
+  const options = await resolveReviewOptions(body);
+  // Pasted text can be refused now; a page or a file only once it is read.
+  if ('text' in body.source) {
+    const { text } = body.source;
+    await refusingAsApi(() => assessableText(text));
+  }
+  // Last, so a request refused for anything above is refused for that.
+  const rate = await assertReviewFits(
+    requireOrgId(),
+    storedProfileName(options.profile),
+    options.judges.length,
+    body.store !== false
+  );
+  return { ...options, hold: null, rate };
+}
+
+/** The review options every request names, as {@link resolveReviewOptions} reads them. */
+export type ReviewOptions = Pick<
+  AssessmentRequest,
+  'projectId' | 'framework' | 'version' | 'context' | 'profile' | 'judges'
+>;
+
+/** What a request's options resolve to: {@link PreparedAssessment} before the budget. */
+export type ResolvedReviewOptions = Omit<PreparedAssessment, 'hold' | 'rate'>;
+
+/**
+ * The version, the project, its overlay, the context and the judges a
+ * request's options resolve to, each refused as {@link prepareAssessment}
+ * says. Shared with a comparison (t-87), whose drafts are all reviewed with
+ * what this resolves once.
+ */
+export async function resolveReviewOptions(body: ReviewOptions): Promise<ResolvedReviewOptions> {
   const project = body.projectId ? await projectForReview(body.projectId) : null;
   const version = await versionToScore(frameworkChoice(body, project));
   // The project's defaults under the request's own fields (t-70), checked
@@ -230,18 +262,6 @@ export async function prepareAssessment(body: AssessmentRequest): Promise<Prepar
     () => ownProfile === undefined && project?.defaults.profile !== undefined,
     () => judgesFor(resolved, profile)
   );
-  // Pasted text can be refused now; a page or a file only once it is read.
-  if ('text' in body.source) {
-    const { text } = body.source;
-    await refusingAsApi(() => assessableText(text));
-  }
-  // Last, so a request refused for anything above is refused for that.
-  const rate = await assertReviewFits(
-    requireOrgId(),
-    storedProfileName(profile),
-    judges.length,
-    body.store !== false
-  );
   return {
     resolved,
     projectId: project?.id ?? null,
@@ -249,8 +269,6 @@ export async function prepareAssessment(body: AssessmentRequest): Promise<Prepar
     ctx,
     profile,
     judges,
-    hold: null,
-    rate,
   };
 }
 
@@ -310,7 +328,7 @@ function issuesFromDefaults(
  * are that framework's ids.
  */
 function frameworkChoice(
-  body: AssessmentRequest,
+  body: ReviewOptions,
   project: ReviewProject | null
 ): { framework?: string; version?: string } {
   if (!project) return body;

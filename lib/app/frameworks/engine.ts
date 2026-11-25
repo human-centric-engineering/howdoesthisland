@@ -128,6 +128,13 @@ export type JudgeReplyValidation<Output = unknown, Reason extends string = strin
 export type ContextParse<Ctx = unknown> =
   { ok: true; ctx: Ctx } | { ok: false; issues: { path: string; message: string }[] };
 
+/** One appeal's score in a result (`FrameworkEngine.appealScores`, t-87). */
+export interface AppealScore {
+  /** The framework's id for it (for this one, `ethos`, `pathos`, `logos`, `kairos`). */
+  appeal: string;
+  score: number;
+}
+
 /**
  * A project's adjustment to a version's weights (D5, t-72) checked against
  * the bounds that version declares: the overlay the engine scores with (null
@@ -206,6 +213,13 @@ export interface FrameworkEngine<
    * (t-81).
    */
   rewriteFocuses(): readonly string[];
+  /**
+   * A stored result's score on each of the framework's appeals, in the
+   * framework's order, for comparing reviews of different drafts (t-87):
+   * `null` when `result` is not one this framework assembled. `result` is
+   * read as stored (JSON), so it is checked, not trusted. Added in f-compare.
+   */
+  appealScores(result: unknown): readonly AppealScore[] | null;
   /**
    * The editor's call for a rewrite of `text` from `result`, which this
    * engine assembled from the same text and context, aimed at `focus`.
