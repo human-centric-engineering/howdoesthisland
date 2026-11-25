@@ -312,4 +312,89 @@ describe('RewriteDrawer', () => {
     ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
+
+  it('stops reading when closed mid-draft, and lists the rewrite still writing on the next open', async () => {
+    let listed = 0;
+    routes.list = () =>
+      listed++ === 0 ? ok([earlierRow]) : ok([row({ draft: 'A bet' }), earlierRow]);
+    // A stream that never ends: the editor is still writing.
+    routes.post = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(new TextEncoder().encode(frame({ type: 'rewrite', rewrite: row() })));
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } }
+      );
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    await screen.findByRole('heading', { name: 'Ethos rewrite · writing…' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+
+    expect(await screen.findByRole('button', { name: /Ethos · .*Writing/ })).toBeInTheDocument();
+    // Reopened clean, and nothing was started again.
+    expect(draftBox()).toBeNull();
+    expect(calls('POST', '/api/v1/rewrites')).toHaveLength(1);
+  });
+
+  it('says so when the earlier rewrites cannot be read', async () => {
+    routes.list = () => refused(500, 'INTERNAL_ERROR', 'Something went wrong.');
+    render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+    expect(await screen.findByText(/Something went wrong/)).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+
+  it('says the rewrite is still being written when following it fails', async () => {
+    routes.list = () => ok([row({ id: 'rw_run', draft: 'Half' })]);
+    routes.read = () => refused(500, 'INTERNAL_ERROR', 'Something went wrong.');
+    fireEvent.click(await openDrawer(/Ethos · .*Writing/));
+    expect(
+      await screen.findByText(
+        'The rewrite could not be read. It is still being written: open this again in a moment to see it.'
+      )
+    ).toBeInTheDocument();
+    expect(draftBox()?.textContent).toBe('Half');
+  });
+
+  it('shows the server’s own words for a refusal it does not word itself', async () => {
+    routes.post = () =>
+      refused(
+        409,
+        'ASSESSMENT_NOT_REWRITABLE',
+        'This review’s model version can no longer be run.'
+      );
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    expect(
+      await screen.findByText(/This review’s model version can no longer be run\./)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /usage/ })).toBeNull();
+  });
+
+  it('selects the draft to copy by hand when there is no clipboard', async () => {
+    writeText.mockRejectedValue(new Error('denied'));
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: /Pathos · / }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await waitFor(() => expect(window.getSelection()?.toString()).toBe('An earlier draft.'));
+    expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();
+  });
+
+  it('shows the server’s words for a review of the draft refused for another reason', async () => {
+    routes.createReview = () =>
+      refused(400, 'CONTEXT_INVALID', 'The context does not fit this framework version.');
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: /Pathos · / }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review this draft' }));
+    expect(
+      await screen.findByText(/The context does not fit this framework version\./)
+    ).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Review this draft' })).toBeEnabled();
+  });
 });
