@@ -116,6 +116,13 @@ describe('buildVerdictRequest', () => {
     expect(prompt.match(/<\/draft>/g)).toHaveLength(2);
   });
 
+  it('never cuts a text between the halves of a character outside the BMP', () => {
+    const text = `${'x'.repeat(VERDICT_CONTENT_LIMIT - 1)}😀 and more`;
+    const prompt = engine.buildVerdictRequest([{ ...DRAFTS[0], text }, DRAFTS[1]], CTX).prompt;
+    expect(prompt).toContain(`${'x'.repeat(VERDICT_CONTENT_LIMIT - 1)}\n[truncated]`);
+    expect(prompt).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+
   it('refuses fewer than two drafts', () => {
     expect(() => engine.buildVerdictRequest([DRAFTS[0]], CTX)).toThrow(/two drafts/);
   });

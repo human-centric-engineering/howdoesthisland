@@ -467,8 +467,18 @@ describe('round-1 review fixes', () => {
     });
     expect(charges()).toEqual([]);
 
+    let whileRunning: unknown;
+    mocks.callAgent.mockImplementationOnce(
+      async (call: { costMetadata: Record<string, string> }) => {
+        whileRunning = { ...fake.sets[0] };
+        fake.addCost(ORG, 0.02, { ...call.costMetadata }, new Date());
+        return { output: VERDICT, drops: [], provider: 'openai', model: 'gpt-5', costUsd: 0.02 };
+      }
+    );
     expect((await runAsOrg(ORG, () => recoverVerdicts(NOW))).started).toBe(1);
     await settle();
+    // Running again, it no longer read as the failure it waited on.
+    expect(whileRunning).toMatchObject({ verdictStatus: 'RUNNING', verdictReason: null });
     expect(fake.sets[0]).toMatchObject({
       verdictStatus: 'COMPLETED',
       verdictReason: null,

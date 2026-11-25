@@ -292,6 +292,8 @@ export async function startVerdict(setId: string, now: Date = new Date()): Promi
       verdictAttempts: attempt,
       verdictLeaseExpiresAt: new Date(now.getTime() + LEASE_MS),
       verdictStartedAt: now,
+      // Running again: a passing failure's code no longer says where it is.
+      verdictReason: null,
       verdictCostUsd: attempt > 1 ? await spentSoFar(orgId, set) : 0,
     },
   });
@@ -464,8 +466,9 @@ async function chargeOrphanedVerdicts(orgId: string, now: Date): Promise<void> {
     for (const [id, v] of quiet) {
       if (count >= RECOVERY_BATCH) break;
       if (kept.has(id) || done.has(comparisonVerdictChargeReference(id))) continue;
-      const { credits } = await chargeComparisonVerdict(prisma, orgId, id, v.since);
-      if (credits > 0) count += 1;
+      // Every charge counts against the batch, one that took nothing too.
+      count += 1;
+      await chargeComparisonVerdict(prisma, orgId, id, v.since);
     }
   } catch (err) {
     // Left for the next pass.

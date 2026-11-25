@@ -80,6 +80,12 @@ const name = (m: EngineModel, id: string): string => m.DIM.get(id)?.name ?? id;
 /** Any tag that would close or open a draft's fence, taken out: its quotes are the writer's text. */
 const unfenced = (block: string): string => block.replace(/<\s*\/?\s*draft\b[^>]*>/gi, '');
 
+/** `text` cut at `limit` code units, never between a surrogate pair's halves. */
+function cut(text: string, limit: number): string {
+  const end = /[\uD800-\uDBFF]/.test(text[limit - 1] ?? '') ? limit - 1 : limit;
+  return text.slice(0, end);
+}
+
 function draftBlock(m: EngineModel, draft: VerdictDraft<Assessment>): string {
   const { result } = draft;
   const s = result.scores;
@@ -97,7 +103,7 @@ function draftBlock(m: EngineModel, draft: VerdictDraft<Assessment>): string {
   const list = (lines: string[]) => (lines.length ? lines.join('\n') : '- none');
   const text =
     draft.text.length > VERDICT_CONTENT_LIMIT
-      ? `${draft.text.slice(0, VERDICT_CONTENT_LIMIT)}\n[truncated]`
+      ? `${cut(draft.text, VERDICT_CONTENT_LIMIT)}\n[truncated]`
       : draft.text;
   const label = draft.label ? ` (the writer calls it "${draft.label}")` : '';
   return unfenced(`${draftId(draft.position)}${label}
