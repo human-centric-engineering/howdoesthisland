@@ -350,7 +350,7 @@ async function loadAgent(call: CallTarget) {
  */
 async function bindAgent(
   call: CallTarget,
-  agent: { provider: string | null; model: string | null }
+  agent: { provider: string; model: string }
 ): Promise<Omit<PreparedCall, 'agent'>> {
   const { name } = call;
   let binding: Awaited<ReturnType<typeof resolveAgentProviderAndModel>>;
