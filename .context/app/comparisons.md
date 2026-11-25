@@ -131,8 +131,10 @@ lease, is left alone.
 **It survives the process ending.** The lease is renewed while the call
 runs. One whose lease ran out lost its process: recovery claims it again and
 asks again, up to three starts. Past them it ends `failed`, `reason` `lost`.
-A call that fails ends `failed` with the call's code (`malformed`,
-`over_budget`, …), or `internal_error`.
+A failure that passes (`rate_limited`, `provider_error`) goes back to
+`waiting`, its code in `reason`, and the recovery tick asks again while it has
+starts left. Any other failure ends `failed` with the call's code
+(`malformed`, `over_budget`, …), or `internal_error`.
 
 **Budget.** The verdict's estimate is checked and held with the drafts' at
 POST: a workspace that can cover the drafts but not the verdict beside them is
@@ -184,10 +186,11 @@ Each draft is charged in CopyCredits as its review ends, as any review is.
 ## Deleting and purging
 
 - **Deleting a comparison** deletes the set and its drafts' places. Their
-  reviews stay in the workspace's history. A verdict whose process died while
-  it ran is charged first, in the same transaction, since nothing could charge
-  it once the row is gone; one whose call is still alive charges itself as it
-  ends.
+  reviews stay in the workspace's history. A verdict whose call is still
+  running charges itself as it ends. One whose process was lost (and a
+  verdict purged with its comparison) is charged by the recovery tick once its
+  cost rows have been quiet an hour: nothing else can charge it once the row
+  is gone.
 - **Deleting a draft's review** (`DELETE /api/v1/assessments/{id}`) leaves its
   place in the set: the member's link is `ON DELETE SET NULL`, and the draft
   reads as `purged`, its label kept. The set is not failed for it; with fewer

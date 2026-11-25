@@ -45,7 +45,6 @@ import {
   startVerdictsAfterReview,
 } from '@/lib/app/comparisons/verdict';
 import { readComparison } from '@/lib/app/comparisons/views';
-import { removeComparison } from '@/lib/app/comparisons/service';
 import { cancelAssessment } from '@/lib/app/assessments/run';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { comparisonVerdictChargeReference } from '@/lib/app/credits/charge';
@@ -417,28 +416,79 @@ describe('round-1 review fixes', () => {
     ]);
   });
 
-  it('charges a lost verdict when its comparison is deleted, and leaves a live one to its call', async () => {
-    const lost = comparison([review('COMPLETED'), review('COMPLETED')], {
-      verdictStatus: 'RUNNING',
-      verdictAttempts: 1,
-      verdictLeaseExpiresAt: new Date(Date.now() - 1_000),
-    });
-    const live = comparison([review('COMPLETED'), review('COMPLETED')], {
-      verdictStatus: 'RUNNING',
-      verdictAttempts: 1,
-      verdictLeaseExpiresAt: new Date(Date.now() + LEASE_MS),
-    });
-    for (const set of [lost, live]) {
-      fake.addCost(ORG, 0.04, { editor: 'verdict', comparisonId: set.id }, NOW);
-    }
+  it('charges a lost verdict once its comparison is gone and its rows are quiet, and nothing else', async () => {
+    const hour = 60 * 60 * 1000;
+    // Deleted while its process was lost: its rows quiet for over an hour.
+    fake.addCost(
+      ORG,
+      0.04,
+      { editor: 'verdict', comparisonId: 'gone-quiet' },
+      new Date(NOW.getTime() - 2 * hour)
+    );
+    // Deleted while its call runs: a row landed a minute ago.
+    fake.addCost(
+      ORG,
+      0.04,
+      { editor: 'verdict', comparisonId: 'gone-live' },
+      new Date(NOW.getTime() - 60_000)
+    );
+    // Still there: left to the write that ends its verdict.
+    const kept = comparison([review('COMPLETED'), review('RUNNING')]);
+    fake.addCost(
+      ORG,
+      0.04,
+      { editor: 'verdict', comparisonId: kept.id },
+      new Date(NOW.getTime() - 2 * hour)
+    );
 
-    await runAsOrg(ORG, () => removeComparison(lost.id as string));
-    await runAsOrg(ORG, () => removeComparison(live.id as string));
+    await runAsOrg(ORG, () => recoverVerdicts(NOW));
+    await runAsOrg(ORG, () => recoverVerdicts(NOW));
 
-    expect(fake.sets).toEqual([]);
     expect(charges().map((c) => c.reference)).toEqual([
-      comparisonVerdictChargeReference(lost.id as string),
+      comparisonVerdictChargeReference('gone-quiet'),
     ]);
+  });
+
+  it('asks again, at the next tick, a verdict whose call failed in a way that passes', async () => {
+    mocks.callAgent.mockImplementationOnce(async () => {
+      throw new JudgeRunError('rate_limited', 'the editor is busy');
+    });
+    const set = comparison([review('COMPLETED'), review('COMPLETED')]);
+    await runAsOrg(ORG, () => startVerdict(set.id as string, NOW));
+    await settle();
+    expect(fake.sets[0]).toMatchObject({
+      verdictStatus: 'WAITING',
+      verdictReason: 'rate_limited',
+      verdictAttempts: 1,
+      verdictLeaseExpiresAt: null,
+    });
+    expect(charges()).toEqual([]);
+
+    expect((await runAsOrg(ORG, () => recoverVerdicts(NOW))).started).toBe(1);
+    await settle();
+    expect(fake.sets[0]).toMatchObject({
+      verdictStatus: 'COMPLETED',
+      verdictReason: null,
+      verdictAttempts: 2,
+    });
+    expect(charges()).toHaveLength(1);
+  });
+
+  it('fails for good a passing failure on its last start', async () => {
+    mocks.callAgent.mockImplementationOnce(async () => {
+      throw new JudgeRunError('provider_error', 'the provider is down');
+    });
+    const set = comparison([review('COMPLETED'), review('COMPLETED')], {
+      verdictStatus: 'RUNNING',
+      verdictAttempts: MAX_ATTEMPTS - 1,
+      verdictLeaseExpiresAt: new Date(NOW.getTime() - 1_000),
+    });
+    await runAsOrg(ORG, () => startVerdict(set.id as string, NOW));
+    await settle();
+    expect(fake.sets[0]).toMatchObject({
+      verdictStatus: 'FAILED',
+      verdictReason: 'provider_error',
+    });
   });
 
   it('starts the verdict once a cancel ends the last queued draft', async () => {

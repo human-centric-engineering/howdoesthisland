@@ -682,7 +682,7 @@ export const comparisonDetailSchema = comparisonSummarySchema.extend({
         .meta({ description: 'The appeals that decide it, most telling first; empty before.' }),
       reason: z.string().nullable().meta({
         description:
-          'Why there is none: `too_few_completed`, `too_few_judges` or `predates_verdicts` when `skipped`; the call’s code, or `lost`, when `failed`.',
+          'Why there is none: `too_few_completed`, `too_few_judges` or `predates_verdicts` when `skipped`; the call’s code, `lost` or `internal_error` when `failed`; while `waiting` to be asked again, the code of the failure that passes (`rate_limited`, `provider_error`).',
       }),
       model: z.string().nullable(),
       costUsd: z.number(),

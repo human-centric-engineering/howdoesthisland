@@ -1091,18 +1091,18 @@ export async function estimateVerdictCost(
   orgId: string,
   ceiling?: () => Promise<number | null>
 ): Promise<number> {
-  const past = await prisma.assessmentSet.findMany({
-    where: { orgId, verdictStatus: { in: ['COMPLETED', 'FAILED'] }, verdictCostUsd: { gt: 0 } },
-    // By when each ended: a verdict recovery finished late is recent spend.
-    orderBy: { verdictCompletedAt: 'desc' },
-    take: VERDICT_HISTORY,
-    select: { verdictCostUsd: true },
-  });
-  if (past.length > 0) return usd(median(past.map((r) => r.verdictCostUsd)));
   try {
+    const past = await prisma.assessmentSet.findMany({
+      where: { orgId, verdictStatus: { in: ['COMPLETED', 'FAILED'] }, verdictCostUsd: { gt: 0 } },
+      // By when each ended: a verdict recovery finished late is recent spend.
+      orderBy: { verdictCompletedAt: 'desc' },
+      take: VERDICT_HISTORY,
+      select: { verdictCostUsd: true },
+    });
+    if (past.length > 0) return usd(median(past.map((r) => r.verdictCostUsd)));
     return usd((await ceiling?.()) ?? 0);
   } catch (err) {
-    logger.warn('Verdict cost ceiling unreadable; holding nothing for it', {
+    logger.warn('Verdict cost estimate unreadable; holding nothing for it', {
       orgId,
       error: err instanceof Error ? err.message : String(err),
     });

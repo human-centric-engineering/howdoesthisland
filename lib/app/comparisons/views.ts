@@ -82,7 +82,9 @@ export type VerdictDetail = VerdictSummary & {
   appeals: { appeal: string; why: string }[];
   /**
    * Why there is none: for `skipped`, `too_few_completed`, `too_few_judges`
-   * or `predates_verdicts`; for `failed`, the call's code or `lost`.
+   * or `predates_verdicts`; for `failed`, the call's code, `lost` or
+   * `internal_error`; while `waiting` to be asked again, the code of the
+   * failure that passes.
    */
   reason: string | null;
   model: string | null;

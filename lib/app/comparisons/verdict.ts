@@ -39,21 +39,35 @@
  * verdict's earlier attempts wrote theirs before it was restarted. A call
  * that ends after its verdict was claimed again does not charge: the attempt
  * that ends it does, its rows included. A comparison deleted under its call
- * is charged by that call, since nothing else will.
+ * is charged by that call, and one deleted or purged while its verdict's
+ * process was lost by the recovery tick, once its rows have been quiet an
+ * hour ({@link chargeOrphanedVerdicts}).
+ *
+ * **A failure that passes** (`rate_limited`, `provider_error`) is asked
+ * again by the recovery tick while the verdict has starts left: it waits
+ * `WAITING`, the code in `reason`, still holding its estimate. Any other
+ * failure is final.
  *
  * Runs in the caller's tenant context; every read and write names the org.
  */
 import type { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { EDITOR_MIN_JUDGES } from '@/lib/app/assessments/editor';
 import { engineForVersion, type VersionEngine } from '@/lib/app/assessments/engine';
 import {
+  CANCEL_GRACE_MS,
   LEASE_MS,
   LEASE_RENEW_MS,
   MAX_ATTEMPTS,
   RECOVERY_BATCH,
+  RETRIED_ON_REDRIVE,
 } from '@/lib/app/assessments/limits';
-import { chargeComparisonVerdict } from '@/lib/app/credits/charge';
+import {
+  chargeComparisonVerdict,
+  chargeSweepFloor,
+  comparisonVerdictChargeReference,
+} from '@/lib/app/credits/charge';
 import type { ComparisonVerdict, FrameworkEngine, VerdictDraft } from '@/lib/app/frameworks/engine';
 import { EDITOR_AGENT_SLUG } from '@/lib/app/judges/agents';
 import { callAgent, JudgeRunError, streamCeilingUsd } from '@/lib/app/judges/run-judge';
@@ -322,7 +336,72 @@ export async function recoverVerdicts(
       logger.error('Recovery could not start a comparison verdict', err, { setId: id });
     }
   }
+  await chargeOrphanedVerdicts(orgId, now);
   return tally;
+}
+
+/** A verdict's cost row, as its call tags it. */
+const verdictCostRow = z.object({ editor: z.literal(VERDICT_COST_TAG), comparisonId: z.string() });
+
+/**
+ * Charge the verdicts whose comparison is gone and that were never charged:
+ * deleted, or purged by retention, while a lost process held the verdict, or
+ * while its call's ending could not be written. Nothing else can charge them
+ * once the row is gone. Only once their rows have been quiet for
+ * `CANCEL_GRACE_MS`, so a call still running (its comparison deleted under
+ * it) charges itself first, all its rows landed; and none before
+ * `chargeSweepFloor`, as for a `store: false` run. A comparison that still
+ * exists is left to the write that ends its verdict.
+ */
+async function chargeOrphanedVerdicts(orgId: string, now: Date): Promise<void> {
+  try {
+    const floor = await chargeSweepFloor(orgId, now);
+    if (!floor) return;
+    const rows = await prisma.aiCostLog.findMany({
+      where: {
+        orgId,
+        createdAt: { gte: floor },
+        metadata: { path: ['editor'], equals: VERDICT_COST_TAG },
+      },
+      select: { createdAt: true, metadata: true },
+    });
+    const verdicts = new Map<string, { first: Date; last: Date }>();
+    for (const row of rows) {
+      const parsed = verdictCostRow.safeParse(row.metadata);
+      if (!parsed.success) continue;
+      const seen = verdicts.get(parsed.data.comparisonId);
+      if (!seen)
+        verdicts.set(parsed.data.comparisonId, { first: row.createdAt, last: row.createdAt });
+      else {
+        if (row.createdAt < seen.first) seen.first = row.createdAt;
+        if (row.createdAt > seen.last) seen.last = row.createdAt;
+      }
+    }
+    const quietSince = now.getTime() - CANCEL_GRACE_MS;
+    const quiet = [...verdicts].filter(([, v]) => v.last.getTime() <= quietSince);
+    if (quiet.length === 0) return;
+    const ids = quiet.map(([id]) => id);
+    const [existing, charged] = await Promise.all([
+      prisma.assessmentSet.findMany({ where: { orgId, id: { in: ids } }, select: { id: true } }),
+      prisma.creditEntry.findMany({
+        where: { kind: 'CHARGE', reference: { in: ids.map(comparisonVerdictChargeReference) } },
+        select: { reference: true },
+      }),
+    ]);
+    const kept = new Set(existing.map((s) => s.id));
+    const done = new Set(charged.map((c) => c.reference));
+    let count = 0;
+    for (const [id, v] of quiet) {
+      if (count >= RECOVERY_BATCH) break;
+      if (kept.has(id) || done.has(comparisonVerdictChargeReference(id))) continue;
+      // Since its first row: its comparison's `createdAt` is gone with it.
+      const { credits } = await chargeComparisonVerdict(prisma, orgId, id, v.first);
+      if (credits > 0) count += 1;
+    }
+  } catch (err) {
+    // Left for the next pass.
+    logger.error('Recovery could not charge verdicts whose comparison is gone', err, { orgId });
+  }
 }
 
 /** How a verdict's call ended. */
@@ -367,6 +446,33 @@ async function drive(
     ending = await ask(set, drafts);
   } finally {
     clearInterval(timer);
+  }
+  // A failure that passes (the editor's rate limit, the provider) waits for
+  // the recovery tick to ask again, while it has starts left: its estimate is
+  // still held, and what it spent is charged with the attempt that ends it.
+  if (
+    ending.status === 'FAILED' &&
+    ending.reason !== null &&
+    RETRIED_ON_REDRIVE.has(ending.reason) &&
+    attempt < MAX_ATTEMPTS
+  ) {
+    try {
+      const { count } = await prisma.assessmentSet.updateMany({
+        where: mine,
+        data: {
+          verdictStatus: 'WAITING',
+          verdictReason: ending.reason,
+          verdictLeaseExpiresAt: null,
+        },
+      });
+      if (count === 1) return;
+    } catch (err) {
+      // Left `RUNNING`; once its lease runs out, recovery asks again all the same.
+      logger.error('A comparison verdict could not be set to wait for a retry', err, {
+        setId: set.id,
+      });
+      return;
+    }
   }
   for (let tries = 1; tries <= 2; tries += 1) {
     try {

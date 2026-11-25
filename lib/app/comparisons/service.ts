@@ -46,7 +46,6 @@ import {
 } from '@/lib/app/usage/budget';
 import type { CreateComparisonBody } from '@/lib/app/comparisons/validations';
 import { readComparison, type ComparisonDetail } from '@/lib/app/comparisons/views';
-import { chargeComparisonVerdict } from '@/lib/app/credits/charge';
 import {
   estimateComparisonVerdict,
   verdictRuns,
@@ -232,30 +231,13 @@ export async function getComparison(id: string): Promise<ComparisonDetail> {
 /**
  * Delete a comparison: the set and its drafts' places, not their reviews,
  * which stay in the workspace's history and are deleted as any review is.
- *
- * A verdict whose process died while it ran (`RUNNING`, its lease run out)
- * is charged first, in the same transaction: recovery would have charged it,
- * and once the row is gone nothing can. One whose call is still alive is
- * left to that call, which charges itself as it ends (`verdict.ts`): charged
- * here, its own rows, landing later, would find the reference taken.
+ * A verdict whose call is still running charges itself as it ends; one whose
+ * process was lost is charged by the recovery tick (`verdict.ts`).
  */
 export async function removeComparison(id: string): Promise<{ deleted: true }> {
-  const orgId = requireOrgId();
-  const now = new Date();
-  return prisma.$transaction(async (tx) => {
-    const set = await tx.assessmentSet.findFirst({
-      where: { id, orgId, kind: 'COMPARISON' },
-      select: { createdAt: true, verdictStatus: true, verdictLeaseExpiresAt: true },
-    });
-    if (!set) throw new NotFoundError('Comparison not found');
-    const lost =
-      set.verdictStatus === 'RUNNING' &&
-      (set.verdictLeaseExpiresAt === null || set.verdictLeaseExpiresAt < now);
-    if (lost) await chargeComparisonVerdict(tx, orgId, id, set.createdAt);
-    const { count } = await tx.assessmentSet.deleteMany({
-      where: { id, orgId, kind: 'COMPARISON' },
-    });
-    if (count === 0) throw new NotFoundError('Comparison not found');
-    return { deleted: true as const };
+  const { count } = await prisma.assessmentSet.deleteMany({
+    where: { id, orgId: requireOrgId(), kind: 'COMPARISON' },
   });
+  if (count === 0) throw new NotFoundError('Comparison not found');
+  return { deleted: true };
 }

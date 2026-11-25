@@ -2099,7 +2099,7 @@ describe('a comparison’s verdict, held with its drafts (t-88)', () => {
         })
       ).toBe(0);
       expect(logger.warn).toHaveBeenCalledWith(
-        'Verdict cost ceiling unreadable; holding nothing for it',
+        'Verdict cost estimate unreadable; holding nothing for it',
         expect.objectContaining({ orgId: ORG })
       );
     });
