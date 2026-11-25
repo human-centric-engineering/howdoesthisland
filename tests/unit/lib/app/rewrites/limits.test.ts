@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { EDITOR_MAX_TOKENS } from '@/lib/app/judges/agents';
 import { REWRITE_CALL_MS, REWRITE_LIFETIME_MS } from '@/lib/app/rewrites/limits';
 
 describe('REWRITE_LIFETIME_MS', () => {
@@ -26,7 +27,7 @@ describe('REWRITE_CALL_MS', () => {
     expect(REWRITE_LIFETIME_MS - REWRITE_CALL_MS).toBeGreaterThanOrEqual(30_000);
   });
 
-  it('outlasts the editor’s longest timeout and the budget lock’s wait', () => {
-    expect(REWRITE_CALL_MS).toBeGreaterThan(300_000 + 10_000);
+  it('lets the editor’s largest reply finish at 45 tokens a second, after the budget lock’s wait', () => {
+    expect(REWRITE_CALL_MS).toBeGreaterThanOrEqual((EDITOR_MAX_TOKENS / 45) * 1000 + 10_000);
   });
 });

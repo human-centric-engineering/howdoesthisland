@@ -664,6 +664,25 @@ describe('while it runs', () => {
     expect(charges()).toEqual([expect.objectContaining({ amount: -5 })]);
   });
 
+  it('saves at once on its first real piece, not on empty ones before it', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let savesBeforeText = -1;
+    mocks.streamAgent.mockImplementation(async (call: AgentStreamCall) => {
+      const before = fake.db.rewrite.updateMany.mock.calls.length;
+      await call.onText('');
+      await call.onText('');
+      await Promise.resolve();
+      savesBeforeText = fake.db.rewrite.updateMany.mock.calls.length - before;
+      throw new JudgeRunError('provider_error', 'stopped');
+    });
+    const review = finishedReview();
+    const started = await inOrg(() =>
+      startRewrite({ assessmentId: String(review.id), stream: false }, { userId: null })
+    );
+    await started.done;
+    expect(savesBeforeText).toBe(0);
+  });
+
   it('keeps a call’s own reason when the deadline passes as it fails another way', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
     let release!: () => void;

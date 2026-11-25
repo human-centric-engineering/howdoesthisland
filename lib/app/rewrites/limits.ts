@@ -28,16 +28,20 @@ export const REWRITE_COST_TAG = 'rewrite';
  * from its saved draft is one whose call has stopped and will write no cost
  * row of its own after the estimate.
  */
-export const REWRITE_LIFETIME_MS = 360_000;
+export const REWRITE_LIFETIME_MS = 800_000;
 
 /**
  * How long after its row is written a rewrite's call is stopped, if it is
  * still running (`service.ts`). Nothing else bounds a stream on a
  * long-running server: the provider's timeout covers the connection, not the
  * whole reply. Stopped, the call writes its own cost row (an estimate, as
- * any stopped call's) and ends its rewrite. It leaves
- * {@link REWRITE_LIFETIME_MS} room for that before recovery may price it.
- * Sized past the editor's longest timeout (300s) and the budget lock's wait
- * (10s), so only a call that would have been cut off is stopped.
+ * any stopped call's) and ends its rewrite, with
+ * {@link REWRITE_LIFETIME_MS} leaving room for that before recovery may
+ * price it.
+ *
+ * Sized so a healthy call of the longest text finishes: the editor's output
+ * ceiling (`EDITOR_MAX_TOKENS`, 32,768) streamed at 45 tokens a second, a
+ * slow rate for the editor's models, plus the budget lock's wait (10s). A
+ * call slower than that is stopped, ending `timed_out` with what it wrote.
  */
-export const REWRITE_CALL_MS = 330_000;
+export const REWRITE_CALL_MS = 750_000;

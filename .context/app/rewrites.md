@@ -111,8 +111,10 @@ its prompt (the editor's instructions and the request, counted by the model's
 tokeniser) and its whole output ceiling (`rewriteMaxTokens(text)`, never above
 the approved entry's or the agent's), at the editor's price at its binding
 (`streamCeilingUsd`). So it scales with the text, and several first rewrites
-asked for together cannot each pass on a remainder that covers one. It is an
-upper bound: a first rewrite is charged what it cost, usually much less. It is
+asked for together cannot each pass on a remainder that covers one. It is
+priced at the model's list rate, so near the most rather than a bound: a call
+served at a priority tier or writing to the prompt cache is billed above list.
+A first rewrite is charged what it cost, usually much less. It is
 `0` (`basis: "none"`) only when that is nothing: a local or unpriced model, or
 an editor that would refuse the call before it spent.
 
@@ -132,7 +134,7 @@ its ending replaces recovery's. The retention
 purge leaves a review alone while one of its rewrites runs.
 
 **A call stopped part-way** (its signal, a save that failed, a dropped
-connection, or running past `REWRITE_CALL_MS`, 330s after its row was written,
+connection, or running past `REWRITE_CALL_MS`, 750s after its row was written,
 on any host) reports no usage, since a provider reports it in a stream's last
 event. One that had answered at all is recorded at an estimate: the prompt and
 what it streamed, counted by the model's tokeniser, its row tagged
@@ -149,8 +151,8 @@ its estimate. One whose process was alive after all charges itself as it ends
 (above).
 
 Recovery leaves a rewrite that kept its call (`callStart`) alone until it is
-`REWRITE_LIFETIME_MS` (360s, the route's `maxDuration`) old. The call stops
-itself at `REWRITE_CALL_MS` (330s) on any host, writing its own cost row, so a
+`REWRITE_LIFETIME_MS` (800s, the route's `maxDuration`) old. The call stops
+itself at `REWRITE_CALL_MS` (750s) on any host, writing its own cost row, so a
 rewrite recovery prices has a call that has stopped and will write no row
 after the estimate. One that kept no call is ended once its lease runs out:
 there is nothing to price, and no call to wait for.
@@ -162,8 +164,10 @@ the claim, and the pass leaves the row. The estimate is written with no
 transaction open, so a pass needs one connection at a time. A pass that fails
 part-way leaves its claim to run out; the next finds its estimate and charges
 it without another. An estimate write that fails is left for the next pass
-too, unless the agent it names is gone (every pass would be refused): that
-one is ended uncharged, and logged.
+too, for an hour (`PRICING_RETRY_MS`), unless the agent it names is gone
+(every pass would be refused): that one, or one still failing after the hour,
+is ended uncharged, and logged. A pass takes its batch from the rewrites due,
+so young ones that kept a call never keep a due one waiting.
 
 **One account of a call** (`settleRewriteCostRows`). Whatever charges a
 rewrite (recovery, or its call as it ends) first leaves it one account of its
@@ -171,7 +175,9 @@ call: should the call's own cost row have landed beside recovery's estimate (a
 process that stalled past the lifetime, then recovered), the estimate is
 removed; should two passes each have written one, the later goes. So neither
 the charge nor the monthly cap counts a call twice. One already charged at the
-estimate stays charged at it (one reference): low, never high.
+estimate stays charged at it (one reference): low, never high. Each pass also
+settles again the rewrites it ended `lost` in the last day, for a call whose
+own row landed after recovery ended it, and which never ended itself.
 
 **Priced when it left no row** (t-85). A streamed call writes its cost row only
 as it ends, so one whose process died part-way through the stream (the platform
@@ -206,10 +212,14 @@ the row too.
 
 - `REWRITES_PER_MINUTE` (10) per user, across sessions and keys: a
   handler-level sub-cap, as for reviews that call judges.
-- The route's `maxDuration` is 360s: the editor's longest timeout (300s), the
-  budget lock's wait (10s), and the setup and ending write.
-- `REWRITE_CALL_MS` (330s) stops a call still running then, on any host,
-  leaving 30s for its cost row before recovery may price it.
+- `REWRITE_CALL_MS` (750s) stops a call still running then, on any host:
+  long enough for the editor's largest reply (32,768 tokens) at 45 tokens a
+  second, after the budget lock's wait (10s). Nothing else bounds a stream on
+  a long-running server; the provider's timeout covers the connection only.
+- The route's `maxDuration` is 800s, the most Vercel allows (Pro, fluid
+  compute), leaving 50s for the call's cost row before recovery may price it
+  (`REWRITE_LIFETIME_MS`). A plan with a lower ceiling cuts a long rewrite off
+  sooner; recovery ends and charges it.
 
 ## Data
 

@@ -672,10 +672,12 @@ export async function recordStoppedStream(
  * nothing then. Nothing is checked against a budget or a rate limit, and
  * nothing is spent.
  *
- * The output ceiling is exact; the prompt is counted by the model's
- * tokeniser, exact for OpenAI and elsewhere an approximation calibrated to
- * count high (`lib/orchestration/llm/tokeniser.ts`), so the ceiling errs
- * above the bill, as a hold should.
+ * Priced at the model's list rate. The output ceiling is exact; the prompt
+ * is counted by the model's tokeniser, exact for OpenAI and elsewhere an
+ * approximation calibrated to count high (`lib/orchestration/llm/tokeniser.ts`).
+ * A call served at a priority tier, or writing to the prompt cache, is
+ * billed above list, so it can cost more than this: a hold near the most,
+ * not a bound.
  */
 export async function streamCeilingUsd(
   call: CallTarget,
@@ -738,8 +740,8 @@ type CostTags = Pick<
  * slug. For {@link recordStoppedStream} that row was loaded before the
  * process died, and its id read back from what the caller kept: if the agent
  * has been deleted since, the FK refuses the row and the write answers
- * `null`. `userId` is a real `User.id` or nothing (see `AgentCall.userId`). It never rejects: a failed write is
- * logged there and answers `null`.
+ * `null`. `userId` is a real `User.id` or nothing (see `AgentCall.userId`).
+ * It never rejects: a failed write is logged there and answers `null`.
  */
 async function recordSpend(
   pricing: CallPricing,

@@ -347,7 +347,7 @@ async function drive(d: Drive): Promise<RewriteView> {
       onText: (piece) => {
         // Saved at once, so a process that dies before the next save has a
         // draft that says the provider answered, and how much (t-85).
-        const first = draft === '';
+        const first = draft === '' && piece !== '';
         draft += piece;
         if (first) save();
         d.channel?.push({ type: 'rewrite_text', text: piece });

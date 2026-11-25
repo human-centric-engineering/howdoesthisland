@@ -63,6 +63,25 @@ export const LOST_REWRITE_CODE = 'lost';
 /** How long a pass holds a rewrite it is ending: far longer than pricing and ending one takes. */
 export const CLAIM_MS = 60_000;
 
+/**
+ * How many lapsed rewrites a pass reads to choose its batch from. Rewrites
+ * not yet due (a call kept, but not yet {@link REWRITE_LIFETIME_MS} old)
+ * are passed over in code, so the batch is taken after them, not before:
+ * a few such rows must not keep a due one waiting.
+ */
+const LAPSED_SCAN = 100;
+
+/**
+ * How long after its row was written recovery keeps retrying an estimate
+ * that would not write (the database, the network). Past it, the failure
+ * is taken to be one that repeats, and the rewrite is ended uncharged
+ * rather than holding budget for good. Several ticks' worth.
+ */
+export const PRICING_RETRY_MS = 60 * 60 * 1000;
+
+/** How far back recovery looks for a rewrite it ended `lost` to settle again ({@link settleLost}). */
+const SETTLE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export async function recoverRewrites(now: Date = new Date()): Promise<{ failed: number }> {
   const orgId = requireOrgId();
   const lapsed: Prisma.RewriteWhereInput = {
@@ -71,26 +90,56 @@ export async function recoverRewrites(now: Date = new Date()): Promise<{ failed:
     OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
   };
   const oldBefore = new Date(now.getTime() - REWRITE_LIFETIME_MS);
-  const rows = await prisma.rewrite.findMany({
+  const scanned = await prisma.rewrite.findMany({
     where: lapsed,
     orderBy: { createdAt: 'asc' },
-    take: RECOVERY_BATCH,
+    take: LAPSED_SCAN,
     select: { id: true, createdAt: true, callStart: true },
   });
+  // SQL NULL filtered here, not in the query, as `frameworks/repo.ts` does:
+  // the query would need `Prisma.DbNull`, which `lib/app` cannot import.
+  const due = scanned
+    .filter((r) => r.callStart === null || r.createdAt < oldBefore)
+    .slice(0, RECOVERY_BATCH);
   let failed = 0;
-  for (const { id, createdAt, callStart } of rows) {
-    // SQL NULL filtered here, not in the query, as `frameworks/repo.ts` does:
-    // the query would need `Prisma.DbNull`, which `lib/app` cannot import.
-    const old = createdAt < oldBefore;
-    if (callStart !== null && !old) continue;
+  for (const { id, createdAt } of due) {
     try {
-      failed += await endLost(orgId, id, createdAt, old, lapsed, now);
+      failed += await endLost(orgId, id, createdAt, createdAt < oldBefore, lapsed, now);
     } catch (err) {
       // Left for the next pass once its claim runs out; the rest of this one goes on.
       logger.error('Recovery could not end a lost rewrite', err, { rewriteId: id });
     }
   }
+  await settleLost(orgId, now);
   return { failed };
+}
+
+/**
+ * Settle again the rewrites recovery ended `lost` lately
+ * ({@link settleRewriteCostRows}). A call that stalled past its lifetime,
+ * then wrote its own cost row but died (or could not end its rewrite) before
+ * its ending settled it, leaves that row beside recovery's estimate; this is
+ * what removes the estimate then. A rewrite with one account is unchanged.
+ */
+async function settleLost(orgId: string, now: Date): Promise<void> {
+  const ended = await prisma.rewrite.findMany({
+    where: {
+      orgId,
+      status: 'FAILED',
+      errorCode: LOST_REWRITE_CODE,
+      completedAt: { gte: new Date(now.getTime() - SETTLE_WINDOW_MS) },
+    },
+    orderBy: { completedAt: 'desc' },
+    take: LAPSED_SCAN,
+    select: { id: true, createdAt: true },
+  });
+  for (const { id, createdAt } of ended) {
+    try {
+      await prisma.$transaction((tx) => settleRewriteCostRows(tx, orgId, id, createdAt));
+    } catch (err) {
+      logger.error('Recovery could not settle a lost rewrite', err, { rewriteId: id });
+    }
+  }
 }
 
 async function endLost(
@@ -119,8 +168,10 @@ async function endLost(
 
   const ownRows = rewriteCostRows(orgId, id, createdAt);
   if (old && (await prisma.aiCostLog.count({ where: ownRows })) === 0) {
-    // A write that may succeed next time: leave the claim to run out.
-    if ((await priceLostCall(id, row)) === 'retry') return 0;
+    // A write that may succeed next time: leave the claim to run out, for a
+    // while (`PRICING_RETRY_MS`).
+    const retrying = createdAt.getTime() > now.getTime() - PRICING_RETRY_MS;
+    if ((await priceLostCall(id, row, retrying)) === 'retry') return 0;
   }
 
   return prisma.$transaction(async (tx) => {
@@ -212,12 +263,15 @@ export async function settleRewriteCostRows(
  *
  * Answers `retry` when the write failed for a reason that may pass (the
  * database, the network), so the pass leaves the rewrite to the next
- * rather than ending it uncharged. A write refused because the agent it
- * names is gone would be refused at every pass: that one is ended uncharged.
+ * rather than ending it uncharged, until {@link PRICING_RETRY_MS}. A write
+ * refused because the agent it names is gone would be refused at every
+ * pass: that one is ended uncharged at once.
  */
 async function priceLostCall(
   rewriteId: string,
-  row: { draft: string; callStart: unknown; createdByUserId: string | null }
+  row: { draft: string; callStart: unknown; createdByUserId: string | null },
+  /** Whether a failed write is still worth another pass ({@link PRICING_RETRY_MS}). */
+  retrying: boolean
 ): Promise<'done' | 'retry'> {
   if (row.draft === '') return 'done';
   const start = parseRewriteCallStart(row.callStart);
@@ -240,13 +294,14 @@ async function priceLostCall(
   );
   if (written) return 'done';
   // The write failed (`logCost` logged why).
-  if ((await prisma.aiAgent.count({ where: { id: pricing.agentId } })) > 0) {
+  const agentGone = (await prisma.aiAgent.count({ where: { id: pricing.agentId } })) === 0;
+  if (!agentGone && retrying) {
     logger.warn('A lost rewrite could not be priced; left for the next pass', { rewriteId });
     return 'retry';
   }
   logger.error('A lost rewrite could not be priced; it is ended uncharged', undefined, {
     rewriteId,
-    reason: 'agent_gone',
+    reason: agentGone ? 'agent_gone' : 'retries_exhausted',
   });
   return 'done';
 }

@@ -30,7 +30,12 @@ vi.mock('@/lib/logging', () => ({
 
 import { RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { REWRITE_LIFETIME_MS } from '@/lib/app/rewrites/limits';
-import { CLAIM_MS, LOST_REWRITE, recoverRewrites } from '@/lib/app/rewrites/recover';
+import {
+  CLAIM_MS,
+  LOST_REWRITE,
+  PRICING_RETRY_MS,
+  recoverRewrites,
+} from '@/lib/app/rewrites/recover';
 import { logger } from '@/lib/logging';
 import type { LogCostParams } from '@/lib/orchestration/llm/cost-tracker';
 import { tokeniserForModel } from '@/lib/orchestration/llm/tokeniser';
@@ -205,6 +210,17 @@ describe('recoverRewrites', () => {
     expect(charges()).toEqual([]);
   });
 
+  it('takes its batch from the due ones, so young ones with a call never keep one waiting', async () => {
+    // Older than the one due, lapsed, but not yet old enough to price.
+    const young = Array.from({ length: RECOVERY_BATCH + 1 }, (_, i) =>
+      rewrite({ createdAt: new Date(NOW.getTime() - 60_000 + i), callStart: CALL_START })
+    );
+    const due = rewrite({ createdAt: new Date(NOW.getTime() - 30_000), callStart: null });
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(due.status).toBe('FAILED');
+    expect(young.every((r) => r.status === 'RUNNING')).toBe(true);
+  });
+
   it('takes one claimed by a pass alongside only once that claim runs out', async () => {
     const row = rewrite();
     row.leaseExpiresAt = new Date(NOW.getTime() + CLAIM_MS);
@@ -321,6 +337,35 @@ describe('recoverRewrites on a call that died mid-stream (t-85)', () => {
     row.leaseExpiresAt = new Date(NOW.getTime() - 1_000);
     expect(await recover()).toEqual({ failed: 1 });
     expect(row).toMatchObject({ status: 'FAILED', costUsd: ESTIMATE_USD });
+    expect(charges()).toEqual([expect.objectContaining({ amount: -13 })]);
+  });
+
+  it(`ends one whose estimate keeps failing uncharged, once it is ${PRICING_RETRY_MS / 60_000} minutes old`, async () => {
+    mocks.logCost.mockResolvedValue(null);
+    const row = rewrite({
+      draft: DRAFT,
+      callStart: CALL_START,
+      createdAt: new Date(NOW.getTime() - PRICING_RETRY_MS - 1_000),
+    });
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(row).toMatchObject({ status: 'FAILED', costUsd: 0 });
+    expect(logger.error).toHaveBeenCalledWith(
+      'A lost rewrite could not be priced; it is ended uncharged',
+      undefined,
+      { rewriteId: row.id, reason: 'retries_exhausted' }
+    );
+  });
+
+  it('removes the estimate of one it ended when the call’s own row lands after', async () => {
+    const row = rewrite({ draft: DRAFT, callStart: CALL_START });
+    expect(await recover()).toEqual({ failed: 1 });
+    expect(charges()).toEqual([expect.objectContaining({ amount: -13 })]);
+    // A stalled call wakes, writes its own row, and dies before ending its rewrite.
+    fake.addCost(ORG, 0.2, { editor: 'rewrite', rewriteId: row.id }, NOW);
+
+    expect(await recover()).toEqual({ failed: 0 });
+    expect(fake.costRows.map((r) => r.totalCostUsd)).toEqual([0.2]);
+    // Charged at the estimate already, and not again: low, never twice.
     expect(charges()).toEqual([expect.objectContaining({ amount: -13 })]);
   });
 
