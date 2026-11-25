@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIClientError } from '@/lib/api/client';
 import {
+  answersFor,
   followRewrite,
   mergeRewrites,
   reviewDraftBody,
@@ -409,5 +410,60 @@ describe('reviewDraftBody', () => {
       version: '0.5.1',
       profile: 'quick',
     });
+  });
+});
+
+describe('streamRewrite: filling gaps (t-83)', () => {
+  it('sends the rewrite it fills and the answers beside the focus, still streamed', async () => {
+    fetchMock.mockResolvedValue(
+      streamed([
+        frame({ type: 'rewrite_done', rewrite: row({ status: 'completed', draft: 'Done.' }) }),
+      ])
+    );
+
+    await streamRewrite(
+      'asm_1',
+      { focus: 'pathos', fromRewriteId: 'rw_prev', answers: { p1: '£20 a month', p2: 'Leeds' } },
+      { onStart: vi.fn(), onText: vi.fn() },
+      new AbortController().signal
+    );
+
+    expect(bodyOf(fetchMock.mock.calls[0][1])).toEqual({
+      assessmentId: 'asm_1',
+      focus: 'pathos',
+      fromRewriteId: 'rw_prev',
+      answers: { p1: '£20 a month', p2: 'Leeds' },
+      stream: true,
+    });
+  });
+
+  it('never lets the ask turn streaming off', async () => {
+    fetchMock.mockResolvedValue(streamed([]));
+    await streamRewrite(
+      'asm_1',
+      { focus: 'balanced', ...({ stream: false } as object) },
+      { onStart: vi.fn(), onText: vi.fn() },
+      new AbortController().signal
+    );
+    expect(bodyOf(fetchMock.mock.calls[0][1])).toMatchObject({ stream: true });
+  });
+});
+
+describe('answersFor', () => {
+  const placeholders = [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }];
+
+  it('keeps each answer trimmed, by id, and leaves out the blank and the unanswered', () => {
+    expect(answersFor(placeholders, { p1: '  £20 a month  ', p2: '   ' })).toEqual({
+      p1: '£20 a month',
+    });
+  });
+
+  it('ignores text typed for an id that is not one of the placeholders', () => {
+    expect(answersFor(placeholders, { p1: 'Yes', gone: 'Stale answer' })).toEqual({ p1: 'Yes' });
+  });
+
+  it('is empty when nothing is answered, so there is nothing to rewrite with', () => {
+    expect(answersFor(placeholders, {})).toEqual({});
+    expect(answersFor(placeholders, { p1: '\n\t ' })).toEqual({});
   });
 });

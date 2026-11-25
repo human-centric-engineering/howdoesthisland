@@ -590,4 +590,201 @@ describe('RewriteDrawer', () => {
     expect(await screen.findByText('Timed out.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /usage/ })).toBeNull();
   });
+
+  describe('gaps the writer fills (t-83)', () => {
+    const gappy = (over: Partial<RewriteWire> = {}) =>
+      row({
+        id: 'rw_gappy',
+        focus: 'pathos',
+        status: 'completed',
+        draft: 'From [ADD: monthly price] a month, across [ADD: number of clients] clients.',
+        placeholders: [
+          { id: 'p1', label: 'monthly price', at: [{ start: 5, end: 25 }] },
+          { id: 'p2', label: 'number of clients', at: [{ start: 40, end: 66 }] },
+        ],
+        ...over,
+      });
+
+    /** Open the drawer on a finished rewrite with two gaps, reopened from the list. */
+    async function openGappy(over: Partial<RewriteWire> = {}) {
+      routes.list = () => ok([gappy(over), earlierRow]);
+      render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      // The gappy rewrite is the newest of two Pathos ones, so it is listed first.
+      const [newest] = await screen.findAllByRole('button', { name: /Pathos · / });
+      fireEvent.click(newest);
+      await screen.findByRole('heading', { name: 'Facts the editor needs' });
+    }
+
+    const fillButton = () => screen.getByRole('button', { name: 'Fill these and rewrite' });
+    const gap = (label: string) => screen.getByLabelText<HTMLInputElement>(label);
+
+    it('lists each gap of a finished rewrite as a labelled field, and offers none for a draft without gaps', async () => {
+      await openGappy();
+      expect(gap('monthly price')).toHaveValue('');
+      expect(gap('number of clients')).toHaveValue('');
+
+      const [, older] = screen.getAllByRole('button', { name: /Pathos · / });
+      fireEvent.click(older);
+      expect(draftBox()?.textContent).toBe('An earlier draft.');
+      expect(screen.queryByRole('heading', { name: 'Facts the editor needs' })).toBeNull();
+    });
+
+    it('shows no fields while the rewrite is still being written', async () => {
+      routes.list = () => ok([gappy({ status: 'running' })]);
+      routes.read = () => ok(gappy({ status: 'running' }));
+      render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      fireEvent.click(await screen.findByRole('button', { name: /Pathos · .*Writing/ }));
+      expect(screen.queryByRole('heading', { name: 'Facts the editor needs' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Fill these and rewrite' })).toBeNull();
+    });
+
+    it('keeps the button off until a field has text that is not blank', async () => {
+      await openGappy();
+      expect(fillButton()).toBeDisabled();
+
+      fireEvent.change(gap('monthly price'), { target: { value: '   ' } });
+      expect(fillButton()).toBeDisabled();
+
+      fireEvent.change(gap('monthly price'), { target: { value: '£20' } });
+      expect(fillButton()).toBeEnabled();
+    });
+
+    it('rewrites from the shown draft with the trimmed answers, leaving out the blank, and shows the new draft', async () => {
+      routes.post = () =>
+        streamed([
+          frame({ type: 'rewrite', rewrite: row({ id: 'rw_filled', focus: 'pathos' }) }),
+          frame({ type: 'rewrite_text', text: 'From £20 a month.' }),
+          frame({
+            type: 'rewrite_done',
+            rewrite: row({
+              id: 'rw_filled',
+              focus: 'pathos',
+              status: 'completed',
+              draft: 'From £20 a month.',
+            }),
+          }),
+        ]);
+      await openGappy();
+      fireEvent.change(gap('monthly price'), { target: { value: '  £20  ' } });
+      fireEvent.change(gap('number of clients'), { target: { value: '  ' } });
+      fireEvent.click(fillButton());
+
+      await waitFor(() => expect(draftBox()?.textContent).toBe('From £20 a month.'));
+      const posts = calls('POST', '/api/v1/rewrites');
+      expect(posts).toHaveLength(1);
+      expect(bodyOf(posts[0][1])).toEqual({
+        assessmentId: 'asm_1',
+        focus: 'pathos',
+        fromRewriteId: 'rw_gappy',
+        answers: { p1: '£20' },
+        stream: true,
+      });
+      // The finished draft has no gaps left, so the fields are gone with it.
+      expect(screen.queryByRole('heading', { name: 'Facts the editor needs' })).toBeNull();
+    });
+
+    it('puts back the draft and what was typed when the fill is refused, and shows the refusal beside Fill', async () => {
+      routes.post = () =>
+        refused(402, 'INSUFFICIENT_CREDITS', 'This needs 40 CopyCredits; the workspace has 12.', {
+          usagePage: '/usage',
+        });
+      await openGappy();
+      fireEvent.change(gap('monthly price'), { target: { value: '£20' } });
+      fireEvent.click(fillButton());
+
+      const message = await screen.findByText('This needs 40 CopyCredits; the workspace has 12.');
+      expect(screen.getByRole('link', { name: /usage/ })).toHaveAttribute('href', '/usage');
+      // The previous draft is shown again, with its fields and the typed answer.
+      expect(draftBox()?.textContent).toBe(gappy().draft);
+      expect(gap('monthly price')).toHaveValue('£20');
+      expect(fillButton()).toBeEnabled();
+      // Beside Fill, in the gaps section, not beside "Write a rewrite".
+      const gapsSection = screen
+        .getByRole('heading', { name: 'Facts the editor needs' })
+        .closest('section');
+      expect(gapsSection).toContainElement(message);
+      expect(calls('POST', '/api/v1/rewrites')).toHaveLength(1);
+    });
+
+    it('puts back the draft for a fill refused as invalid (400), with the server’s words', async () => {
+      routes.post = () => refused(400, 'VALIDATION_ERROR', 'An answer is too long.');
+      await openGappy();
+      fireEvent.change(gap('number of clients'), { target: { value: '300' } });
+      fireEvent.click(fillButton());
+
+      expect(await screen.findByText(/An answer is too long\./)).toBeInTheDocument();
+      expect(gap('number of clients')).toHaveValue('300');
+      expect(draftBox()?.textContent).toBe(gappy().draft);
+    });
+
+    it('shows a refused plain rewrite beside Write a rewrite, not beside Fill', async () => {
+      routes.post = () => refused(402, 'INSUFFICIENT_CREDITS', 'Add credits.');
+      await openGappy();
+      const write = screen.getByRole('button', { name: 'Write a rewrite' });
+      fireEvent.click(write);
+
+      const message = await screen.findByText('Add credits.');
+      expect(write.parentElement).toContainElement(message);
+      // A plain rewrite replaces the shown draft for its attempt, so no fields remain to host it.
+      expect(screen.queryByRole('button', { name: 'Fill these and rewrite' })).toBeNull();
+    });
+  });
+
+  describe('the invitation to write a brief (t-83)', () => {
+    it('shows none when the drawer is given none', async () => {
+      await openDrawer();
+      expect(screen.queryByRole('complementary', { name: 'Add a brief' })).toBeNull();
+    });
+
+    it('shows none for a null invitation', async () => {
+      render(<RewriteDrawer assessmentId="asm_1" focuses={focuses} briefInvite={null} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      await screen.findByRole('button', { name: /Pathos · / });
+      expect(screen.queryByRole('complementary', { name: 'Add a brief' })).toBeNull();
+    });
+
+    it('links a project with no brief to the project’s page', async () => {
+      render(
+        <RewriteDrawer
+          assessmentId="asm_1"
+          focuses={focuses}
+          briefInvite={{ projectId: 'prj_1' }}
+        />
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      const invite = await screen.findByRole('complementary', { name: 'Add a brief' });
+      expect(
+        within(invite).getByRole('link', { name: 'Write the project’s brief' })
+      ).toHaveAttribute('href', '/projects/prj_1');
+    });
+
+    it('links copy in no project to the projects page', async () => {
+      render(
+        <RewriteDrawer assessmentId="asm_1" focuses={focuses} briefInvite={{ projectId: null }} />
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      const invite = await screen.findByRole('complementary', { name: 'Add a brief' });
+      expect(
+        within(invite).getByRole('link', { name: 'Make a project with a brief' })
+      ).toHaveAttribute('href', '/projects');
+    });
+
+    it('still writes a rewrite with the invitation shown', async () => {
+      render(
+        <RewriteDrawer assessmentId="asm_1" focuses={focuses} briefInvite={{ projectId: null }} />
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }));
+      await screen.findByRole('complementary', { name: 'Add a brief' });
+      fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+
+      await waitFor(() => expect(draftBox()?.textContent).toBe('A better draft.'));
+      expect(bodyOf(calls('POST', '/api/v1/rewrites')[0][1])).toEqual({
+        assessmentId: 'asm_1',
+        focus: 'balanced',
+        stream: true,
+      });
+    });
+  });
 });
