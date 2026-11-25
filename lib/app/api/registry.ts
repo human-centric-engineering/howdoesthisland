@@ -89,7 +89,6 @@ import {
 } from '@/lib/app/workspaces/validations';
 import { monthUsageSchema, reviewRefusalDetailsSchema } from '@/lib/app/usage/wire';
 import { rewriteEventSchema, rewriteSchema } from '@/lib/app/rewrites/wire';
-import { comparisonDetailSchema, comparisonSummarySchema } from '@/lib/app/comparisons/wire';
 import {
   comparisonIdParamSchema,
   createComparisonSchema,
@@ -532,8 +531,6 @@ export const sharedAssessmentSchema = assessmentDetailSchema
 export { createdReportShareSchema, reportShareSchema };
 // `rewriteSchema` and `rewriteEventSchema` live with the rewrites (t-81).
 export { rewriteEventSchema, rewriteSchema };
-// The comparison's live with the comparisons (t-87).
-export { comparisonDetailSchema, comparisonSummarySchema };
 
 /**
  * `SharedReport`, less its model, plus the version's catalogue: what
@@ -604,6 +601,69 @@ export const assessmentEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('assessment_gone'), id: z.string() }),
   z.object({ type: z.literal('assessment_timeout'), id: z.string() }),
 ]);
+
+// --- Comparisons (t-87): `ComparisonSummary` and `ComparisonDetail` in
+// `lib/app/comparisons/views.ts`. Here, not beside them, so `context` is the
+// registry's own field, which the OpenAPI document types as the framework's.
+
+/** `DraftSummary` in `views.ts`. */
+const comparisonDraftSchema = z.object({
+  position: z.number().int(),
+  label: z.string().nullable(),
+  assessmentId: z.string().nullable(),
+  status: z.enum([...ASSESSMENT_STATES, 'purged']),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+});
+
+const comparisonAppealScoreSchema = z.object({ appeal: z.string(), score: z.number() });
+
+/** `ComparisonSummary` in `views.ts`. */
+export const comparisonSummarySchema = z.object({
+  id: z.string(),
+  kind: z.literal('comparison'),
+  status: z.enum(['running', 'completed', 'partial', 'failed']),
+  framework: frameworkRefSchema,
+  profile: z.string(),
+  judges: z.array(z.string()),
+  projectId: z.string().nullable(),
+  project: z.object({ id: z.string(), name: z.string() }).nullable(),
+  createdAt: isoDateTime,
+  drafts: z.array(comparisonDraftSchema),
+});
+
+/** `ComparisonDetail` in `views.ts`. */
+export const comparisonDetailSchema = comparisonSummarySchema.extend({
+  context: assessmentContextField,
+  drafts: z.array(
+    comparisonDraftSchema.extend({
+      appeals: z
+        .array(comparisonAppealScoreSchema)
+        .nullable()
+        .meta({ description: 'Its score on each appeal once scored; `null` before.' }),
+    })
+  ),
+  appeals: z
+    .array(
+      z.object({
+        appeal: z.string(),
+        leaders: z.array(z.number().int()).meta({
+          description: 'The positions of the drafts with the best score; more than one on a tie.',
+        }),
+        drafts: z.array(
+          z.object({
+            position: z.number().int(),
+            score: z.number().nullable(),
+            delta: z.number().nullable().meta({
+              description:
+                '`score` less the best score: `0` for a leader, negative for the rest; `null` when not scored.',
+            }),
+          })
+        ),
+      })
+    )
+    .meta({ description: 'Per appeal, once at least two drafts are scored; empty before.' }),
+});
 
 /** What `remove()` in `lib/app/assessments/api/service.ts` returns. */
 export const assessmentDeletedSchema = z.object({ deleted: z.literal(true) });

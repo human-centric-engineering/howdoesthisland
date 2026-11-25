@@ -261,6 +261,10 @@ describe('reserved fork tiers', () => {
       // FORK (HowDoesThisLand): rewrites (t-81).
       'model Rewrite {',
       'enum RewriteStatus {',
+      // FORK (HowDoesThisLand): comparisons of drafts (t-87).
+      'model AssessmentSet {',
+      'enum AssessmentSetKind {',
+      'model AssessmentSetMember {',
     ]);
   });
 
