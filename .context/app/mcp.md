@@ -78,6 +78,13 @@ Every tool sets `processesPii`, because a draft is the writer's words and may
 name people. `redactProvenance` keeps a draft's length, never its text, and
 `[title]` for a title. Its result preview is the id and status.
 
+**The MCP audit log keeps none of a draft either.** Core's transport writes every
+call's params to `McpAuditLog`, an install-wide table that platform admins read
+and that no workspace's erasure reaches. A `tools/call`'s `arguments` are now
+withheld there unless the tool's capability declares no personal data
+(`toolArgumentsAuditable`, `WITHHELD_TOOL_ARGUMENTS`). That is a change we carry
+in core (ledger row 31), filed as sunrise#1349.
+
 ## Who can make a key
 
 - **Today, at `TENANCY_MODE=multi`:** a workspace OWNER or ADMIN, at

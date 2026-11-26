@@ -189,7 +189,7 @@ async function main(): Promise<number> {
     const elsewhere = await makeReview(other.id);
 
     const { plaintext, hash, prefix } = generateApiKey();
-    await runAsOrg(org.id, () =>
+    const key = await runAsOrg(org.id, () =>
       prisma.mcpApiKey.create({
         data: {
           name: 'Smoke MCP tools',
@@ -199,6 +199,7 @@ async function main(): Promise<number> {
           orgId: org.id,
           createdBy: owner.id,
         },
+        select: { id: true },
       })
     );
 
@@ -214,6 +215,20 @@ async function main(): Promise<number> {
         field(scanned.data, 'overall') === scan.overall &&
         typeof field(scanned.data, 'caveat') === 'string',
       `quick_scan scores the draft as the library does (${String(field(scanned.data, 'overall'))}, ${String(field(scanned.data, 'band'))})`
+    );
+
+    // The transport's audit row is written after it answers; give it a moment.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const audit = await system(() =>
+      prisma.mcpAuditLog.findFirst({
+        where: { apiKeyId: key.id, toolSlug: 'quick_scan' },
+        orderBy: { createdAt: 'desc' },
+        select: { requestParams: true },
+      })
+    );
+    check(
+      audit !== null && !JSON.stringify(audit.requestParams).includes('Sarah'),
+      `the MCP audit log keeps no words of the draft (${JSON.stringify(audit?.requestParams ?? null).slice(0, 90)})`
     );
 
     const read = await callTool(plaintext, 'get_assessment', { assessmentId: review.id });
