@@ -34,6 +34,37 @@ whole set (`CONTENT_EMPTY`, `TEXT_TOO_LONG`), with the draft's place in
 `drafts` as `details.position`. A file or a page is not taken:
 drafts are pasted.
 
+### A draft that is a review you already have (t-84)
+
+A draft may instead be `{ assessmentId, label? }`: a review in the workspace,
+which joins the set as it is. It is not reviewed, held, counted against the cap
+or charged again. This is how the report's rewrite drawer compares a rewrite
+with its original (`.context/app/rewrites.md`) without paying for the original
+twice. A set still needs at least one draft as text, and names a review at most
+once (400 `VALIDATION_ERROR` otherwise). Comparing only reviews you already have
+is not offered: no caller needs it, and a set with no new review has no run
+whose end starts its verdict.
+
+The review must compare like for like (`reusedReviews` in
+`lib/app/comparisons/service.ts`), each refusal carrying the draft's
+`details.position`:
+
+- **In this workspace.** Otherwise 404 `ASSESSMENT_NOT_FOUND`.
+- **Not ended unscored.** A `failed` or `cancelled` review is 409
+  `REVIEW_NOT_COMPARABLE`, `details.reason: 'not_scored'`. A `partial` one
+  joins, and is shown but not weighed by the verdict, as any partial draft is.
+- **Reviewed the way the set is.** Its version, judges, context, overlay and
+  project must equal what the set's options resolve to now. Any that differ is
+  409 `REVIEW_NOT_COMPARABLE`, `details.reason: 'options_differ'`, with them in
+  `details.differs` (`version`, `judges`, `context`, `weights`, `project`). The
+  JSON fields are compared ignoring key order (`jsonEquals`), since Postgres
+  stores `jsonb` in its own order. The usual cause is a project whose defaults
+  or weights changed after the review: its scores would not compare with a new
+  review's.
+
+A review still queued or running joins as it is, and its run's end starts the
+verdict, as any member's does.
+
 ## Each draft is an ordinary review
 
 Each draft becomes a stored review: in the workspace's history, titled with its
@@ -168,7 +199,8 @@ asked again: the first answer is paid for and lost.
 
 ## The budget and the per-user cap
 
-**The budget is checked for every draft together.** The estimate is one
+**The budget is checked for every draft it reviews together.** A draft that
+is an existing review (t-84) is not counted here or below. The estimate is one
 review's times the drafts (`assertReviewFits` with a count), and the hold is
 taken under the workspace's lock for all of them at once
 (`reserveComparisonBudget`, `lib/app/usage/budget.ts`), one hold per draft. A

@@ -11,13 +11,14 @@
  *   reopened while it runs, or whose stream dropped. A dropped stream is
  *   never answered with a second `POST`: that would be a second, charged
  *   rewrite, while the first carries on regardless.
- * - {@link reviewDraftBody}: the body that reviews a draft the way its
- *   original was reviewed.
+ * - {@link compareDraftBody}: the comparison of a draft with its original
+ *   (t-84), the draft reviewed the way the original was.
  */
 import { z } from 'zod';
 import { APIClientError, apiClient, apiErrorFromResponse } from '@/lib/api/client';
 import { parseSseBlock } from '@/lib/api/sse-parser';
 import { rewriteEventSchema, rewriteSchema } from '@/lib/app/rewrites/wire';
+import { DRAFT_LABEL_MAX } from '@/lib/app/comparisons/limits';
 import { refusalOf, type Refusal } from '@/components/app/workbench/assess-draft';
 
 export type RewriteWire = z.infer<typeof rewriteSchema>;
@@ -250,20 +251,41 @@ export function rewriteRefusalOf(err: unknown): Refusal | null {
 }
 
 /**
- * A refused review of a draft, in words a person can act on: the assess
- * page's, but for a retired model version. Reloading cannot help there, since
- * the draft is reviewed with its original's version.
+ * A refused comparison of a draft with its original (t-84), in words a
+ * person can act on: the assess page's, but for a retired model version
+ * (reloading cannot help, since the draft is reviewed with its original's)
+ * and an original that no longer compares. `reviewAgain` is set when sending
+ * the original as text, reviewed beside the draft, would compare them.
  */
-export function reviewDraftRefusalOf(err: unknown): Refusal | null {
+export function compareDraftRefusalOf(err: unknown): (Refusal & { reviewAgain: boolean }) | null {
   if (err instanceof APIClientError && err.code === 'FRAMEWORK_VERSION_NOT_FOUND') {
     return {
       message:
         'The model this review ran on has been retired, so the draft cannot be reviewed the same way. Copy it, and review it from the assess page.',
       usagePage: null,
+      reviewAgain: false,
     };
   }
-  return refusalOf(err);
+  if (err instanceof APIClientError && err.code === 'REVIEW_NOT_COMPARABLE') {
+    const notScored = notComparableReason.safeParse(err.details).data?.reason === 'not_scored';
+    return notScored
+      ? {
+          message: 'This review has no score to compare the draft with.',
+          usagePage: null,
+          reviewAgain: false,
+        }
+      : {
+          message:
+            'This review was made before its project’s settings changed, so its scores would not compare with a new review of the draft. Review both again to compare them: that is charged as two reviews.',
+          usagePage: null,
+          reviewAgain: true,
+        };
+  }
+  const refusal = refusalOf(err);
+  return refusal ? { ...refusal, reviewAgain: false } : null;
 }
+
+const notComparableReason = z.object({ reason: z.string() });
 
 /**
  * The answers worth sending for `placeholders`: each one filled in, trimmed,
@@ -289,6 +311,8 @@ export function failureMessage(rewrite: RewriteWire): string {
 /** The parts of `GET /api/v1/assessments/{id}` a review of its rewrite repeats. */
 export const originalReviewSchema = z.object({
   title: z.string().nullable(),
+  /** The original copy: sent again only when its review cannot be reused. */
+  text: z.string(),
   framework: z.object({ slug: z.string(), version: z.string() }),
   context: z.record(z.string(), z.unknown()).nullable(),
   projectId: z.string().nullable(),
@@ -296,28 +320,44 @@ export const originalReviewSchema = z.object({
 });
 export type OriginalReview = z.infer<typeof originalReviewSchema>;
 
-/** The most a review's title may be (`POST /api/v1/assessments`). */
-const MAX_TITLE = 200;
-const REWRITE_SUFFIX = ' (rewrite)';
+/** Cut `text` to `max` code points, so a character outside the BMP is never split. */
+function cut(text: string, max: number): string {
+  return Array.from(text).slice(0, max).join('').trimEnd();
+}
 
 /**
- * `POST /api/v1/assessments` for a draft, reviewed as its original was: the
- * same model version, reader context, project and AI reviewers, and its
- * title marked as a rewrite. A quick review called none, so it is quick
- * again (`judges` takes at least one).
+ * `POST /api/v1/comparisons` of a draft with the review it was rewritten
+ * from (t-84): the draft reviewed as its original was, with the same model
+ * version, reader context, project and AI reviewers. A quick review called
+ * none, so it is quick again (`judges` takes at least one).
+ *
+ * The original joins by its review's id, so it is not reviewed or charged
+ * again. With `reviewAgain`, when that review no longer compares (its
+ * project's settings changed since), its copy is sent as text instead and
+ * reviewed beside the draft.
+ *
+ * Each draft is labelled with the review's title, the draft's saying which
+ * rewrite it is; the draft's review is titled with its label.
  */
-export function reviewDraftBody(original: OriginalReview, draft: string): Record<string, unknown> {
-  const title = original.title?.trim();
-  // Cut by code point, so a character outside the BMP is never split.
-  const cut = title
-    ? Array.from(title)
-        .slice(0, MAX_TITLE - REWRITE_SUFFIX.length)
-        .join('')
-        .trimEnd()
-    : '';
+export function compareDraftBody(
+  original: OriginalReview & { id: string },
+  draft: { text: string; focusName: string },
+  reviewAgain = false
+): Record<string, unknown> {
+  const title = original.title?.trim() ? cut(original.title.trim(), DRAFT_LABEL_MAX) : '';
+  const kind = `${draft.focusName.toLowerCase()} rewrite`;
+  const suffix = ` (${kind})`;
+  const draftLabel = title
+    ? `${cut(title, DRAFT_LABEL_MAX - Array.from(suffix).length)}${suffix}`
+    : cut(`${draft.focusName} rewrite`, DRAFT_LABEL_MAX);
+  const originalLabel = title || 'Original';
   return {
-    source: { text: draft },
-    ...(cut ? { title: `${cut}${REWRITE_SUFFIX}` } : {}),
+    drafts: [
+      reviewAgain
+        ? { text: original.text, label: originalLabel }
+        : { assessmentId: original.id, label: originalLabel },
+      { text: draft.text, label: draftLabel },
+    ],
     framework: original.framework.slug,
     version: original.framework.version,
     ...(original.context ? { context: original.context } : {}),

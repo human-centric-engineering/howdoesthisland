@@ -2,7 +2,8 @@
 
 /**
  * The report's rewrite drawer (t-82), with the editor stubbed at the network:
- * `fetch` answers the rewrites and assessments routes as the API would.
+ * `fetch` answers the rewrites, assessments and comparisons routes as the
+ * API would.
  *
  * @see components/app/report/rewrite-drawer.tsx
  */
@@ -87,7 +88,7 @@ let routes: {
   post: () => Response;
   read: () => Response;
   assessment: () => Response;
-  createReview: () => Response;
+  createComparison: () => Response;
 };
 const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = urlOf(input);
@@ -96,7 +97,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
   if (url === '/api/v1/rewrites' && method === 'POST') return routes.post();
   if (url.startsWith('/api/v1/rewrites/')) return routes.read();
   if (url === '/api/v1/assessments/asm_1') return routes.assessment();
-  if (url === '/api/v1/assessments' && method === 'POST') return routes.createReview();
+  if (url === '/api/v1/comparisons' && method === 'POST') return routes.createComparison();
   throw new Error(`unexpected ${method} ${url}`);
 });
 
@@ -130,13 +131,14 @@ beforeEach(() => {
       ok({
         id: 'asm_1',
         title: 'Q3 board briefing',
+        text: 'The original copy.',
         framework: { slug: 'howdoesthisland', version: '0.5.1' },
         context: { contentType: 'proposal' },
         projectId: 'prj_1',
         judges: ['judge_ethos', 'judge_logos'],
         status: 'completed',
       }),
-    createReview: () => ok({ id: 'asm_2', status: 'queued' }),
+    createComparison: () => ok({ id: 'cmp_1', status: 'running' }),
   };
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -414,18 +416,22 @@ describe('RewriteDrawer', () => {
     expect(screen.getByRole('button', { name: 'Review this draft' })).toBeDisabled();
   });
 
-  it('reviews the draft with the original’s context, project and AI reviewers, and opens it', async () => {
+  it('compares the draft with the original’s review, reviewed with its context, project and AI reviewers, and opens it (t-84)', async () => {
     await openDrawer();
     fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
     const review = await screen.findByRole('button', { name: 'Review this draft' });
     await waitFor(() => expect(review).toBeEnabled());
     fireEvent.click(review);
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/assessments/asm_2'));
-    const [, init] = calls('POST', '/api/v1/assessments')[0];
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/compare/cmp_1'));
+    expect(calls('POST', '/api/v1/assessments')).toHaveLength(0);
+    const [, init] = calls('POST', '/api/v1/comparisons')[0];
+    // The original joins by its review: it is not reviewed again.
     expect(bodyOf(init)).toEqual({
-      source: { text: 'A better draft.' },
-      title: 'Q3 board briefing (rewrite)',
+      drafts: [
+        { assessmentId: 'asm_1', label: 'Q3 board briefing' },
+        { text: 'A better draft.', label: 'Q3 board briefing (ethos rewrite)' },
+      ],
       framework: 'howdoesthisland',
       version: '0.5.1',
       context: { contentType: 'proposal' },
@@ -434,8 +440,49 @@ describe('RewriteDrawer', () => {
     });
   });
 
+  it('offers to review both again when the original’s review no longer compares, sending its copy (t-84)', async () => {
+    let posts = 0;
+    routes.createComparison = () =>
+      posts++ === 0
+        ? refused(409, 'REVIEW_NOT_COMPARABLE', 'Not comparable.', {
+            position: 0,
+            reason: 'options_differ',
+            differs: ['weights'],
+          })
+        : ok({ id: 'cmp_2', status: 'running' });
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    const review = await screen.findByRole('button', { name: 'Review this draft' });
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
+
+    const again = await screen.findByRole('button', { name: 'Review both again' });
+    expect(screen.getByText(/charged as two reviews/)).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    fireEvent.click(again);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/compare/cmp_2'));
+    const [, init] = calls('POST', '/api/v1/comparisons')[1];
+    expect((bodyOf(init) as { drafts: unknown[] }).drafts).toEqual([
+      { text: 'The original copy.', label: 'Q3 board briefing' },
+      { text: 'A better draft.', label: 'Q3 board briefing (ethos rewrite)' },
+    ]);
+  });
+
+  it('does not offer to review both again for any other refusal', async () => {
+    routes.createComparison = () =>
+      refused(402, 'BUDGET_EXCEEDED', 'The workspace is at its budget for the month.');
+    await openDrawer();
+    fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
+    const review = await screen.findByRole('button', { name: 'Review this draft' });
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
+    await screen.findByText('The workspace is at its budget for the month.');
+    expect(screen.queryByRole('button', { name: 'Review both again' })).toBeNull();
+  });
+
   it('shows a refused review of the draft beside its button', async () => {
-    routes.createReview = () =>
+    routes.createComparison = () =>
       refused(402, 'BUDGET_EXCEEDED', 'The workspace is at its budget for the month.');
     await openDrawer();
     fireEvent.click(screen.getByRole('button', { name: 'Write a rewrite' }));
@@ -521,7 +568,7 @@ describe('RewriteDrawer', () => {
   });
 
   it('shows the server’s words for a review of the draft refused for another reason', async () => {
-    routes.createReview = () =>
+    routes.createComparison = () =>
       refused(400, 'CONTEXT_INVALID', 'The context does not fit this framework version.');
     await openDrawer();
     fireEvent.click(screen.getByRole('button', { name: /Pathos · / }));

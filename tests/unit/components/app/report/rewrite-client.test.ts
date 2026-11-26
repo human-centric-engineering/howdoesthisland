@@ -9,10 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIClientError } from '@/lib/api/client';
 import {
   answersFor,
+  compareDraftBody,
+  compareDraftRefusalOf,
   followRewrite,
   mergeRewrites,
-  reviewDraftBody,
-  reviewDraftRefusalOf,
   rewriteRefusalOf,
   startedSince,
   streamRewrite,
@@ -329,67 +329,24 @@ describe('rewriteRefusalOf', () => {
   });
 });
 
-describe('reviewDraftBody: the title', () => {
-  it('keeps a long title within the 200 characters a review takes, marked as a rewrite', () => {
-    const body = reviewDraftBody(
-      {
-        title: 'x'.repeat(200),
-        framework: { slug: 'howdoesthisland', version: '0.5.1' },
-        context: null,
-        projectId: null,
-        judges: [],
-      },
-      'The draft.'
-    );
-    expect(body.title).toBe(`${'x'.repeat(190)} (rewrite)`);
-  });
-});
-
-describe('reviewDraftBody: a title with characters outside the BMP', () => {
-  it('never cuts one in half', () => {
-    const body = reviewDraftBody(
-      {
-        title: `${'x'.repeat(189)}😀😀`,
-        framework: { slug: 'howdoesthisland', version: '0.5.1' },
-        context: null,
-        projectId: null,
-        judges: [],
-      },
-      'The draft.'
-    );
-    expect(body.title).toBe(`${'x'.repeat(189)}😀 (rewrite)`);
-  });
-});
-
-describe('reviewDraftRefusalOf', () => {
-  it('says a retired model version cannot review the draft, rather than to reload', () => {
-    expect(
-      reviewDraftRefusalOf(new APIClientError('x', 'FRAMEWORK_VERSION_NOT_FOUND', 404))?.message
-    ).toBe(
-      'The model this review ran on has been retired, so the draft cannot be reviewed the same way. Copy it, and review it from the assess page.'
-    );
-  });
-
-  it('words the rest as the assess page does', () => {
-    expect(
-      reviewDraftRefusalOf(new APIClientError('Add credits.', 'INSUFFICIENT_CREDITS', 402))
-    ).toEqual({ message: 'Add credits.', usagePage: '/usage' });
-  });
-});
-
-describe('reviewDraftBody', () => {
+describe('compareDraftBody (t-84)', () => {
   const original = {
+    id: 'asm_1',
     title: 'Q3 board briefing',
+    text: 'The original.',
     framework: { slug: 'howdoesthisland', version: '0.5.1' },
     context: { contentType: 'proposal', audience: { awareness: 'aware' } },
     projectId: 'prj_1',
     judges: ['judge_ethos', 'judge_logos'],
   };
+  const draft = { text: 'The draft.', focusName: 'Balanced' };
 
-  it('reviews the draft with the original’s version, context, project and AI reviewers', () => {
-    expect(reviewDraftBody(original, 'The draft.')).toEqual({
-      source: { text: 'The draft.' },
-      title: 'Q3 board briefing (rewrite)',
+  it('compares the draft with the original’s review, reviewed with its version, context, project and AI reviewers', () => {
+    expect(compareDraftBody(original, draft)).toEqual({
+      drafts: [
+        { assessmentId: 'asm_1', label: 'Q3 board briefing' },
+        { text: 'The draft.', label: 'Q3 board briefing (balanced rewrite)' },
+      ],
       framework: 'howdoesthisland',
       version: '0.5.1',
       context: { contentType: 'proposal', audience: { awareness: 'aware' } },
@@ -398,18 +355,78 @@ describe('reviewDraftBody', () => {
     });
   });
 
+  it('sends the original’s copy to be reviewed again only when asked to', () => {
+    expect(compareDraftBody(original, draft, true).drafts).toEqual([
+      { text: 'The original.', label: 'Q3 board briefing' },
+      { text: 'The draft.', label: 'Q3 board briefing (balanced rewrite)' },
+    ]);
+  });
+
   it('reviews a quick review’s draft quickly, and leaves out what the original had none of', () => {
     expect(
-      reviewDraftBody(
+      compareDraftBody(
         { ...original, title: null, context: null, projectId: null, judges: [] },
-        'The draft.'
+        { text: 'The draft.', focusName: 'Pathos' }
       )
     ).toEqual({
-      source: { text: 'The draft.' },
+      drafts: [
+        { assessmentId: 'asm_1', label: 'Original' },
+        { text: 'The draft.', label: 'Pathos rewrite' },
+      ],
       framework: 'howdoesthisland',
       version: '0.5.1',
       profile: 'quick',
     });
+  });
+
+  it('keeps each label within the 80 characters a draft’s label takes, never cutting a character in half', () => {
+    const [first, second] = compareDraftBody(
+      { ...original, title: `${'x'.repeat(60)}😀😀${'y'.repeat(30)}` },
+      draft
+    ).drafts as { label: string }[];
+    expect(Array.from(first.label)).toHaveLength(80);
+    expect(second.label).toBe(`${'x'.repeat(60)}😀 (balanced rewrite)`);
+    expect(Array.from(second.label)).toHaveLength(80);
+  });
+});
+
+describe('compareDraftRefusalOf (t-84)', () => {
+  it('says a retired model version cannot review the draft, rather than to reload', () => {
+    expect(
+      compareDraftRefusalOf(new APIClientError('x', 'FRAMEWORK_VERSION_NOT_FOUND', 404))
+    ).toEqual({
+      message:
+        'The model this review ran on has been retired, so the draft cannot be reviewed the same way. Copy it, and review it from the assess page.',
+      usagePage: null,
+      reviewAgain: false,
+    });
+  });
+
+  it('offers reviewing both again when the original’s review no longer compares', () => {
+    const refusal = compareDraftRefusalOf(
+      new APIClientError('x', 'REVIEW_NOT_COMPARABLE', 409, {
+        position: 0,
+        reason: 'options_differ',
+        differs: ['weights'],
+      })
+    );
+    expect(refusal).toMatchObject({ reviewAgain: true, usagePage: null });
+    expect(refusal?.message).toMatch(/Review both again/);
+  });
+
+  it('does not offer it for a review with no score, which reviewing the draft cannot help', () => {
+    expect(
+      compareDraftRefusalOf(
+        new APIClientError('x', 'REVIEW_NOT_COMPARABLE', 409, { position: 0, reason: 'not_scored' })
+      )
+    ).toMatchObject({ reviewAgain: false });
+  });
+
+  it('words the rest as the assess page does', () => {
+    expect(
+      compareDraftRefusalOf(new APIClientError('Add credits.', 'INSUFFICIENT_CREDITS', 402))
+    ).toEqual({ message: 'Add credits.', usagePage: '/usage', reviewAgain: false });
+    expect(compareDraftRefusalOf(new Error('x'))).toBeNull();
   });
 });
 
