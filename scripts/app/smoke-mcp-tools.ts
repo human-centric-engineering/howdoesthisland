@@ -1,5 +1,5 @@
 /**
- * Smoke: HowDoesThisLand's MCP tools through the real transport (t-92).
+ * Smoke: HowDoesThisLand's MCP tools through the real transport (t-92, t-93).
  *
  * What no unit test can prove: that a key bound to a workspace reaches the
  * tools through `POST /api/v1/mcp` on a running server, which registers the
@@ -8,13 +8,14 @@
  * dispatcher's whole pipeline against the real database and row-level
  * security.
  *
- * Makes a throwaway workspace with one finished review (scored by the quick
- * scan, so no judge is called and nothing is billed) and an MCP key in it,
- * switches the MCP server and the three tools on if they are off, then:
- * `tools/list`, `quick_scan`, `get_assessment` on the workspace's review, and
- * `get_assessment` on another workspace's. Puts the switches back and erases
- * the workspace, key and all, at the end. `assess_draft` is not called: it
- * would run the judges, which cost money.
+ * Makes a throwaway workspace with two finished reviews (scored by the quick
+ * scan, so no judge is called and nothing is billed), a comparison of them
+ * and an MCP key, switches the MCP server and the tools on if they are off,
+ * then: `tools/list`, `quick_scan`, `get_assessment` and `get_comparison` on
+ * the workspace's own, and each read on another workspace's. Puts the
+ * switches back and erases the workspaces, key and all, at the end.
+ * `assess_draft` and `compare_drafts` are not called: they would run the
+ * judges, which cost money.
  *
  * Needs the dev server running (`npm run dev`) and a seeded database
  * (`npm run db:seed`, for the capability rows), and a user to own the key:
@@ -160,14 +161,14 @@ async function main(): Promise<number> {
     );
     made.push(other);
     const scan = await runAsOrg(org.id, () => runQuickScan({ text: DRAFT }));
-    const makeReview = (orgId: string) =>
+    const makeReview = (orgId: string, tag: string) =>
       runAsOrg(orgId, async () => {
         const content = await prisma.content.create({
           data: {
             orgId,
             sourceKind: 'TEXT',
             text: DRAFT,
-            textSha256: `smoke-mcp-${stamp}`,
+            textSha256: `smoke-mcp-${stamp}-${tag}`,
             wordCount: scan.wordCount,
           },
         });
@@ -189,8 +190,37 @@ async function main(): Promise<number> {
           select: { id: true },
         });
       });
-    const review = await makeReview(org.id);
-    const elsewhere = await makeReview(other.id);
+    const review = await makeReview(org.id, 'a');
+    const second = await makeReview(org.id, 'b');
+    const elsewhere = await makeReview(other.id, 'a');
+    // Quick-scan reviews call no judge, so the verdict is skipped, as the service writes it.
+    const makeComparison = (orgId: string, reviews: { id: string }[]) =>
+      runAsOrg(orgId, () =>
+        prisma.assessmentSet.create({
+          data: {
+            orgId,
+            kind: 'COMPARISON',
+            frameworkVersionId: version.id,
+            profile: 'quick',
+            judges: [],
+            context: scan.context as object,
+            createdByUserId: owner.id,
+            verdictStatus: 'SKIPPED',
+            verdictReason: 'too_few_judges',
+            members: {
+              create: reviews.map((r, position) => ({
+                orgId,
+                assessmentId: r.id,
+                position,
+                label: `Draft ${position + 1}`,
+              })),
+            },
+          },
+          select: { id: true },
+        })
+      );
+    const comparison = await makeComparison(org.id, [review, second]);
+    const theirComparison = await makeComparison(other.id, [elsewhere]);
 
     const { plaintext, hash, prefix } = generateApiKey();
     const key = await runAsOrg(org.id, () =>
@@ -251,6 +281,31 @@ async function main(): Promise<number> {
     check(
       refused.isError,
       `another workspace's review is not found (${refused.text.slice(0, 60)})`
+    );
+
+    const compared = await callTool(plaintext, 'get_comparison', { comparisonId: comparison.id });
+    if (process.env.SMOKE_MCP_SHOW) console.log(compared.text);
+    const comparedDrafts = z
+      .array(z.object({ assessmentId: z.string().nullable() }).loose())
+      .safeParse(field(compared.data, 'drafts'));
+    check(
+      !compared.isError &&
+        field(compared.data, 'id') === comparison.id &&
+        field(compared.data, 'ready') === true &&
+        comparedDrafts.success &&
+        comparedDrafts.data.map((d) => d.assessmentId).join() === [review.id, second.id].join(),
+      `get_comparison reads the workspace's comparison (${compared.isError ? compared.text : String(field(compared.data, 'status'))})`
+    );
+    check(
+      String(field(compared.data, 'compareUrl')).endsWith(`/compare/${comparison.id}`),
+      'and links its page'
+    );
+    const theirs = await callTool(plaintext, 'get_comparison', {
+      comparisonId: theirComparison.id,
+    });
+    check(
+      theirs.isError,
+      `another workspace's comparison is not found (${theirs.text.slice(0, 60)})`
     );
   } finally {
     // Each step on its own, so one that fails does not leave the rest undone.

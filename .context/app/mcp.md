@@ -9,18 +9,22 @@ workflows to call.
 
 ## The tools
 
-| Tool             | Does                                                                                       | Calls (the route's library)                                         | Needs a person | Spends |
-| ---------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | -------------- | ------ |
-| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat. | `runQuickScan`, `summariseQuickScan`                                | no             | no     |
-| `assess_draft`   | Starts a full review of text or a public URL, stored, and waits up to 45 seconds for it.   | `prepareAssessment` → cap → `holdReviewBudget` → `createAssessment` | yes            | yes    |
-| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                         | `getAssessment`, then `loadReport` (the report's own view)          | no             | no     |
+| Tool             | Does                                                                                       | Calls (the route's library)                                                                    | Needs a person | Spends |
+| ---------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------- | ------ |
+| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat. | `runQuickScan`, `summariseQuickScan`                                                           | no             | no     |
+| `assess_draft`   | Starts a full review of text or a public URL, stored, and waits up to 45 seconds for it.   | `prepareAssessment` → cap → `holdReviewBudget` → `createAssessment`                            | yes            | yes    |
+| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                         | `getAssessment`, then `loadReport` (the report's own view)                                     | no             | no     |
+| `compare_drafts` | Reviews 2–5 drafts the same way, and waits up to 45 seconds for the editor's verdict.      | `prepareComparison` → cap → `holdComparisonBudget` → cap → `createComparison` → `releaseHolds` | yes            | yes    |
+| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.     | `getComparison` (the comparison's own view)                                                    | no             | no     |
 
-Comparing and rewriting come next (t-93, t-94), and so do keys a workspace owner
-makes from settings (t-95).
+Rewriting comes next (t-94), and so do keys a workspace owner makes from settings
+(t-95).
 
 The code is `lib/app/mcp/`. Each tool has a class (its definition, Zod schema and
 redaction) and its work in `run/`. `tool-support.ts` holds what they share,
-`assessment-summary.ts` what `get_assessment` and `assess_draft` answer, and
+`run/spender.ts` the checks both spending tools make before anything is charged,
+`assessment-summary.ts` what `get_assessment` and `assess_draft` answer,
+`comparison-summary.ts` what `get_comparison` and `compare_drafts` answer, and
 `definitions.ts` what each tool publishes.
 
 **A class loads its work on its first call, never at import.** Core's capability
@@ -37,9 +41,10 @@ The transport authenticates the key, runs the call inside the key's workspace
 scoped agent). **There is no session and no request behind a tool call.** So:
 
 - **The person is the key's creator.** `protocol-handler.ts` passes
-  `McpApiKey.createdBy` as `context.userId`. `assess_draft` needs one, for the
-  per-person cap (`aiAssessmentLimiter`, keyed `user:<id>`, the same bucket as
-  the API) and the review's `createdByUserId`. A key whose creator has gone
+  `McpApiKey.createdBy` as `context.userId`. `assess_draft` and
+  `compare_drafts` need one, for the per-person cap (`aiAssessmentLimiter`,
+  keyed `user:<id>`, the same bucket as the API) and the `createdByUserId` of
+  what they store. A key whose creator has gone
   (`createdBy` is `SetNull`), or is no longer a member of the key's workspace,
   is refused with `KEY_HAS_NO_OWNER` before anything is prepared or charged,
   and a suspended workspace with `WORKSPACE_SUSPENDED`. Past the per-person cap
@@ -56,17 +61,25 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   (`keepRunningAfterResponse`), and `get_assessment` reads it later. On Vercel
   that continuation is bounded by the MCP route's function duration, which the
   route raises to 300 seconds as `/api/v1/assessments` does (divergence row 32).
+  `compare_drafts` waits the same bound, though the comparisons route answers 202
+  at once: a tool call that answered at once would leave the assistant nothing to
+  say. It polls each draft's status and the verdict's, not the full view, once a
+  second, and answers once every draft's review has ended and so has the verdict
+  (`comparisonSettled`).
   A review cut off anyway is picked up by assessment recovery, as any abandoned
   run is. A JSON-RPC batch runs its calls one after another in one request, so
-  a batch carries at most one `assess_draft`: each later one is refused with
+  a batch carries at most one call to a tool that waits (`assess_draft` or
+  `compare_drafts`, counted together): each later one is refused with
   `INVALID_REQUEST`, saying to send it on its own (`lib/app/mcp/batch.ts`,
   divergence row 33). The tool does not see the client hang up (core's
   `CapabilityContext` carries no abort signal), so it waits out its 45 seconds
   either way.
-- **A stored review always answers its id.** If the summary cannot be built
-  after the review is stored (`storedButUnread`), the tool logs it and answers
-  the id and status with `ready: false`, so the assistant reads it back with
-  `get_assessment` instead of paying for another.
+- **A stored review or comparison always answers its id.** If the summary cannot
+  be built after the review is stored (`storedButUnread`), the tool logs it and
+  answers the id and status with `ready: false`, so the assistant reads it back
+  with `get_assessment` instead of paying for another. A failure after either is
+  stored answers `STORED_UNREAD` with the id (`onStored` on `createAssessment`
+  and `createComparison`).
 - **The audit trail keeps a context's catalogue ids, not free text**
   (`contextShape`): a key or value that does not read as an id is kept as
   `[key]` or `[value]`, since the record is written before the framework checks
@@ -89,11 +102,28 @@ cannot place.
 move, not a line of the draft.** Quick-scan reviews have many of these. The flag
 is passed through so an assistant does not quote words the writer never wrote.
 
+### What `compare_drafts` takes and `get_comparison` answers
+
+The drafts as text, or as the `assessmentId` of a finished review reviewed the
+same way (t-84), which joins without being charged again; at least one is text.
+It takes `projectId` and `context`, and no profile, judges or framework version,
+as `assess_draft` takes none. So every draft gets the full panel or the project's
+defaults, and a review `assess_draft` made can join. **Each draft it reviews
+counts against the per-person cap**: the tool peeks for room for all of them
+before it holds the budget, and again after, then counts each, as the route does.
+
+The answer is the comparison's view trimmed for an assistant: each draft's place,
+label, review id, state, score and band; per appeal the leaders and each draft's
+gap to the best; and the verdict's state, the draft it chose, why, the appeals
+that decide it, or why there is none. `ready` is true once nothing will change.
+Left out are the context, the judge slots, and the verdict's model and cost.
+`get_assessment` on a draft's `assessmentId` reads its recommendations.
+
 ### Personal data
 
 Every tool sets `processesPii`, because a draft is the writer's words and may
 name people. `redactProvenance` keeps a draft's length, never its text, and
-`[title]` for a title. Its result preview is the id and status.
+`[title]` or `[label]` for a title or a draft's label. Its result preview is the id and status.
 
 **The MCP audit log keeps none of a draft either.** Core's transport writes every
 call's params to `McpAuditLog`, an install-wide table that platform admins read
@@ -142,11 +172,11 @@ connected (`sunrise.mcp-reseed`). Merging changes only the first.
   npx tsx --env-file=.env.local scripts/app/smoke-mcp-tools.ts
   ```
 
-  It makes a throwaway workspace with a quick-scan review and a key, turns the
-  server and the three tools on, then calls `tools/list`, `quick_scan` and
-  `get_assessment`, and `get_assessment` on another workspace's review. Then it
-  puts everything back. It never calls `assess_draft`, which would bill the
-  judges. Add `NODE_OPTIONS=--use-system-ca` behind the local HTTPS proxy, and
+  It makes a throwaway workspace with two quick-scan reviews, a comparison of
+  them and a key, turns the server and the tools on, then calls `tools/list`,
+  `quick_scan`, `get_assessment` and `get_comparison`, and each read on another
+  workspace's. Then it puts everything back. It never calls `assess_draft` or
+  `compare_drafts`, which would bill the judges. Add `NODE_OPTIONS=--use-system-ca` behind the local HTTPS proxy, and
   `SMOKE_MCP_SHOW=1` to print the answers.
 
 To try it from Claude Code, add the server with the key as a bearer header:
