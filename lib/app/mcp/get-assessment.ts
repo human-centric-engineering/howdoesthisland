@@ -7,15 +7,13 @@
  * capabilities, not resources, and this is how `assess_draft`'s answer is
  * read once the review has finished. Reads only, so it needs no person
  * behind the key; another workspace's id is not found, as over the API.
+ *
+ * The work is loaded on the first call: why, in `tool-support.ts`.
  */
 import { z } from 'zod';
 import { assessmentIdParamSchema } from '@/lib/app/assessments/api/validations';
-import {
-  readAssessmentSummary,
-  type AssessmentSummaryForAssistant,
-} from '@/lib/app/mcp/assessment-summary';
+import type { AssessmentSummaryForAssistant } from '@/lib/app/mcp/assessment-summary';
 import { GET_ASSESSMENT } from '@/lib/app/mcp/definitions';
-import { refusalOf } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -39,13 +37,10 @@ export class GetAssessmentCapability extends BaseCapability<Args, AssessmentSumm
     args: Args,
     _context: CapabilityContext
   ): Promise<CapabilityResult<AssessmentSummaryForAssistant>> {
-    try {
-      return this.success(await readAssessmentSummary(args.assessmentId));
-    } catch (err) {
-      const refusal = refusalOf(err);
-      if (!refusal) throw err;
-      return this.error(refusal.message, refusal.code);
-    }
+    const { getAssessmentTool } = await import('@/lib/app/mcp/run/get-assessment');
+    const outcome = await getAssessmentTool(args.assessmentId);
+    if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
+    return this.success(outcome.data);
   }
 
   redactProvenance(

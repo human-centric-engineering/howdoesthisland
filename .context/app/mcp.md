@@ -18,9 +18,17 @@ workflows to call.
 Comparing and rewriting come next (t-93, t-94), and so do keys a workspace owner
 makes from settings (t-95).
 
-The code is `lib/app/mcp/`: one class per tool, `tool-support.ts` for what they
-share, `assessment-summary.ts` for what `get_assessment` and `assess_draft`
-answer, and `definitions.ts` for what each tool publishes.
+The code is `lib/app/mcp/`. Each tool has a class (its definition, Zod schema and
+redaction) and its work in `run/`. `tool-support.ts` holds what they share,
+`assessment-summary.ts` what `get_assessment` and `assess_draft` answer, and
+`definitions.ts` what each tool publishes.
+
+**A class loads its work on its first call, never at import.** Core's capability
+registry imports `lib/app/capabilities.ts` on every dispatch path, so whatever a
+class imports lands in the module graph of everything that can dispatch. When the
+classes first imported the assessment service, the database client and the rate
+limiters came with them, and core's inbound-trigger route tests stopped loading.
+`tests/unit/lib/app/mcp/import-weight.test.ts` fails if a class reaches either again.
 
 ## How a call runs
 

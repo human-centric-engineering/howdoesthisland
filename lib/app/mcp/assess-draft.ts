@@ -1,51 +1,34 @@
 /**
  * `assess_draft` (t-92): `POST /api/v1/assessments` as an MCP tool.
  *
- * The route's steps in the route's order (`prepareAssessment`, the per-person
- * cap, `holdReviewBudget`, `createAssessment`), so credits, the review budget
- * and the workspace's running limit hold exactly as they do over the API.
- * What differs:
+ * The route's steps in the route's order (`run/assess-draft.ts`), so credits,
+ * the review budget and the workspace's running limit hold exactly as they do
+ * over the API. What differs:
  *
  * - **The person is the key's creator.** The cap and the row's
- *   `createdByUserId` need one, so a key whose creator has gone is refused.
- * - **Always stored, and waited for up to {@link MCP_WAIT_MS}.** A review not
- *   kept could not be read back, and a tool call cannot hold its request for
+ *   `createdByUserId` need one, so a key whose creator has gone is refused
+ *   before anything is loaded or charged.
+ * - **Always stored, and waited for up to `MCP_WAIT_MS`.** A review not kept
+ *   could not be read back, and a tool call cannot hold its request for
  *   minutes; past the bound this answers the id and status, the review runs on
  *   (`keepRunningAfterResponse`), and `get_assessment` reads it.
  * - **Recorded as `MCP`**, not `APP`.
  *
- * Text or a public URL; a file needs the API's multipart upload.
+ * Text or a public URL; a file needs the API's multipart upload. The work is
+ * loaded on the first call: why, in `tool-support.ts`.
  */
 import { z } from 'zod';
-import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
-import {
-  createAssessment,
-  holdReviewBudget,
-  prepareAssessment,
-} from '@/lib/app/assessments/api/service';
 import { contextField, textField } from '@/lib/app/assessments/api/validations';
 import type { AssessmentRequest } from '@/lib/app/assessments/api/validations';
 import { MAX_URL_CHARS } from '@/lib/app/assessments/limits';
-import { startWaitingReviews } from '@/lib/app/assessments/kick';
-import { WorkspaceBusyError } from '@/lib/app/assessments/places';
-import {
-  summariseAssessment,
-  type AssessmentSummaryForAssistant,
-} from '@/lib/app/mcp/assessment-summary';
+import type { AssessmentSummaryForAssistant } from '@/lib/app/mcp/assessment-summary';
 import { ASSESS_DRAFT } from '@/lib/app/mcp/definitions';
-import {
-  creatorOf,
-  draftShape,
-  isRefusal,
-  MCP_WAIT_MS,
-  refusalOf,
-} from '@/lib/app/mcp/tool-support';
+import { creatorOf, draftShape } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
 } from '@/lib/orchestration/capabilities/base-capability';
 import type { CapabilityContext, CapabilityResult } from '@/lib/orchestration/capabilities/types';
-import { requireOrgId } from '@/lib/tenancy/context';
 
 export const assessDraftArgsSchema = z
   .strictObject({
@@ -88,44 +71,11 @@ export class AssessDraftCapability extends BaseCapability<Args, AssessmentSummar
     context: CapabilityContext
   ): Promise<CapabilityResult<AssessmentSummaryForAssistant>> {
     const userId = creatorOf(context);
-    if (isRefusal(userId)) return this.error(userId.message, userId.code);
-    const body = assessmentRequestOf(args);
-    try {
-      const prepared = await prepareAssessment(body);
-      try {
-        if (prepared.judges.length > 0) {
-          const limit = aiAssessmentLimiter.check(`user:${userId}`);
-          if (!limit.success) {
-            const seconds = Math.max(1, limit.reset - Math.floor(Date.now() / 1000));
-            return this.error(
-              `Too many reviews started in the last minute. Try again in ${seconds} seconds.`,
-              'RATE_LIMITED'
-            );
-          }
-          await holdReviewBudget(body, prepared);
-        }
-        const created = await createAssessment(
-          body,
-          prepared,
-          { userId, apiKeyId: null, via: 'MCP' },
-          { boundMs: MCP_WAIT_MS }
-        );
-        // `wait: true` and stored, so never ephemeral; narrowed for the type.
-        if (created.kind !== 'stored') {
-          return this.error('The review was not stored.', 'NOT_STORED');
-        }
-        return this.success(await summariseAssessment(created.assessment));
-      } finally {
-        await prepared.hold?.release();
-      }
-    } catch (err) {
-      if (err instanceof WorkspaceBusyError && err.queueCanStart) {
-        startWaitingReviews(requireOrgId());
-      }
-      const refusal = refusalOf(err);
-      if (!refusal) throw err;
-      return this.error(refusal.message, refusal.code);
-    }
+    if (typeof userId !== 'string') return this.error(userId.message, userId.code);
+    const { assessDraftTool } = await import('@/lib/app/mcp/run/assess-draft');
+    const outcome = await assessDraftTool(assessmentRequestOf(args), userId);
+    if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
+    return this.success(outcome.data);
   }
 
   redactProvenance(

@@ -6,14 +6,15 @@
  * offsets an assistant cannot place. No AI call, nothing stored, no credit,
  * so it needs no person behind the key. Off when the quick scan's switch is
  * off, as the route is.
+ *
+ * The work is in `run/quick-scan.ts`, loaded on the first call: why, in
+ * `tool-support.ts`.
  */
 import { z } from 'zod';
-import { runQuickScan } from '@/lib/app/assessments/api/scan';
 import { contextField, textField } from '@/lib/app/assessments/api/validations';
 import { QUICK_SCAN } from '@/lib/app/mcp/definitions';
-import { draftShape, refusalOf } from '@/lib/app/mcp/tool-support';
-import { summariseQuickScan, type QuickScanSummary } from '@/lib/app/quick-scan/summary';
-import { isQuickScanEnabled } from '@/lib/app/quick-scan/switch';
+import { draftShape } from '@/lib/app/mcp/tool-support';
+import type { QuickScanSummary } from '@/lib/app/quick-scan/summary';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -35,16 +36,10 @@ export class QuickScanCapability extends BaseCapability<Args, QuickScanSummary> 
     args: Args,
     _context: CapabilityContext
   ): Promise<CapabilityResult<QuickScanSummary>> {
-    if (!isQuickScanEnabled()) {
-      return this.error('The quick scan is switched off on this server.', 'QUICK_SCAN_OFF');
-    }
-    try {
-      return this.success(summariseQuickScan(await runQuickScan(args)));
-    } catch (err) {
-      const refusal = refusalOf(err);
-      if (!refusal) throw err;
-      return this.error(refusal.message, refusal.code);
-    }
+    const { quickScanTool } = await import('@/lib/app/mcp/run/quick-scan');
+    const outcome = await quickScanTool(args);
+    if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
+    return this.success(outcome.data);
   }
 
   redactProvenance(args: Args, result: CapabilityResult<QuickScanSummary>): ProvenanceRedaction {
