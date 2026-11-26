@@ -288,6 +288,32 @@ export async function callMcpTool(
   };
 }
 
+/**
+ * Whether a tool call's arguments may be written to the MCP audit log as sent.
+ *
+ * `false` when the tool resolves to a capability that declares
+ * `processesPii` (its arguments carry personal data, and the capability's own
+ * `redactProvenance` is what decides what of them is kept), and also when the
+ * name resolves to no registered capability, since nothing then vouches for
+ * what the arguments hold. `true` only for a known capability that declares no
+ * personal data. The audit log is install-wide and outside every org's
+ * erasure, so it fails closed.
+ *
+ * Resolves the advertised name the way {@link callMcpTool} does (the cached
+ * global list), so a `customName` is honoured.
+ */
+export async function toolArgumentsAuditable(toolName: string): Promise<boolean> {
+  try {
+    const tool = (await listMcpTools()).find((t) => t.name === toolName);
+    if (!tool) return false;
+    registerBuiltInCapabilities();
+    const handler = capabilityDispatcher.getHandler(tool.slug);
+    return handler !== undefined && !handler.processesPii;
+  } catch {
+    return false;
+  }
+}
+
 /** Clear the tool cache (after admin mutations) */
 export function clearMcpToolCache(): void {
   cachedTools = null;

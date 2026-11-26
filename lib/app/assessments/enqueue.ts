@@ -16,7 +16,7 @@
 import type { JudgeProfile } from '@/lib/app/frameworks/engine';
 import { JudgeProfileError } from '@/lib/app/frameworks/engine';
 import { sha256 } from '@/lib/app/frameworks/store';
-import type { Prisma } from '@prisma/client';
+import type { AssessmentVia, Prisma } from '@prisma/client';
 import { engineForVersion } from '@/lib/app/assessments/engine';
 import { AssessmentInputError } from '@/lib/app/assessments/errors';
 import { assessableText } from '@/lib/app/assessments/text';
@@ -47,7 +47,7 @@ export interface EnqueueAssessmentInput {
    * with it, and the row records it.
    */
   overlay?: Prisma.InputJsonObject | null;
-  requestedVia: 'APP' | 'API';
+  requestedVia: AssessmentVia;
   apiKeyId?: string | null;
   /** A real `User.id`, or nothing. */
   userId?: string | null;

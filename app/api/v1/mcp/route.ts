@@ -32,6 +32,7 @@ import {
   getMcpRateLimiter,
 } from '@/lib/orchestration/mcp';
 import { jsonRpcRequestSchema } from '@/lib/validations/mcp';
+import { BATCH_SOLO_MESSAGE, refusedInBatch } from '@/lib/app/mcp/batch';
 import { runAsOrg } from '@/lib/tenancy/context';
 import {
   JsonRpcErrorCode,
@@ -54,6 +55,12 @@ function jsonRpcErrorResponse(code: JsonRpcErrorCode, message: string, status: n
   }
   return Response.json({ jsonrpc: '2.0', id: null, error: { code, message } }, { status, headers });
 }
+
+/**
+ * Long enough for a review `assess_draft` answered before it finished to run on
+ * under `after()`, as `/api/v1/assessments` allows (HowDoesThisLand, t-92).
+ */
+export const maxDuration = 300;
 
 const MAX_BODY_SIZE = 1_048_576; // 1MB
 const MAX_BATCH_SIZE = 20;
@@ -288,7 +295,22 @@ async function handlePost(request: NextRequest, auth: McpAuthContext): Promise<R
   };
   const responses: (JsonRpcResponse | null)[] = [];
 
-  for (const rpcRequest of validRequests) {
+  // A batch carries one call to a tool that holds the request (HowDoesThisLand,
+  // t-92): `lib/app/mcp/batch.ts`.
+  const refused = isBatch ? await refusedInBatch(validRequests) : [];
+  for (const [i, rpcRequest] of validRequests.entries()) {
+    if (refused[i]) {
+      responses.push(
+        rpcRequest.id === undefined
+          ? null
+          : {
+              jsonrpc: '2.0',
+              id: rpcRequest.id,
+              error: { code: JsonRpcErrorCode.INVALID_REQUEST, message: BATCH_SOLO_MESSAGE },
+            }
+      );
+      continue;
+    }
     responses.push(await handleMcpRequest(rpcRequest, handlerContext));
   }
 

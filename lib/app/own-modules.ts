@@ -94,4 +94,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/rewrites/',
   // Comparisons: 2–5 drafts reviewed the same way and read together (t-87).
   'lib/app/comparisons/',
+  // HowDoesThisLand as MCP tools: the capabilities and what they answer (t-92).
+  'lib/app/mcp/',
 ];

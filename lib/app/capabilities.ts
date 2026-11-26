@@ -13,6 +13,14 @@
  *
  * Full guide + example: CUSTOMIZATION.md §4 · .context/orchestration/capabilities.md
  */
+import { registerAppCapability } from '@/lib/orchestration/capabilities';
+import { AssessDraftCapability } from '@/lib/app/mcp/assess-draft';
+import { GetAssessmentCapability } from '@/lib/app/mcp/get-assessment';
+import { QuickScanCapability } from '@/lib/app/mcp/quick-scan';
+
 export function initAppCapabilities(): void {
-  // No app capabilities by default.
+  // HowDoesThisLand as MCP tools (t-92): `lib/app/mcp/`, `.context/app/mcp.md`.
+  registerAppCapability(new QuickScanCapability());
+  registerAppCapability(new AssessDraftCapability());
+  registerAppCapability(new GetAssessmentCapability());
 }
