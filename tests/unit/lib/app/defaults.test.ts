@@ -158,6 +158,15 @@ vi.mock('@/lib/app/admin-tier', (importOriginal) => importOriginal());
 vi.mock('@/lib/app/user-created', (importOriginal) => importOriginal());
 vi.mock('@/lib/app/erasure', (importOriginal) => importOriginal());
 
+// FORK (HowDoesThisLand): the capabilities row below reads what our seam
+// registers (t-92). `lib/app/capabilities.ts` is the only importer of this
+// module here. Ledger: .context/app/platform-divergences.md row 2.
+const { registerAppCapabilitySpy } = vi.hoisted(() => ({ registerAppCapabilitySpy: vi.fn() }));
+vi.mock('@/lib/orchestration/capabilities', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/orchestration/capabilities')>()),
+  registerAppCapability: registerAppCapabilitySpy,
+}));
+
 /**
  * One row per `lib/app/*` seam.
  *
@@ -256,7 +265,23 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/capabilities.ts',
     risk: 'a stray capability would be dispatchable on every install',
     // Behavioural reach into the dispatcher is covered by bootstrap-wiring.test.ts.
-    assert: () => expect(initAppCapabilities()).toBeUndefined(),
+    // FORK (HowDoesThisLand): pinned to our three MCP tools (t-92), each
+    // registered once with no slug override, guard or scope binding. Ledger:
+    // .context/app/platform-divergences.md row 2.
+    assert: () => {
+      registerAppCapabilitySpy.mockClear();
+      expect(initAppCapabilities()).toBeUndefined();
+      expect(
+        registerAppCapabilitySpy.mock.calls.map(([cap, options]: unknown[]) => [
+          (cap as { slug: string }).slug,
+          options,
+        ])
+      ).toEqual([
+        ['quick_scan', undefined],
+        ['assess_draft', undefined],
+        ['get_assessment', undefined],
+      ]);
+    },
   },
   {
     seam: 'lib/app/context-contributors.ts',
@@ -864,7 +889,13 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/capability-seed-pairs.ts',
     risk: 'a stray pair fails the capability parity test on every install (for a slug no seed writes it is a pair nothing wrote, for a slug core already pairs a duplicate), and a stray unchecked seed switches the parity checks off for that seed',
     assert: () => {
-      expect(APP_CAPABILITY_PAIRS).toEqual([]);
+      // FORK (HowDoesThisLand): pinned to our three MCP tools' pairs (t-92).
+      // Ledger: .context/app/platform-divergences.md row 2.
+      expect(APP_CAPABILITY_PAIRS.map((p) => [p.slug, p.instance.constructor.name])).toEqual([
+        ['quick_scan', 'QuickScanCapability'],
+        ['assess_draft', 'AssessDraftCapability'],
+        ['get_assessment', 'GetAssessmentCapability'],
+      ]);
       expect(APP_UNCHECKED_SEEDS).toEqual({});
     },
   },
@@ -927,6 +958,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'scripts/app/smoke-credit-charge.ts',
         // FORK (HowDoesThisLand): and the rewrite charge's smoke (t-81, t-85).
         'scripts/app/smoke-rewrite-charge.ts',
+        // FORK (HowDoesThisLand): and the MCP tools smoke (t-92).
+        'scripts/app/smoke-mcp-tools.ts',
         // FORK (HowDoesThisLand): and the judge smoke (t-19).
         'scripts/app/smoke-judge.ts',
         'scripts/app/frameworks/*.ts',
