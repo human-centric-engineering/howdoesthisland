@@ -370,7 +370,7 @@ describe('rewrite_draft', () => {
       { success: false, error: { code: 'VALIDATION_ERROR', message: 'no' } }
     ).args;
     // A key that is not a placeholder id may carry the writer's fact.
-    expect(keyed.answers).toEqual(['p2', '[value]']);
+    expect(keyed).toMatchObject({ answers: ['p2', '[value]'] });
 
     const args = tool.redactProvenance({ assessmentId: 'free text here', answers: 'x' } as never, {
       success: false,
