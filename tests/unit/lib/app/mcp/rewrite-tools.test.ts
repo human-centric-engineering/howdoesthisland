@@ -428,6 +428,26 @@ describe('get_rewrite', () => {
     expect(none.error?.code).toBe('NOT_FOUND');
   });
 
+  it('throws a failure that is not a refusal, for the dispatcher to log', async () => {
+    vi.spyOn(fake.db.rewrite, 'findFirst').mockRejectedValueOnce(new Error('connection lost'));
+
+    await expect(inOrg(() => tool.execute({ rewriteId: 'rw-1' }, noCreator))).rejects.toThrow(
+      'connection lost'
+    );
+  });
+
+  it('previews the id and status of what it read', () => {
+    const redacted = tool.redactProvenance(
+      { rewriteId: 'rw-1' },
+      { success: true, data: { id: 'rw-1', status: 'completed' } as never }
+    );
+
+    expect(redacted).toEqual({
+      args: { rewriteId: 'rw-1' },
+      resultPreview: JSON.stringify({ id: 'rw-1', status: 'completed' }),
+    });
+  });
+
   it('keeps only an id-shaped id in the audit trail', () => {
     const redacted = tool.redactProvenance(
       { rewriteId: 'Jane Doe’s draft' },
