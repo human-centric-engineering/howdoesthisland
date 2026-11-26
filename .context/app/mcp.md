@@ -185,7 +185,8 @@ The code is `lib/app/workspaces/mcp-keys.ts`, on core's `generateApiKey` and
   spending tool charges the workspace's credits: that is the bound on what a
   key can spend.
 - **Revoked, not deleted**, so `McpAuditLog` still names it, and the list still
-  shows what was turned off.
+  shows what was turned off. Core's `/admin/orchestration/mcp/keys` can still
+  delete a key outright until t-64 closes it to workspace owners.
 
 The routes serve only the workspace the caller has entered, as the judges
 routes do (`lib/app/workspaces/mcp-keys-access.ts`): someone acting in another

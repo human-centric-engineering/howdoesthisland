@@ -315,9 +315,16 @@ export function McpKeysManager({ orgId, initialKeys, renderedAt }: McpKeysManage
               </Select>
             </div>
 
-            <Button type="submit" disabled={creating}>
+            {/* One unsaved value at a time: a second key would replace the panel above,
+                and the first key's value could never be shown again. */}
+            <Button type="submit" disabled={creating || shown !== null}>
               {creating ? 'Making the key…' : 'Make key'}
             </Button>
+            {shown ? (
+              <p className="text-muted-foreground text-sm">
+                Save the new key above before you make another.
+              </p>
+            ) : null}
             <SaveError failure={create.failure} />
           </form>
         </CardContent>

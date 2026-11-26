@@ -133,10 +133,14 @@ describe('McpKeysManager', () => {
       expect(rows[0]).toHaveTextContent('Newsletter tool');
       expect(rows[0]).not.toHaveTextContent('the_whole_secret');
       expect(nameInput()).toHaveValue('');
+      // A second key would replace this one's only showing, so none until it is saved.
+      expect(screen.getByRole('button', { name: 'Make key' })).toBeDisabled();
+      expect(document.body).toHaveTextContent('Save the new key above before you make another.');
 
       await user.click(screen.getByRole('button', { name: 'I’ve saved it' }));
       expect(screen.queryByTestId('new-mcp-key')).toBeNull();
       expect(document.body).not.toHaveTextContent('the_whole_secret');
+      expect(screen.getByRole('button', { name: 'Make key' })).toBeEnabled();
     });
 
     it('puts a new key at the top of the existing list', async () => {
