@@ -20,7 +20,7 @@
  * Runs in the caller's tenant context (the route's guard). Every refusal is
  * an `APIError`, so the guard answers it with its status and code.
  */
-import type { AssessmentStatus, Prisma } from '@prisma/client';
+import type { AssessmentStatus, AssessmentVia, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { APIError, NotFoundError } from '@/lib/api/errors';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
@@ -139,6 +139,17 @@ export interface Caller {
   userId: string;
   /** The API key the request came through, if it did. */
   apiKeyId: string | null;
+  /**
+   * Set by a tool call through the MCP server (t-92), which comes with no
+   * `sk_` key: without it the review would read as asked for in the app.
+   */
+  via?: 'MCP';
+}
+
+/** How a review was asked for, as its row records it. */
+export function requestedViaOf(caller: Caller): AssessmentVia {
+  if (caller.via) return caller.via;
+  return caller.apiKeyId ? 'API' : 'APP';
 }
 
 interface Source {
@@ -394,7 +405,7 @@ export async function createAssessment(
         profile,
         context: storedContext(ctx),
         overlay: prepared.overlay,
-        requestedVia: caller.apiKeyId ? 'API' : 'APP',
+        requestedVia: requestedViaOf(caller),
         apiKeyId: caller.apiKeyId,
         userId: caller.userId,
       })

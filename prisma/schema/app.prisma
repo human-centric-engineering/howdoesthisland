@@ -320,6 +320,8 @@ enum AssessmentStatus {
 enum AssessmentVia {
   APP
   API
+  /// A tool call through the MCP server (t-92): an AI assistant, or a workspace's own agent.
+  MCP
 }
 
 /// One judge's run within an assessment, saved as it lands. A failed judge's
