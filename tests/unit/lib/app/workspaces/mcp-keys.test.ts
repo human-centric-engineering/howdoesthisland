@@ -1,13 +1,13 @@
 /**
  * Tests: a workspace's MCP keys (t-95): list, make, revoke.
  *
- * `generateApiKey` is real (pure), so what reaches prisma is checked against
+ * `generateApiKey` and `hashApiKey` are real (pure), so what reaches prisma is checked against
  * the value it really made: the hash is stored, the plaintext is not.
  *
  * @see lib/app/workspaces/mcp-keys.ts
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createHash } from 'node:crypto';
+import { hashApiKey } from '@/lib/orchestration/mcp/auth';
 
 vi.mock('@/lib/db/client', () => ({
   prisma: {
@@ -86,7 +86,7 @@ describe('createWorkspaceMcpKey', () => {
     const args = vi.mocked(prisma.mcpApiKey.create).mock.calls[0]?.[0];
     expect(args?.data).toEqual({
       name: 'Sam’s Claude',
-      keyHash: createHash('sha256').update(plaintext).digest('hex'),
+      keyHash: hashApiKey(plaintext),
       keyPrefix: plaintext.slice(0, 12),
       scopes: ['tools:list', 'tools:execute'],
       expiresAt: new Date('2027-02-15T12:00:00.000Z'),
