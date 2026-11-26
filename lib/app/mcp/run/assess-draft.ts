@@ -5,10 +5,8 @@
  * cap, `holdReviewBudget`, `createAssessment`), so credits, the review budget
  * and the workspace's running limit hold exactly as they do over the API.
  *
- * Before any of it, the key's creator must still be a member of the key's
- * workspace: a key outlives its creator's removal (only erasure nulls
- * `createdBy`), and the person a review is charged to must be one who can
- * spend there.
+ * Before any of it, the key's creator must still be able to spend in the
+ * key's workspace (`spender.ts`).
  */
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import {
@@ -25,34 +23,17 @@ import {
   type AssessmentSummaryForAssistant,
 } from '@/lib/app/mcp/assessment-summary';
 import { refusalOf } from '@/lib/app/mcp/run/refusal';
+import { capRefusal, spenderRefusal } from '@/lib/app/mcp/run/spender';
 import { MCP_WAIT_MS, type ToolOutcome } from '@/lib/app/mcp/tool-support';
-import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
-import { verifiedMembership } from '@/lib/tenancy/entry';
 import { requireOrgId } from '@/lib/tenancy/context';
 
 export async function assessDraftTool(
   body: AssessmentRequest,
   userId: string
 ): Promise<ToolOutcome<AssessmentSummaryForAssistant>> {
-  const membership = await verifiedMembership(userId, requireOrgId(), prisma);
-  if ('refused' in membership) {
-    if (membership.refused === 'org-suspended') {
-      return {
-        refusal: {
-          code: 'WORKSPACE_SUSPENDED',
-          message: 'This workspace is suspended, so it cannot start work that spends credits.',
-        },
-      };
-    }
-    return {
-      refusal: {
-        code: 'KEY_HAS_NO_OWNER',
-        message:
-          'The person this runs for (over MCP, the key’s creator) is no longer in the workspace, so it cannot start work that spends credits. Over MCP, ask a workspace owner for a new key.',
-      },
-    };
-  }
+  const refused = await spenderRefusal(userId);
+  if (refused) return { refusal: refused };
   // Set once the review's row is written: from then on, a failure answers its id.
   let storedId: string | undefined;
   try {
@@ -60,15 +41,7 @@ export async function assessDraftTool(
     try {
       if (prepared.judges.length > 0) {
         const limit = aiAssessmentLimiter.check(`user:${userId}`);
-        if (!limit.success) {
-          const seconds = Math.max(1, limit.reset - Math.floor(Date.now() / 1000));
-          return {
-            refusal: {
-              code: 'RATE_LIMIT_EXCEEDED',
-              message: `Too many reviews started in the last minute. Try again in ${seconds} seconds.`,
-            },
-          };
-        }
+        if (!limit.success) return { refusal: capRefusal(limit.reset, 'reviews') };
         await holdReviewBudget(body, prepared);
       }
       const created = await createAssessment(
