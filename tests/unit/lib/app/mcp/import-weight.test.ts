@@ -1,7 +1,7 @@
 /**
  * Core's capability registry imports `lib/app/capabilities.ts` on every
  * dispatch path, so the tool classes it registers must not pull the database
- * client or the rate limiters into that module graph (t-92). They did when
+ * client or the rate limiters into that module graph (t-92, t-93). They did when
  * this first landed, and the inbound-trigger route's tests, whose mock of
  * the rate limiter has no `createRateLimiter`, failed to load. The work is
  * loaded on a tool's first call instead (`lib/app/mcp/tool-support.ts`).
@@ -23,12 +23,16 @@ describe('the MCP tool classes', () => {
       import('@/lib/app/mcp/quick-scan'),
       import('@/lib/app/mcp/assess-draft'),
       import('@/lib/app/mcp/get-assessment'),
+      import('@/lib/app/mcp/compare-drafts'),
+      import('@/lib/app/mcp/get-comparison'),
     ]);
 
     expect(modules.map((m) => Object.keys(m).find((k) => k.endsWith('Capability')))).toEqual([
       'QuickScanCapability',
       'AssessDraftCapability',
       'GetAssessmentCapability',
+      'CompareDraftsCapability',
+      'GetComparisonCapability',
     ]);
   });
 });

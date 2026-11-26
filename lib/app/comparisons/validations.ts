@@ -32,25 +32,42 @@ const reviewedDraftSchema = z.strictObject({
   label: labelField,
 });
 
-const draftSchema = z.union([textDraftSchema, reviewedDraftSchema], {
+/** One draft: pasted text, or a review the workspace has. The MCP tool (t-93) takes it as is. */
+export const comparisonDraftSchema = z.union([textDraftSchema, reviewedDraftSchema], {
   // A draft matching neither: most often one giving both, or neither, of the two.
   error: 'Give each draft as text or as an assessmentId, not both',
 });
 
-export type ComparisonDraftInput = z.infer<typeof draftSchema>;
+export type ComparisonDraftInput = z.infer<typeof comparisonDraftSchema>;
 
 /** A draft given as text, reviewed with the set; otherwise an existing review. */
 export const isTextDraft = (
   draft: ComparisonDraftInput
 ): draft is z.infer<typeof textDraftSchema> => 'text' in draft;
 
+/** The drafts a set is made of: 2–5 of {@link comparisonDraftSchema}. */
+export const comparisonDraftsField = z
+  .array(comparisonDraftSchema)
+  .min(MIN_DRAFTS, `Give at least ${MIN_DRAFTS} drafts to compare`)
+  .max(MAX_DRAFTS, `Give at most ${MAX_DRAFTS} drafts to compare`);
+
+/** At least one draft is text: a set of reviews alone would review nothing. */
+export const hasTextDraft = (drafts: readonly ComparisonDraftInput[]): boolean =>
+  drafts.some(isTextDraft);
+export const HAS_TEXT_DRAFT_ERROR =
+  'Give at least one draft as text: the others may be reviews you already have';
+
+/** No review is named twice. */
+export const namesEachReviewOnce = (drafts: readonly ComparisonDraftInput[]): boolean => {
+  const named = drafts.flatMap((d) => (isTextDraft(d) ? [] : [d.assessmentId]));
+  return new Set(named).size === named.length;
+};
+export const NAMES_EACH_REVIEW_ONCE_ERROR = 'Name each review at most once';
+
 /** POST /api/v1/comparisons. */
 export const createComparisonSchema = z
   .strictObject({
-    drafts: z
-      .array(draftSchema)
-      .min(MIN_DRAFTS, `Give at least ${MIN_DRAFTS} drafts to compare`)
-      .max(MAX_DRAFTS, `Give at most ${MAX_DRAFTS} drafts to compare`),
+    drafts: comparisonDraftsField,
     ...versionChoice,
     context: contextField,
     /** The workspace's project every draft is reviewed in; its defaults fill what is left out. */
@@ -64,17 +81,11 @@ export const createComparisonSchema = z
     error: 'Give a profile or a list of judges, not both',
     path: ['judges'],
   })
-  .refine((body) => body.drafts.some(isTextDraft), {
-    error: 'Give at least one draft as text: the others may be reviews you already have',
+  .refine((body) => hasTextDraft(body.drafts), { error: HAS_TEXT_DRAFT_ERROR, path: ['drafts'] })
+  .refine((body) => namesEachReviewOnce(body.drafts), {
+    error: NAMES_EACH_REVIEW_ONCE_ERROR,
     path: ['drafts'],
-  })
-  .refine(
-    (body) => {
-      const named = body.drafts.flatMap((d) => (isTextDraft(d) ? [] : [d.assessmentId]));
-      return new Set(named).size === named.length;
-    },
-    { error: 'Name each review at most once', path: ['drafts'] }
-  );
+  });
 
 export type CreateComparisonBody = z.infer<typeof createComparisonSchema>;
 

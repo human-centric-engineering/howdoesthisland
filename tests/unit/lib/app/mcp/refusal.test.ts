@@ -69,4 +69,19 @@ describe('refusalOf', () => {
     expect(refusalOf(new Error('connection reset'))).toBeNull();
     expect(refusalOf('a string')).toBeNull();
   });
+
+  it('ignores a position that is not a draft’s place (t-93)', () => {
+    for (const position of [-1, 1.5, '2', null]) {
+      expect(
+        refusalOf(new APIError('No.', 'REFUSED', 409, { position, differs: ['project'] }))?.message
+      ).toBe('No.');
+    }
+  });
+
+  it('names the draft and keeps only the field names it can read (t-93)', () => {
+    expect(
+      refusalOf(new APIError('No.', 'REFUSED', 409, { position: 0, differs: ['version', 3] }))
+        ?.message
+    ).toBe('The draft at position 0: No. It differs in: version.');
+  });
 });

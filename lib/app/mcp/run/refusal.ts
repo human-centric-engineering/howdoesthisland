@@ -24,6 +24,29 @@ const issueList = (details: Record<string, unknown> | undefined): string[] => {
 };
 
 /**
+ * Which draft of a comparison a refusal is about (t-93): the API says so in
+ * `details.position` (from 0, as the tools' answers count) and, for a review reviewed another way, the
+ * fields in `details.differs`. An assistant told only the message could not
+ * tell which draft to fix.
+ */
+const draftOf = (
+  details: Record<string, unknown> | undefined
+): { prefix: string; suffix: string } => {
+  const position = details?.position;
+  if (typeof position !== 'number' || !Number.isInteger(position) || position < 0) {
+    return { prefix: '', suffix: '' };
+  }
+  const differs = Array.isArray(details?.differs)
+    ? details.differs.filter((f): f is string => typeof f === 'string')
+    : [];
+  return {
+    // Counted from 0, as `position` is in every answer the tools give.
+    prefix: `The draft at position ${position}: `,
+    suffix: differs.length > 0 ? ` It differs in: ${differs.join(', ')}.` : '',
+  };
+};
+
+/**
  * The refusal, or `null` for anything else, which the caller rethrows so the
  * dispatcher logs it and answers its generic `execution_error`. The library's
  * messages are already written for the person asking (they are the API's), so
@@ -35,11 +58,10 @@ export function refusalOf(err: unknown): ToolRefusal | null {
   }
   if (err instanceof APIError) {
     const issues = issueList(err.details);
-    return {
-      code: err.code ?? 'REFUSED',
-      message:
-        issues.length > 0 ? `${err.message.replace(/\.$/, '')}: ${issues.join('; ')}` : err.message,
-    };
+    const { prefix, suffix } = draftOf(err.details);
+    const message =
+      issues.length > 0 ? `${err.message.replace(/\.$/, '')}: ${issues.join('; ')}` : err.message;
+    return { code: err.code ?? 'REFUSED', message: `${prefix}${message}${suffix}` };
   }
   return null;
 }

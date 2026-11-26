@@ -322,11 +322,16 @@ export async function releaseHolds(prepared: PreparedComparison): Promise<void> 
  * reviews it reuses as members, in one transaction, then start the new
  * reviews. Those the workspace has no running place for wait queued, and the
  * next of its runs to end starts one (`run.ts`).
+ *
+ * `onStored` is told the comparison's id as soon as it is written, so a
+ * caller that cannot let a later failure lose it (the MCP tool, t-93) can
+ * still answer it.
  */
 export async function createComparison(
   body: CreateComparisonBody,
   prepared: PreparedComparison,
-  caller: Caller
+  caller: Caller,
+  options: { onStored?: (comparisonId: string) => void } = {}
 ): Promise<ComparisonDetail> {
   const orgId = requireOrgId();
   const context = storedContext(prepared.ctx);
@@ -404,6 +409,7 @@ export async function createComparison(
     await releaseHolds(prepared);
   }
 
+  options.onStored?.(written.also);
   for (const review of written.enqueued) startAssessmentInBackground(review.assessmentId);
   const comparison = await readComparison(written.also);
   // Deleted under us, by another request, between the write and this read.
