@@ -22,7 +22,7 @@
  */
 import { z } from 'zod';
 import { prisma } from '@/lib/db/client';
-import { NotFoundError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { generateApiKey } from '@/lib/orchestration/mcp/auth';
 import { cuidSchema } from '@/lib/validations/common';
 import { orgIdParamSchema } from '@/lib/validations/tenancy';
@@ -115,8 +115,9 @@ export async function createWorkspaceMcpKey(input: {
 }): Promise<{ key: WorkspaceMcpKey; plaintext: string }> {
   const mintOrg = orgForMint();
   if (mintOrg !== input.orgId) {
-    // The route requires the entered workspace first; this is the backstop.
-    throw new NotFoundError('Workspace not found');
+    // The route requires the entered workspace first; this is the backstop,
+    // with the same answer as `requireEnteredWorkspace`.
+    throw new ForbiddenError('Switch to this workspace to manage its MCP keys');
   }
   const { plaintext, hash, prefix } = generateApiKey();
   const row = await prisma.mcpApiKey.create({

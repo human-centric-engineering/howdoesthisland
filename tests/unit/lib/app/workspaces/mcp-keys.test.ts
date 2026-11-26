@@ -25,7 +25,7 @@ import {
   revokeWorkspaceMcpKey,
   workspaceMcpKeyParamsSchema,
 } from '@/lib/app/workspaces/mcp-keys';
-import { NotFoundError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { prisma } from '@/lib/db/client';
 
 const ORG = 'cmorg000000000000000team1';
@@ -134,7 +134,7 @@ describe('createWorkspaceMcpKey', () => {
     orgForMint.mockReturnValue(OTHER_ORG);
     await expect(
       createWorkspaceMcpKey({ orgId: ORG, createdBy: USER, body: { name: 'x' } })
-    ).rejects.toBeInstanceOf(NotFoundError);
+    ).rejects.toBeInstanceOf(ForbiddenError);
     expect(prisma.mcpApiKey.create).not.toHaveBeenCalled();
   });
 
