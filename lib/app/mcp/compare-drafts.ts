@@ -49,6 +49,27 @@ export const compareDraftsArgsSchema = z
 
 type Args = z.infer<typeof compareDraftsArgsSchema>;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * What the audit trail keeps of the drafts. Read defensively: a chat turn
+ * records a call's trace with the model's arguments as sent, before or
+ * without validation (`buildToolCallTrace`), so they may be any shape.
+ */
+function draftsShape(args: unknown): Record<string, unknown>[] | undefined {
+  const drafts: unknown = isRecord(args) ? args.drafts : undefined;
+  if (!Array.isArray(drafts)) return undefined;
+  return drafts.map((draft: unknown) => {
+    if (!isRecord(draft)) return { draft: '[value]' };
+    return {
+      ...(typeof draft.text === 'string' ? { textChars: draft.text.length } : {}),
+      ...(typeof draft.assessmentId === 'string' ? { assessmentId: draft.assessmentId } : {}),
+      ...(draft.label !== undefined ? { label: '[label]' } : {}),
+    };
+  });
+}
+
 export class CompareDraftsCapability extends BaseCapability<Args, ComparisonSummaryForAssistant> {
   readonly slug = COMPARE_DRAFTS.name;
   readonly functionDefinition = COMPARE_DRAFTS;
@@ -72,17 +93,14 @@ export class CompareDraftsCapability extends BaseCapability<Args, ComparisonSumm
     args: Args,
     result: CapabilityResult<ComparisonSummaryForAssistant>
   ): ProvenanceRedaction {
+    // Typed as validated, but a chat turn's trace passes them as sent: see `draftsShape`.
+    const sent: Record<string, unknown> = isRecord(args) ? args : {};
     return {
       args: {
         // Each draft's size or the review it names, never its words or label.
-        drafts: args.drafts.map((draft) => ({
-          ...('text' in draft
-            ? { textChars: draft.text.length }
-            : { assessmentId: draft.assessmentId }),
-          ...(draft.label !== undefined ? { label: '[label]' } : {}),
-        })),
-        projectId: args.projectId,
-        context: contextShape(args.context),
+        drafts: draftsShape(sent),
+        projectId: typeof sent.projectId === 'string' ? sent.projectId : undefined,
+        context: contextShape(isRecord(sent.context) ? sent.context : undefined),
       },
       resultPreview: result.success
         ? JSON.stringify({ id: result.data?.id, status: result.data?.status })

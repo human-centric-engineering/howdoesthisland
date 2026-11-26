@@ -275,7 +275,10 @@ describe('compare_drafts', () => {
 
     expect(result).toEqual({
       success: false,
-      error: { code: 'REVIEW_NOT_COMPARABLE', message: 'That review has not finished yet.' },
+      error: {
+        code: 'REVIEW_NOT_COMPARABLE',
+        message: 'Draft 2: That review has not finished yet.',
+      },
     });
     expect(mocks.releaseHolds).toHaveBeenCalledTimes(1);
   });
@@ -300,7 +303,7 @@ describe('compare_drafts', () => {
   });
 
   it('answers the stored id, never a bare failure, when the read after storing fails', async () => {
-    mocks.getComparison.mockRejectedValue(new NotFoundError('Comparison not found'));
+    mocks.getComparison.mockRejectedValue(new Error('connection reset'));
 
     const result = await tool.execute(tool.validate(ARGS), asCreator);
 
@@ -357,16 +360,6 @@ describe('compare_drafts', () => {
     expect(result.data?.next).toContain('get_comparison');
   });
 
-  it('stops waiting when the comparison is deleted under it, and says so', async () => {
-    mocks.findUnique.mockResolvedValue(null);
-    mocks.getComparison.mockRejectedValue(new NotFoundError('Comparison not found'));
-
-    const result = await tool.execute(tool.validate(ARGS), asCreator);
-
-    expect(mocks.findUnique).toHaveBeenCalledTimes(1);
-    expect(result.error?.code).toBe('STORED_UNREAD');
-  });
-
   it('keeps each draft’s length or review in the audit trail, never its words or label', () => {
     const redacted = tool.redactProvenance(
       tool.validate({
@@ -383,6 +376,70 @@ describe('compare_drafts', () => {
     });
     expect(redacted.resultPreview).toBe(JSON.stringify({ id: 'cmp-1', status: 'running' }));
     expect(JSON.stringify(redacted)).not.toMatch(/Sarah|Jane/);
+  });
+
+  it('records the trace of arguments as a model sent them, whatever their shape', () => {
+    const preview = (sent: unknown) =>
+      tool.redactProvenance(sent as never, {
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'no' },
+      }).args;
+
+    expect(preview({ drafts: 'Sarah vs Teams' })).toEqual({
+      drafts: undefined,
+      projectId: undefined,
+      context: undefined,
+    });
+    expect(preview(undefined)).toEqual({
+      drafts: undefined,
+      projectId: undefined,
+      context: undefined,
+    });
+    expect(preview({ drafts: [null, 'Sarah', { text: 7, label: 'Sarah' }], projectId: 3 })).toEqual(
+      {
+        drafts: [{ draft: '[value]' }, { draft: '[value]' }, { label: '[label]' }],
+        projectId: undefined,
+        context: undefined,
+      }
+    );
+  });
+
+  it('answers a comparison deleted while it ran as not found, not as unread', async () => {
+    mocks.findUnique.mockResolvedValue(null);
+    mocks.getComparison.mockRejectedValue(new NotFoundError('Comparison not found'));
+
+    const result = await tool.execute(tool.validate(ARGS), asCreator);
+
+    expect(result.error?.code).toBe('NOT_FOUND');
+    expect(result.error?.message).toContain('deleted');
+  });
+
+  it('names the draft a refusal is about, and the fields that differ', async () => {
+    mocks.prepareComparison.mockRejectedValue(
+      new APIError(
+        'That review was not reviewed the way this comparison is.',
+        'REVIEW_NOT_COMPARABLE',
+        409,
+        {
+          position: 2,
+          reason: 'options_differ',
+          differs: ['project', 'judges'],
+        }
+      )
+    );
+
+    const result = await tool.execute(
+      tool.validate({
+        drafts: [{ text: OPENING_A }, { assessmentId: 'a-1' }, { assessmentId: 'a-2' }],
+      }),
+      asCreator
+    );
+
+    expect(result.error).toEqual({
+      code: 'REVIEW_NOT_COMPARABLE',
+      message:
+        'Draft 3: That review was not reviewed the way this comparison is. It differs in: project, judges.',
+    });
   });
 
   it('previews a refusal by its code and message', () => {

@@ -16,6 +16,7 @@
  * with `get_comparison`. The drafts' reviews and the verdict run on either
  * way; they were started in the background by `createComparison`.
  */
+import { NotFoundError } from '@/lib/api/errors';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import { stateOf } from '@/lib/app/assessments/api/views';
 import { POLL_MS } from '@/lib/app/assessments/limits';
@@ -121,6 +122,15 @@ export async function compareDraftsTool(
     await waitToSettle(storedId);
     return { data: summariseComparison(await getComparison(storedId)) };
   } catch (err) {
+    if (storedId !== undefined && err instanceof NotFoundError) {
+      // Deleted while it ran, by someone in the workspace: reading it back would find nothing.
+      return {
+        refusal: {
+          code: 'NOT_FOUND',
+          message: `The comparison ${storedId} was deleted while it ran. Its drafts' reviews stay in the workspace.`,
+        },
+      };
+    }
     if (storedId !== undefined) {
       // Stored, so possibly charged: an assistant told only "failed" would start another.
       logger.error('compare_drafts failed after storing its comparison', err, {

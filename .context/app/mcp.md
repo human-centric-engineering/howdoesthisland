@@ -86,8 +86,10 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   the context.
 - **Refusals reach the assistant in the library's words.** An `APIError` (no
   credits, a context the framework refuses, not found) becomes the tool's error
-  with its code. Anything else is thrown for the dispatcher to log, and it
-  answers its generic `execution_error`.
+  with its code. A refusal about one draft of a comparison names it (`Draft 3:`)
+  and the fields it was reviewed with that differ, which the API carries in
+  `details.position` and `details.differs`. Anything else is thrown for the
+  dispatcher to log, and it answers its generic `execution_error`.
 
 ### What `get_assessment` answers
 
