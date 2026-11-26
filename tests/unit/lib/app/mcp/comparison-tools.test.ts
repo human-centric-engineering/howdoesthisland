@@ -451,4 +451,15 @@ describe('get_comparison', () => {
       resultPreview: JSON.stringify({ id: 'cmp-1', status: 'completed' }),
     });
   });
+
+  it('previews a refusal by its code and message', () => {
+    const redacted = tool.redactProvenance(
+      { comparisonId: 'theirs' },
+      { success: false, error: { code: 'NOT_FOUND', message: 'Comparison not found' } }
+    );
+
+    expect(redacted.resultPreview).toBe(
+      JSON.stringify({ code: 'NOT_FOUND', message: 'Comparison not found' })
+    );
+  });
 });
