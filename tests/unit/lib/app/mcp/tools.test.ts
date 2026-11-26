@@ -129,6 +129,23 @@ describe('quick_scan', () => {
     });
   });
 
+  it('lets an unexpected failure through, for the dispatcher to log', async () => {
+    mocks.runQuickScan.mockRejectedValue(new Error('engine missing'));
+
+    await expect(tool.execute(tool.validate({ text: DRAFT }), asCreator)).rejects.toThrow(
+      'engine missing'
+    );
+  });
+
+  it('previews a refusal by its code and message', () => {
+    const redacted = tool.redactProvenance(
+      { text: DRAFT },
+      { success: false, error: { code: 'QUICK_SCAN_OFF', message: 'off' } }
+    );
+
+    expect(redacted.resultPreview).toBe(JSON.stringify({ code: 'QUICK_SCAN_OFF', message: 'off' }));
+  });
+
   it('refuses arguments the API does not take', () => {
     expect(() => tool.validate({ text: DRAFT, url: 'https://example.com' })).toThrow();
   });
@@ -284,6 +301,14 @@ describe('assess_draft', () => {
     expect(mocks.startWaitingReviews).toHaveBeenCalledWith('org-1');
   });
 
+  it('refuses, rather than answers, a review that was not stored', async () => {
+    mocks.createAssessment.mockResolvedValue({ kind: 'ephemeral', assessment: {} });
+
+    const result = await tool.execute(tool.validate({ text: DRAFT }), asCreator);
+
+    expect(result).toMatchObject({ success: false, error: { code: 'NOT_STORED' } });
+  });
+
   it('lets an unexpected failure through, for the dispatcher to log', async () => {
     mocks.createAssessment.mockRejectedValue(new Error('connection reset'));
 
@@ -291,6 +316,18 @@ describe('assess_draft', () => {
       'connection reset'
     );
     expect(mocks.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a url draft as a placeholder in the audit trail, and a refusal by its code', () => {
+    const redacted = tool.redactProvenance(
+      { url: 'https://example.com/sarah-launch' },
+      { success: false, error: { code: 'RATE_LIMITED', message: 'Try again' } }
+    );
+
+    expect(redacted.args).toEqual({ url: '[url]', projectId: undefined, context: undefined });
+    expect(redacted.resultPreview).toBe(
+      JSON.stringify({ code: 'RATE_LIMITED', message: 'Try again' })
+    );
   });
 
   it('keeps no words of the draft or its title in the audit trail', () => {
@@ -334,6 +371,23 @@ describe('get_assessment', () => {
       success: false,
       error: { code: 'NOT_FOUND', message: 'Assessment not found' },
     });
+  });
+
+  it('lets an unexpected failure through, for the dispatcher to log', async () => {
+    mocks.readAssessmentSummary.mockRejectedValue(new Error('connection reset'));
+
+    await expect(tool.execute(tool.validate({ assessmentId: 'a-1' }), asCreator)).rejects.toThrow(
+      'connection reset'
+    );
+  });
+
+  it('previews a refusal by its code', () => {
+    const redacted = tool.redactProvenance(
+      { assessmentId: 'a-1' },
+      { success: false, error: { code: 'NOT_FOUND', message: 'Assessment not found' } }
+    );
+
+    expect(redacted.resultPreview).toContain('NOT_FOUND');
   });
 
   it('previews only the id and status, since the summary quotes the draft', () => {
