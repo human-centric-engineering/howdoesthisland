@@ -129,6 +129,7 @@ accept" and keeps the draft and the file. The production servers carry the whole
 
 `/home` and a project's page (t-79) list the workspace's reviews, newest first,
 each linking to its report. Code: `components/app/history/`.
+`/home` also shows the latest comparisons (t-90); see `comparisons.md`.
 
 - **One list call.** Each page makes one `GET /api/v1/assessments` call for its
   list (`reviewListEndpoint`, 20 a page); a row names its project from the
@@ -141,9 +142,12 @@ each linking to its report. Code: `components/app/history/`.
   too, marked "(archived)", since their reviews are still listed. A value the
   choices lack (an older version's type) is still shown as chosen.
 - **The empty desk** (`HomeEmptyState`, linking to `/assess`) shows only when
-  the workspace has no review at all. A filter matching nothing says so and
-  offers to clear the filters instead. With no reviews, `/home` reads neither
-  the catalogue nor the projects. A page past the last links back to the
+  the workspace has no review and no comparison at all. A filter matching nothing says so and
+  offers to clear the filters instead. With no reviews and no comparisons, `/home`
+  reads neither the catalogue nor the projects. With only comparisons it hides
+  the filters and points to `/assess`. If the comparisons cannot be read, their
+  section is replaced by a link to `/compare` and the reviews still show; the
+  desk is not called empty, since it may not be. A page past the last links back to the
   newest. An archived project with no reviews says to restore it, not to
   choose it on `/assess`.
 - **Delete asks first**: it takes the copy, the result and any share link, and

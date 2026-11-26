@@ -2,8 +2,8 @@
 
 /**
  * /home — the signed-in landing (D22): the workspace's recent reviews (t-79),
- * filtered through the address, from one list call; the empty desk only when
- * there are none at all.
+ * filtered through the address, from one list call, and its latest
+ * comparisons (t-90) from another; the empty desk only when there is neither.
  *
  * The proxy only checks that a session cookie exists and sends anyone holding
  * one here from /login, so a stale cookie must be cleared here or that person
@@ -13,21 +13,31 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
-const { getServerSession, clearInvalidSession, requireServerData, requireAllServerData } =
-  vi.hoisted(() => ({
-    getServerSession: vi.fn(),
-    clearInvalidSession: vi.fn((returnUrl: string) => {
-      throw new Error(`NEXT_REDIRECT ${returnUrl}`);
-    }),
-    requireServerData: vi.fn(),
-    requireAllServerData: vi.fn(),
-  }));
+const {
+  getServerSession,
+  clearInvalidSession,
+  requireServerData,
+  requireAllServerData,
+  loadServerData,
+} = vi.hoisted(() => ({
+  getServerSession: vi.fn(),
+  clearInvalidSession: vi.fn((returnUrl: string) => {
+    throw new Error(`NEXT_REDIRECT ${returnUrl}`);
+  }),
+  requireServerData: vi.fn(),
+  requireAllServerData: vi.fn(),
+  loadServerData: vi.fn(),
+}));
 
 vi.mock('@/lib/auth/utils', () => ({ getServerSession }));
 vi.mock('@/lib/auth/clear-session', () => ({ clearInvalidSession }));
-vi.mock('@/lib/api/server-load', () => ({ requireServerData, requireAllServerData }));
+vi.mock('@/lib/api/server-load', () => ({
+  requireServerData,
+  requireAllServerData,
+  loadServerData,
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/components/ui/select', async () => {
   const { selectMock } = await import('@/tests/unit/components/app/projects/select-mock');
@@ -37,16 +47,20 @@ vi.mock('@/components/ui/select', async () => {
 import HomePage, { metadata } from '@/app/(protected)/home/page';
 import { aReview } from '@/tests/unit/components/app/history/fixtures';
 import { aProject } from '@/tests/unit/components/app/projects/fixtures';
+import { aComparisonRow } from '@/tests/unit/components/app/compare/fixtures';
 
 const page = (search: Record<string, string> = {}) =>
   HomePage({ searchParams: Promise.resolve(search) });
 
 const LIST = '/api/v1/assessments?limit=20';
+const COMPARISONS = '/api/v1/comparisons?limit=3';
 
 function answer(
   reviews = [aReview()],
   total = reviews.length,
-  latestVersion: string | null = '0.5.2'
+  latestVersion: string | null = '0.5.2',
+  comparisons: ReturnType<typeof aComparisonRow>[] = [],
+  comparisonTotal = comparisons.length
 ) {
   requireServerData.mockImplementation(async (path: string) => {
     if (path.startsWith('/api/v1/assessments?'))
@@ -60,6 +74,15 @@ function answer(
           result: { bands: ['Weak', 'Strong'] },
         },
         meta: null,
+      };
+    throw new Error(`unexpected ${path}`);
+  });
+  loadServerData.mockImplementation(async (path: string) => {
+    if (path === COMPARISONS)
+      return {
+        ok: true,
+        data: comparisons,
+        meta: { page: 1, limit: 3, total: comparisonTotal, totalPages: 1 },
       };
     throw new Error(`unexpected ${path}`);
   });
@@ -130,7 +153,8 @@ describe('/home', () => {
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Nothing on the desk yet.');
     // Nothing to filter, so neither the catalogue nor the projects are read.
-    expect(requireServerData).toHaveBeenCalledTimes(1);
+    expect(requireServerData.mock.calls).toEqual([[LIST]]);
+    expect(loadServerData.mock.calls).toEqual([[COMPARISONS]]);
     expect(requireAllServerData).not.toHaveBeenCalled();
   });
 
@@ -177,6 +201,98 @@ describe('/home', () => {
   it('ignores what the address carries that is not a filter', async () => {
     render(await page({ status: 'failed', page: 'two' }));
     expect(listCalls()).toEqual([[LIST]]);
+  });
+
+  it('lists the latest comparisons from one call, linking to each and to all of them', async () => {
+    answer([aReview()], 1, '0.5.2', [aComparisonRow()], 7);
+    render(await page());
+
+    expect(loadServerData.mock.calls).toEqual([[COMPARISONS]]);
+    const section = screen.getByRole('region', { name: 'Recent comparisons' });
+    expect(
+      within(section).getByRole('link', { name: 'Subject A · Draft 2 · Subject C' })
+    ).toHaveAttribute('href', '/compare/cmp-1');
+    expect(within(section).getByRole('link', { name: 'All 7 comparisons' })).toHaveAttribute(
+      'href',
+      '/compare'
+    );
+    // And at the top of the page, beside the way to /assess.
+    expect(screen.getByRole('link', { name: 'Comparisons' })).toHaveAttribute('href', '/compare');
+  });
+
+  it('leaves the comparisons out, and the link to them, when there are none', async () => {
+    render(await page());
+    expect(screen.queryByRole('region', { name: 'Recent comparisons' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Comparisons' })).toBeNull();
+  });
+
+  it('does not offer all of them when it already shows every one', async () => {
+    answer([aReview()], 1, '0.5.2', [aComparisonRow()], 1);
+    render(await page());
+    expect(screen.queryByRole('link', { name: /^All \d+ comparisons$/ })).toBeNull();
+  });
+
+  it('keeps the comparisons as they are under the reviews’ filters', async () => {
+    answer([], 0, '0.5.2', [aComparisonRow()], 1);
+    render(await page({ band: 'Weak' }));
+    expect(screen.getByText('No reviews match these filters')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Recent comparisons' })).toBeInTheDocument();
+  });
+
+  it('shows a comparison rather than the empty desk when no review is left', async () => {
+    answer([], 0, '0.5.2', [aComparisonRow()], 1);
+    render(await page());
+    expect(screen.queryByText('Nothing on the desk yet.')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Recent comparisons' })).toBeInTheDocument();
+    // Nothing to filter, so the filters' choices are not even read, and a way
+    // to add a review rather than a dead end.
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(requireAllServerData).not.toHaveBeenCalled();
+    expect(requireServerData.mock.calls).toEqual([[LIST]]);
+    expect(screen.getByText('No reviews here')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Review some copy' })[1]).toHaveAttribute(
+      'href',
+      '/assess'
+    );
+  });
+
+  it('still lists the reviews when the comparisons cannot be read', async () => {
+    answer([aReview()], 1);
+    loadServerData.mockResolvedValue({
+      ok: false,
+      failure: { kind: 'failed', status: 500, code: null },
+    });
+    render(await page());
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Recent comparisons' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'See them on the Comparisons page' })).toHaveAttribute(
+      'href',
+      '/compare'
+    );
+    expect(screen.getByRole('link', { name: 'Comparisons' })).toHaveAttribute('href', '/compare');
+  });
+
+  it('does not call the desk empty when no review is left and the comparisons cannot be read', async () => {
+    answer([], 0);
+    loadServerData.mockResolvedValue({
+      ok: false,
+      failure: { kind: 'failed', status: null, code: null },
+    });
+    render(await page());
+    expect(screen.queryByText('Nothing on the desk yet.')).toBeNull();
+    expect(screen.getByText('No reviews here')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See them on the Comparisons page' })).toHaveAttribute(
+      'href',
+      '/compare'
+    );
+  });
+
+  it('leaves out comparisons whose rows do not parse, keeping the reviews', async () => {
+    answer([aReview()], 1);
+    loadServerData.mockResolvedValue({ ok: true, data: [{ id: 1 }], meta: null });
+    render(await page());
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Recent comparisons' })).toBeNull();
   });
 
   it('refuses an answer that is not a list of reviews', async () => {

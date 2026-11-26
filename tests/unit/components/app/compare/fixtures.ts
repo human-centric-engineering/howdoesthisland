@@ -151,3 +151,43 @@ export const APPEAL_NAMES = {
   logos: 'Logic',
   kairos: 'Timing',
 };
+
+/**
+ * A row of `GET /api/v1/comparisons` (t-90): the summary the list sends, held
+ * to `comparisonSummarySchema` in `schemas.test.ts`. By default `aComparison`'s
+ * three drafts, the second chosen.
+ */
+export function aComparisonRow(overrides: Partial<SummaryWire> = {}): SummaryWire {
+  const { id, kind, status, framework, profile, judges, projectId, project, createdAt } =
+    aComparison();
+  return {
+    id,
+    kind,
+    status,
+    framework,
+    profile,
+    judges,
+    projectId,
+    project,
+    createdAt,
+    drafts: aComparison().drafts.map(({ appeals: _appeals, ...draft }) => draft),
+    verdict: { status: 'completed', draft: 1 },
+    ...overrides,
+  };
+}
+
+type SummaryWire = Pick<
+  Wire,
+  | 'id'
+  | 'kind'
+  | 'status'
+  | 'framework'
+  | 'profile'
+  | 'judges'
+  | 'projectId'
+  | 'project'
+  | 'createdAt'
+> & {
+  drafts: Array<Omit<Wire['drafts'][number], 'appeals'>>;
+  verdict: Pick<Wire['verdict'], 'status' | 'draft'>;
+};

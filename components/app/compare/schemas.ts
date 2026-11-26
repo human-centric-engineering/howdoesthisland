@@ -45,7 +45,7 @@ export const comparisonSchema = z.object({
   status: z.enum(['running', 'completed', 'partial', 'failed']),
   framework: z.object({ slug: z.string(), version: z.string() }),
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
-  createdAt: z.string(),
+  createdAt: z.iso.datetime(),
   drafts: z.array(comparisonDraftSchema),
   /** Per appeal, once two drafts are scored; empty before. */
   appeals: z.array(
@@ -99,3 +99,51 @@ export function isMoving(comparison: Comparison): boolean {
 export function draftName(draft: Pick<ComparisonDraft, 'label' | 'position'>): string {
   return draft.label ?? `Draft ${draft.position + 1}`;
 }
+
+// --- The list (t-90) ---------------------------------------------------------
+
+/** Where every comparison is listed, newest first. */
+export const COMPARISONS_PATH = '/compare';
+
+/** How many comparisons `/compare` asks for in its one call. */
+export const COMPARISON_LIST_LIMIT = 20;
+
+/** How many `/home` shows, with a link to the rest. */
+export const COMPARISON_RECENT_LIMIT = 3;
+
+/** The list call for one page: the one request a list of comparisons makes. */
+export function comparisonListEndpoint(page = 1, limit = COMPARISON_LIST_LIMIT): string {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (page > 1) query.set('page', String(page));
+  return `${COMPARISONS_ENDPOINT}?${query.toString()}`;
+}
+
+/** `/compare`'s address for a page: the first has none. */
+export const comparisonsPagePath = (page: number): string =>
+  page > 1 ? `${COMPARISONS_PATH}?page=${page}` : COMPARISONS_PATH;
+
+/**
+ * A row of `GET /api/v1/comparisons` (`comparisonSummarySchema` in
+ * `lib/app/api/registry.ts`): only the fields a row shows. Its drafts carry
+ * their states and scores and its verdict the draft it chose, so no row reads
+ * its comparison again.
+ */
+export const comparisonRowSchema = z.object({
+  id: z.string(),
+  status: comparisonSchema.shape.status,
+  project: z.object({ id: z.string(), name: z.string() }).nullable(),
+  createdAt: z.iso.datetime(),
+  drafts: z.array(
+    comparisonDraftSchema.pick({
+      position: true,
+      label: true,
+      status: true,
+      overall: true,
+      band: true,
+    })
+  ),
+  verdict: z.object({ status: verdictState, draft: z.number().int().nullable() }),
+});
+export type ComparisonRow = z.infer<typeof comparisonRowSchema>;
+
+export const comparisonListSchema = z.array(comparisonRowSchema);

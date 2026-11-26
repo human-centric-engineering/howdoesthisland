@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getServerSession } from '@/lib/auth/utils';
 import { clearInvalidSession } from '@/lib/auth/clear-session';
-import { requireAllServerData, requireServerData } from '@/lib/api/server-load';
+import { loadServerData, requireAllServerData, requireServerData } from '@/lib/api/server-load';
+import { logger } from '@/lib/logging';
 import { parsePaginationMeta } from '@/lib/validations/common';
 import { Button } from '@/components/ui/button';
 import { WORDS } from '@/lib/app/reports/words';
@@ -27,6 +28,14 @@ import {
 } from '@/components/app/history/schemas';
 import { ReviewFilters } from '@/components/app/history/review-filters';
 import { ReviewList } from '@/components/app/history/review-list';
+import {
+  COMPARISONS_PATH,
+  COMPARISON_RECENT_LIMIT,
+  comparisonListEndpoint,
+  comparisonListSchema,
+  type ComparisonRow,
+} from '@/components/app/compare/schemas';
+import { ComparisonList } from '@/components/app/compare/comparison-list';
 
 export const metadata: Metadata = { title: 'Home' };
 
@@ -44,6 +53,13 @@ const NO_FILTERS: FilterCatalogue = { request: { contentTypes: [] }, result: { b
  * fetches its own. The filters' choices are the workspace's projects (archived
  * ones included, marked) and the
  * framework's latest catalogue (its types of copy and bands).
+ *
+ * Below them, the latest few comparisons of drafts (t-90), with a link to
+ * `/compare` for every one: one `GET /api/v1/comparisons` call, read beside
+ * the reviews, whose rows carry their drafts' scores and the editor's choice.
+ * The filters are the reviews' own and leave the comparisons as they are.
+ * The comparisons are a side panel: if they cannot be read, the section is left
+ * out and the reviews still show.
  *
  * The proxy only checks that a session cookie exists, and it sends anyone with
  * one away from the login page to here. So a cookie whose session has expired
@@ -65,21 +81,25 @@ export default async function HomePage({
   const page = pageFromSearch(search.page);
   const filtered = FILTER_KEYS.some((key) => filter[key]);
 
-  const loaded = await requireServerData<unknown>(reviewListEndpoint(filter, page));
+  const [loaded, recent] = await Promise.all([
+    requireServerData<unknown>(reviewListEndpoint(filter, page)),
+    loadRecentComparisons(),
+  ]);
   const reviews = reviewListSchema.parse(loaded.data);
   const total = parsePaginationMeta(loaded.meta)?.total ?? reviews.length;
-  if (total === 0 && !filtered) return <HomeEmptyState />;
+  const { comparisons, total: comparisonTotal, failed: comparisonsFailed } = recent;
+  // Nothing to filter yet: at most comparisons are on the desk.
+  const noReviews = total === 0 && !filtered;
+  // A comparison whose drafts' reviews were all deleted is still on the desk,
+  // and one that could not be read may be: only a desk known to be empty is.
+  if (noReviews && comparisonTotal === 0 && !comparisonsFailed) return <HomeEmptyState />;
+  // Offered whenever there may be comparisons: /compare reads them itself.
+  const offerComparisons = comparisonTotal > 0 || comparisonsFailed;
 
-  const [catalogue, projects] = await Promise.all([
-    loadFilterCatalogue(),
-    // Archived ones too: their reviews are still listed, so they can be
-    // filtered by, and a filter on one still names it.
-    requireAllServerData<{ id: string }>(`${PROJECTS_ENDPOINT}?archived=true`).then((rows) =>
-      projectListSchema
-        .parse(rows)
-        .map(({ id, name, archived }) => ({ id, name: archived ? `${name} (archived)` : name }))
-    ),
-  ]);
+  // With no reviews no filters are shown, so their choices are not read.
+  const { catalogue, projects } = noReviews
+    ? { catalogue: NO_FILTERS, projects: [] }
+    : await loadFilterChoices();
 
   return (
     <div className="space-y-6">
@@ -88,12 +108,31 @@ export default async function HomePage({
           <p className="hd-slug">Home</p>
           <h1 className="text-2xl font-bold">Recent {WORDS.review}s</h1>
         </div>
-        <Button asChild>
-          <Link href="/assess">Review some copy</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {offerComparisons ? (
+            <Button asChild variant="outline">
+              <Link href={COMPARISONS_PATH}>Comparisons</Link>
+            </Button>
+          ) : null}
+          <Button asChild>
+            <Link href="/assess">Review some copy</Link>
+          </Button>
+        </div>
       </div>
-      <ReviewFilters basePath="/home" filter={filter} catalogue={catalogue} projects={projects} />
-      {reviews.length === 0 ? (
+      {noReviews ? null : (
+        <ReviewFilters basePath="/home" filter={filter} catalogue={catalogue} projects={projects} />
+      )}
+      {noReviews ? (
+        <div className="rounded-md border p-8 text-center">
+          <p className="font-semibold">No {WORDS.review}s here</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            <Link href="/assess" className="underline underline-offset-4">
+              Review some copy
+            </Link>{' '}
+            to see it listed here.
+          </p>
+        </div>
+      ) : reviews.length === 0 ? (
         <div className="rounded-md border p-8 text-center">
           <p className="font-semibold">
             {filtered ? `No ${WORDS.review}s match these filters` : `No ${WORDS.review}s here`}
@@ -117,8 +156,78 @@ export default async function HomePage({
           page={page}
         />
       )}
+      {comparisons.length > 0 ? (
+        <section aria-labelledby="recent-comparisons" className="space-y-3 pt-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <h2 id="recent-comparisons" className="text-xl font-bold">
+              Recent comparisons
+            </h2>
+            {comparisonTotal > comparisons.length ? (
+              <Link href={COMPARISONS_PATH} className="text-sm underline underline-offset-4">
+                All {comparisonTotal.toLocaleString('en-GB')} comparisons
+              </Link>
+            ) : null}
+          </div>
+          <ComparisonList comparisons={comparisons} total={comparisonTotal} />
+        </section>
+      ) : null}
+      {comparisonsFailed ? (
+        <p className="text-muted-foreground pt-4 text-sm">
+          Your comparisons could not be shown here.{' '}
+          <Link href={COMPARISONS_PATH} className="underline underline-offset-4">
+            See them on the Comparisons page
+          </Link>
+          .
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/**
+ * The latest few comparisons. A failure here leaves the section out, with a
+ * pointer to `/compare`, rather than failing the page; `failed` says so, so
+ * the desk is not called empty when it may not be. `loadServerData` logs a
+ * failed call; a row that does not parse is logged here.
+ */
+async function loadRecentComparisons(): Promise<{
+  comparisons: ComparisonRow[];
+  total: number;
+  failed: boolean;
+}> {
+  const failed = { comparisons: [], total: 0, failed: true };
+  const loaded = await loadServerData<unknown>(comparisonListEndpoint(1, COMPARISON_RECENT_LIMIT));
+  if (!loaded.ok) return failed;
+  const parsed = comparisonListSchema.safeParse(loaded.data);
+  if (!parsed.success) {
+    logger.warn('Recent comparisons did not parse; leaving them off /home', {
+      issues: parsed.error.issues.length,
+    });
+    return failed;
+  }
+  return {
+    comparisons: parsed.data,
+    total: parsePaginationMeta(loaded.meta)?.total ?? parsed.data.length,
+    failed: false,
+  };
+}
+
+/** What the review filters offer: the latest catalogue and the workspace's projects. */
+async function loadFilterChoices(): Promise<{
+  catalogue: FilterCatalogue;
+  projects: { id: string; name: string }[];
+}> {
+  const [catalogue, projects] = await Promise.all([
+    loadFilterCatalogue(),
+    // Archived ones too: their reviews are still listed, so they can be
+    // filtered by, and a filter on one still names it.
+    requireAllServerData<{ id: string }>(`${PROJECTS_ENDPOINT}?archived=true`).then((rows) =>
+      projectListSchema
+        .parse(rows)
+        .map(({ id, name, archived }) => ({ id, name: archived ? `${name} (archived)` : name }))
+    ),
+  ]);
+  return { catalogue, projects };
 }
 
 /** The framework's latest catalogue, as far as the filters read it. */

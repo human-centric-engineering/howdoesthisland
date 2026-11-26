@@ -9,14 +9,21 @@
  * @see components/app/compare/schemas.ts
  */
 import { describe, expect, it } from 'vitest';
-import { comparisonDetailSchema } from '@/lib/app/api/registry';
+import { comparisonDetailSchema, comparisonSummarySchema } from '@/lib/app/api/registry';
 import {
+  comparisonListEndpoint,
+  comparisonListSchema,
+  comparisonsPagePath,
   comparisonSchema,
   draftName,
   isMoving,
   type Comparison,
 } from '@/components/app/compare/schemas';
-import { aComparison, aRunningComparison } from '@/tests/unit/components/app/compare/fixtures';
+import {
+  aComparison,
+  aComparisonRow,
+  aRunningComparison,
+} from '@/tests/unit/components/app/compare/fixtures';
 
 const read = (wire: unknown): Comparison => comparisonSchema.parse(wire);
 
@@ -68,5 +75,43 @@ describe('draftName', () => {
   it('is the label, else the draft’s place counted from one', () => {
     expect(draftName({ label: 'Subject A', position: 0 })).toBe('Subject A');
     expect(draftName({ label: null, position: 1 })).toBe('Draft 2');
+  });
+});
+
+describe('comparisonListSchema (t-90)', () => {
+  it('reads what the list sends, as its wire contract describes it', () => {
+    const rows = [
+      aComparisonRow(),
+      aComparisonRow({
+        id: 'cmp-2',
+        status: 'running',
+        verdict: { status: 'waiting', draft: null },
+      }),
+    ];
+    for (const row of rows) expect(comparisonSummarySchema.safeParse(row).success).toBe(true);
+    const read = comparisonListSchema.parse(rows);
+    expect(read.map((r) => r.id)).toEqual(['cmp-1', 'cmp-2']);
+    expect(read[0].verdict).toEqual({ status: 'completed', draft: 1 });
+  });
+
+  it('refuses a row it cannot show', () => {
+    expect(comparisonListSchema.safeParse([{ id: 'cmp-1' }]).success).toBe(false);
+  });
+
+  it('refuses a row whose date is not a timestamp, which the list could not format', () => {
+    expect(comparisonListSchema.safeParse([aComparisonRow({ createdAt: '' })]).success).toBe(false);
+  });
+});
+
+describe('comparisonListEndpoint', () => {
+  it('asks for a page of the newest, leaving the first page out', () => {
+    expect(comparisonListEndpoint()).toBe('/api/v1/comparisons?limit=20');
+    expect(comparisonListEndpoint(3)).toBe('/api/v1/comparisons?limit=20&page=3');
+    expect(comparisonListEndpoint(1, 3)).toBe('/api/v1/comparisons?limit=3');
+  });
+
+  it('addresses /compare’s pages the same way', () => {
+    expect(comparisonsPagePath(1)).toBe('/compare');
+    expect(comparisonsPagePath(2)).toBe('/compare?page=2');
   });
 });

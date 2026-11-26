@@ -139,7 +139,7 @@ describe('Compare drafts tab', () => {
     expect(kept.drafts.every((d) => d.text === '' && d.label === '')).toBe(true);
   });
 
-  it('says a comparison with no readable id has started, rather than that it failed', async () => {
+  it('says a comparison with no readable id has started, and where to find it', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ nope: true });
     renderWorkbench();
     await openCompare();
@@ -148,7 +148,7 @@ describe('Compare drafts tab', () => {
     await userEvent.click(compareButton(2));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /The comparison has started.*no need to start it again/
+      /The comparison has started.*no need to start it again: find it listed on the Comparisons page/
     );
     expect(push).not.toHaveBeenCalled();
     // Still on the Compare tab, under its message, with the copy spent.
