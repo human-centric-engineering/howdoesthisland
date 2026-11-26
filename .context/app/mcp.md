@@ -11,13 +11,13 @@ workflows to call.
 
 | Tool             | Does                                                                                                            | Calls (the route's library)                                                                    | Needs a person | Spends |
 | ---------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------- | ------ |
-| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat.                      | `runQuickScan`, `summariseQuickScan`                                                           | yes            | no     |
+| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat.                      | `runQuickScan`, `summariseQuickScan`                                                           | over MCP       | no     |
 | `assess_draft`   | Starts a full review of text or a public URL, stored, and waits up to 45 seconds for it.                        | `prepareAssessment` → cap → `holdReviewBudget` → `createAssessment`                            | yes            | yes    |
-| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                                              | `getAssessment`, then `loadReport` (the report's own view)                                     | yes            | no     |
+| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                                              | `getAssessment`, then `loadReport` (the report's own view)                                     | over MCP       | no     |
 | `compare_drafts` | Reviews 2–5 drafts the same way, and waits up to 45 seconds for the editor's verdict.                           | `prepareComparison` → cap → `holdComparisonBudget` → cap → `createComparison` → `releaseHolds` | yes            | yes    |
-| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.                          | `getComparison` (the comparison's own view)                                                    | yes            | no     |
+| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.                          | `getComparison` (the comparison's own view)                                                    | over MCP       | no     |
 | `rewrite_draft`  | Has the editor rewrite a finished review's draft, or fill a rewrite's placeholders, and waits up to 45 seconds. | `rewriteLimiter` → `startRewrite`                                                              | yes            | yes    |
-| `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | yes            | no     |
+| `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | over MCP       | no     |
 
 Over MCP every tool needs the key's creator to be a member of the key's workspace ([When a key's creator leaves](#when-a-keys-creator-leaves)).
 

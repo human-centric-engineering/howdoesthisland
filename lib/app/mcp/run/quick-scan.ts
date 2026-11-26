@@ -13,6 +13,8 @@ export async function quickScanTool(
   args: { text: string; context?: Record<string, unknown> },
   caller: ToolCaller
 ): Promise<ToolOutcome<QuickScanSummary>> {
+  const refused = await callerRefusal(caller);
+  if (refused) return { refusal: refused };
   if (!isQuickScanEnabled()) {
     return {
       refusal: {
@@ -21,8 +23,6 @@ export async function quickScanTool(
       },
     };
   }
-  const refused = await callerRefusal(caller);
-  if (refused) return { refusal: refused };
   try {
     return { data: summariseQuickScan(await runQuickScan(args)) };
   } catch (err) {
