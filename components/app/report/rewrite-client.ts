@@ -267,19 +267,22 @@ export function compareDraftRefusalOf(err: unknown): (Refusal & { reviewAgain: b
     };
   }
   if (err instanceof APIClientError && err.code === 'REVIEW_NOT_COMPARABLE') {
-    const notScored = notComparableReason.safeParse(err.details).data?.reason === 'not_scored';
-    return notScored
-      ? {
-          message: 'This review has no score to compare the draft with.',
-          usagePage: null,
-          reviewAgain: false,
-        }
-      : {
-          message:
-            'This review was made before its project’s settings changed, so its scores would not compare with a new review of the draft. Review both again to compare them: that is charged as two reviews.',
-          usagePage: null,
-          reviewAgain: true,
-        };
+    const reason = notComparableReason.safeParse(err.details).data?.reason;
+    if (reason === 'not_scored') {
+      return {
+        message: 'This review has no score to compare the draft with.',
+        usagePage: null,
+        reviewAgain: false,
+      };
+    }
+    return {
+      message:
+        reason === 'partly_scored'
+          ? 'This review was only partly scored, so the draft could not be weighed against it. Review both again to compare them: that is charged as two reviews.'
+          : 'This review was made with settings that have changed since, so its scores would not compare with a new review of the draft. Review both again to compare them: that is charged as two reviews.',
+      usagePage: null,
+      reviewAgain: true,
+    };
   }
   const refusal = refusalOf(err);
   return refusal ? { ...refusal, reviewAgain: false } : null;

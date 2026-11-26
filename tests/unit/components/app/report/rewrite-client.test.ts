@@ -414,6 +414,18 @@ describe('compareDraftRefusalOf (t-84)', () => {
     expect(refusal?.message).toMatch(/Review both again/);
   });
 
+  it('offers it for a review only partly scored, saying so rather than blaming settings', () => {
+    const refusal = compareDraftRefusalOf(
+      new APIClientError('x', 'REVIEW_NOT_COMPARABLE', 409, {
+        position: 0,
+        reason: 'partly_scored',
+      })
+    );
+    expect(refusal).toMatchObject({ reviewAgain: true, usagePage: null });
+    expect(refusal?.message).toMatch(/only partly scored/);
+    expect(refusal?.message).not.toMatch(/settings/);
+  });
+
   it('does not offer it for a review with no score, which reviewing the draft cannot help', () => {
     expect(
       compareDraftRefusalOf(

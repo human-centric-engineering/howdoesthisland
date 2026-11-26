@@ -26,7 +26,7 @@
  * `details.position`). Fewer than 2 or more than 5 drafts is
  * 400 `VALIDATION_ERROR`. A named review: 404 `ASSESSMENT_NOT_FOUND` when
  * the workspace has none, 409 `REVIEW_NOT_COMPARABLE` when it ended unscored
- * (`details.reason: 'not_scored'`) or was reviewed with another version, AI
+ * (`details.reason: 'not_scored'`) or partly scored (`'partly_scored'`) or was reviewed with another version, AI
  * reviewers, context, weights or project (`'options_differ'`, the fields in
  * `details.differs`), each with its `details.position`. 402 `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` when
  * the workspace cannot cover the estimate of every draft it reviews, and the editor's verdict

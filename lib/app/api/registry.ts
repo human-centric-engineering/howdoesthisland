@@ -1090,7 +1090,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
         status: 409,
         code: 'REVIEW_NOT_COMPARABLE',
         description:
-          "A named review cannot join this comparison: it ended without a score (`details.reason: 'not_scored'`), or it was reviewed with another version, AI reviewers, context, weights or project (`'options_differ'`, those fields in `details.differs`). `details.position` is its place in `drafts`. Nothing was stored.",
+          "A named review cannot join this comparison: it ended without a score (`details.reason: 'not_scored'`) or partly scored (`'partly_scored'`), or it was reviewed with another version, AI reviewers, context, weights or project (`'options_differ'`, those fields in `details.differs`). `details.position` is its place in `drafts`. Nothing was stored.",
       },
       {
         status: 402,

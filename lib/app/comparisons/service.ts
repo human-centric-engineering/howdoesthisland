@@ -20,10 +20,12 @@
  * rewrite. It joins the set as it is, so it is not run, held for or charged
  * again; only the drafts given as text are. It must have been reviewed the
  * way the set is (the same version, AI reviewers, context, weights and
- * project), or the scores would not compare like for like, and must not have
- * ended unscored (failed or cancelled): both are refused with 409
- * `REVIEW_NOT_COMPARABLE` (`reusedReviews`). One still queued or running
- * joins as it is, and its end starts the verdict as any member's does.
+ * project), or the scores would not compare like for like, and must have
+ * ended with a full score or not ended yet: a failed, cancelled or partial
+ * one is not weighed by the verdict. Both are refused with 409
+ * `REVIEW_NOT_COMPARABLE` (`reusedReviews`), checked again under a lock as
+ * the set is written. One still queued or running joins as it is, and its
+ * end starts the verdict as any member's does.
  *
  * Deleting a comparison deletes the set, not its reviews: each stays in the
  * workspace's history. Deleting or purging a review leaves its draft's place
@@ -32,6 +34,7 @@
  * Runs in the caller's tenant context (the route's guard). Every refusal is
  * an `APIError`.
  */
+import type { Prisma } from '@prisma/client';
 import { APIError, NotFoundError } from '@/lib/api/errors';
 import { jsonEquals } from '@/lib/utils/json-equal';
 import { requireOrgId } from '@/lib/tenancy/context';
@@ -97,16 +100,64 @@ export interface ReusedReview {
 /** What a review was reviewed with that a comparison's members must share (t-84). */
 export type ReviewOptionField = 'version' | 'judges' | 'context' | 'weights' | 'project';
 
-/** Statuses a review ends in without a score: not worth a place in a comparison. */
-const UNSCORED = new Set(['FAILED', 'CANCELLED']);
+/**
+ * Statuses a review ends in without a full score, each with the `reason` it
+ * is refused with: one ended unscored has nothing to compare, and one partly
+ * scored is not weighed by the verdict, so a draft compared with it would
+ * get none.
+ */
+const NOT_COMPARABLE: ReadonlyMap<string, { reason: string; message: string }> = new Map([
+  [
+    'FAILED',
+    {
+      reason: 'not_scored',
+      message: 'That review ended without a score, so it cannot be compared.',
+    },
+  ],
+  [
+    'CANCELLED',
+    {
+      reason: 'not_scored',
+      message: 'That review ended without a score, so it cannot be compared.',
+    },
+  ],
+  [
+    'PARTIAL',
+    {
+      reason: 'partly_scored',
+      message:
+        'That review was only partly scored, so the editor could not weigh it in a comparison.',
+    },
+  ],
+]);
+
+/** Refuse a reused review that is gone (404) or ended without a full score (409), at `position`. */
+function assertComparable(
+  row: { status: string } | undefined,
+  position: number
+): asserts row is { status: string } {
+  if (!row) {
+    throw new APIError('There is no such review in this workspace.', 'ASSESSMENT_NOT_FOUND', 404, {
+      position,
+    });
+  }
+  const refused = NOT_COMPARABLE.get(row.status);
+  if (refused) {
+    throw new APIError(refused.message, 'REVIEW_NOT_COMPARABLE', 409, {
+      position,
+      reason: refused.reason,
+    });
+  }
+}
 
 /**
  * The drafts `body` names as existing reviews, each checked to join a set
  * reviewed with `options` (t-84): in this workspace (404
- * `ASSESSMENT_NOT_FOUND`), not ended unscored, and reviewed the same way
- * (409 `REVIEW_NOT_COMPARABLE`, `details.reason` `not_scored` or
- * `options_differ` with the fields that differ). Each refusal carries the
- * draft's `position`.
+ * `ASSESSMENT_NOT_FOUND`), not ended without a full score, and reviewed the
+ * same way (409 `REVIEW_NOT_COMPARABLE`, `details.reason` `not_scored`,
+ * `partly_scored`, or `options_differ` with the fields that differ). Each
+ * refusal carries the draft's `position`. Checked again, locked, as the set
+ * is written ({@link lockReusedReviews}).
  */
 async function reusedReviews(
   body: CreateComparisonBody,
@@ -134,24 +185,7 @@ async function reusedReviews(
   const context = storedContext(options.ctx);
   for (const { position, assessmentId } of named) {
     const row = byId.get(assessmentId);
-    if (!row) {
-      throw new APIError(
-        'There is no such review in this workspace.',
-        'ASSESSMENT_NOT_FOUND',
-        404,
-        {
-          position,
-        }
-      );
-    }
-    if (UNSCORED.has(row.status)) {
-      throw new APIError(
-        'That review ended without a score, so it cannot be compared.',
-        'REVIEW_NOT_COMPARABLE',
-        409,
-        { position, reason: 'not_scored' }
-      );
-    }
+    assertComparable(row, position);
     const differs: ReviewOptionField[] = [];
     if (row.frameworkVersionId !== options.resolved.version.id) differs.push('version');
     if (!jsonEquals(row.judges, [...options.judges])) differs.push('judges');
@@ -169,6 +203,31 @@ async function reusedReviews(
     reused.set(position, { assessmentId, text: row.content.text });
   }
   return reused;
+}
+
+/**
+ * Lock the reviews `prepared` reuses in the set's transaction and check them
+ * again: one deleted, purged, or ended without a full score since
+ * {@link reusedReviews} read it is refused as it would have been then, so
+ * the set never stores a member it would have refused. Held until the commit,
+ * a review cannot end in between, so a run that ends after it finds its
+ * member row and starts the verdict.
+ */
+async function lockReusedReviews(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  reused: ReadonlyMap<number, ReusedReview>
+): Promise<void> {
+  if (reused.size === 0) return;
+  const ids = [...reused.values()].map((r) => r.assessmentId);
+  const rows = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+    SELECT id, status::text AS status FROM "app_assessment"
+    WHERE "orgId" = ${orgId} AND id = ANY(${ids})
+    FOR SHARE`;
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  for (const [position, { assessmentId }] of reused) {
+    assertComparable(byId.get(assessmentId), position);
+  }
 }
 
 /**
@@ -282,6 +341,7 @@ export async function createComparison(
           userId: caller.userId,
         })),
         async (tx, enqueued) => {
+          await lockReusedReviews(tx, orgId, prepared.reused);
           const set = await tx.assessmentSet.create({
             data: {
               orgId,

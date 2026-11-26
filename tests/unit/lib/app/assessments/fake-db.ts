@@ -30,7 +30,8 @@
  *
  * For the budget holds (t-50): `budgetHold` rows in `holds`, with `findMany`,
  * `create`, `updateMany` and `deleteMany`, and `$executeRaw` (the advisory
- * lock) answering `0`. One transaction at a time is also what the lock
+ * lock) answering `0`; `$queryRaw` answers only a comparison's lock on the
+ * reviews it reuses (t-84), with their `id` and `status`. One transaction at a time is also what the lock
  * guarantees the check: a request checked behind another sees its hold.
  *
  * For the credits (t-58): `aiCostLog` rows in `costRows`, with `deleteMany`, `aggregate`
@@ -658,6 +659,18 @@ export function createFakeDb() {
       ),
     },
     $executeRaw: vi.fn(async () => 0),
+    // The one raw read asked of it: a comparison locking the reviews it reuses
+    // (t-84), `SELECT id, status … WHERE "orgId" = $1 AND id = ANY($2) FOR SHARE`.
+    $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join('?');
+      if (!sql.includes('"app_assessment"') || !sql.includes('FOR SHARE')) {
+        throw new Error(`fake-db: no $queryRaw for ${sql}`);
+      }
+      const [orgId, ids] = values as [string, unknown[]];
+      return assessments
+        .filter((a) => a.orgId === orgId && ids.includes(a.id))
+        .map((a) => ({ id: a.id, status: a.status }));
+    }),
     $transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => {
       const run = txQueue.then(() => fn(db));
       txQueue = run.catch(() => undefined);

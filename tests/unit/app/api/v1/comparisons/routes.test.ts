@@ -968,6 +968,84 @@ describe('POST /api/v1/comparisons — a draft that is a review the workspace ha
     });
   });
 
+  it('refuses with 409 a review only partly scored, which the verdict would not weigh', async () => {
+    const original = await existingReview(DRAFT_A);
+    const row = fake.assessments.find((a) => a.id === original);
+    if (row) row.status = 'PARTIAL';
+    const sets = fake.sets.length;
+
+    const res = await post({
+      judges: TWO,
+      drafts: [{ assessmentId: original }, { text: DRAFT_B }],
+    });
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'REVIEW_NOT_COMPARABLE',
+      details: { position: 0, reason: 'partly_scored' },
+    });
+    expect(fake.sets).toHaveLength(sets);
+  });
+
+  describe('a review that changes after it was checked, before the set is written', () => {
+    /** Run `change` on the review right after the first check reads it. */
+    function afterCheck(change: (row: Record<string, unknown>) => void) {
+      const { findMany } = fake.db.assessment;
+      const read = findMany.getMockImplementation();
+      findMany.mockImplementationOnce(async (args: Parameters<typeof findMany>[0]) => {
+        const rows = (await read?.(args)) ?? [];
+        for (const row of fake.assessments) change(row);
+        return rows;
+      });
+    }
+
+    it('is refused with 404 when deleted, storing nothing and holding nothing', async () => {
+      const original = await existingReview(DRAFT_A);
+      const sets = fake.sets.length;
+      afterCheck(() => {
+        const at = fake.assessments.findIndex((a) => a.id === original);
+        if (at >= 0) fake.assessments.splice(at, 1);
+      });
+
+      const res = await post({
+        judges: TWO,
+        drafts: [{ text: DRAFT_B }, { assessmentId: original }],
+      });
+
+      expect(res.status).toBe(404);
+      expect((await json(res)).error).toMatchObject({
+        code: 'ASSESSMENT_NOT_FOUND',
+        details: { position: 1 },
+      });
+      // Refused in the transaction, which rolls the new review back (the fake
+      // keeps no rollback, so this reads what it can): no set, no run, no hold.
+      expect(fake.sets).toHaveLength(sets);
+      expect(fake.holds).toHaveLength(0);
+      await settle();
+      expect(mocks.runJudge).not.toHaveBeenCalled();
+    });
+
+    it('is refused with 409 when it ended without a score', async () => {
+      const original = await existingReview(DRAFT_A);
+      const sets = fake.sets.length;
+      afterCheck((row) => {
+        if (row.id === original) row.status = 'CANCELLED';
+      });
+
+      const res = await post({
+        judges: TWO,
+        drafts: [{ assessmentId: original }, { text: DRAFT_B }],
+      });
+
+      expect(res.status).toBe(409);
+      expect((await json(res)).error).toMatchObject({
+        code: 'REVIEW_NOT_COMPARABLE',
+        details: { position: 0, reason: 'not_scored' },
+      });
+      expect(fake.sets).toHaveLength(sets);
+    });
+  });
+
   it('refuses with 404 a review in another workspace, or none', async () => {
     signedIn(BOB, WS_B);
     const theirs = await existingReview(DRAFT_A);
