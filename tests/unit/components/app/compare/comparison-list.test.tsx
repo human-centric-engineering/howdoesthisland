@@ -36,6 +36,7 @@ describe('ComparisonList', () => {
           aComparisonRow({ project: { id: 'proj-1', name: 'Spring launch' }, projectId: 'proj-1' })
         )}
         total={1}
+        page={1}
       />
     );
 
@@ -132,7 +133,9 @@ describe('ComparisonList', () => {
 
   it('without a page (on /home), says it shows the latest and offers no pages', () => {
     render(<ComparisonList comparisons={rows(aComparisonRow())} total={7} />);
-    expect(screen.getByRole('status')).toHaveTextContent('The latest 1 of 7 comparisons');
+    expect(screen.getByText('The latest 1 of 7 comparisons')).toBeInTheDocument();
+    // Not a second live region beside the reviews' count.
+    expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByRole('navigation')).toBeNull();
   });
 

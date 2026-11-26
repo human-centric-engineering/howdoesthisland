@@ -96,7 +96,9 @@ export function ComparisonList({
 
   return (
     <div className="space-y-3">
-      <p className="text-muted-foreground text-sm" role="status">
+      {/* A live region only where it is the page's own list: on /home the
+          reviews' count is already one, and a second would be read after it. */}
+      <p className="text-muted-foreground text-sm" role={page === undefined ? undefined : 'status'}>
         {total === comparisons.length
           ? `${total.toLocaleString('en-GB')} ${noun}`
           : page === undefined

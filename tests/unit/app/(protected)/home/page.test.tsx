@@ -15,19 +15,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 
-const { getServerSession, clearInvalidSession, requireServerData, requireAllServerData } =
-  vi.hoisted(() => ({
-    getServerSession: vi.fn(),
-    clearInvalidSession: vi.fn((returnUrl: string) => {
-      throw new Error(`NEXT_REDIRECT ${returnUrl}`);
-    }),
-    requireServerData: vi.fn(),
-    requireAllServerData: vi.fn(),
-  }));
+const {
+  getServerSession,
+  clearInvalidSession,
+  requireServerData,
+  requireAllServerData,
+  loadServerData,
+} = vi.hoisted(() => ({
+  getServerSession: vi.fn(),
+  clearInvalidSession: vi.fn((returnUrl: string) => {
+    throw new Error(`NEXT_REDIRECT ${returnUrl}`);
+  }),
+  requireServerData: vi.fn(),
+  requireAllServerData: vi.fn(),
+  loadServerData: vi.fn(),
+}));
 
 vi.mock('@/lib/auth/utils', () => ({ getServerSession }));
 vi.mock('@/lib/auth/clear-session', () => ({ clearInvalidSession }));
-vi.mock('@/lib/api/server-load', () => ({ requireServerData, requireAllServerData }));
+vi.mock('@/lib/api/server-load', () => ({
+  requireServerData,
+  requireAllServerData,
+  loadServerData,
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/components/ui/select', async () => {
   const { selectMock } = await import('@/tests/unit/components/app/projects/select-mock');
@@ -55,11 +65,6 @@ function answer(
   requireServerData.mockImplementation(async (path: string) => {
     if (path.startsWith('/api/v1/assessments?'))
       return { data: reviews, meta: { page: 1, limit: 20, total, totalPages: 1 } };
-    if (path === COMPARISONS)
-      return {
-        data: comparisons,
-        meta: { page: 1, limit: 3, total: comparisonTotal, totalPages: 1 },
-      };
     if (path === '/api/v1/frameworks/howdoesthisland')
       return { data: { name: 'HowDoesThisLand', latestVersion }, meta: null };
     if (path === '/api/v1/frameworks/howdoesthisland/versions/0.5.2/catalogue')
@@ -69,6 +74,15 @@ function answer(
           result: { bands: ['Weak', 'Strong'] },
         },
         meta: null,
+      };
+    throw new Error(`unexpected ${path}`);
+  });
+  loadServerData.mockImplementation(async (path: string) => {
+    if (path === COMPARISONS)
+      return {
+        ok: true,
+        data: comparisons,
+        meta: { page: 1, limit: 3, total: comparisonTotal, totalPages: 1 },
       };
     throw new Error(`unexpected ${path}`);
   });
@@ -139,7 +153,8 @@ describe('/home', () => {
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Nothing on the desk yet.');
     // Nothing to filter, so neither the catalogue nor the projects are read.
-    expect(requireServerData.mock.calls).toEqual([[LIST], [COMPARISONS]]);
+    expect(requireServerData.mock.calls).toEqual([[LIST]]);
+    expect(loadServerData.mock.calls).toEqual([[COMPARISONS]]);
     expect(requireAllServerData).not.toHaveBeenCalled();
   });
 
@@ -193,10 +208,7 @@ describe('/home', () => {
     answer([aReview()], 1, '0.5.2', [aComparisonRow()], 7);
     render(await page());
 
-    const comparisonCalls = requireServerData.mock.calls.filter(([path]) =>
-      String(path).startsWith('/api/v1/comparisons')
-    );
-    expect(comparisonCalls).toEqual([[COMPARISONS]]);
+    expect(loadServerData.mock.calls).toEqual([[COMPARISONS]]);
     const section = screen.getByRole('region', { name: 'Recent comparisons' });
     expect(
       within(section).getByRole('link', { name: 'Subject A · Draft 2 · Subject C' })
@@ -233,6 +245,32 @@ describe('/home', () => {
     render(await page());
     expect(screen.queryByText('Nothing on the desk yet.')).toBeNull();
     expect(screen.getByRole('region', { name: 'Recent comparisons' })).toBeInTheDocument();
+    // Nothing to filter, and a way to add a review rather than a dead end.
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText('No reviews here')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Review some copy' })[1]).toHaveAttribute(
+      'href',
+      '/assess'
+    );
+  });
+
+  it('still lists the reviews when the comparisons cannot be read', async () => {
+    answer([aReview()], 1);
+    loadServerData.mockResolvedValue({
+      ok: false,
+      failure: { kind: 'failed', status: 500, code: null },
+    });
+    render(await page());
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Recent comparisons' })).toBeNull();
+  });
+
+  it('leaves out comparisons whose rows do not parse, keeping the reviews', async () => {
+    answer([aReview()], 1);
+    loadServerData.mockResolvedValue({ ok: true, data: [{ id: 1 }], meta: null });
+    render(await page());
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Recent comparisons' })).toBeNull();
   });
 
   it('refuses an answer that is not a list of reviews', async () => {
