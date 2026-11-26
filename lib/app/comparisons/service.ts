@@ -46,6 +46,7 @@ import {
 import { assessableText } from '@/lib/app/assessments/text';
 import {
   refusingAsApi,
+  requestedViaOf,
   resolveReviewOptions,
   storedContext,
   type Caller,
@@ -345,7 +346,7 @@ export async function createComparison(
           profile: prepared.profile,
           context,
           overlay: prepared.overlay,
-          requestedVia: caller.apiKeyId ? ('API' as const) : ('APP' as const),
+          requestedVia: requestedViaOf(caller),
           apiKeyId: caller.apiKeyId,
           userId: caller.userId,
         })),

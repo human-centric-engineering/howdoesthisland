@@ -224,7 +224,7 @@ describe('assess_draft', () => {
       body,
       expect.anything(),
       { userId: 'user-1', apiKeyId: null, via: 'MCP' },
-      { boundMs: MCP_WAIT_MS }
+      expect.objectContaining({ boundMs: MCP_WAIT_MS })
     );
     expect(mocks.summariseAssessment).toHaveBeenCalledWith({ id: 'a-1', status: 'running' });
     expect(result).toEqual({
@@ -302,6 +302,31 @@ describe('assess_draft', () => {
 
     expect(mocks.storedButUnread).toHaveBeenCalledWith({ id: 'a-1', status: 'running' });
     expect(result).toEqual({ success: true, data: { id: 'a-1', status: 'running', ready: false } });
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers a review’s id when the wait fails after its row is written', async () => {
+    mocks.createAssessment.mockImplementation(
+      async (
+        _b: unknown,
+        _p: unknown,
+        _c: unknown,
+        options: { onStored?: (id: string) => void }
+      ) => {
+        options.onStored?.('a-9');
+        throw new Error('connection reset');
+      }
+    );
+
+    const result = await tool.execute(tool.validate({ text: DRAFT }), asCreator);
+
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: 'STORED_UNREAD',
+        message: expect.stringMatching(/stored as a-9.*get_assessment.*do not start another/),
+      },
+    });
     expect(mocks.release).toHaveBeenCalledTimes(1);
   });
 

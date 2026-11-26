@@ -372,11 +372,20 @@ export async function holdReviewBudget(
   );
 }
 
+/**
+ * `onStored` is told the review's id as soon as its row is written, so a
+ * caller that cannot let a later failure lose it (the MCP tool, t-92) can
+ * still answer it.
+ */
 export async function createAssessment(
   body: AssessmentRequest,
   prepared: PreparedAssessment,
   caller: Caller,
-  options: { boundMs?: number; signal?: AbortSignal } = {}
+  options: {
+    boundMs?: number;
+    signal?: AbortSignal;
+    onStored?: (assessmentId: string) => void;
+  } = {}
 ): Promise<CreatedAssessment> {
   const { resolved, ctx, profile, hold } = prepared;
   if (body.store === false) {
@@ -410,6 +419,7 @@ export async function createAssessment(
         userId: caller.userId,
       })
     ));
+    options.onStored?.(assessmentId);
   } finally {
     // Stored, the review's row is held in its place; refused, nothing is.
     // Before the run is claimed, whose check would hold this request's hold

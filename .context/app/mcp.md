@@ -57,9 +57,10 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   that continuation is bounded by the MCP route's function duration, which the
   route raises to 300 seconds as `/api/v1/assessments` does (divergence row 32).
   A review cut off anyway is picked up by assessment recovery, as any abandoned
-  run is. Two ways that can still happen: a JSON-RPC batch runs its calls one
-  after another in one request, so a batch of several `assess_draft` calls can
-  outlast the 300 seconds; and the tool does not see the client hang up (core's
+  run is. A JSON-RPC batch runs its calls one after another in one request, so
+  a batch carries at most one `assess_draft`: each later one is refused with
+  `INVALID_REQUEST`, saying to send it on its own (`lib/app/mcp/batch.ts`,
+  divergence row 33). The tool does not see the client hang up (core's
   `CapabilityContext` carries no abort signal), so it waits out its 45 seconds
   either way.
 - **A stored review always answers its id.** If the summary cannot be built

@@ -49,10 +49,12 @@ export async function assessDraftTool(
       refusal: {
         code: 'KEY_HAS_NO_OWNER',
         message:
-          'The person who made this MCP key is no longer in the workspace, so it cannot start work that spends credits. Ask a workspace owner for a new key.',
+          'The person this runs for (over MCP, the key’s creator) is no longer in the workspace, so it cannot start work that spends credits. Over MCP, ask a workspace owner for a new key.',
       },
     };
   }
+  // Set once the review's row is written: from then on, a failure answers its id.
+  let storedId: string | undefined;
   try {
     const prepared = await prepareAssessment(body);
     try {
@@ -73,7 +75,12 @@ export async function assessDraftTool(
         body,
         prepared,
         { userId, apiKeyId: null, via: 'MCP' },
-        { boundMs: MCP_WAIT_MS }
+        {
+          boundMs: MCP_WAIT_MS,
+          onStored: (id) => {
+            storedId = id;
+          },
+        }
       );
       // `wait: true` and stored, so never ephemeral; narrowed for the type.
       if (created.kind !== 'stored') {
@@ -92,6 +99,16 @@ export async function assessDraftTool(
       await prepared.hold?.release();
     }
   } catch (err) {
+    if (storedId !== undefined) {
+      // Stored, so possibly charged: an assistant told only "failed" would start another.
+      logger.error('assess_draft failed after storing its review', err, { assessmentId: storedId });
+      return {
+        refusal: {
+          code: 'STORED_UNREAD',
+          message: `The review was stored as ${storedId} but could not be read back just now. Call get_assessment with that id; do not start another review.`,
+        },
+      };
+    }
     if (err instanceof WorkspaceBusyError && err.queueCanStart) {
       startWaitingReviews(requireOrgId());
     }

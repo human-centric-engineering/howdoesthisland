@@ -48,7 +48,7 @@ export function creatorOf(context: CapabilityContext): string | ToolRefusal {
   return {
     code: 'KEY_HAS_NO_OWNER',
     message:
-      'The person who made this MCP key no longer has an account, so it cannot start work that spends credits. Ask a workspace owner for a new key.',
+      'No one is behind this call (over MCP, the key’s creator no longer has an account), so it cannot start work that spends credits. Over MCP, ask a workspace owner for a new key.',
   };
 }
 
