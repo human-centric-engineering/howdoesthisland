@@ -27,6 +27,13 @@ import {
 } from '@/components/app/history/schemas';
 import { ReviewFilters } from '@/components/app/history/review-filters';
 import { ReviewList } from '@/components/app/history/review-list';
+import {
+  COMPARISONS_PATH,
+  COMPARISON_RECENT_LIMIT,
+  comparisonListEndpoint,
+  comparisonListSchema,
+} from '@/components/app/compare/schemas';
+import { ComparisonList } from '@/components/app/compare/comparison-list';
 
 export const metadata: Metadata = { title: 'Home' };
 
@@ -44,6 +51,11 @@ const NO_FILTERS: FilterCatalogue = { request: { contentTypes: [] }, result: { b
  * fetches its own. The filters' choices are the workspace's projects (archived
  * ones included, marked) and the
  * framework's latest catalogue (its types of copy and bands).
+ *
+ * Below them, the latest few comparisons of drafts (t-90), with a link to
+ * `/compare` for every one: one `GET /api/v1/comparisons` call, read beside
+ * the reviews, whose rows carry their drafts' scores and the editor's choice.
+ * The filters are the reviews' own and leave the comparisons as they are.
  *
  * The proxy only checks that a session cookie exists, and it sends anyone with
  * one away from the login page to here. So a cookie whose session has expired
@@ -65,10 +77,16 @@ export default async function HomePage({
   const page = pageFromSearch(search.page);
   const filtered = FILTER_KEYS.some((key) => filter[key]);
 
-  const loaded = await requireServerData<unknown>(reviewListEndpoint(filter, page));
+  const [loaded, loadedComparisons] = await Promise.all([
+    requireServerData<unknown>(reviewListEndpoint(filter, page)),
+    requireServerData<unknown>(comparisonListEndpoint(1, COMPARISON_RECENT_LIMIT)),
+  ]);
   const reviews = reviewListSchema.parse(loaded.data);
   const total = parsePaginationMeta(loaded.meta)?.total ?? reviews.length;
-  if (total === 0 && !filtered) return <HomeEmptyState />;
+  const comparisons = comparisonListSchema.parse(loadedComparisons.data);
+  const comparisonTotal = parsePaginationMeta(loadedComparisons.meta)?.total ?? comparisons.length;
+  // A comparison whose drafts' reviews were all deleted is still on the desk.
+  if (total === 0 && !filtered && comparisonTotal === 0) return <HomeEmptyState />;
 
   const [catalogue, projects] = await Promise.all([
     loadFilterCatalogue(),
@@ -88,9 +106,16 @@ export default async function HomePage({
           <p className="hd-slug">Home</p>
           <h1 className="text-2xl font-bold">Recent {WORDS.review}s</h1>
         </div>
-        <Button asChild>
-          <Link href="/assess">Review some copy</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {comparisonTotal > 0 ? (
+            <Button asChild variant="outline">
+              <Link href={COMPARISONS_PATH}>Comparisons</Link>
+            </Button>
+          ) : null}
+          <Button asChild>
+            <Link href="/assess">Review some copy</Link>
+          </Button>
+        </div>
       </div>
       <ReviewFilters basePath="/home" filter={filter} catalogue={catalogue} projects={projects} />
       {reviews.length === 0 ? (
@@ -117,6 +142,21 @@ export default async function HomePage({
           page={page}
         />
       )}
+      {comparisons.length > 0 ? (
+        <section aria-labelledby="recent-comparisons" className="space-y-3 pt-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <h2 id="recent-comparisons" className="text-xl font-bold">
+              Recent comparisons
+            </h2>
+            {comparisonTotal > comparisons.length ? (
+              <Link href={COMPARISONS_PATH} className="text-sm underline underline-offset-4">
+                All {comparisonTotal.toLocaleString('en-GB')} comparisons
+              </Link>
+            ) : null}
+          </div>
+          <ComparisonList comparisons={comparisons} total={comparisonTotal} />
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -242,6 +242,19 @@ streams: the verdict has no stream, so a stream per draft
 (`use-review-events.ts`) would still leave the verdict to be read this way, and
 five streams would take most of a browser's six connections to the site.
 
+**Finding one again** (t-90). `/compare` (`app/(protected)/compare/page.tsx`)
+lists every comparison in the workspace, newest first, 20 a page (`?page=`),
+and `/home` shows the latest three under Recent comparisons, with a link to
+the rest and a Comparisons button beside Review some copy. A row is named by
+its drafts ("Subject A · Draft 2"), links to `/compare/{id}`, and says which
+draft the editor found lands better, "Still to come", or "No verdict". Both
+read one `GET /api/v1/comparisons` call (`comparisonListEndpoint`), whose rows
+carry their drafts' scores and the verdict's choice, so no row reads its
+comparison again (`components/app/compare/comparison-list.tsx`). `/home`'s
+filters are the reviews' and leave the comparisons as they are, and its empty
+desk shows only with no review and no comparison. A comparison started from
+the workbench whose reply could not be read points there.
+
 **Starting one.** The `/assess` workbench's Compare drafts tab takes 2–5
 pasted drafts, each with an optional name, and the reader settings and AI
 reviewers beside them, given once (`assess-draft.ts`). Starting it posts to
