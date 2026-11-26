@@ -19,7 +19,7 @@ workflows to call.
 | `rewrite_draft`  | Has the editor rewrite a finished review's draft, or fill a rewrite's placeholders, and waits up to 45 seconds. | `rewriteLimiter` → `startRewrite`                                                              | yes            | yes    |
 | `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | yes            | no     |
 
-Every tool needs the person behind the call (over MCP, the key's creator) to be a member of the key's workspace; only a workflow step may call the four that do not spend with nobody behind it.
+Over MCP every tool needs the key's creator to be a member of the key's workspace ([When a key's creator leaves](#when-a-keys-creator-leaves)).
 
 A workspace's owners and admins make its keys from its settings (see [Who can make a key](#who-can-make-a-key)).
 
@@ -226,10 +226,16 @@ removal and would leave the keys of anyone already gone. What that leaves out:
 exposes over MCP still answers it. Revoke a departed member's keys on settings;
 the list shows each key's creator.
 
-A call with no person behind it is refused too, except a workflow step's
-(`context.workflowExecutionId`): a scheduled workflow runs with nobody behind
-it, and keeps reading as before. The spending tools refuse it either way, since
-they charge a person.
+**The four that do not spend check only over MCP** (`callerOf` in
+`tool-support.ts`). A chat turn's person entered through a session, which may
+be a support grant or an embed visitor rather than a membership, and a workflow
+may run with nobody behind it; those calls are left as they were. Core's
+`CapabilityContext` does not say where a call came from, so `callerOf` reads it
+off what each dispatcher sets: a chat turn sets `conversationId`, both workflow
+executors set `workflowExecutionId`, and the MCP transport sets neither. A
+dispatcher core adds later reads as MCP until `callerOf` learns it, which
+refuses rather than admits. The spending tools check every caller, since they
+charge a person.
 
 ## After a merge that changes a tool
 

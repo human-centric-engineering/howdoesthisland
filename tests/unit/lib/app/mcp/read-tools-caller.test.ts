@@ -2,9 +2,10 @@
  * The four MCP tools that do not spend, and the person behind the key (t-96).
  *
  * A key acts as its creator and outlives their removal from the workspace, so
- * each of these refuses a creator who is no longer a member, or who has gone,
- * before it reads anything; a member reads as before. A workflow step can run
- * with no person behind it, and still reads.
+ * over MCP each of these refuses a creator who is no longer a member, or who
+ * has gone, before it reads anything; a member reads as before. A chat turn or
+ * a workflow step is not a key's call, and is not checked: its person may be a
+ * support admin or an embed visitor, or nobody.
  *
  * The work behind each tool is mocked: what it reads is its own file's tests'.
  * These pin only who may reach it.
@@ -46,7 +47,14 @@ import type { CapabilityContext, CapabilityResult } from '@/lib/orchestration/ca
 
 const asCreator: CapabilityContext = { userId: 'user-1', agentId: 'mcp-system' };
 const noCreator: CapabilityContext = { userId: null, agentId: 'mcp-system' };
-const unattendedWorkflow: CapabilityContext = {
+/** What core's chat handler sends: a session's person, who need not be a member. */
+const chatTurn: CapabilityContext = {
+  userId: 'embed:visitor-1',
+  agentId: 'agent-1',
+  conversationId: 'conv-1',
+};
+/** What core's workflow executors send: a scheduled run has nobody behind it. */
+const workflowStep: CapabilityContext = {
   userId: null,
   agentId: 'workflow:wf-1',
   workflowExecutionId: 'exec-1',
@@ -121,7 +129,13 @@ describe.each(TOOLS)('$name', ({ run, work }) => {
   it('refuses a key whose creator has gone, without asking who is a member', async () => {
     const result = await run(noCreator);
 
-    expect(result.error?.code).toBe('KEY_HAS_NO_OWNER');
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: 'KEY_HAS_NO_OWNER',
+        message: expect.stringContaining('no longer has an account'),
+      },
+    });
     expect(mocks.verifiedMembership).not.toHaveBeenCalled();
     expect(work).not.toHaveBeenCalled();
   });
@@ -135,20 +149,17 @@ describe.each(TOOLS)('$name', ({ run, work }) => {
     expect(work).not.toHaveBeenCalled();
   });
 
-  it('reads for a workflow step with no person behind it', async () => {
-    const result = await run(unattendedWorkflow);
+  it.each([
+    ['a chat turn', chatTurn],
+    ['a workflow step', workflowStep],
+    ['a workflow step run for someone', { ...workflowStep, userId: 'user-2' }],
+  ])('leaves %s unchecked, as it was before', async (_label, context) => {
+    mocks.verifiedMembership.mockResolvedValue({ refused: 'not-a-member' });
+
+    const result = await run(context);
 
     expect(result.success).toBe(true);
     expect(mocks.verifiedMembership).not.toHaveBeenCalled();
     expect(work).toHaveBeenCalledOnce();
-  });
-
-  it('refuses a workflow run for someone who has left the workspace', async () => {
-    mocks.verifiedMembership.mockResolvedValue({ refused: 'not-a-member' });
-
-    const result = await run({ ...unattendedWorkflow, userId: 'user-1' });
-
-    expect(result.error?.code).toBe('KEY_HAS_NO_OWNER');
-    expect(work).not.toHaveBeenCalled();
   });
 });
