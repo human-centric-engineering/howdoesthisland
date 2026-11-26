@@ -19,7 +19,7 @@ workflows to call.
 | `rewrite_draft`  | Has the editor rewrite a finished review's draft, or fill a rewrite's placeholders, and waits up to 45 seconds. | `rewriteLimiter` → `startRewrite`                                                              | yes            | yes    |
 | `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | no             | no     |
 
-Keys a workspace owner makes from settings come next (t-95).
+A workspace's owners and admins make its keys from its settings (see [Who can make a key](#who-can-make-a-key)).
 
 The code is `lib/app/mcp/`. Each tool has a class (its definition, Zod schema and
 redaction) and its work in `run/`. `tool-support.ts` holds what they share,
@@ -163,16 +163,42 @@ in core (ledger row 31), filed as sunrise#1349.
 
 ## Who can make a key
 
-- **Today, at `TENANCY_MODE=multi`:** a workspace OWNER or ADMIN, at
-  `/admin/orchestration/mcp/keys`. That route and page are org-tier in core
-  (`lib/auth/admin-tier.ts`), and this app's authorization policy does not
-  narrow them yet. A platform admin can too, in any workspace they enter.
-- **Once t-64 lands:** the admin area is platform admins only, so a workspace
-  can get a key only from a platform admin.
-- **Owner ruling (2026-11-26):** workspace owners make and revoke their own
-  keys from the workspace's settings (t-95), not from `/admin`.
+A workspace's `OWNER` or `ADMIN` makes and revokes its keys on the workspace's
+settings page (`/settings/workspace`, "AI assistant keys"), an app surface
+rather than `/admin` (owner ruling, 2026-11-26, t-95). Over the API:
 
-A key a workspace makes needs only `tools:list` and `tools:execute`.
+| Route                                                  | Does                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| `GET /api/v1/workspaces/[id]/mcp-keys`                 | The workspace's keys, newest first, revoked ones included.    |
+| `POST /api/v1/workspaces/[id]/mcp-keys`                | `{ name, expiresAt? }`: makes a key; its value is shown once. |
+| `POST /api/v1/workspaces/[id]/mcp-keys/[keyId]/revoke` | Deactivates the key at once. The row is kept, never deleted.  |
+
+The code is `lib/app/workspaces/mcp-keys.ts`, on core's `generateApiKey` and
+`orgForMint`, unedited (`sunrise.golden-rule`). What a key made there is:
+
+- **Only `tools:list` and `tools:execute`.** The body takes no scopes, and the
+  schema is strict, so asking for one is a `VALIDATION_ERROR`. No `scope`, no
+  rate-limit override.
+- **No `scopedAgentId`**, so it dispatches as `mcp-system`.
+- **Bound to the workspace** (`orgId`) and **acting as its maker**
+  (`createdBy`), which is who the spending tools charge and cap. Every
+  spending tool charges the workspace's credits: that is the bound on what a
+  key can spend.
+- **Revoked, not deleted**, so `McpAuditLog` still names it, and the list still
+  shows what was turned off. Core's `/admin/orchestration/mcp/keys` can still
+  delete a key outright until t-64 closes it to workspace owners.
+
+The routes serve only the workspace the caller has entered, as the judges
+routes do (`lib/app/workspaces/mcp-keys-access.ts`): someone acting in another
+workspace is refused, and so is an API key. A platform admin under a support
+grant can list and revoke but not make one (`orgForMint` refuses a support
+session): the key would outlive the session and act as someone who is not a
+member, which the spending tools refuse (`KEY_HAS_NO_OWNER`). Making and
+revoking write `mcp_api_key.create` and `mcp_api_key.update` to the admin
+audit log, as core's routes do.
+
+Core's `/admin/orchestration/mcp/keys` still works for a workspace owner until
+t-64 closes the admin area to platform admins.
 
 ## After a merge that changes a tool
 
