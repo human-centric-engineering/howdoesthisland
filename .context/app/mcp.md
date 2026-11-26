@@ -9,22 +9,24 @@ workflows to call.
 
 ## The tools
 
-| Tool             | Does                                                                                       | Calls (the route's library)                                                                    | Needs a person | Spends |
-| ---------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | -------------- | ------ |
-| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat. | `runQuickScan`, `summariseQuickScan`                                                           | no             | no     |
-| `assess_draft`   | Starts a full review of text or a public URL, stored, and waits up to 45 seconds for it.   | `prepareAssessment` → cap → `holdReviewBudget` → `createAssessment`                            | yes            | yes    |
-| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                         | `getAssessment`, then `loadReport` (the report's own view)                                     | no             | no     |
-| `compare_drafts` | Reviews 2–5 drafts the same way, and waits up to 45 seconds for the editor's verdict.      | `prepareComparison` → cap → `holdComparisonBudget` → cap → `createComparison` → `releaseHolds` | yes            | yes    |
-| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.     | `getComparison` (the comparison's own view)                                                    | no             | no     |
+| Tool             | Does                                                                                                            | Calls (the route's library)                                                                    | Needs a person | Spends |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------- | ------ |
+| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat.                      | `runQuickScan`, `summariseQuickScan`                                                           | no             | no     |
+| `assess_draft`   | Starts a full review of text or a public URL, stored, and waits up to 45 seconds for it.                        | `prepareAssessment` → cap → `holdReviewBudget` → `createAssessment`                            | yes            | yes    |
+| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                                              | `getAssessment`, then `loadReport` (the report's own view)                                     | no             | no     |
+| `compare_drafts` | Reviews 2–5 drafts the same way, and waits up to 45 seconds for the editor's verdict.                           | `prepareComparison` → cap → `holdComparisonBudget` → cap → `createComparison` → `releaseHolds` | yes            | yes    |
+| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.                          | `getComparison` (the comparison's own view)                                                    | no             | no     |
+| `rewrite_draft`  | Has the editor rewrite a finished review's draft, or fill a rewrite's placeholders, and waits up to 45 seconds. | `rewriteLimiter` → `startRewrite`                                                              | yes            | yes    |
+| `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | no             | no     |
 
-Rewriting comes next (t-94), and so do keys a workspace owner makes from settings
-(t-95).
+Keys a workspace owner makes from settings come next (t-95).
 
 The code is `lib/app/mcp/`. Each tool has a class (its definition, Zod schema and
 redaction) and its work in `run/`. `tool-support.ts` holds what they share,
 `run/spender.ts` the checks both spending tools make before anything is charged,
 `assessment-summary.ts` what `get_assessment` and `assess_draft` answer,
-`comparison-summary.ts` what `get_comparison` and `compare_drafts` answer, and
+`comparison-summary.ts` what `get_comparison` and `compare_drafts` answer,
+`rewrite-summary.ts` what `get_rewrite` and `rewrite_draft` answer, and
 `definitions.ts` what each tool publishes.
 
 **A class loads its work on its first call, never at import.** Core's capability
@@ -41,10 +43,11 @@ The transport authenticates the key, runs the call inside the key's workspace
 scoped agent). **There is no session and no request behind a tool call.** So:
 
 - **The person is the key's creator.** `protocol-handler.ts` passes
-  `McpApiKey.createdBy` as `context.userId`. `assess_draft` and
-  `compare_drafts` need one, for the per-person cap (`aiAssessmentLimiter`,
-  keyed `user:<id>`, the same bucket as the API) and the `createdByUserId` of
-  what they store. A key whose creator has gone
+  `McpApiKey.createdBy` as `context.userId`. The three spending tools need one,
+  for the per-person cap (keyed `user:<id>`, the same bucket as the API:
+  `aiAssessmentLimiter` for `assess_draft` and `compare_drafts`,
+  `rewriteLimiter` for `rewrite_draft`) and the `createdByUserId` of what they
+  store. A key whose creator has gone
   (`createdBy` is `SetNull`), or is no longer a member of the key's workspace,
   is refused with `KEY_HAS_NO_OWNER` before anything is prepared or charged,
   and a suspended workspace with `WORKSPACE_SUSPENDED`. Past the per-person cap
@@ -60,7 +63,13 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   id and status (`ready: false`, with the quick scan's early read). It runs on
   (`keepRunningAfterResponse`), and `get_assessment` reads it later. On Vercel
   that continuation is bounded by the MCP route's function duration, which the
-  route raises to 300 seconds as `/api/v1/assessments` does (divergence row 32).
+  route raises to 800 seconds, as `/api/v1/rewrites` does (divergence row 32):
+  a rewrite's call can run for `REWRITE_CALL_MS` (750 seconds), the longest of
+  the tools' work. `tests/unit/lib/app/rewrites/limits.test.ts` fails if the
+  route falls below the rewrites route's. `rewrite_draft` waits the same bound for
+  `startRewrite`'s `done`; the rewrite was handed to `keepRunningAfterResponse`
+  before `startRewrite` returned, so past the bound it is saved, ended and
+  charged with no one waiting, and `get_rewrite` reads it.
   `compare_drafts` waits the same bound, though the comparisons route answers 202
   at once: a tool call that answered at once would leave the assistant nothing to
   say. It polls each draft's status and the verdict's, not the full view, once a
@@ -68,8 +77,8 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   (`comparisonSettled`).
   A review cut off anyway is picked up by assessment recovery, as any abandoned
   run is. A JSON-RPC batch runs its calls one after another in one request, so
-  a batch carries at most one call to a tool that waits (`assess_draft` or
-  `compare_drafts`, counted together): each later one is refused with
+  a batch carries at most one call to a tool that waits (`assess_draft`,
+  `compare_drafts` or `rewrite_draft`, counted together): each later one is refused with
   `INVALID_REQUEST`, saying to send it on its own (`lib/app/mcp/batch.ts`,
   divergence row 33). The tool does not see the client hang up (core's
   `CapabilityContext` carries no abort signal), so it waits out its 45 seconds
@@ -121,11 +130,29 @@ that decide it, or why there is none. `ready` is true once nothing will change.
 Left out are the context, the judge slots, and the verdict's model and cost.
 `get_assessment` on a draft's `assessmentId` reads its recommendations.
 
+### What `rewrite_draft` takes and `get_rewrite` answers
+
+The `assessmentId` of a finished review, and a `focus` (`balanced`, the default,
+or an appeal), as `POST /api/v1/rewrites` takes them; never streamed. **Filling
+placeholders is a second call**: `fromRewriteId` (a completed rewrite of the same
+review) with `answers` keyed by placeholder id. The tool's description tells the
+assistant to ask the writer for them rather than make them up.
+
+The answer is the rewrite's view trimmed for an assistant: its id, review, focus
+and state, `ready` once it has ended, the review's URL (where the rewrite sits),
+and once completed the draft and each placeholder's id and label. **The draft is
+given only once completed**: a running rewrite's row holds what the editor has
+written so far, and a failed one what it wrote before it stopped, and an
+assistant handed either could pass it off as the rewrite. A failed one answers
+why (`error`, `errorCode`). Left out are each placeholder's offsets, the model
+and the cost.
+
 ### Personal data
 
 Every tool sets `processesPii`, because a draft is the writer's words and may
 name people. `redactProvenance` keeps a draft's length, never its text, and
-`[title]` or `[label]` for a title or a draft's label. Its result preview is the id and status.
+`[title]` or `[label]` for a title or a draft's label. For `rewrite_draft` it
+keeps which placeholders were answered, never the answers. Its result preview is the id and status.
 
 **The MCP audit log keeps none of a draft either.** Core's transport writes every
 call's params to `McpAuditLog`, an install-wide table that platform admins read
@@ -167,7 +194,9 @@ connected (`sunrise.mcp-reseed`). Merging changes only the first.
 ## Checking it
 
 - Unit tests: `tests/unit/lib/app/mcp/` (the definitions against their Zod
-  schemas, each tool around a mocked library, the summary).
+  schemas, each tool around a mocked library, the summary). The rewrite tools'
+  run the real rewrites service with the editor stubbed and Next's `after()`
+  recorded, so they show a rewrite answered early still ending and being charged.
 - Through the real transport, on the dev database with the dev server running:
 
   ```bash
@@ -175,10 +204,11 @@ connected (`sunrise.mcp-reseed`). Merging changes only the first.
   ```
 
   It makes a throwaway workspace with two quick-scan reviews, a comparison of
-  them and a key, turns the server and the tools on, then calls `tools/list`,
-  `quick_scan`, `get_assessment` and `get_comparison`, and each read on another
-  workspace's. Then it puts everything back. It never calls `assess_draft` or
-  `compare_drafts`, which would bill the judges. Add `NODE_OPTIONS=--use-system-ca` behind the local HTTPS proxy, and
+  them, a finished rewrite of one (written as a row) and a key, turns the server
+  and the tools on, then calls `tools/list`, `quick_scan`, `get_assessment`,
+  `get_comparison` and `get_rewrite`, and each read on another workspace's. Then
+  it puts everything back. It never calls `assess_draft`, `compare_drafts` or
+  `rewrite_draft`, which would bill the judges or the editor. Add `NODE_OPTIONS=--use-system-ca` behind the local HTTPS proxy, and
   `SMOKE_MCP_SHOW=1` to print the answers.
 
 To try it from Claude Code, add the server with the key as a bearer header:

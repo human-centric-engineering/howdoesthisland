@@ -1,9 +1,9 @@
 /**
- * Which calls of a JSON-RPC batch the MCP route refuses (t-92, t-93).
+ * Which calls of a JSON-RPC batch the MCP route refuses (t-92, t-93, t-94).
  *
  * The route runs a batch's calls one after another in one request. A tool that
- * holds the request while its work runs (`assess_draft` and `compare_drafts`
- * wait up to `MCP_WAIT_MS` for their reviews) adds that wait per call, so a batch of them
+ * holds the request while its work runs (`assess_draft`, `compare_drafts` and
+ * `rewrite_draft` wait up to `MCP_WAIT_MS` for their work) adds that wait per call, so a batch of them
  * outlasts the route's `maxDuration`: the platform ends the function, the
  * client gets no answer, and the reviews it stored, and charged for, are cut
  * off until recovery. So a batch may carry one call to such a tool; each later
@@ -14,7 +14,7 @@
  * resolved to slugs through the exposed tools, as `callMcpTool` resolves them,
  * so a tool exposed under another name is still counted.
  */
-import { ASSESS_DRAFT, COMPARE_DRAFTS } from '@/lib/app/mcp/definitions';
+import { ASSESS_DRAFT, COMPARE_DRAFTS, REWRITE_DRAFT } from '@/lib/app/mcp/definitions';
 import { listMcpTools } from '@/lib/orchestration/mcp';
 import { mcpToolCallParamsSchema } from '@/lib/validations/mcp';
 
@@ -22,6 +22,7 @@ import { mcpToolCallParamsSchema } from '@/lib/validations/mcp';
 export const BATCH_SOLO_SLUGS: ReadonlySet<string> = new Set([
   ASSESS_DRAFT.name,
   COMPARE_DRAFTS.name,
+  REWRITE_DRAFT.name,
 ]);
 
 /** What a refused call answers. */

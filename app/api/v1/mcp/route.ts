@@ -57,10 +57,12 @@ function jsonRpcErrorResponse(code: JsonRpcErrorCode, message: string, status: n
 }
 
 /**
- * Long enough for a review `assess_draft` answered before it finished to run on
- * under `after()`, as `/api/v1/assessments` allows (HowDoesThisLand, t-92).
+ * Long enough for work a tool answered before it finished to run on under
+ * `after()` (HowDoesThisLand): a review from `assess_draft`, as
+ * `/api/v1/assessments` allows (t-92), and a rewrite from `rewrite_draft`, as
+ * `/api/v1/rewrites` allows (t-94), which is the longer.
  */
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 const MAX_BODY_SIZE = 1_048_576; // 1MB
 const MAX_BATCH_SIZE = 20;

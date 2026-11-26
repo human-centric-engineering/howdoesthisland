@@ -22,6 +22,15 @@ describe('REWRITE_LIFETIME_MS', () => {
   });
 });
 
+describe('the MCP route', () => {
+  it('lives as long as a rewrite, so one rewrite_draft answered early runs on under after() (t-94)', () => {
+    const route = readFileSync(path.join(process.cwd(), 'app/api/v1/mcp/route.ts'), 'utf8');
+    const match = /export const maxDuration = (\d+);/.exec(route);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1]) * 1000).toBeGreaterThanOrEqual(REWRITE_LIFETIME_MS);
+  });
+});
+
 describe('REWRITE_CALL_MS', () => {
   it('stops a call before recovery may price it, leaving room for its own cost row', () => {
     expect(REWRITE_LIFETIME_MS - REWRITE_CALL_MS).toBeGreaterThanOrEqual(30_000);

@@ -1,5 +1,5 @@
 /**
- * Smoke: HowDoesThisLand's MCP tools through the real transport (t-92, t-93).
+ * Smoke: HowDoesThisLand's MCP tools through the real transport (t-92, t-93, t-94).
  *
  * What no unit test can prove: that a key bound to a workspace reaches the
  * tools through `POST /api/v1/mcp` on a running server, which registers the
@@ -9,13 +9,15 @@
  * security.
  *
  * Makes a throwaway workspace with two finished reviews (scored by the quick
- * scan, so no judge is called and nothing is billed), a comparison of them
- * and an MCP key, switches the MCP server and the tools on if they are off,
- * then: `tools/list`, `quick_scan`, `get_assessment` and `get_comparison` on
+ * scan, so no judge is called and nothing is billed), a comparison of them,
+ * a finished rewrite of one (written as a row: no editor is called) and an
+ * MCP key, switches the MCP server and the tools on if they are off,
+ * then: `tools/list`, `quick_scan`, `get_assessment`, `get_comparison` and
+ * `get_rewrite` on
  * the workspace's own, and each read on another workspace's. Puts the
  * switches back and erases the workspaces, key and all, at the end.
- * `assess_draft` and `compare_drafts` are not called: they would run the
- * judges, which cost money.
+ * `assess_draft`, `compare_drafts` and `rewrite_draft` are not called: they
+ * would run the judges or the editor, which cost money.
  *
  * Needs the dev server running (`npm run dev`) and a seeded database
  * (`npm run db:seed`, for the capability rows), and a user to own the key:
@@ -40,6 +42,9 @@ const BASE_URL = process.argv[2] ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://l
 const OWNER_EMAIL = process.env.SMOKE_MCP_USER_EMAIL ?? 'report-check@example.test';
 const DRAFT =
   'Our new scheduling tool will revolutionise how your team works. It is the best on the market. Sarah at Acme saved four hours a week in her first month, and so can you. Book a demo today.';
+
+const REWRITTEN =
+  'Our scheduling tool saved Sarah at Acme [ADD: the hours saved] in her first month. Book a demo to see what it saves your team.';
 
 let failures = 0;
 
@@ -221,6 +226,24 @@ async function main(): Promise<number> {
       );
     const comparison = await makeComparison(org.id, [review, second]);
     const theirComparison = await makeComparison(other.id, [elsewhere]);
+    // As the service ends one: completed, with a placeholder for the writer.
+    const makeRewrite = (orgId: string, assessmentId: string) =>
+      runAsOrg(orgId, () =>
+        prisma.rewrite.create({
+          data: {
+            orgId,
+            assessmentId,
+            focus: 'balanced',
+            status: 'COMPLETED',
+            draft: REWRITTEN,
+            createdByUserId: owner.id,
+            completedAt: new Date(),
+          },
+          select: { id: true },
+        })
+      );
+    const rewrite = await makeRewrite(org.id, review.id);
+    const theirRewrite = await makeRewrite(other.id, elsewhere.id);
 
     const { plaintext, hash, prefix } = generateApiKey();
     const key = await runAsOrg(org.id, () =>
@@ -306,6 +329,29 @@ async function main(): Promise<number> {
     check(
       theirs.isError,
       `another workspace's comparison is not found (${theirs.text.slice(0, 60)})`
+    );
+
+    const rewritten = await callTool(plaintext, 'get_rewrite', { rewriteId: rewrite.id });
+    if (process.env.SMOKE_MCP_SHOW) console.log(rewritten.text);
+    const placeholders = z
+      .array(z.object({ id: z.string(), label: z.string() }))
+      .safeParse(field(rewritten.data, 'placeholders'));
+    check(
+      !rewritten.isError &&
+        field(rewritten.data, 'id') === rewrite.id &&
+        field(rewritten.data, 'draft') === REWRITTEN &&
+        placeholders.success &&
+        placeholders.data.map((p) => `${p.id}:${p.label}`).join() === 'p1:the hours saved',
+      `get_rewrite reads the workspace's rewrite and its placeholder (${rewritten.isError ? rewritten.text : String(field(rewritten.data, 'status'))})`
+    );
+    check(
+      String(field(rewritten.data, 'reviewUrl')).endsWith(`/assessments/${review.id}`),
+      'and links its review'
+    );
+    const theirRewritten = await callTool(plaintext, 'get_rewrite', { rewriteId: theirRewrite.id });
+    check(
+      theirRewritten.isError,
+      `another workspace's rewrite is not found (${theirRewritten.text.slice(0, 60)})`
     );
   } finally {
     // Each step on its own, so one that fails does not leave the rest undone.
