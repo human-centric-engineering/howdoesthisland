@@ -1076,15 +1076,27 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'POST',
     path: '/api/v1/comparisons',
     summary:
-      "Review 2–5 drafts the same way, to read together: every draft gets the same framework version, context, project and AI reviewers. Each is an ordinary review, in the workspace's history and titled with its label. Answered 202 at once; follow the comparison with its GET. Each draft counts as a review against the per-user limit.",
+      "Review 2–5 drafts the same way, to read together: every draft gets the same framework version, context, project and AI reviewers. Each is an ordinary review, in the workspace's history and titled with its label. A draft may instead name a review the workspace already has (`assessmentId`), reviewed the same way: it joins as it is, not reviewed or charged again. At least one draft is text. Answered 202 at once; follow the comparison with its GET. Each draft it reviews counts as a review against the per-user limit.",
     auth: ASSESS,
     request: { body: createComparisonSchema },
     errors: [
       {
+        status: 404,
+        code: 'ASSESSMENT_NOT_FOUND',
+        description:
+          'A draft names a review this workspace does not have. `details.position` is its place in `drafts`.',
+      },
+      {
+        status: 409,
+        code: 'REVIEW_NOT_COMPARABLE',
+        description:
+          "A named review cannot join this comparison: it ended without a score (`details.reason: 'not_scored'`), or it was reviewed with another version, AI reviewers, context, weights or project (`'options_differ'`, those fields in `details.differs`). `details.position` is its place in `drafts`. Nothing was stored.",
+      },
+      {
         status: 402,
         code: 'INSUFFICIENT_CREDITS',
         description:
-          "The workspace's CopyCredits, less what its reviews and rewrites in flight hold, do not cover every draft's estimate together. Nothing was stored and no draft was reviewed. `details` as for a review, `estimateCredits` being every draft's.",
+          "The workspace's CopyCredits, less what its reviews and rewrites in flight hold, do not cover the estimate of every draft it reviews together. Nothing was stored and no draft was reviewed. `details` as for a review, `estimateCredits` being those drafts'.",
       },
       {
         status: 402,

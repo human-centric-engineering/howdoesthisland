@@ -15,6 +15,16 @@
  * cannot cover all of them stores none (402). Then every draft's content and
  * review, the set and its members are written in one transaction.
  *
+ * **A review the workspace already has** (t-84) can be a draft, named by
+ * `assessmentId`: the original a rewrite was made from, compared with the
+ * rewrite. It joins the set as it is, so it is not run, held for or charged
+ * again; only the drafts given as text are. It must have been reviewed the
+ * way the set is (the same version, AI reviewers, context, weights and
+ * project), or the scores would not compare like for like, and must not have
+ * ended unscored (failed or cancelled): both are refused with 409
+ * `REVIEW_NOT_COMPARABLE` (`reusedReviews`). One still queued or running
+ * joins as it is, and its end starts the verdict as any member's does.
+ *
  * Deleting a comparison deletes the set, not its reviews: each stays in the
  * workspace's history. Deleting or purging a review leaves its draft's place
  * in the set, read as purged (`views.ts`).
@@ -23,6 +33,7 @@
  * an `APIError`.
  */
 import { APIError, NotFoundError } from '@/lib/api/errors';
+import { jsonEquals } from '@/lib/utils/json-equal';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { prisma } from '@/lib/db/client';
 import {
@@ -44,7 +55,7 @@ import {
   type BudgetHold,
   type ReviewRate,
 } from '@/lib/app/usage/budget';
-import type { CreateComparisonBody } from '@/lib/app/comparisons/validations';
+import { isTextDraft, type CreateComparisonBody } from '@/lib/app/comparisons/validations';
 import { readComparison, type ComparisonDetail } from '@/lib/app/comparisons/views';
 import {
   estimateComparisonVerdict,
@@ -68,12 +79,103 @@ export interface PreparedComparison extends ResolvedReviewOptions {
    * with the drafts, then kept on the comparison until its verdict ends.
    */
   verdictUsd: number;
+  /**
+   * The drafts named as existing reviews (t-84), by their place in `drafts`:
+   * each review's id and text. Every other draft is reviewed with the set.
+   */
+  reused: ReadonlyMap<number, ReusedReview>;
+  /** How many drafts the set reviews: those given as text. Each is held, counted and charged. */
+  toReview: number;
+}
+
+/** A review that joins a comparison as it is (t-84). */
+export interface ReusedReview {
+  assessmentId: string;
+  text: string;
+}
+
+/** What a review was reviewed with that a comparison's members must share (t-84). */
+export type ReviewOptionField = 'version' | 'judges' | 'context' | 'weights' | 'project';
+
+/** Statuses a review ends in without a score: not worth a place in a comparison. */
+const UNSCORED = new Set(['FAILED', 'CANCELLED']);
+
+/**
+ * The drafts `body` names as existing reviews, each checked to join a set
+ * reviewed with `options` (t-84): in this workspace (404
+ * `ASSESSMENT_NOT_FOUND`), not ended unscored, and reviewed the same way
+ * (409 `REVIEW_NOT_COMPARABLE`, `details.reason` `not_scored` or
+ * `options_differ` with the fields that differ). Each refusal carries the
+ * draft's `position`.
+ */
+async function reusedReviews(
+  body: CreateComparisonBody,
+  options: ResolvedReviewOptions
+): Promise<Map<number, ReusedReview>> {
+  const named = body.drafts.flatMap((draft, position) =>
+    isTextDraft(draft) ? [] : [{ position, assessmentId: draft.assessmentId }]
+  );
+  const reused = new Map<number, ReusedReview>();
+  if (named.length === 0) return reused;
+  const rows = await prisma.assessment.findMany({
+    where: { orgId: requireOrgId(), id: { in: named.map((n) => n.assessmentId) } },
+    select: {
+      id: true,
+      status: true,
+      frameworkVersionId: true,
+      judges: true,
+      context: true,
+      overlay: true,
+      projectId: true,
+      content: { select: { text: true } },
+    },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const context = storedContext(options.ctx);
+  for (const { position, assessmentId } of named) {
+    const row = byId.get(assessmentId);
+    if (!row) {
+      throw new APIError(
+        'There is no such review in this workspace.',
+        'ASSESSMENT_NOT_FOUND',
+        404,
+        {
+          position,
+        }
+      );
+    }
+    if (UNSCORED.has(row.status)) {
+      throw new APIError(
+        'That review ended without a score, so it cannot be compared.',
+        'REVIEW_NOT_COMPARABLE',
+        409,
+        { position, reason: 'not_scored' }
+      );
+    }
+    const differs: ReviewOptionField[] = [];
+    if (row.frameworkVersionId !== options.resolved.version.id) differs.push('version');
+    if (!jsonEquals(row.judges, [...options.judges])) differs.push('judges');
+    if (!jsonEquals(row.context, context)) differs.push('context');
+    if (!jsonEquals(row.overlay ?? null, options.overlay ?? null)) differs.push('weights');
+    if (row.projectId !== options.projectId) differs.push('project');
+    if (differs.length > 0) {
+      throw new APIError(
+        'That review was not reviewed the way this comparison is, so its scores would not compare.',
+        'REVIEW_NOT_COMPARABLE',
+        409,
+        { position, reason: 'options_differ', differs }
+      );
+    }
+    reused.set(position, { assessmentId, text: row.content.text });
+  }
+  return reused;
 }
 
 /**
  * Everything that can be refused before anything is held or written: the
- * options (as a single review's), each draft's text, and every draft's
- * estimate with the verdict's together against the workspace's credits and
+ * options (as a single review's), each draft's text, each review it names
+ * ({@link reusedReviews}), and every draft's estimate it reviews with the
+ * verdict's together against the workspace's credits and
  * monthly budget (402).
  * Holds nothing: once this has passed, the route checks the per-user cap,
  * holds with {@link holdComparisonBudget}, then counts the drafts against it.
@@ -81,6 +183,7 @@ export interface PreparedComparison extends ResolvedReviewOptions {
 export async function prepareComparison(body: CreateComparisonBody): Promise<PreparedComparison> {
   const options = await resolveReviewOptions(body);
   for (const [position, draft] of body.drafts.entries()) {
+    if (!isTextDraft(draft)) continue;
     try {
       await refusingAsApi(() => assessableText(draft.text));
     } catch (err) {
@@ -89,6 +192,8 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
       throw err;
     }
   }
+  const reused = await reusedReviews(body, options);
+  const toReview = body.drafts.length - reused.size;
   const orgId = requireOrgId();
   // The project's brief, which the verdict's call reads, for its ceiling.
   const project =
@@ -102,7 +207,11 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
     orgId,
     options.resolved.engine,
     options.ctx,
-    body.drafts,
+    body.drafts.map((draft, position) => ({
+      // Every review it names is in `reused` by now.
+      text: isTextDraft(draft) ? draft.text : (reused.get(position)?.text ?? ''),
+      label: draft.label,
+    })),
     options.judges,
     project?.brief
   );
@@ -111,27 +220,24 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
     storedProfileName(options.profile),
     options.judges.length,
     true,
-    body.drafts.length,
+    toReview,
     verdictUsd
   );
-  return { ...options, holds: [], rate, verdictUsd };
+  return { ...options, holds: [], rate, verdictUsd, reused, toReview };
 }
 
 /**
- * Check every draft against the budget again and hold their estimates under
+ * Check every draft it reviews against the budget again and hold their estimates under
  * the lock that orders requests arriving together, as `prepared.holds`: the
  * last step before {@link createComparison}. Throws 402 when requests checked
  * before it took what was left, holding nothing.
  */
-export async function holdComparisonBudget(
-  body: CreateComparisonBody,
-  prepared: PreparedComparison
-): Promise<void> {
+export async function holdComparisonBudget(prepared: PreparedComparison): Promise<void> {
   prepared.holds = await reserveComparisonBudget(
     requireOrgId(),
     storedProfileName(prepared.profile),
     prepared.judges.length,
-    body.drafts.length,
+    prepared.toReview,
     prepared.rate ?? undefined,
     prepared.verdictUsd
   );
@@ -143,7 +249,8 @@ export async function releaseHolds(prepared: PreparedComparison): Promise<void> 
 }
 
 /**
- * Store every draft's review and the set in one transaction, then start the
+ * Store the review of every draft given as text and the set, with the
+ * reviews it reuses as members, in one transaction, then start the new
  * reviews. Those the workspace has no running place for wait queued, and the
  * next of its runs to end starts one (`run.ts`).
  */
@@ -154,11 +261,12 @@ export async function createComparison(
 ): Promise<ComparisonDetail> {
   const orgId = requireOrgId();
   const context = storedContext(prepared.ctx);
+  const toReview = body.drafts.flatMap((draft) => (isTextDraft(draft) ? [draft] : []));
   let written;
   try {
     written = await refusingAsApi(() =>
       enqueueAssessments(
-        body.drafts.map((draft) => ({
+        toReview.map((draft) => ({
           content: {
             text: draft.text,
             title: draft.label ?? null,
@@ -200,13 +308,16 @@ export async function createComparison(
           if (first && verdictRuns(prepared.judges)) {
             await tx.budgetHold.updateMany({ where: { id: first.id }, data: { extraUsd: 0 } });
           }
+          // In the order sent: the new reviews fill the places not reused, in turn.
+          const fresh = enqueued.map((review) => review.assessmentId);
+          let next = 0;
           await tx.assessmentSetMember.createMany({
-            data: enqueued.map((review, position) => ({
+            data: body.drafts.map((draft, position) => ({
               orgId,
               setId: set.id,
-              assessmentId: review.assessmentId,
+              assessmentId: prepared.reused.get(position)?.assessmentId ?? fresh[next++],
               position,
-              label: body.drafts[position].label ?? null,
+              label: draft.label ?? null,
             })),
           });
           return set.id;
