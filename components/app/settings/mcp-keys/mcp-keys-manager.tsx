@@ -361,7 +361,7 @@ export function McpKeysManager({ orgId, initialKeys, renderedAt }: McpKeysManage
                     <TableCell>
                       <code className="text-xs">{key.keyPrefix}…</code>
                     </TableCell>
-                    <TableCell>{key.createdByName ?? 'Someone who has left'}</TableCell>
+                    <TableCell>{key.createdByName ?? 'A deleted account'}</TableCell>
                     <TableCell>
                       {key.lastUsedAt ? <ClientDate date={key.lastUsedAt} /> : 'Never'}
                     </TableCell>

@@ -161,7 +161,7 @@ describe('revokeWorkspaceMcpKey', () => {
       orgId: ORG,
     });
     expect(prisma.mcpApiKey.updateMany).toHaveBeenCalledWith({
-      where: { id: KEY_ID, orgId: ORG },
+      where: { id: KEY_ID, orgId: ORG, isActive: true },
       data: { isActive: false },
     });
     expect(changed).toBe(true);
@@ -183,9 +183,25 @@ describe('revokeWorkspaceMcpKey', () => {
   });
 
   it('reports not found when the row vanished between the read and the write', async () => {
-    vi.mocked(prisma.mcpApiKey.findFirst).mockResolvedValue(dbRow() as never);
+    vi.mocked(prisma.mcpApiKey.findFirst)
+      .mockResolvedValueOnce(dbRow() as never)
+      .mockResolvedValueOnce(null);
     vi.mocked(prisma.mcpApiKey.updateMany).mockResolvedValue({ count: 0 });
     await expect(revokeWorkspaceMcpKey(ORG, KEY_ID)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('answers unchanged when another revoke got there between the read and the write', async () => {
+    vi.mocked(prisma.mcpApiKey.findFirst)
+      .mockResolvedValueOnce(dbRow() as never)
+      .mockResolvedValueOnce(dbRow({ isActive: false }) as never);
+    vi.mocked(prisma.mcpApiKey.updateMany).mockResolvedValue({ count: 0 });
+    const { key, changed } = await revokeWorkspaceMcpKey(ORG, KEY_ID);
+    expect(changed).toBe(false);
+    expect(key.isActive).toBe(false);
+    expect(vi.mocked(prisma.mcpApiKey.findFirst).mock.calls[1]?.[0]?.where).toEqual({
+      id: KEY_ID,
+      orgId: ORG,
+    });
   });
 });
 

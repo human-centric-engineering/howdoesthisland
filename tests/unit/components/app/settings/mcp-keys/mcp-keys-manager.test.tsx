@@ -82,7 +82,7 @@ describe('McpKeysManager', () => {
       expect(rows[0]).toHaveTextContent('No expiry');
       expect(rows[0]).toHaveTextContent('Active');
       expect(rows[1]).toHaveTextContent('Revoked');
-      expect(rows[1]).toHaveTextContent('Someone who has left');
+      expect(rows[1]).toHaveTextContent('A deleted account');
       expect(rows[2]).toHaveTextContent('Expired');
     });
 

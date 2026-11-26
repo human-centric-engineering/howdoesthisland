@@ -71,7 +71,7 @@ export interface WorkspaceMcpKey {
   expiresAt: Date | null;
   lastUsedAt: Date | null;
   createdAt: Date;
-  /** Who made it, which is who its tool calls act as; `null` once they have gone. */
+  /** Who made it, which is who its tool calls act as; `null` once their account is deleted. */
   createdByName: string | null;
 }
 
@@ -151,10 +151,19 @@ export async function revokeWorkspaceMcpKey(
   if (!existing) throw new NotFoundError('MCP key not found');
   if (!existing.isActive) return { key: toView(existing), changed: false };
 
+  // Only an active key is updated, so of two revokes at once only one reports
+  // the change (and writes the audit row); the other reads the result.
   const { count } = await prisma.mcpApiKey.updateMany({
-    where: { id: keyId, orgId },
+    where: { id: keyId, orgId, isActive: true },
     data: { isActive: false },
   });
-  if (count === 0) throw new NotFoundError('MCP key not found');
+  if (count === 0) {
+    const now = await prisma.mcpApiKey.findFirst({
+      where: { id: keyId, orgId },
+      select: KEY_SELECT,
+    });
+    if (!now) throw new NotFoundError('MCP key not found');
+    return { key: toView(now), changed: false };
+  }
   return { key: toView({ ...existing, isActive: false }), changed: true };
 }

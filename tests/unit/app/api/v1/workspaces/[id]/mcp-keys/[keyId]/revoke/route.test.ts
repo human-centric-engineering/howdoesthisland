@@ -119,7 +119,7 @@ describe('POST /api/v1/workspaces/[id]/mcp-keys/[keyId]/revoke', () => {
     const body = await json(res);
 
     expect(prisma.mcpApiKey.updateMany).toHaveBeenCalledWith({
-      where: { id: KEY, orgId: WS },
+      where: { id: KEY, orgId: WS, isActive: true },
       data: { isActive: false },
     });
     expect(body.data.key).toMatchObject({ id: KEY, isActive: false });
