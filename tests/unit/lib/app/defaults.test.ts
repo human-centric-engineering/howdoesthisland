@@ -265,7 +265,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/capabilities.ts',
     risk: 'a stray capability would be dispatchable on every install',
     // Behavioural reach into the dispatcher is covered by bootstrap-wiring.test.ts.
-    // FORK (HowDoesThisLand): pinned to our three MCP tools (t-92), each
+    // FORK (HowDoesThisLand): pinned to our five MCP tools (t-92, t-93), each
     // registered once with no slug override, guard or scope binding. Ledger:
     // .context/app/platform-divergences.md row 2.
     assert: () => {
@@ -280,6 +280,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['quick_scan', undefined],
         ['assess_draft', undefined],
         ['get_assessment', undefined],
+        ['compare_drafts', undefined],
+        ['get_comparison', undefined],
       ]);
     },
   },
@@ -889,12 +891,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/capability-seed-pairs.ts',
     risk: 'a stray pair fails the capability parity test on every install (for a slug no seed writes it is a pair nothing wrote, for a slug core already pairs a duplicate), and a stray unchecked seed switches the parity checks off for that seed',
     assert: () => {
-      // FORK (HowDoesThisLand): pinned to our three MCP tools' pairs (t-92).
+      // FORK (HowDoesThisLand): pinned to our five MCP tools' pairs (t-92, t-93).
       // Ledger: .context/app/platform-divergences.md row 2.
       expect(APP_CAPABILITY_PAIRS.map((p) => [p.slug, p.instance.constructor.name])).toEqual([
         ['quick_scan', 'QuickScanCapability'],
         ['assess_draft', 'AssessDraftCapability'],
         ['get_assessment', 'GetAssessmentCapability'],
+        ['compare_drafts', 'CompareDraftsCapability'],
+        ['get_comparison', 'GetComparisonCapability'],
       ]);
       expect(APP_UNCHECKED_SEEDS).toEqual({});
     },
