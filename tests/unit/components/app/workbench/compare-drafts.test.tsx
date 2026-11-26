@@ -133,7 +133,10 @@ describe('Compare drafts tab', () => {
       profile: 'craft',
     });
     expect(push).toHaveBeenCalledWith('/compare/cmp-1');
-    expect(window.localStorage.getItem(DRAFT_KEY)).toBeNull();
+    // Spent: the drafts' copy is gone, the Compare tab kept.
+    const kept = readDraft(JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? 'null'));
+    expect(kept.source).toBe('compare');
+    expect(kept.drafts.every((d) => d.text === '' && d.label === '')).toBe(true);
   });
 
   it('says a comparison with no readable id has started, rather than that it failed', async () => {
@@ -148,6 +151,12 @@ describe('Compare drafts tab', () => {
       /The comparison has started.*no need to start it again/
     );
     expect(push).not.toHaveBeenCalled();
+    // Still on the Compare tab, under its message, with the copy spent.
+    expect(screen.getByRole('tab', { name: 'Compare drafts' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(field('compare-text-0')).toHaveValue('');
   });
 
   it('refuses an empty draft, or one too long, before sending, naming it', async () => {
@@ -229,6 +238,36 @@ describe('Compare drafts tab', () => {
       'Subject B: This copy has no words to review.'
     );
     expect(field('compare-text-1')).toHaveFocus();
+  });
+
+  it('falls back to the message by Save when the refused draft is not one on the page', async () => {
+    vi.mocked(apiClient.post).mockRejectedValue(
+      new APIClientError('This copy has no words to review.', 'VALIDATION_ERROR', 400, {
+        position: 4,
+      })
+    );
+    renderWorkbench();
+    await openCompare();
+    await writeDraft(0, 'A');
+    await writeDraft(1, 'B');
+    await userEvent.click(compareButton(2));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This copy has no words to review.');
+    expect(alert).not.toHaveTextContent('Draft 5');
+  });
+
+  it('clears a shown problem when a draft is removed, since it names drafts by place', async () => {
+    renderWorkbench();
+    await openCompare();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a draft' }));
+    await writeDraft(0, 'A');
+    await writeDraft(2, 'C');
+    await userEvent.click(compareButton(3));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Paste the copy for Draft 2.');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove draft 1' }));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('names the comparison, not a review, when starting it fails without a reason', async () => {

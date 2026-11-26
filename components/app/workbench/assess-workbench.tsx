@@ -107,10 +107,13 @@ const COMPARE_STARTED_UNREADABLE =
   'The comparison has started, but this page could not read the reply, so it cannot open it. There is no need to start it again: each draft’s review is in your reviews.';
 
 /** The draft a comparison's refusal names (`details.position`), if it is one of these. */
-function refusedDraftOf(err: unknown): number | null {
+function refusedDraftOf(err: unknown, count: number): number | null {
   if (!(err instanceof APIClientError)) return null;
   const position = err.details?.position;
-  return typeof position === 'number' && Number.isInteger(position) && position >= 0
+  return typeof position === 'number' &&
+    Number.isInteger(position) &&
+    position >= 0 &&
+    position < count
     ? position
     : null;
 }
@@ -196,8 +199,9 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
         const reply = await apiClient.post<unknown>(COMPARISONS_ENDPOINT, {
           body: { drafts: comparisonDraftsOf(draft), ...options },
         });
-        // From here every draft is a review: the draft is spent.
-        clearStored();
+        // From here every draft is a review: the drafts are spent. The page
+        // stays on the Compare tab, under the message that may follow.
+        setStored({ ...EMPTY_DRAFT, source: 'compare' });
         const created = createdIdSchema.safeParse(reply);
         if (created.success) router.push(comparePath(created.data.id));
         else save.show(COMPARE_STARTED_UNREADABLE);
@@ -230,7 +234,7 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
       else save.show(STARTED_UNREADABLE);
     } catch (err) {
       const refusal = refusalOf(err);
-      const at = comparing ? refusedDraftOf(err) : null;
+      const at = comparing ? refusedDraftOf(err, draft.drafts.length) : null;
       if (at !== null && !refusal && err instanceof APIClientError) {
         // The server names the draft it refused; say so on that draft.
         const name = draft.drafts[at]?.label.trim() || `Draft ${at + 1}`;
@@ -390,7 +394,10 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => update({ drafts: draft.drafts.filter((_, j) => j !== i) })}
+                      onClick={() => {
+                        save.clear();
+                        update({ drafts: draft.drafts.filter((_, j) => j !== i) });
+                      }}
                       disabled={sending}
                     >
                       <X className="mr-1 h-4 w-4" aria-hidden />
@@ -421,7 +428,11 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => update({ drafts: [...draft.drafts, { label: '', text: '' }] })}
+                onClick={() => {
+                  // A shown problem names drafts by their place, which this moves.
+                  save.clear();
+                  update({ drafts: [...draft.drafts, { label: '', text: '' }] });
+                }}
                 disabled={sending}
               >
                 <Plus className="mr-1 h-4 w-4" aria-hidden />

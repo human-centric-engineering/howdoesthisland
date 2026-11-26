@@ -216,7 +216,7 @@ describe('ComparisonView while it runs', () => {
       .mockResolvedValueOnce(aComparison());
     renderView(aRunningComparison());
 
-    expect(screen.getByText('1 of 3 drafts reviewed')).toBeInTheDocument();
+    expect(screen.getByText('1 of 3 drafts finished')).toBeInTheDocument();
     const headers = screen.getAllByRole('columnheader');
     expect(headers[1]).toHaveTextContent('Being reviewed');
     expect(within(headers[1]).getByRole('link', { name: 'Watch its review' })).toBeTruthy();
@@ -224,11 +224,11 @@ describe('ComparisonView while it runs', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/comparisons/cmp-1');
-    expect(screen.getByText('1 of 3 drafts reviewed')).toBeInTheDocument();
+    expect(screen.getByText('1 of 3 drafts finished')).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
     expect(verdict()).toHaveTextContent('Draft 2 lands better');
-    expect(screen.queryByText(/drafts reviewed/)).toBeNull();
+    expect(screen.queryByText(/drafts finished/)).toBeNull();
 
     // Ended: it is not read again.
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 3));
@@ -251,7 +251,7 @@ describe('ComparisonView while it runs', () => {
     expect(screen.queryByRole('status')).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
     expect(screen.getByRole('status')).toHaveTextContent(/may be behind/);
-    expect(screen.getByText('1 of 3 drafts reviewed')).toBeInTheDocument();
+    expect(screen.getByText('1 of 3 drafts finished')).toBeInTheDocument();
 
     // It keeps trying, and the notice goes once a read lands.
     vi.mocked(apiClient.get).mockResolvedValue(aRunningComparison());
@@ -269,9 +269,31 @@ describe('ComparisonView while it runs', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
     expect(screen.getByRole('status')).toHaveTextContent(says);
-    expect(screen.queryByText(/drafts reviewed/)).toBeNull();
+    expect(screen.queryByText(/drafts finished/)).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 5));
     expect(apiClient.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('says a draft still running is waiting, not unscored', () => {
+    renderView(aRunningComparison());
+    expect(cell('Overall', 'Draft 2')).toHaveTextContent('Waiting');
+    expect(cell('Overall', 'Draft 2')).not.toHaveTextContent('Not scored');
+  });
+
+  it('stops saying the editor is reading once the page has stopped checking', async () => {
+    vi.useFakeTimers();
+    vi.mocked(apiClient.get).mockRejectedValue(new APIClientError('No', 'X', 401));
+    const wire = aComparison();
+    renderView({
+      ...wire,
+      status: 'running',
+      verdict: { ...wire.verdict, status: 'running', draft: null, why: null, appeals: [] },
+    });
+    expect(verdict()).toHaveTextContent('The editor is reading the drafts.');
+
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
+    expect(verdict()).not.toHaveTextContent('is reading');
+    expect(verdict()).toHaveTextContent('stopped checking');
   });
 
   it('counts a reply it cannot read as a failed read', async () => {

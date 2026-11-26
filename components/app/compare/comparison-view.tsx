@@ -72,9 +72,12 @@ const RETRYING = new Set(['rate_limited', 'provider_error']);
 function Verdict({
   comparison,
   appealNames,
+  checking,
 }: {
   comparison: Comparison;
   appealNames: Record<string, string>;
+  /** False once the page has stopped reading the comparison (`ended`). */
+  checking: boolean;
 }) {
   const { verdict, drafts } = comparison;
   const draftsRunning = drafts.some((d) => d.status === 'queued' || d.status === 'running');
@@ -102,6 +105,15 @@ function Verdict({
           </dl>
         ) : null}
       </>
+    );
+  } else if (
+    !checking &&
+    (verdict.status === 'running' || (verdict.status === 'waiting' && !draftsRunning))
+  ) {
+    body = (
+      <p className="text-lg text-(--hd-muted)">
+        The editor was still to give its verdict when this page stopped checking.
+      </p>
     );
   } else if (verdict.status === 'running' || (verdict.status === 'waiting' && !draftsRunning)) {
     body = (
@@ -151,13 +163,17 @@ function ScoreCell({
   colour,
   leads,
   delta,
+  pending = false,
 }: {
   score: number | null;
   colour: string;
   leads: boolean;
   delta: number | null;
+  /** Its draft is still queued or running, so no score is not a missing one. */
+  pending?: boolean;
 }) {
-  if (score === null) return <span className="text-sm text-(--hd-muted)">Not scored</span>;
+  if (score === null)
+    return <span className="text-sm text-(--hd-muted)">{pending ? 'Waiting' : 'Not scored'}</span>;
   return (
     <div className="min-w-[7rem] space-y-1">
       <div className="flex items-baseline justify-between gap-2">
@@ -247,7 +263,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
         {isMoving(comparison) && ended === null && done < drafts.length ? (
           <p className="mt-3 flex items-center gap-2" aria-live="polite">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            {done} of {drafts.length} drafts reviewed
+            {done} of {drafts.length} drafts finished
           </p>
         ) : null}
         {stale ? (
@@ -265,7 +281,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
         ) : null}
       </header>
 
-      <Verdict comparison={comparison} appealNames={appealNames} />
+      <Verdict comparison={comparison} appealNames={appealNames} checking={ended === null} />
 
       <section aria-labelledby="scores-heading" className="hd-sheet px-6 py-8 md:px-10">
         <h2 id="scores-heading" className="hd-slug">
@@ -307,6 +323,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
                         colour="var(--hd-ink)"
                         leads={score !== null && bestOverall !== null && score === bestOverall}
                         delta={score !== null && bestOverall !== null ? score - bestOverall : null}
+                        pending={d.status === 'queued' || d.status === 'running'}
                       />
                       {score !== null && d.band ? (
                         <span className="mt-1 block text-xs text-(--hd-muted)">{d.band}</span>
@@ -335,6 +352,7 @@ export function ComparisonView({ comparison: initial, appealNames }: ComparisonV
                             colour={appealColour(appeal)}
                             leads={compare?.leaders.includes(d.position) ?? false}
                             delta={row?.delta ?? null}
+                            pending={d.status === 'queued' || d.status === 'running'}
                           />
                         </td>
                       );
