@@ -998,6 +998,32 @@ describe('POST /api/v1/comparisons — a draft that is a review the workspace ha
     expect(fake.sets).toHaveLength(sets);
   });
 
+  it('refuses with 409 a review not finished yet, which may still end unscored', async () => {
+    const original = await existingReview(DRAFT_A);
+    const row = fake.assessments.find((a) => a.id === original);
+    if (row) row.status = 'RUNNING';
+    const sets = fake.sets.length;
+
+    const res = await post({
+      judges: TWO,
+      drafts: [{ assessmentId: original }, { text: DRAFT_B }],
+    });
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'REVIEW_NOT_COMPARABLE',
+      details: { position: 0, reason: 'not_finished' },
+    });
+    expect(fake.sets).toHaveLength(sets);
+  });
+
+  it('refuses with 400 a draft giving both text and a review', async () => {
+    const res = await post({ drafts: [{ text: DRAFT_A, assessmentId: 'x' }, { text: DRAFT_B }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify((await json(res)).error)).toContain('not both');
+  });
+
   describe('a review that changes after it was checked, before the set is written', () => {
     /** Run `change` on the review right after the first check reads it. */
     function afterCheck(change: (row: Record<string, unknown>) => void) {

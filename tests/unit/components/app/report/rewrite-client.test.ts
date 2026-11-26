@@ -458,6 +458,25 @@ describe('compareDraftRefusalOf (t-84)', () => {
     ).toMatchObject({ reviewAgain: false });
   });
 
+  it('offers nothing charged for a reason it does not know, saying what the server said', () => {
+    for (const details of [{ position: 0, reason: 'not_finished' }, { position: 0 }]) {
+      expect(
+        compareDraftRefusalOf(
+          new APIClientError(
+            'That review has not finished yet.',
+            'REVIEW_NOT_COMPARABLE',
+            409,
+            details
+          )
+        )
+      ).toEqual({
+        message: 'That review has not finished yet.',
+        usagePage: null,
+        reviewAgain: false,
+      });
+    }
+  });
+
   it('words the rest as the assess page does', () => {
     expect(
       compareDraftRefusalOf(new APIClientError('Add credits.', 'INSUFFICIENT_CREDITS', 402))

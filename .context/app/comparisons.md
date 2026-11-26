@@ -50,11 +50,12 @@ The review must compare like for like (`reusedReviews` in
 `details.position`:
 
 - **In this workspace.** Otherwise 404 `ASSESSMENT_NOT_FOUND`.
-- **Not ended without a full score.** A `failed` or `cancelled` review is 409
+- **Completed.** A `failed` or `cancelled` review is 409
   `REVIEW_NOT_COMPARABLE`, `details.reason: 'not_scored'`. A `partial` one is
   `'partly_scored'`: the verdict weighs only completed drafts, so a rewrite
   compared with it would be charged for and get no verdict. Reviewing both
-  again as text compares them.
+  again as text compares them. A `queued` or `running` one is
+  `'not_finished'`, since it may yet end either way: compare it once it has.
 - **Reviewed the way the set is.** Its version, judges, context, overlay and
   project must equal what the set's options resolve to now. Any that differ is
   409 `REVIEW_NOT_COMPARABLE`, `details.reason: 'options_differ'`, with them in
@@ -64,11 +65,10 @@ The review must compare like for like (`reusedReviews` in
   or weights changed after the review: its scores would not compare with a new
   review's.
 
-A review still queued or running joins as it is, and its run's end starts the
-verdict, as any member's does. The named reviews are checked again in the
-set's transaction, held `FOR SHARE` until it commits, so one deleted, purged or
-ended unscored in between is refused as above (not a bare 500), and one cannot
-end between the check and the commit unseen by its run's verdict start.
+The named reviews' existence and status are checked again in the set's
+transaction, held `FOR SHARE` until it commits, so one deleted, purged or
+re-run in between is refused as above (not a bare 500). Their options are not
+checked again: a review's are written once, as it is made.
 
 ## Each draft is an ordinary review
 

@@ -275,6 +275,11 @@ export function compareDraftRefusalOf(err: unknown): (Refusal & { reviewAgain: b
         reviewAgain: false,
       };
     }
+    // Only a review that would compare once reviewed again is worth offering
+    // that, charged; any other reason is the server's to say.
+    if (reason !== 'partly_scored' && reason !== 'options_differ') {
+      return { message: err.message, usagePage: null, reviewAgain: false };
+    }
     return {
       message:
         reason === 'partly_scored'
@@ -323,7 +328,6 @@ export const originalReviewSchema = z.object({
 });
 export type OriginalReview = z.infer<typeof originalReviewSchema>;
 
-/** Cut `text` to `max` code points, so a character outside the BMP is never split. */
 /**
  * `text` cut to at most `max` UTF-16 code units, as the server's `.max()`
  * counts a label, never splitting a character (an emoji is two units).

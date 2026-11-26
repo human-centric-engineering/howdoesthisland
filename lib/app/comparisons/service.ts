@@ -21,11 +21,10 @@
  * again; only the drafts given as text are. It must have been reviewed the
  * way the set is (the same version, AI reviewers, context, weights and
  * project), or the scores would not compare like for like, and must have
- * ended with a full score or not ended yet: a failed, cancelled or partial
- * one is not weighed by the verdict. Both are refused with 409
- * `REVIEW_NOT_COMPARABLE` (`reusedReviews`), checked again under a lock as
- * the set is written. One still queued or running joins as it is, and its
- * end starts the verdict as any member's does.
+ * completed: a failed, cancelled or partial one is not weighed by the
+ * verdict, and one queued or running may yet end so. Both are refused with
+ * 409 `REVIEW_NOT_COMPARABLE` (`reusedReviews`), its status checked again
+ * under a lock as the set is written.
  *
  * Deleting a comparison deletes the set, not its reviews: each stays in the
  * workspace's history. Deleting or purging a review leaves its draft's place
@@ -101,10 +100,10 @@ export interface ReusedReview {
 export type ReviewOptionField = 'version' | 'judges' | 'context' | 'weights' | 'project';
 
 /**
- * Statuses a review ends in without a full score, each with the `reason` it
- * is refused with: one ended unscored has nothing to compare, and one partly
- * scored is not weighed by the verdict, so a draft compared with it would
- * get none.
+ * Statuses a reused review is refused in, each with its `reason`: one ended
+ * unscored has nothing to compare; one partly scored is not weighed by the
+ * verdict, so a draft compared with it would get none; and one not finished
+ * may yet end either way, so only a completed review joins.
  */
 const NOT_COMPARABLE: ReadonlyMap<string, { reason: string; message: string }> = new Map([
   [
@@ -121,6 +120,16 @@ const NOT_COMPARABLE: ReadonlyMap<string, { reason: string; message: string }> =
       message: 'That review ended without a score, so it cannot be compared.',
     },
   ],
+  ...(['QUEUED', 'RUNNING'] as const).map(
+    (status) =>
+      [
+        status,
+        {
+          reason: 'not_finished',
+          message: 'That review has not finished yet. Compare it once it has.',
+        },
+      ] as const
+  ),
   [
     'PARTIAL',
     {
@@ -131,7 +140,7 @@ const NOT_COMPARABLE: ReadonlyMap<string, { reason: string; message: string }> =
   ],
 ]);
 
-/** Refuse a reused review that is gone (404) or ended without a full score (409), at `position`. */
+/** Refuse a reused review that is gone (404) or not completed (409), at `position`. */
 function assertComparable(
   row: { status: string } | undefined,
   position: number
@@ -153,9 +162,9 @@ function assertComparable(
 /**
  * The drafts `body` names as existing reviews, each checked to join a set
  * reviewed with `options` (t-84): in this workspace (404
- * `ASSESSMENT_NOT_FOUND`), not ended without a full score, and reviewed the
- * same way (409 `REVIEW_NOT_COMPARABLE`, `details.reason` `not_scored`,
- * `partly_scored`, or `options_differ` with the fields that differ). Each
+ * `ASSESSMENT_NOT_FOUND`), completed, and reviewed the same way (409
+ * `REVIEW_NOT_COMPARABLE`, `details.reason` `not_scored`, `partly_scored`,
+ * `not_finished`, or `options_differ` with the fields that differ). Each
  * refusal carries the draft's `position`. Checked again, locked, as the set
  * is written ({@link lockReusedReviews}).
  */
@@ -206,12 +215,12 @@ async function reusedReviews(
 }
 
 /**
- * Lock the reviews `prepared` reuses in the set's transaction and check them
- * again: one deleted, purged, or ended without a full score since
- * {@link reusedReviews} read it is refused as it would have been then, so
- * the set never stores a member it would have refused. Held until the commit,
- * a review cannot end in between, so a run that ends after it finds its
- * member row and starts the verdict.
+ * Lock the reviews `prepared` reuses in the set's transaction and check
+ * again that each still exists and is completed: one deleted, purged or
+ * re-run since {@link reusedReviews} read it is refused as it would have been
+ * then, and held until the commit it cannot change before the set is stored.
+ * The options it was reviewed with are not checked again: a review's are
+ * written once, as it is made.
  */
 async function lockReusedReviews(
   tx: Prisma.TransactionClient,
@@ -320,12 +329,12 @@ export async function createComparison(
 ): Promise<ComparisonDetail> {
   const orgId = requireOrgId();
   const context = storedContext(prepared.ctx);
-  const toReview = body.drafts.flatMap((draft) => (isTextDraft(draft) ? [draft] : []));
+  const textDrafts = body.drafts.flatMap((draft) => (isTextDraft(draft) ? [draft] : []));
   let written;
   try {
     written = await refusingAsApi(() =>
       enqueueAssessments(
-        toReview.map((draft) => ({
+        textDrafts.map((draft) => ({
           content: {
             text: draft.text,
             title: draft.label ?? null,

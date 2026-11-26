@@ -32,7 +32,10 @@ const reviewedDraftSchema = z.strictObject({
   label: labelField,
 });
 
-const draftSchema = z.union([textDraftSchema, reviewedDraftSchema]);
+const draftSchema = z.union([textDraftSchema, reviewedDraftSchema], {
+  // A draft matching neither: most often one giving both, or neither, of the two.
+  error: 'Give each draft as text or as an assessmentId, not both',
+});
 
 export type ComparisonDraftInput = z.infer<typeof draftSchema>;
 
