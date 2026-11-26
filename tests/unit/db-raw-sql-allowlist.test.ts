@@ -95,6 +95,13 @@ const ALLOWLIST: ReadonlyArray<{ file: string; calls: number; why: string }> = [
     calls: 2,
     why: 'knowledge-graph adjacency aggregation',
   },
+  // FORK (HowDoesThisLand): a comparison holds the reviews it reuses (t-84).
+  // Ledger: .context/app/platform-divergences.md row 19.
+  {
+    file: 'lib/app/comparisons/service.ts',
+    calls: 1,
+    why: "a comparison that reuses a workspace's reviews reads their status with `SELECT … FOR SHARE` in the transaction that writes the set, so one deleted or re-run after its check is refused, not stored as a member it would have refused (t-84). Prisma has no row lock; it reads `app_assessment`, which carries the `org_isolation` policy, and filters on `orgId` too",
+  },
   // FORK (HowDoesThisLand): an admin credit change holds its workspace's row (t-57).
   // Ledger: .context/app/platform-divergences.md row 19.
   {

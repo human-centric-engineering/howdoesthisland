@@ -1,5 +1,5 @@
 /**
- * Tests: the `comparisons` routes (t-87).
+ * Tests: the `comparisons` routes (t-87), and a draft that is an existing review (t-84).
  *
  * POST/GET /api/v1/comparisons · GET/DELETE …/{id}
  *
@@ -883,6 +883,234 @@ describe('a comparison with drafts that failed, scored partly, or were purged', 
     const done = await readBack(id);
     expect(done).toMatchObject({ status: 'failed', appeals: [] });
     expect(done.drafts.map((d) => d.status)).toEqual(['purged', 'purged']);
+  });
+});
+
+describe('POST /api/v1/comparisons — a draft that is a review the workspace has (t-84)', () => {
+  /** A finished review of `text` in this workspace, reviewed as `body` says. */
+  async function existingReview(text: string, body: Record<string, unknown> = {}) {
+    const { drafts: made } = await compare({ drafts: drafts(text, DRAFT_E), ...body });
+    await settle();
+    vi.clearAllMocks();
+    mocks.runJudge.mockImplementation(async (slot: string) => reply(slot));
+    mocks.callAgent.mockImplementation(editorCall);
+    aiAssessmentLimiter.reset(`user:${ALICE}`);
+    return String(made[0].assessmentId);
+  }
+
+  it('joins the set as it is: only the drafts given as text are reviewed and counted', async () => {
+    const original = await existingReview(DRAFT_A);
+    const reviewsBefore = fake.assessments.length;
+
+    const created = await compare({
+      drafts: [
+        { assessmentId: original, label: 'Original' },
+        { text: DRAFT_B, label: 'Rewrite' },
+      ],
+    });
+
+    expect(created.drafts.map((d) => [d.position, d.label])).toEqual([
+      [0, 'Original'],
+      [1, 'Rewrite'],
+    ]);
+    expect(created.drafts[0]).toMatchObject({ assessmentId: original, status: 'completed' });
+    // One new review, of the rewrite; the original is not run again.
+    expect(fake.assessments).toHaveLength(reviewsBefore + 1);
+    expect(fake.contents.at(-1)).toMatchObject({ text: DRAFT_B, title: 'Rewrite' });
+    expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(5);
+    await settle();
+    expect(mocks.runJudge).toHaveBeenCalledTimes(TWO.length);
+    for (const call of mocks.runJudge.mock.calls) {
+      expect(JSON.stringify(call[1])).not.toContain(DRAFT_A);
+    }
+
+    // Read back as any comparison, the verdict weighing both.
+    const done = await readBack(created.id);
+    expect(done.status).toBe('completed');
+    expect(done.drafts.map((d) => [d.status, d.overall])).toEqual([
+      ['completed', 55],
+      ['completed', 56],
+    ]);
+    expect(done.verdict).toMatchObject({ status: 'completed', draft: 1 });
+    // The review keeps its own row and place in the history: the set only points at it.
+    expect(fake.assessments.filter((a) => a.id === original)).toHaveLength(1);
+  });
+
+  it('writes a draft and its original in a transaction sized for a comparison, not one review', async () => {
+    const original = await existingReview(DRAFT_A);
+
+    await compare({ drafts: [{ assessmentId: original }, { text: DRAFT_B }] });
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
+  });
+
+  it('refuses a review reviewed another way with 409, saying what differs, storing nothing', async () => {
+    const original = await existingReview(DRAFT_A, { context: { contentType: 'landing_page' } });
+    const sets = fake.sets.length;
+    const reviews = fake.assessments.length;
+
+    const res = await post({
+      judges: ['judge_ethos'],
+      drafts: [{ text: DRAFT_B }, { assessmentId: original }],
+    });
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'REVIEW_NOT_COMPARABLE',
+      details: { position: 1, reason: 'options_differ', differs: ['judges', 'context'] },
+    });
+    expect(fake.sets).toHaveLength(sets);
+    expect(fake.assessments).toHaveLength(reviews);
+    expect(aiAssessmentLimiter.peek(`user:${ALICE}`).remaining).toBe(6);
+  });
+
+  it('refuses with 409 a review that ended without a score', async () => {
+    const failed = await existingReview(UNSCORABLE);
+
+    const res = await post({ judges: TWO, drafts: [{ assessmentId: failed }, { text: DRAFT_B }] });
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'REVIEW_NOT_COMPARABLE',
+      details: { position: 0, reason: 'not_scored' },
+    });
+  });
+
+  it('refuses with 409 a review only partly scored, which the verdict would not weigh', async () => {
+    const original = await existingReview(DRAFT_A);
+    const row = fake.assessments.find((a) => a.id === original);
+    if (row) row.status = 'PARTIAL';
+    const sets = fake.sets.length;
+
+    const res = await post({
+      judges: TWO,
+      drafts: [{ assessmentId: original }, { text: DRAFT_B }],
+    });
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'REVIEW_NOT_COMPARABLE',
+      details: { position: 0, reason: 'partly_scored' },
+    });
+    expect(fake.sets).toHaveLength(sets);
+  });
+
+  it('refuses with 409 a review not finished yet, which may still end unscored', async () => {
+    const original = await existingReview(DRAFT_A);
+    const row = fake.assessments.find((a) => a.id === original);
+    if (row) row.status = 'RUNNING';
+    const sets = fake.sets.length;
+
+    const res = await post({
+      judges: TWO,
+      drafts: [{ assessmentId: original }, { text: DRAFT_B }],
+    });
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'REVIEW_NOT_COMPARABLE',
+      details: { position: 0, reason: 'not_finished' },
+    });
+    expect(fake.sets).toHaveLength(sets);
+  });
+
+  it('refuses with 400 a draft giving both text and a review', async () => {
+    const res = await post({ drafts: [{ text: DRAFT_A, assessmentId: 'x' }, { text: DRAFT_B }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify((await json(res)).error)).toContain('not both');
+  });
+
+  describe('a review that changes after it was checked, before the set is written', () => {
+    /** Run `change` on the review right after the first check reads it. */
+    function afterCheck(change: (row: Record<string, unknown>) => void) {
+      const { findMany } = fake.db.assessment;
+      const read = findMany.getMockImplementation();
+      findMany.mockImplementationOnce(async (args: Parameters<typeof findMany>[0]) => {
+        const rows = (await read?.(args)) ?? [];
+        for (const row of fake.assessments) change(row);
+        return rows;
+      });
+    }
+
+    it('is refused with 404 when deleted, storing nothing and holding nothing', async () => {
+      const original = await existingReview(DRAFT_A);
+      const sets = fake.sets.length;
+      afterCheck(() => {
+        const at = fake.assessments.findIndex((a) => a.id === original);
+        if (at >= 0) fake.assessments.splice(at, 1);
+      });
+
+      const res = await post({
+        judges: TWO,
+        drafts: [{ text: DRAFT_B }, { assessmentId: original }],
+      });
+
+      expect(res.status).toBe(404);
+      expect((await json(res)).error).toMatchObject({
+        code: 'ASSESSMENT_NOT_FOUND',
+        details: { position: 1 },
+      });
+      // Refused in the transaction, which rolls the new review back (the fake
+      // keeps no rollback, so this reads what it can): no set, no run, no hold.
+      expect(fake.sets).toHaveLength(sets);
+      expect(fake.holds).toHaveLength(0);
+      await settle();
+      expect(mocks.runJudge).not.toHaveBeenCalled();
+    });
+
+    it('is refused with 409 when it ended without a score', async () => {
+      const original = await existingReview(DRAFT_A);
+      const sets = fake.sets.length;
+      afterCheck((row) => {
+        if (row.id === original) row.status = 'CANCELLED';
+      });
+
+      const res = await post({
+        judges: TWO,
+        drafts: [{ assessmentId: original }, { text: DRAFT_B }],
+      });
+
+      expect(res.status).toBe(409);
+      expect((await json(res)).error).toMatchObject({
+        code: 'REVIEW_NOT_COMPARABLE',
+        details: { position: 0, reason: 'not_scored' },
+      });
+      expect(fake.sets).toHaveLength(sets);
+    });
+  });
+
+  it('refuses with 404 a review in another workspace, or none', async () => {
+    signedIn(BOB, WS_B);
+    const theirs = await existingReview(DRAFT_A);
+    signedIn(ALICE, WS_A);
+
+    for (const assessmentId of [theirs, 'no-such-review']) {
+      const res = await post({ judges: TWO, drafts: [{ text: DRAFT_B }, { assessmentId }] });
+      expect(res.status).toBe(404);
+      expect((await json(res)).error).toMatchObject({
+        code: 'ASSESSMENT_NOT_FOUND',
+        details: { position: 1 },
+      });
+    }
+    expect(fake.sets.filter((s) => s.orgId === WS_A)).toHaveLength(0);
+  });
+
+  it('refuses with 400 a set with no draft as text, or naming one review twice', async () => {
+    const original = await existingReview(DRAFT_A);
+    const other = String(fake.assessments[1].id);
+
+    for (const set of [
+      [{ assessmentId: original }, { assessmentId: other }],
+      [{ assessmentId: original }, { assessmentId: original }, { text: DRAFT_B }],
+    ]) {
+      const res = await post({ judges: TWO, drafts: set });
+      expect(res.status).toBe(400);
+      expect((await json(res)).error?.code).toBe('VALIDATION_ERROR');
+    }
   });
 });
 

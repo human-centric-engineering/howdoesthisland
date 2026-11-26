@@ -3,8 +3,8 @@
 A review says what to change; a rewrite is the draft that does it. The editor
 rewrites a finished review's text, streaming the draft as it writes, and the app
 keeps it. Built in t-81 (f-rewrite, app-plan §8.2). The report's drawer (t-82)
-and the placeholders as fields (t-83) build on it; reviewing a rewrite as a
-comparison (t-84) is next.
+and the placeholders as fields (t-83) build on it, and t-84 reviews a rewrite
+as a comparison with its original.
 
 ## The API
 
@@ -242,12 +242,20 @@ show it.
 - **The list** is each read laid under the rows the drawer has seen since
   (`mergeRewrites`), so a read that lands after a rewrite started does not
   hide it, and only the latest read's answer is shown.
-- **Copy** copies the draft. **Review this draft** reads the review
-  (`GET /api/v1/assessments/{id}`) and starts a review of the draft with the
-  same model version, reader context, project and AI reviewers, and its title
-  marked "(rewrite)" (a quick review
-  is reviewed quickly again: `judges` takes at least one), then opens it. In
-  t-84 that becomes a comparison with the original.
+- **Copy** copies the draft. **Review this draft** (t-84) reads the review
+  (`GET /api/v1/assessments/{id}`) and starts a comparison of the original and
+  the draft (`POST /api/v1/comparisons`, `compareDraftBody`), then opens it at
+  `/compare/{id}`. The draft is reviewed with the original's model version,
+  reader context, project and AI reviewers (a quick review is reviewed quickly
+  again: `judges` takes at least one). The original joins by its review's id,
+  so it is not reviewed or charged again (`.context/app/comparisons.md`). The
+  original is labelled with its title, or "Original", and the draft with the
+  title and its focus ("Q3 board briefing (ethos rewrite)").
+- **When the original no longer compares** (409 `REVIEW_NOT_COMPARABLE`,
+  `options_differ`: usually its project's defaults or weights changed since),
+  the refusal says so and offers **Review both again**, which sends the
+  original's copy as text, reviewed beside the draft and charged as two
+  reviews. It is never done without that press.
 - **Facts the editor needs** (t-83): a finished draft's placeholders are
   listed under it as short fields, each with its label. **Fill these and
   rewrite** (enabled once one is filled) starts the next rewrite from that
@@ -270,8 +278,10 @@ show it.
   rate limit is worded for rewrites, without blaming the reader, since a burst
   of the workspace's requests answers it too (`rewriteRefusalOf`). A review of
   the draft refused for a retired model version says so, rather than to reload
-  (`reviewDraftRefusalOf`): the draft is reviewed with its original's
-  version. A rewrite that started and then failed shows the server's `error`
+  (`compareDraftRefusalOf`): the draft is reviewed with its original's
+  version. One refused `REVIEW_NOT_COMPARABLE` says why: an original with no
+  score has nothing to compare with; one partly scored, or reviewed with
+  settings that have changed since, offers **Review both again**. A rewrite that started and then failed shows the server's `error`
   and keeps what it wrote.
 
 ## When the process dies

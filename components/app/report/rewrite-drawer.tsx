@@ -6,8 +6,16 @@
  * A drawer off the report's actions. The writer picks a focus (balanced, or
  * one appeal) and the editor's draft streams in as it is written
  * (`POST /api/v1/rewrites`, `stream: true`). A finished draft can be copied,
- * or reviewed as a new review with the original's reader context, project
- * and AI reviewers, which then opens.
+ * or reviewed beside its original as a comparison (t-84), which then opens
+ * (`/compare/[id]`).
+ *
+ * **Review this draft** compares the draft with the review it was rewritten
+ * from (`POST /api/v1/comparisons`): the draft is reviewed with the
+ * original's model version, reader context, project and AI reviewers, and the
+ * original joins by its review, so it is not reviewed or charged again. When
+ * that review no longer compares (its project's settings changed since),
+ * the refusal offers **Review both again**, which reviews the original's copy
+ * beside the draft, charged as two reviews (and the editor's verdict).
  *
  * Opening the drawer reads the review's earlier rewrites (one call for the
  * whole list, each with its draft), and any of them reopens. One still being
@@ -55,17 +63,18 @@ import {
 } from '@/components/ui/dialog';
 import { FieldHelp } from '@/components/ui/field-help';
 import { SaveError } from '@/components/forms/form-error';
-import { ASSESSMENTS_ENDPOINT, reportPath } from '@/components/app/workbench/schemas';
+import { ASSESSMENTS_ENDPOINT } from '@/components/app/workbench/schemas';
+import { COMPARISONS_ENDPOINT, comparePath } from '@/components/app/compare/schemas';
 import { BriefInvite } from '@/components/app/projects/brief-invite';
 import {
   answersFor,
+  compareDraftBody,
+  compareDraftRefusalOf,
   failureMessage,
   followRewrite,
   listRewrites,
   mergeRewrites,
   originalReviewSchema,
-  reviewDraftBody,
-  reviewDraftRefusalOf,
   rewriteRefusalOf,
   startedSince,
   streamRewrite,
@@ -126,6 +135,8 @@ export function RewriteDrawer({
    */
   const [answersBy, setAnswersBy] = useState<Record<string, Record<string, string>>>({});
   const [reviewUsagePage, setReviewUsagePage] = useState<string | null>(null);
+  /** Set when the original's review no longer compares: reviewing both again would. */
+  const [offerReviewAgain, setOfferReviewAgain] = useState(false);
   const rewrite = useSaveFailure({ fallback: 'The rewrite could not be started. Try again.' });
   const review = useSaveFailure({
     fallback: `The ${WORDS.review} of this draft could not be started. Try again.`,
@@ -248,11 +259,13 @@ export function RewriteDrawer({
     setOrigin('write');
     rewrite.clear();
     review.clear();
+    setOfferReviewAgain(false);
   };
 
   const write = async (ask: RewriteAsk, from: Origin) => {
     rewrite.clear();
     review.clear();
+    setOfferReviewAgain(false);
     setOrigin(from);
     setUsagePage(null);
     setCopied(false);
@@ -339,6 +352,7 @@ export function RewriteDrawer({
   const reopen = (r: RewriteWire) => {
     rewrite.clear();
     review.clear();
+    setOfferReviewAgain(false);
     setOrigin('write');
     setUsagePage(null);
     setReviewUsagePage(null);
@@ -361,25 +375,33 @@ export function RewriteDrawer({
     }
   };
 
-  const reviewDraft = async () => {
+  /** Compare the shown draft with its original; `reviewAgain` reviews the original's copy too. */
+  const reviewDraft = async (reviewAgain = false) => {
+    if (!shown) return;
     review.clear();
     setReviewUsagePage(null);
+    setOfferReviewAgain(false);
     setReviewing(true);
     try {
       const original = originalReviewSchema.parse(
         await apiClient.get<unknown>(`${ASSESSMENTS_ENDPOINT}/${encodeURIComponent(assessmentId)}`)
       );
       const created = createdIdSchema.parse(
-        await apiClient.post<unknown>(ASSESSMENTS_ENDPOINT, {
-          body: reviewDraftBody(original, draft),
+        await apiClient.post<unknown>(COMPARISONS_ENDPOINT, {
+          body: compareDraftBody(
+            { ...original, id: assessmentId },
+            { text: draft, focusName: nameOf(shown.focus) },
+            reviewAgain
+          ),
         })
       );
-      router.push(reportPath(created.id));
+      router.push(comparePath(created.id));
     } catch (err) {
-      const refusal = reviewDraftRefusalOf(err);
+      const refusal = compareDraftRefusalOf(err);
       if (refusal) {
         review.show(refusal.message);
         setReviewUsagePage(refusal.usagePage);
+        setOfferReviewAgain(refusal.reviewAgain);
       } else {
         review.report(err);
       }
@@ -509,12 +531,26 @@ export function RewriteDrawer({
                 Review this draft
               </Button>
               <FieldHelp title="Review this draft">
-                Starts a new {WORDS.review} of this draft with the original&rsquo;s reader settings,
-                project and {WORDS.aiReviewers}, and opens it. It is charged as any {WORDS.review}{' '}
-                is.
+                Reviews this draft with the original&rsquo;s reader settings, project and{' '}
+                {WORDS.aiReviewers}, and opens it side by side with the original&rsquo;s{' '}
+                {WORDS.review}, with the editor&rsquo;s verdict on which lands better. The
+                draft&rsquo;s {WORDS.review} is charged, as any is, and so is the verdict when the{' '}
+                {WORDS.review} calls enough {WORDS.aiReviewers} for one. The original is not
+                reviewed again.
               </FieldHelp>
             </div>
             <SaveError failure={review.failure} />
+            {review.failure && offerReviewAgain ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void reviewDraft(true)}
+                disabled={reviewing}
+              >
+                Review both again
+              </Button>
+            ) : null}
             {review.failure && reviewUsagePage ? (
               <p className="text-sm">
                 <Link href={reviewUsagePage} className="underline">
