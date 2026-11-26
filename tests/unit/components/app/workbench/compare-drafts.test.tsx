@@ -148,7 +148,7 @@ describe('Compare drafts tab', () => {
     await userEvent.click(compareButton(2));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /The comparison has started.*no need to start it again: find it on the Comparisons page \(\/compare\)/
+      /The comparison has started.*no need to start it again: find it listed on the Comparisons page/
     );
     expect(push).not.toHaveBeenCalled();
     // Still on the Compare tab, under its message, with the copy spent.
