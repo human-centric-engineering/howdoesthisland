@@ -23,7 +23,7 @@ import type { AssessmentRequest } from '@/lib/app/assessments/api/validations';
 import { MAX_URL_CHARS } from '@/lib/app/assessments/limits';
 import type { AssessmentSummaryForAssistant } from '@/lib/app/mcp/assessment-summary';
 import { ASSESS_DRAFT } from '@/lib/app/mcp/definitions';
-import { creatorOf, draftShape } from '@/lib/app/mcp/tool-support';
+import { contextShape, creatorOf, draftShape } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -87,7 +87,7 @@ export class AssessDraftCapability extends BaseCapability<Args, AssessmentSummar
         ...draftShape(args),
         ...(args.title !== undefined ? { title: '[title]' } : {}),
         projectId: args.projectId,
-        context: args.context,
+        context: contextShape(args.context),
       },
       resultPreview: result.success
         ? JSON.stringify({ id: result.data?.id, status: result.data?.status })

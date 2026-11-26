@@ -17,6 +17,7 @@ vi.mock('@/lib/app/assessments/api/service', () => ({ getAssessment: mocks.getAs
 
 import {
   readAssessmentSummary,
+  storedButUnread,
   summariseAssessment,
   SUMMARY_RECOMMENDATIONS,
 } from '@/lib/app/mcp/assessment-summary';
@@ -265,6 +266,20 @@ describe('a review still running', () => {
     const summary = await summariseAssessment(detail({ status: 'queued', result: null }));
 
     expect(summary).toMatchObject({ ready: false, early: null });
+  });
+});
+
+describe('storedButUnread', () => {
+  it('answers the id and status, and says to read it back rather than start another', () => {
+    expect(storedButUnread(detail({ status: 'completed' }))).toEqual({
+      id: 'a 1',
+      status: 'completed',
+      title: 'Launch email',
+      reportUrl: 'https://app.test/assessments/a%201',
+      ready: false,
+      next: expect.stringContaining('do not start another'),
+      early: null,
+    });
   });
 });
 

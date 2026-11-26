@@ -41,7 +41,9 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   per-person cap (`aiAssessmentLimiter`, keyed `user:<id>`, the same bucket as
   the API) and the review's `createdByUserId`. A key whose creator has gone
   (`createdBy` is `SetNull`), or is no longer a member of the key's workspace,
-  is refused with `KEY_HAS_NO_OWNER` before anything is prepared or charged. The two tools
+  is refused with `KEY_HAS_NO_OWNER` before anything is prepared or charged,
+  and a suspended workspace with `WORKSPACE_SUSPENDED`. Past the per-person cap
+  the code is `RATE_LIMIT_EXCEEDED`, the API's. The two tools
   that only read, or spend nothing, still work for it.
 - **Credits, the review budget and the running limit hold as over the API**,
   because the tool takes the route's steps, in the route's order.
@@ -54,9 +56,20 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   (`keepRunningAfterResponse`), and `get_assessment` reads it later. On Vercel
   that continuation is bounded by the MCP route's function duration, which the
   route raises to 300 seconds as `/api/v1/assessments` does (divergence row 32).
-  A review cut off anyway (a long JSON-RPC batch of reviews runs them one after
-  another in one request) is picked up by assessment recovery, as any abandoned
-  run is.
+  A review cut off anyway is picked up by assessment recovery, as any abandoned
+  run is. Two ways that can still happen: a JSON-RPC batch runs its calls one
+  after another in one request, so a batch of several `assess_draft` calls can
+  outlast the 300 seconds; and the tool does not see the client hang up (core's
+  `CapabilityContext` carries no abort signal), so it waits out its 45 seconds
+  either way.
+- **A stored review always answers its id.** If the summary cannot be built
+  after the review is stored (`storedButUnread`), the tool logs it and answers
+  the id and status with `ready: false`, so the assistant reads it back with
+  `get_assessment` instead of paying for another.
+- **The audit trail keeps a context's catalogue ids, not free text**
+  (`contextShape`): a key or value that does not read as an id is kept as
+  `[key]` or `[value]`, since the record is written before the framework checks
+  the context.
 - **Refusals reach the assistant in the library's words.** An `APIError` (no
   credits, a context the framework refuses, not found) becomes the tool's error
   with its code. Anything else is thrown for the dispatcher to log, and it

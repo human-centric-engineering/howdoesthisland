@@ -13,7 +13,7 @@
 import { z } from 'zod';
 import { contextField, textField } from '@/lib/app/assessments/api/validations';
 import { QUICK_SCAN } from '@/lib/app/mcp/definitions';
-import { draftShape } from '@/lib/app/mcp/tool-support';
+import { contextShape, draftShape } from '@/lib/app/mcp/tool-support';
 import type { QuickScanSummary } from '@/lib/app/quick-scan/summary';
 import {
   BaseCapability,
@@ -44,7 +44,7 @@ export class QuickScanCapability extends BaseCapability<Args, QuickScanSummary> 
 
   redactProvenance(args: Args, result: CapabilityResult<QuickScanSummary>): ProvenanceRedaction {
     return {
-      args: { ...draftShape(args), context: args.context },
+      args: { ...draftShape(args), context: contextShape(args.context) },
       resultPreview: result.success
         ? JSON.stringify({ overall: result.data?.overall, band: result.data?.band })
         : JSON.stringify(result.error),

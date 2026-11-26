@@ -52,6 +52,26 @@ export function creatorOf(context: CapabilityContext): string | ToolRefusal {
   };
 }
 
+/** A context key or value that reads as a catalogue id, not as free text. */
+const CATALOGUE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+
+/**
+ * What the audit trail keeps of a context: each key and value that reads as a
+ * catalogue id, and `[value]` for anything else. Recorded before the framework
+ * checks the context, so a caller's free text must not pass through.
+ */
+export function contextShape(
+  context: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (context === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(context).map(([key, value]) => [
+      CATALOGUE_ID.test(key) ? key : '[key]',
+      typeof value === 'string' && CATALOGUE_ID.test(value) ? value : '[value]',
+    ])
+  );
+}
+
 /** What the audit trail keeps of a draft: its size, never its words. */
 export function draftShape(args: { text?: string; url?: string }): Record<string, unknown> {
   return {

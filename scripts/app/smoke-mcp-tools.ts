@@ -138,23 +138,27 @@ async function main(): Promise<number> {
       select: { capabilityId: true, isEnabled: true },
     })
   );
-  await system(async () => {
-    await prisma.mcpServerConfig.update({ where: { id: config.id }, data: { isEnabled: true } });
-    for (const c of capabilities) {
-      await prisma.mcpExposedTool.upsert({
-        where: { capabilityId: c.id },
-        update: { isEnabled: true },
-        create: { capabilityId: c.id, isEnabled: true },
-      });
-    }
-  });
-
   const stamp = Date.now();
-  const org = await system(() => createWorkspaceOrg('Smoke MCP tools', `smoke-mcp-${stamp}`));
-  const other = await system(() =>
-    createWorkspaceOrg('Smoke MCP tools (other)', `smoke-mcp-other-${stamp}`)
-  );
+  // Everything that changes the install sits inside the try, so the finally
+  // puts back whatever was done before a step threw.
+  const made: { id: string }[] = [];
   try {
+    await system(async () => {
+      await prisma.mcpServerConfig.update({ where: { id: config.id }, data: { isEnabled: true } });
+      for (const c of capabilities) {
+        await prisma.mcpExposedTool.upsert({
+          where: { capabilityId: c.id },
+          update: { isEnabled: true },
+          create: { capabilityId: c.id, isEnabled: true },
+        });
+      }
+    });
+    const org = await system(() => createWorkspaceOrg('Smoke MCP tools', `smoke-mcp-${stamp}`));
+    made.push(org);
+    const other = await system(() =>
+      createWorkspaceOrg('Smoke MCP tools (other)', `smoke-mcp-other-${stamp}`)
+    );
+    made.push(other);
     const scan = await runAsOrg(org.id, () => runQuickScan({ text: DRAFT }));
     const makeReview = (orgId: string) =>
       runAsOrg(orgId, async () => {
@@ -249,28 +253,35 @@ async function main(): Promise<number> {
       `another workspace's review is not found (${refused.text.slice(0, 60)})`
     );
   } finally {
-    await system(async () => {
-      await eraseOrg({ orgId: org.id, actorUserId: 'smoke' });
-      await eraseOrg({ orgId: other.id, actorUserId: 'smoke' });
-      await prisma.mcpServerConfig.update({
+    // Each step on its own, so one that fails does not leave the rest undone.
+    const cleanUp = async (what: string, step: () => Promise<unknown>) => {
+      await system(step).catch((err: unknown) => {
+        console.error(`  ✗ could not ${what} after the smoke:`, err);
+        failures++;
+      });
+    };
+    for (const ws of made) {
+      await cleanUp('erase a smoke workspace', () =>
+        eraseOrg({ orgId: ws.id, actorUserId: 'smoke' })
+      );
+    }
+    await cleanUp('restore the MCP server switch', () =>
+      prisma.mcpServerConfig.update({
         where: { id: config.id },
         data: { isEnabled: config.isEnabled },
-      });
-      for (const c of capabilities) {
-        const before = exposedBefore.find((e) => e.capabilityId === c.id);
-        if (before) {
-          await prisma.mcpExposedTool.update({
-            where: { capabilityId: c.id },
-            data: { isEnabled: before.isEnabled },
-          });
-        } else {
-          await prisma.mcpExposedTool.delete({ where: { capabilityId: c.id } });
-        }
-      }
-    }).catch((err: unknown) => {
-      console.error('  ✗ could not clean up after the smoke:', err);
-      failures++;
-    });
+      })
+    );
+    for (const c of capabilities) {
+      const before = exposedBefore.find((e) => e.capabilityId === c.id);
+      await cleanUp(`restore the ${c.slug} tool`, () =>
+        before
+          ? prisma.mcpExposedTool.update({
+              where: { capabilityId: c.id },
+              data: { isEnabled: before.isEnabled },
+            })
+          : prisma.mcpExposedTool.deleteMany({ where: { capabilityId: c.id } })
+      );
+    }
   }
 
   console.log(failures === 0 ? 'MCP tools smoke passed' : `${failures} check(s) failed`);

@@ -146,6 +146,20 @@ export async function summariseAssessment(
   };
 }
 
+/**
+ * A stored assessment whose summary could not be built: its id and status, so
+ * an assistant reads it back with `get_assessment` rather than starting (and
+ * paying for) another.
+ */
+export function storedButUnread(detail: AssessmentDetail): AssessmentSummaryForAssistant {
+  return {
+    ...header(detail),
+    ready: false,
+    next: 'The review was stored but could not be read back just now. Call get_assessment with this id; do not start another review.',
+    early: null,
+  };
+}
+
 /** One of the workspace's assessments, summarised; `NotFoundError` for any other id. */
 export async function readAssessmentSummary(id: string): Promise<AssessmentSummaryForAssistant> {
   return summariseAssessment(await getAssessment(id));

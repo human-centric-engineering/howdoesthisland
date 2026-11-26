@@ -20,12 +20,14 @@ import type { AssessmentRequest } from '@/lib/app/assessments/api/validations';
 import { startWaitingReviews } from '@/lib/app/assessments/kick';
 import { WorkspaceBusyError } from '@/lib/app/assessments/places';
 import {
+  storedButUnread,
   summariseAssessment,
   type AssessmentSummaryForAssistant,
 } from '@/lib/app/mcp/assessment-summary';
 import { refusalOf } from '@/lib/app/mcp/run/refusal';
 import { MCP_WAIT_MS, type ToolOutcome } from '@/lib/app/mcp/tool-support';
 import { prisma } from '@/lib/db/client';
+import { logger } from '@/lib/logging';
 import { verifiedMembership } from '@/lib/tenancy/entry';
 import { requireOrgId } from '@/lib/tenancy/context';
 
@@ -35,6 +37,14 @@ export async function assessDraftTool(
 ): Promise<ToolOutcome<AssessmentSummaryForAssistant>> {
   const membership = await verifiedMembership(userId, requireOrgId(), prisma);
   if ('refused' in membership) {
+    if (membership.refused === 'org-suspended') {
+      return {
+        refusal: {
+          code: 'WORKSPACE_SUSPENDED',
+          message: 'This workspace is suspended, so it cannot start work that spends credits.',
+        },
+      };
+    }
     return {
       refusal: {
         code: 'KEY_HAS_NO_OWNER',
@@ -52,7 +62,7 @@ export async function assessDraftTool(
           const seconds = Math.max(1, limit.reset - Math.floor(Date.now() / 1000));
           return {
             refusal: {
-              code: 'RATE_LIMITED',
+              code: 'RATE_LIMIT_EXCEEDED',
               message: `Too many reviews started in the last minute. Try again in ${seconds} seconds.`,
             },
           };
@@ -69,7 +79,15 @@ export async function assessDraftTool(
       if (created.kind !== 'stored') {
         return { refusal: { code: 'NOT_STORED', message: 'The review was not stored.' } };
       }
-      return { data: await summariseAssessment(created.assessment) };
+      try {
+        return { data: await summariseAssessment(created.assessment) };
+      } catch (err) {
+        // The review is stored and may be paid for: answer its id, never a bare failure.
+        logger.error('assess_draft could not summarise a stored review', err, {
+          assessmentId: created.assessment.id,
+        });
+        return { data: storedButUnread(created.assessment) };
+      }
     } finally {
       await prepared.hold?.release();
     }

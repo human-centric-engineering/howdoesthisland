@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   readAssessmentSummary: vi.fn(),
   release: vi.fn(),
   verifiedMembership: vi.fn(),
+  storedButUnread: vi.fn(),
 }));
 
 vi.mock('@/lib/app/assessments/api/scan', () => ({ runQuickScan: mocks.runQuickScan }));
@@ -39,6 +40,7 @@ vi.mock('@/lib/app/assessments/kick', () => ({ startWaitingReviews: mocks.startW
 vi.mock('@/lib/app/mcp/assessment-summary', () => ({
   summariseAssessment: mocks.summariseAssessment,
   readAssessmentSummary: mocks.readAssessmentSummary,
+  storedButUnread: mocks.storedButUnread,
 }));
 vi.mock('@/lib/tenancy/context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/tenancy/context')>()),
@@ -162,6 +164,26 @@ describe('quick_scan', () => {
     expect(redacted.args).toEqual({ textChars: DRAFT.length, context: undefined });
     expect(JSON.stringify(redacted)).not.toContain('Sarah');
   });
+
+  it('keeps a context’s catalogue ids in the audit trail, never free text', () => {
+    const redacted = tool.redactProvenance(
+      {
+        text: DRAFT,
+        context: {
+          contentType: 'landing-page',
+          'who is reading': 'Jane Doe, recently bereaved',
+          n: 3,
+        },
+      },
+      { success: false, error: { code: 'CONTEXT_INVALID', message: 'no' } }
+    );
+
+    expect(redacted.args).toEqual({
+      textChars: DRAFT.length,
+      context: { contentType: 'landing-page', '[key]': '[value]', n: '[value]' },
+    });
+    expect(JSON.stringify(redacted)).not.toContain('Jane');
+  });
 });
 
 describe('assess_draft', () => {
@@ -260,6 +282,29 @@ describe('assess_draft', () => {
     expect(mocks.createAssessment).not.toHaveBeenCalled();
   });
 
+  it('refuses a key whose workspace is suspended in its own words', async () => {
+    mocks.verifiedMembership.mockResolvedValue({ refused: 'org-suspended' });
+
+    const result = await tool.execute(tool.validate({ text: DRAFT }), asCreator);
+
+    expect(result).toEqual({
+      success: false,
+      error: { code: 'WORKSPACE_SUSPENDED', message: expect.stringContaining('suspended') },
+    });
+    expect(mocks.prepareAssessment).not.toHaveBeenCalled();
+  });
+
+  it('answers a stored review’s id when its summary cannot be built, and releases the hold', async () => {
+    mocks.summariseAssessment.mockRejectedValue(new Error('connection reset'));
+    mocks.storedButUnread.mockReturnValue({ id: 'a-1', status: 'running', ready: false });
+
+    const result = await tool.execute(tool.validate({ text: DRAFT }), asCreator);
+
+    expect(mocks.storedButUnread).toHaveBeenCalledWith({ id: 'a-1', status: 'running' });
+    expect(result).toEqual({ success: true, data: { id: 'a-1', status: 'running', ready: false } });
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses past the per-person cap without charging, and releases the hold', async () => {
     mocks.limiterCheck.mockReturnValue({
       success: false,
@@ -272,7 +317,10 @@ describe('assess_draft', () => {
 
     expect(result).toEqual({
       success: false,
-      error: { code: 'RATE_LIMITED', message: expect.stringMatching(/Try again in \d+ seconds/) },
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: expect.stringMatching(/Try again in \d+ seconds/),
+      },
     });
     expect(mocks.holdReviewBudget).not.toHaveBeenCalled();
     expect(mocks.createAssessment).not.toHaveBeenCalled();

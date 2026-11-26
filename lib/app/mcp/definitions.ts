@@ -64,8 +64,9 @@ export const ASSESS_DRAFT: CapabilityFunctionDefinition = {
       },
       title: {
         type: 'string',
-        description: 'Optional: a name for the review, shown in the workspace.',
+        description: 'Optional: a name for the review, shown in the workspace. Not blank.',
         minLength: 1,
+        pattern: '\\S',
         maxLength: 200,
       },
       projectId: {
