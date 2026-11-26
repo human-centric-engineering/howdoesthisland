@@ -1,0 +1,131 @@
+/**
+ * What each HowDoesThisLand MCP tool publishes (t-92): its name, what an
+ * assistant reads about it, and the JSON Schema of its arguments.
+ *
+ * One copy, read by two things: the capability classes in `lib/app/mcp/`
+ * and the seed that writes their `AiCapability` rows
+ * (`prisma/seeds/app-howdoesthisland/003-mcp-tools.ts`). A definition the
+ * row and the class disagree on is a tool that strips the argument it does
+ * not know, silently (`sunrise.mcp-reseed`); importing the same object
+ * leaves nothing to disagree on, and the parity test
+ * (`capability-class-seed-parity.test.ts`) still checks it.
+ *
+ * Deliberately dependency-free: the seed runner imports it, so it must not
+ * pull in the database client, the logger or the environment.
+ *
+ * Each schema here mirrors a Zod schema in its class, which is what the
+ * dispatcher validates with. `tests/unit/lib/app/mcp/definitions.test.ts`
+ * holds the two together.
+ */
+import type { CapabilityFunctionDefinition } from '@/lib/orchestration/capabilities/types';
+
+/** As `MAX_CONTENT_CHARS * 2` in `lib/app/assessments/limits.ts`: the API's bound on pasted text. */
+export const MCP_TEXT_MAX = 80_000;
+/** As `MAX_URL_CHARS`. */
+export const MCP_URL_MAX = 2048;
+
+const textProperty = {
+  type: 'string',
+  description:
+    'The draft itself, pasted as plain text. Up to about 40,000 characters are assessed; anything beyond is refused.',
+  maxLength: MCP_TEXT_MAX,
+};
+
+const contextProperty = {
+  type: 'object',
+  description:
+    'Optional: what kind of copy the draft is and who it is for, as the framework reads it, for example {"contentType": "landing_page"} (others include "sales_email", "pitch_deck", "cover_letter" and "general", the default). Leave it out to use the defaults; a value the framework does not know is refused, saying which field.',
+};
+
+export const QUICK_SCAN: CapabilityFunctionDefinition = {
+  name: 'quick_scan',
+  description:
+    'Score a draft at once, without AI: a surface check of word patterns (hype words, vague claims, missing numbers, long sentences) giving an overall score, a band and a score for each of the four appeals. It costs nothing and stores nothing. It cannot tell whether the argument holds up or how a reader will take it; for that, use assess_draft.',
+  parameters: {
+    type: 'object',
+    properties: { text: textProperty, context: contextProperty },
+    required: ['text'],
+    additionalProperties: false,
+  },
+};
+
+export const ASSESS_DRAFT: CapabilityFunctionDefinition = {
+  name: 'assess_draft',
+  description:
+    "Have a panel of AI reviewers assess a draft and say what to change: an overall score and band, the editor's verdict, the changes that matter most, and recommendations quoting the draft. Spends one of the workspace's review credits. Give the draft as text, or as a public web page's url. A review usually takes a minute or two: if it is not finished within about 45 seconds this answers with the assessment's id and status, and get_assessment reads it once it has finished.",
+  parameters: {
+    type: 'object',
+    properties: {
+      text: textProperty,
+      url: {
+        type: 'string',
+        description: 'Instead of text: a public http(s) page to read the draft from.',
+        maxLength: MCP_URL_MAX,
+      },
+      title: {
+        type: 'string',
+        description: 'Optional: a name for the review, shown in the workspace.',
+        minLength: 1,
+        maxLength: 200,
+      },
+      projectId: {
+        type: 'string',
+        description:
+          "Optional: the workspace project to review it in. The reviewers then read the project's brief and context documents.",
+        minLength: 1,
+        maxLength: 64,
+      },
+      context: contextProperty,
+    },
+    additionalProperties: false,
+  },
+};
+
+export const GET_ASSESSMENT: CapabilityFunctionDefinition = {
+  name: 'get_assessment',
+  description:
+    "Read one of the workspace's assessments by its id: its status and, once finished, the overall score and band, the editor's verdict, the changes that matter most, what already works, the score for each appeal, the recommendations and any red flags. A recommendation marked example: true shows the move on the model's own illustration, not on a line of this draft. While it is still running, it says so and gives the quick scan's early read.",
+  parameters: {
+    type: 'object',
+    properties: {
+      assessmentId: {
+        type: 'string',
+        description: 'The id assess_draft answered with.',
+        minLength: 1,
+        maxLength: 64,
+      },
+    },
+    required: ['assessmentId'],
+    additionalProperties: false,
+  },
+};
+
+/**
+ * Each tool's row, as the seed writes it. `name` and `description` are the
+ * admin's presentation, seeded once; `rateLimit` is per minute, per agent
+ * (`mcp-system` for every unscoped key), on top of the per-user caps the
+ * classes apply themselves.
+ */
+export const MCP_TOOL_ROWS = [
+  {
+    definition: QUICK_SCAN,
+    handler: 'QuickScanCapability',
+    name: 'Quick scan',
+    description: 'Score a draft at once without AI. Free; stores nothing.',
+    rateLimit: 120,
+  },
+  {
+    definition: ASSESS_DRAFT,
+    handler: 'AssessDraftCapability',
+    name: 'Assess a draft',
+    description: 'Start a full review by the AI panel. Spends a review credit.',
+    rateLimit: 60,
+  },
+  {
+    definition: GET_ASSESSMENT,
+    handler: 'GetAssessmentCapability',
+    name: 'Read an assessment',
+    description: "Read one of the workspace's assessments, as an assistant needs it.",
+    rateLimit: 120,
+  },
+] as const;

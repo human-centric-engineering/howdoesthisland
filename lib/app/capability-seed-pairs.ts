@@ -25,6 +25,9 @@
  *
  * Full guide: CUSTOMIZATION.md §4 · .context/database/seeding.md
  */
+import { AssessDraftCapability } from '@/lib/app/mcp/assess-draft';
+import { GetAssessmentCapability } from '@/lib/app/mcp/get-assessment';
+import { QuickScanCapability } from '@/lib/app/mcp/quick-scan';
 
 /** One capability slug and the class whose definition its seed must write. */
 export interface AppCapabilityPair {
@@ -48,7 +51,12 @@ export interface AppCapabilityPair {
  * ];
  * ```
  */
-export const APP_CAPABILITY_PAIRS: readonly AppCapabilityPair[] = [];
+export const APP_CAPABILITY_PAIRS: readonly AppCapabilityPair[] = [
+  // `prisma/seeds/app-howdoesthisland/003-mcp-tools.ts` (t-92).
+  { slug: 'quick_scan', instance: new QuickScanCapability() },
+  { slug: 'assess_draft', instance: new AssessDraftCapability() },
+  { slug: 'get_assessment', instance: new GetAssessmentCapability() },
+];
 
 /**
  * Seeds of this fork's that the parity test cannot run under its strict mock
