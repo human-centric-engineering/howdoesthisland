@@ -52,6 +52,18 @@ export function creatorOf(context: CapabilityContext): string | ToolRefusal {
   };
 }
 
+/** Who a tool that does not spend runs for: checked with its work (`run/caller.ts`). */
+export interface ToolCaller {
+  userId: string | null;
+  /** The call is a workflow step's, which may run with no person behind it. */
+  inWorkflow: boolean;
+}
+
+/** The caller a context carries. */
+export function callerOf(context: CapabilityContext): ToolCaller {
+  return { userId: context.userId, inWorkflow: context.workflowExecutionId !== undefined };
+}
+
 /** A context key or value that reads as a catalogue id, not as free text. */
 const CATALOGUE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 

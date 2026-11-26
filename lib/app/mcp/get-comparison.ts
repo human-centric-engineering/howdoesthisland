@@ -5,8 +5,8 @@
  * A tool rather than an MCP resource for the reason `get_assessment` is one:
  * it is how `compare_drafts`'s answer is read once the comparison has
  * finished, and a workspace's own agents dispatch capabilities. Reads only,
- * so it needs no person behind the key; another workspace's id is not
- * found, as over the API.
+ * but the person behind the key must still be in its workspace
+ * (`run/caller.ts`); another workspace's id is not found, as over the API.
  *
  * The work is loaded on the first call: why, in `tool-support.ts`.
  */
@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { comparisonIdParamSchema } from '@/lib/app/comparisons/validations';
 import type { ComparisonSummaryForAssistant } from '@/lib/app/mcp/comparison-summary';
 import { GET_COMPARISON } from '@/lib/app/mcp/definitions';
-import { idShape } from '@/lib/app/mcp/tool-support';
+import { callerOf, idShape } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -36,10 +36,10 @@ export class GetComparisonCapability extends BaseCapability<Args, ComparisonSumm
 
   async execute(
     args: Args,
-    _context: CapabilityContext
+    context: CapabilityContext
   ): Promise<CapabilityResult<ComparisonSummaryForAssistant>> {
     const { getComparisonTool } = await import('@/lib/app/mcp/run/get-comparison');
-    const outcome = await getComparisonTool(args.comparisonId);
+    const outcome = await getComparisonTool(args.comparisonId, callerOf(context));
     if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
     return this.success(outcome.data);
   }

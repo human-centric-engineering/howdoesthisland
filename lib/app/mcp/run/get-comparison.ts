@@ -7,12 +7,16 @@ import {
   summariseComparison,
   type ComparisonSummaryForAssistant,
 } from '@/lib/app/mcp/comparison-summary';
+import { callerRefusal } from '@/lib/app/mcp/run/caller';
 import { refusalOf } from '@/lib/app/mcp/run/refusal';
-import type { ToolOutcome } from '@/lib/app/mcp/tool-support';
+import type { ToolCaller, ToolOutcome } from '@/lib/app/mcp/tool-support';
 
 export async function getComparisonTool(
-  comparisonId: string
+  comparisonId: string,
+  caller: ToolCaller
 ): Promise<ToolOutcome<ComparisonSummaryForAssistant>> {
+  const refused = await callerRefusal(caller);
+  if (refused) return { refusal: refused };
   try {
     return { data: summariseComparison(await getComparison(comparisonId)) };
   } catch (err) {

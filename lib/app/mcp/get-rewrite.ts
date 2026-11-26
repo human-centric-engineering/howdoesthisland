@@ -4,16 +4,16 @@
  *
  * A tool rather than an MCP resource for the reason `get_assessment` is one:
  * it is how `rewrite_draft`'s answer is read once the rewrite has finished,
- * and a workspace's own agents dispatch capabilities. Reads only, so it needs
- * no person behind the key; another workspace's id is not found, as over the
- * API.
+ * and a workspace's own agents dispatch capabilities. Reads only, but the
+ * person behind the key must still be in its workspace (`run/caller.ts`);
+ * another workspace's id is not found, as over the API.
  *
  * The work is loaded on the first call: why, in `tool-support.ts`.
  */
 import { z } from 'zod';
 import { GET_REWRITE } from '@/lib/app/mcp/definitions';
 import type { RewriteSummaryForAssistant } from '@/lib/app/mcp/rewrite-summary';
-import { idShape } from '@/lib/app/mcp/tool-support';
+import { callerOf, idShape } from '@/lib/app/mcp/tool-support';
 import { rewriteIdParamSchema } from '@/lib/app/rewrites/validations';
 import {
   BaseCapability,
@@ -36,10 +36,10 @@ export class GetRewriteCapability extends BaseCapability<Args, RewriteSummaryFor
 
   async execute(
     args: Args,
-    _context: CapabilityContext
+    context: CapabilityContext
   ): Promise<CapabilityResult<RewriteSummaryForAssistant>> {
     const { getRewriteTool } = await import('@/lib/app/mcp/run/get-rewrite');
-    const outcome = await getRewriteTool(args.rewriteId);
+    const outcome = await getRewriteTool(args.rewriteId, callerOf(context));
     if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
     return this.success(outcome.data);
   }

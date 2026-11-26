@@ -11,19 +11,22 @@ workflows to call.
 
 | Tool             | Does                                                                                                            | Calls (the route's library)                                                                    | Needs a person | Spends |
 | ---------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------- | ------ |
-| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat.                      | `runQuickScan`, `summariseQuickScan`                                                           | no             | no     |
+| `quick_scan`     | Scores pasted text at once, without AI. Answers the route's summary: scores, band, caveat.                      | `runQuickScan`, `summariseQuickScan`                                                           | yes            | no     |
 | `assess_draft`   | Starts a full review of text or a public URL, stored, and waits up to 45 seconds for it.                        | `prepareAssessment` → cap → `holdReviewBudget` → `createAssessment`                            | yes            | yes    |
-| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                                              | `getAssessment`, then `loadReport` (the report's own view)                                     | no             | no     |
+| `get_assessment` | Reads one of the workspace's reviews, summarised for an assistant.                                              | `getAssessment`, then `loadReport` (the report's own view)                                     | yes            | no     |
 | `compare_drafts` | Reviews 2–5 drafts the same way, and waits up to 45 seconds for the editor's verdict.                           | `prepareComparison` → cap → `holdComparisonBudget` → cap → `createComparison` → `releaseHolds` | yes            | yes    |
-| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.                          | `getComparison` (the comparison's own view)                                                    | no             | no     |
+| `get_comparison` | Reads one of the workspace's comparisons and its verdict, summarised for an assistant.                          | `getComparison` (the comparison's own view)                                                    | yes            | no     |
 | `rewrite_draft`  | Has the editor rewrite a finished review's draft, or fill a rewrite's placeholders, and waits up to 45 seconds. | `rewriteLimiter` → `startRewrite`                                                              | yes            | yes    |
-| `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | no             | no     |
+| `get_rewrite`    | Reads one of the workspace's rewrites and its placeholders, summarised for an assistant.                        | `getRewrite` (the rewrite's own view)                                                          | yes            | no     |
+
+Every tool needs the person behind the call (over MCP, the key's creator) to be a member of the key's workspace; only a workflow step may call the four that do not spend with nobody behind it.
 
 A workspace's owners and admins make its keys from its settings (see [Who can make a key](#who-can-make-a-key)).
 
 The code is `lib/app/mcp/`. Each tool has a class (its definition, Zod schema and
 redaction) and its work in `run/`. `tool-support.ts` holds what they share,
-`run/spender.ts` the checks both spending tools make before anything is charged,
+`run/spender.ts` the checks the spending tools make before anything is charged,
+`run/caller.ts` the one the other four make before they run,
 `assessment-summary.ts` what `get_assessment` and `assess_draft` answer,
 `comparison-summary.ts` what `get_comparison` and `compare_drafts` answer,
 `rewrite-summary.ts` what `get_rewrite` and `rewrite_draft` answer, and
@@ -51,8 +54,12 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   (`createdBy` is `SetNull`), or is no longer a member of the key's workspace,
   is refused with `KEY_HAS_NO_OWNER` before anything is prepared or charged,
   and a suspended workspace with `WORKSPACE_SUSPENDED`. Past the per-person cap
-  the code is `RATE_LIMIT_EXCEEDED`, the API's. The two tools
-  that only read, or spend nothing, still work for it.
+  the code is `RATE_LIMIT_EXCEEDED`, the API's.
+- **The tools that do not spend check the person too** (t-96): `quick_scan`,
+  `get_assessment`, `get_comparison` and `get_rewrite` refuse a key whose
+  creator has gone or has left the workspace with the same `KEY_HAS_NO_OWNER`,
+  before doing anything (`run/caller.ts`). See
+  [When a key's creator leaves](#when-a-keys-creator-leaves).
 - **Credits, the review budget and the running limit hold as over the API**,
   because the tool takes the route's steps, in the route's order.
 - **A review is recorded as `MCP`** (`AssessmentVia.MCP`), not `APP`: the tool
@@ -193,12 +200,36 @@ routes do (`lib/app/workspaces/mcp-keys-access.ts`): someone acting in another
 workspace is refused, and so is an API key. A platform admin under a support
 grant can list and revoke but not make one (`orgForMint` refuses a support
 session): the key would outlive the session and act as someone who is not a
-member, which the spending tools refuse (`KEY_HAS_NO_OWNER`). Making and
+member, which every tool here refuses (`KEY_HAS_NO_OWNER`). Making and
 revoking write `mcp_api_key.create` and `mcp_api_key.update` to the admin
 audit log, as core's routes do.
 
 Core's `/admin/orchestration/mcp/keys` still works for a workspace owner until
 t-64 closes the admin area to platform admins.
+
+### When a key's creator leaves
+
+A key acts as its creator, and removing them from the workspace does not revoke
+it: only erasure touches the key, by nulling `createdBy`. So **every tool here
+checks, on each call, that the key's creator is still a member of the key's
+workspace**, and refuses with `KEY_HAS_NO_OWNER` when they are not, or when
+they have gone. The key stops working for this fork's tools the moment its
+creator is removed, keys made before t-96 included, and works again if they
+are added back. A member whose role changes keeps a working key: any member
+may read the workspace's reviews and spend its credits, as over the API.
+
+The check is in each tool rather than at the key, which is core's transport
+(`lib/orchestration/mcp/auth.ts`, `sunrise.golden-rule`), and rather than as a
+revocation when a member leaves, which would need a hook in core's member
+removal and would leave the keys of anyone already gone. What that leaves out:
+**the key still authenticates**, so a core tool or resource the workspace
+exposes over MCP still answers it. Revoke a departed member's keys on settings;
+the list shows each key's creator.
+
+A call with no person behind it is refused too, except a workflow step's
+(`context.workflowExecutionId`): a scheduled workflow runs with nobody behind
+it, and keeps reading as before. The spending tools refuse it either way, since
+they charge a person.
 
 ## After a merge that changes a tool
 

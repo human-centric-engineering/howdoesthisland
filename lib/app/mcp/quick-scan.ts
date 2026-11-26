@@ -4,7 +4,8 @@
  * The same `runQuickScan` the route runs, answering the route's summary (the
  * scores, the band and the caveat) rather than the full result, whose
  * offsets an assistant cannot place. No AI call, nothing stored, no credit,
- * so it needs no person behind the key. Off when the quick scan's switch is
+ * but the person behind the key must still be in its workspace
+ * (`run/caller.ts`). Off when the quick scan's switch is
  * off, as the route is.
  *
  * The work is in `run/quick-scan.ts`, loaded on the first call: why, in
@@ -13,7 +14,7 @@
 import { z } from 'zod';
 import { contextField, textField } from '@/lib/app/assessments/api/validations';
 import { QUICK_SCAN } from '@/lib/app/mcp/definitions';
-import { contextShape, draftShape } from '@/lib/app/mcp/tool-support';
+import { callerOf, contextShape, draftShape } from '@/lib/app/mcp/tool-support';
 import type { QuickScanSummary } from '@/lib/app/quick-scan/summary';
 import {
   BaseCapability,
@@ -34,10 +35,10 @@ export class QuickScanCapability extends BaseCapability<Args, QuickScanSummary> 
 
   async execute(
     args: Args,
-    _context: CapabilityContext
+    context: CapabilityContext
   ): Promise<CapabilityResult<QuickScanSummary>> {
     const { quickScanTool } = await import('@/lib/app/mcp/run/quick-scan');
-    const outcome = await quickScanTool(args);
+    const outcome = await quickScanTool(args, callerOf(context));
     if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
     return this.success(outcome.data);
   }
