@@ -41,6 +41,10 @@ import { orgIdParamSchema } from '@/lib/validations/tenancy';
 import { ORG_OWNER_ROLE, ORG_ROLES } from '@/lib/tenancy/roles';
 import { kindParam, slugParam, versionParam } from '@/lib/app/frameworks/api/validations';
 import { JUDGE_ROLES } from '@/lib/app/judges/approved-models';
+import {
+  createWorkspaceMcpKeySchema,
+  workspaceMcpKeyParamsSchema,
+} from '@/lib/app/workspaces/mcp-keys';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
 import {
   ASSESSMENT_STATES,
@@ -355,6 +359,19 @@ export const workspaceSettingsSchema = z.object({
   retention: appRetentionSchema.nullable(),
   /** `null` only when the stored window is unreadable: no reply is deleted then. */
   judgeReplyRetention: judgeReplyRetentionSchema.nullable(),
+});
+
+/** `WorkspaceMcpKey` in `lib/app/workspaces/mcp-keys.ts`. */
+export const workspaceMcpKeySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  keyPrefix: z.string(),
+  scopes: z.array(z.string()),
+  isActive: z.boolean(),
+  expiresAt: isoDateTime.nullable(),
+  lastUsedAt: isoDateTime.nullable(),
+  createdAt: isoDateTime,
+  createdByName: z.string().nullable(),
 });
 
 /** `JudgeModelChoice` in `lib/app/judges/model-choice.ts`. */
@@ -1228,6 +1245,36 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: WORKSPACE_ADMIN_ENTERED,
     request: { params: judgeModelParamsSchema, body: chooseJudgeModelSchema },
     response: { status: 200, data: judgeModelChoiceSchema },
+  },
+
+  // A workspace's MCP keys (t-95).
+  {
+    method: 'GET',
+    path: '/api/v1/workspaces/{id}/mcp-keys',
+    summary: "List the workspace's MCP keys, newest first, revoked ones included.",
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: orgIdParamSchema },
+    response: { status: 200, data: z.object({ keys: z.array(workspaceMcpKeySchema) }) },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/workspaces/{id}/mcp-keys',
+    summary:
+      'Make an MCP key for the workspace that can list and call its tools, acting as the caller. Its value is shown once.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: orgIdParamSchema, body: createWorkspaceMcpKeySchema },
+    response: {
+      status: 201,
+      data: z.object({ key: workspaceMcpKeySchema.extend({ plaintext: z.string() }) }),
+    },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/workspaces/{id}/mcp-keys/{keyId}/revoke',
+    summary: 'Revoke one of the workspace’s MCP keys. It stops working at once.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: workspaceMcpKeyParamsSchema },
+    response: { status: 200, data: z.object({ key: workspaceMcpKeySchema }) },
   },
 
   // Calibration, for platform admins (t-38). Publishing stays a CLI action.
