@@ -13,6 +13,11 @@
  * AI reviewer as it lands, then the report. A review with no AI reviewer is
  * final at once and opens its report straight away.
  *
+ * Comparing (t-89) is the fourth tab: 2–5 pasted drafts, each with an
+ * optional name, reviewed with the same reader and AI reviewers. Starting it
+ * posts to `POST /api/v1/comparisons` and opens the comparison's page
+ * (`/compare/[id]`), which follows the drafts as they run.
+ *
  * Before it starts, copy in no project, or in one with no brief, is invited
  * to have one (`BriefInvite`, t-83): what a brief adds, with an example, and
  * where to write it. It never stops the review.
@@ -24,7 +29,7 @@
 import { useState, type BaseSyntheticEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,17 +38,23 @@ import { Textarea } from '@/components/ui/textarea';
 import { FieldHelp } from '@/components/ui/field-help';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SaveError } from '@/components/forms/form-error';
-import { apiClient } from '@/lib/api/client';
+import { APIClientError, apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { useLocalStorage } from '@/lib/hooks/use-local-storage';
 import { sendUpload } from '@/lib/app/intake/send-upload';
-import { MAX_CONTENT_CHARS, MAX_REVIEW_FILE_BYTES } from '@/lib/app/assessments/limits';
+import {
+  EDITOR_MIN_JUDGES,
+  MAX_CONTENT_CHARS,
+  MAX_REVIEW_FILE_BYTES,
+} from '@/lib/app/assessments/limits';
+import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/limits';
 import { WORDS } from '@/lib/app/reports/words';
 import { SettingPicker } from '@/components/app/projects/setting-picker';
 import { BriefInvite, hasBrief } from '@/components/app/projects/brief-invite';
 import { DOCUMENT_EXTENSIONS, type ProjectWire } from '@/components/app/projects/schemas';
 import {
   NO_DEFAULT,
+  QUICK_PROFILE,
   audiencePickers,
   cultureOptions,
   withStored,
@@ -56,10 +67,12 @@ import {
   NO_PROJECT,
   SOURCES,
   choosableReviewers,
+  comparisonDraftsOf,
   defaultsOf,
   fixedByProject,
   problemsOf,
   readDraft,
+  tickedReviewers,
   refusalOf,
   jsonSourceOf,
   requestOptionsOf,
@@ -67,6 +80,7 @@ import {
   reviewerSetOptions,
   settingsInProject,
   staleDefaultsOf,
+  type CompareDraft,
   type Draft,
   type SettingKey,
 } from '@/components/app/workbench/assess-draft';
@@ -79,6 +93,7 @@ import {
   type CreatedReview,
 } from '@/components/app/workbench/schemas';
 import { ReviewProgress } from '@/components/app/workbench/review-progress';
+import { COMPARISONS_ENDPOINT, comparePath } from '@/components/app/compare/schemas';
 
 const MODEL_DEFAULT = 'The model’s default';
 
@@ -87,6 +102,21 @@ const createdIdSchema = z.object({ id: z.string().min(1) });
 /** A host that refuses the upload before the route reads it (Vercel staging, over 4.5 MB). */
 const FILE_TOO_LARGE_FOR_HOST =
   'This file is too large for this server to accept. Paste its text instead, or try a smaller file.';
+
+const COMPARE_STARTED_UNREADABLE =
+  'The comparison has started, but this page could not read the reply, so it cannot open it. There is no need to start it again: each draft’s review is in your reviews.';
+
+/** The draft a comparison's refusal names (`details.position`), if it is one of these. */
+function refusedDraftOf(err: unknown, count: number): number | null {
+  if (!(err instanceof APIClientError)) return null;
+  const position = err.details?.position;
+  return typeof position === 'number' &&
+    Number.isInteger(position) &&
+    position >= 0 &&
+    position < count
+    ? position
+    : null;
+}
 
 const STARTED_UNREADABLE = `The ${WORDS.review} has started, but this page could not read the reply, so it cannot show its progress. There is no need to start it again.`;
 
@@ -126,8 +156,11 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
   const [sending, setSending] = useState(false);
   const [started, setStarted] = useState<CreatedReview | null>(null);
   const [usagePage, setUsagePage] = useState<string | null>(null);
+  const comparing = draft.source === 'compare';
   const save = useSaveFailure({
-    fallback: `The ${WORDS.review} could not be started. Try again in a moment.`,
+    fallback: comparing
+      ? 'The comparison could not be started. Try again in a moment.'
+      : `The ${WORDS.review} could not be started. Try again in a moment.`,
   });
 
   const fixed = fixedByProject(project, catalogue);
@@ -144,6 +177,17 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
   const offeredAudience = new Set(catalogue.request.audience.map((m) => m.id));
   const appealNames = Object.fromEntries(catalogue.result.appeals.map((a) => [a.id, a.name]));
 
+  const setCompareDraft = (i: number, patch: Partial<CompareDraft>) =>
+    update({ drafts: draft.drafts.map((d, j) => (j === i ? { ...d, ...patch } : d)) });
+  // The editor weighs drafts read by at least EDITOR_MIN_JUDGES reviewers.
+  // The catalogue names each reviewer set but not its slots, so of the sets
+  // only the quick scan (no reviewers) is known to fall short here.
+  const noVerdict =
+    comparing &&
+    (draft.profile === QUICK_PROFILE ||
+      (draft.profile === CHOOSE_REVIEWERS &&
+        tickedReviewers(draft, catalogue).length < EDITOR_MIN_JUDGES));
+
   const onSubmit = async (e?: BaseSyntheticEvent) => {
     e?.preventDefault();
     setUsagePage(null);
@@ -151,6 +195,18 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
     setSending(true);
     try {
       const options = requestOptionsOf(draft, catalogue, version);
+      if (comparing) {
+        const reply = await apiClient.post<unknown>(COMPARISONS_ENDPOINT, {
+          body: { drafts: comparisonDraftsOf(draft), ...options },
+        });
+        // From here every draft is a review: the drafts are spent. The page
+        // stays on the Compare tab, under the message that may follow.
+        setStored({ ...EMPTY_DRAFT, source: 'compare' });
+        const created = createdIdSchema.safeParse(reply);
+        if (created.success) router.push(comparePath(created.data.id));
+        else save.show(COMPARE_STARTED_UNREADABLE);
+        return;
+      }
       const source = jsonSourceOf(draft);
       // A file goes as its own bytes in a multipart upload (t-80); text and a
       // page as JSON. `problemsOf` has made sure a file draft has its file.
@@ -178,7 +234,12 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
       else save.show(STARTED_UNREADABLE);
     } catch (err) {
       const refusal = refusalOf(err);
-      if (refusal) {
+      const at = comparing ? refusedDraftOf(err, draft.drafts.length) : null;
+      if (at !== null && !refusal && err instanceof APIClientError) {
+        // The server names the draft it refused; say so on that draft.
+        const name = draft.drafts[at]?.label.trim() || `Draft ${at + 1}`;
+        save.block([{ field: `compare-text-${at}`, message: `${name}: ${err.message}` }]);
+      } else if (refusal) {
         save.show(refusal.message);
         setUsagePage(refusal.usagePage);
       } else {
@@ -231,6 +292,7 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
             <TabsTrigger value="text">Text</TabsTrigger>
             <TabsTrigger value="file">File</TabsTrigger>
             <TabsTrigger value="url">Web page</TabsTrigger>
+            <TabsTrigger value="compare">Compare drafts</TabsTrigger>
           </TabsList>
 
           <TabsContent value="text" className="mt-4 space-y-2">
@@ -298,6 +360,85 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
               placeholder="https://example.com/pricing"
               disabled={sending}
             />
+          </TabsContent>
+
+          <TabsContent value="compare" className="mt-4 space-y-5">
+            <p className="text-sm text-(--hd-muted)">
+              Paste {MIN_DRAFTS} to {MAX_DRAFTS} versions of the same piece. Each is reviewed for
+              the same reader by the same {WORDS.aiReviewers}, and counts as one {WORDS.review}.
+              Then the editor says which lands better, and why.
+            </p>
+            {draft.drafts.map((d, i) => (
+              <fieldset key={i} className="space-y-2 rounded-md border border-(--hd-rule) p-3">
+                <legend className="px-1 text-sm font-semibold">Draft {i + 1}</legend>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor={`compare-label-${i}`} className="flex items-center gap-1">
+                      Name (optional)
+                      <FieldHelp title="The draft’s name">
+                        What to call this draft on the comparison, such as &ldquo;Subject line
+                        A&rdquo;, up to {DRAFT_LABEL_MAX} characters. Left empty, it is called Draft{' '}
+                        {i + 1}.
+                      </FieldHelp>
+                    </Label>
+                    <Input
+                      id={`compare-label-${i}`}
+                      value={d.label}
+                      onChange={(e) => setCompareDraft(i, { label: e.target.value })}
+                      placeholder={`Draft ${i + 1}`}
+                      disabled={sending}
+                    />
+                  </div>
+                  {draft.drafts.length > MIN_DRAFTS ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        save.clear();
+                        update({ drafts: draft.drafts.filter((_, j) => j !== i) });
+                      }}
+                      disabled={sending}
+                    >
+                      <X className="mr-1 h-4 w-4" aria-hidden />
+                      Remove draft {i + 1}
+                    </Button>
+                  ) : null}
+                </div>
+                <Label htmlFor={`compare-text-${i}`} className="flex items-center gap-1">
+                  The copy
+                  <FieldHelp title="The draft’s copy">
+                    Up to {MAX_CONTENT_CHARS.toLocaleString('en-GB')} characters, pasted as it
+                    reads. Kept in this browser&rsquo;s draft until the comparison starts.
+                  </FieldHelp>
+                </Label>
+                <Textarea
+                  id={`compare-text-${i}`}
+                  value={d.text}
+                  onChange={(e) => setCompareDraft(i, { text: e.target.value })}
+                  className="min-h-[140px] resize-y text-base"
+                  disabled={sending}
+                />
+                <p className="text-right text-sm text-(--hd-muted) tabular-nums">
+                  {words(d.text).toLocaleString('en-GB')} words
+                </p>
+              </fieldset>
+            ))}
+            {draft.drafts.length < MAX_DRAFTS ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  // A shown problem names drafts by their place, which this moves.
+                  save.clear();
+                  update({ drafts: [...draft.drafts, { label: '', text: '' }] });
+                }}
+                disabled={sending}
+              >
+                <Plus className="mr-1 h-4 w-4" aria-hidden />
+                Add a draft
+              </Button>
+            ) : null}
           </TabsContent>
         </Tabs>
       </div>
@@ -466,6 +607,14 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
           </fieldset>
         ) : null}
 
+        {noVerdict ? (
+          <p role="note" className="text-sm text-(--hd-muted)">
+            {draft.profile === QUICK_PROFILE
+              ? 'With the quick scan alone, the drafts are scored but the editor gives no verdict on which lands better.'
+              : `With fewer than ${EDITOR_MIN_JUDGES} ${WORDS.aiReviewers}, the drafts are scored but the editor gives no verdict on which lands better.`}
+          </p>
+        ) : null}
+
         <div className="space-y-3">
           <Button type="submit" size="lg" className="w-full" disabled={sending}>
             {sending ? (
@@ -473,6 +622,8 @@ export function AssessWorkbench({ catalogue, version, projects }: AssessWorkbenc
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
                 Starting…
               </>
+            ) : comparing ? (
+              `Compare the ${draft.drafts.length} drafts`
             ) : (
               `Start the ${WORDS.review}`
             )}

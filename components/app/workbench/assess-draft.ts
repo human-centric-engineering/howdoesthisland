@@ -14,6 +14,9 @@
  * - The **request** is `POST /api/v1/assessments`'s body: the context the
  *   pickers name (`contextOf`, as a project saves it), the project, and a
  *   profile or an explicit list of AI reviewers.
+ * - **Comparing** (t-89) is the fourth source: 2–5 pasted drafts, each with
+ *   an optional label, sent to `POST /api/v1/comparisons` with the same
+ *   options, given once for every draft.
  */
 import { z } from 'zod';
 import { APIClientError } from '@/lib/api/client';
@@ -22,6 +25,7 @@ import {
   MAX_REVIEW_FILE_BYTES,
   MAX_URL_CHARS,
 } from '@/lib/app/assessments/limits';
+import { DRAFT_LABEL_MAX, MAX_DRAFTS, MIN_DRAFTS } from '@/lib/app/comparisons/limits';
 import { USAGE_PAGE } from '@/lib/app/usage/wire';
 import { WORDS } from '@/lib/app/reports/words';
 import {
@@ -43,7 +47,7 @@ import { HOWDOESTHISLAND_SLUG } from '@/lib/app/frameworks/howdoesthisland/slug'
 /** Where the browser keeps the draft. Bump the version when its shape changes. */
 export const DRAFT_KEY = 'howdoesthisland.assess.draft.v1';
 
-export const SOURCES = ['text', 'file', 'url'] as const;
+export const SOURCES = ['text', 'file', 'url', 'compare'] as const;
 export type Source = (typeof SOURCES)[number];
 
 /** The profile picker's value for "choose the AI reviewers one by one". Never sent. */
@@ -61,6 +65,19 @@ const settingsSchema = z.object({
   cultureWriter: z.string(),
 });
 
+/** One draft of a comparison, as the page keeps it: the label empty when none is given. */
+export interface CompareDraft {
+  label: string;
+  text: string;
+}
+
+const NO_COMPARE_DRAFT: CompareDraft = { label: '', text: '' };
+
+/** A comparison starts with the fewest drafts it takes, each empty. */
+export const EMPTY_COMPARE: CompareDraft[] = Array.from({ length: MIN_DRAFTS }, () => ({
+  ...NO_COMPARE_DRAFT,
+}));
+
 export const draftSchema = z.object({
   source: z.enum(SOURCES),
   // Not capped: a draft over a cap would fail to read back and empty the
@@ -73,6 +90,16 @@ export const draftSchema = z.object({
   profile: z.string().max(64),
   /** The AI reviewers ticked, by slot, when choosing them one by one. */
   judges: z.array(z.string().max(64)).max(32),
+  /**
+   * The drafts to compare (t-89). A draft kept before comparing existed has
+   * none, and one stored out of shape is started again, without losing the
+   * rest of the draft.
+   */
+  drafts: z
+    .array(z.object({ label: z.string(), text: z.string() }).catch(() => ({ label: '', text: '' })))
+    .min(MIN_DRAFTS)
+    .max(MAX_DRAFTS)
+    .catch(() => EMPTY_COMPARE.map((d) => ({ ...d }))),
 });
 
 export type Draft = z.infer<typeof draftSchema>;
@@ -94,6 +121,7 @@ export const EMPTY_DRAFT: Draft = {
   settings: NO_SETTINGS,
   profile: FULL_PROFILE,
   judges: [],
+  drafts: EMPTY_COMPARE,
 };
 
 /** The stored draft, or a fresh one when nothing usable is stored. */
@@ -304,6 +332,25 @@ export function problemsOf(
       });
     }
   }
+  if (draft.source === 'compare') {
+    for (const [i, d] of draft.drafts.entries()) {
+      const name = d.label.trim() || `Draft ${i + 1}`;
+      if (d.text.trim() === '') {
+        problems.push({ field: `compare-text-${i}`, message: `Paste the copy for ${name}.` });
+      } else if ([...d.text].length > MAX_CONTENT_CHARS) {
+        problems.push({
+          field: `compare-text-${i}`,
+          message: `${name} is over ${MAX_CONTENT_CHARS.toLocaleString('en-GB')} characters. Compare shorter pieces.`,
+        });
+      }
+      if (d.label.trim().length > DRAFT_LABEL_MAX) {
+        problems.push({
+          field: `compare-label-${i}`,
+          message: `Keep ${name}’s name to ${DRAFT_LABEL_MAX} characters.`,
+        });
+      }
+    }
+  }
   if (
     draft.profile !== CHOOSE_REVIEWERS &&
     !profileOptions(catalogue).some((o) => o.value === draft.profile)
@@ -351,6 +398,17 @@ export function jsonSourceOf(draft: Draft): { text: string } | { url: string } |
   if (draft.source === 'text') return { text: draft.text };
   if (draft.source === 'url') return { url: draft.url.trim() };
   return null;
+}
+
+/**
+ * `POST /api/v1/comparisons`'s `drafts`, once {@link problemsOf} finds none:
+ * each draft's text as pasted, and its label when it has one.
+ */
+export function comparisonDraftsOf(draft: Draft): Array<{ text: string; label?: string }> {
+  return draft.drafts.map((d) => {
+    const label = d.label.trim();
+    return label ? { text: d.text, label } : { text: d.text };
+  });
 }
 
 /** A refusal, in words a person can act on, and the usage page when it points there. */

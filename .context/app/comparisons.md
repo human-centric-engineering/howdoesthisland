@@ -5,8 +5,8 @@ reviewing each the same way and reading the results together. A comparison does
 that: 2–5 drafts, reviewed with one framework version, context, project and set
 of AI reviewers, read back with each draft's difference from the best on every
 appeal, and the editor's verdict on which draft lands better. Built in t-87
-(f-compare, app-plan §9), with the verdict in t-88. The side-by-side page
-(t-89) builds on it.
+(f-compare, app-plan §9), with the verdict in t-88, and the page that shows
+it in t-89 (below).
 
 ## The API
 
@@ -220,3 +220,30 @@ drift probe (`lib/app/db-drift.ts`). The subject export gives a person the
 comparisons they started, each with its drafts and its verdict (their reviews
 are in their `assessments`), without the verdict call's lease, hold and
 attempt count; the org export gives both tables.
+
+## The page
+
+`/compare/[id]` (`app/(protected)/compare/[id]/page.tsx`, t-89) shows one
+comparison: a column per draft, by its label or its place ("Draft 2"), with its
+overall score and band, then a row per appeal. The draft with the best score on
+an appeal is marked Best (each of them, on a tie), and the rest say how far
+behind they are. Above it, the editor's verdict: the draft that lands better,
+why, and the appeals that decide it; or, while it is still to come, failed or
+skipped, what that means. A draft that failed, was cancelled, or whose review
+was deleted keeps its column and says so; a partial one shows its scores and
+says the editor leaves it out of the verdict. Each draft links to its own
+report.
+
+It is read from `GET /api/v1/comparisons/{id}` alone, nothing per draft. While
+a draft runs or the verdict is `waiting` or `running`, the page reads it again
+every four seconds (`components/app/compare/use-comparison.ts`), not while the
+tab is in the background, and stops once both have ended. It reads rather than
+streams: the verdict has no stream, so a stream per draft
+(`use-review-events.ts`) would still leave the verdict to be read this way, and
+five streams would take most of a browser's six connections to the site.
+
+**Starting one.** The `/assess` workbench's Compare drafts tab takes 2–5
+pasted drafts, each with an optional name, and the reader settings and AI
+reviewers beside them, given once (`assess-draft.ts`). Starting it posts to
+`POST /api/v1/comparisons` and opens the comparison's page. With the quick scan
+alone the tab says the editor will give no verdict (`too_few_judges`).

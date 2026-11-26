@@ -108,3 +108,10 @@ export const AI_ASSESSMENTS_PER_MINUTE = 10;
  * `POST assessments`, which this does not count.
  */
 export const SCANS_PER_MINUTE = 10;
+
+/**
+ * The fewest judges a run asks for before the editor is asked to summarise
+ * it (`editor.ts`). Here, not there, so the workbench can say before a
+ * comparison starts that it will get no verdict.
+ */
+export const EDITOR_MIN_JUDGES = 2;
