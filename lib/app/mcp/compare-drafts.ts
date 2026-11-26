@@ -28,7 +28,7 @@ import {
 } from '@/lib/app/comparisons/validations';
 import type { ComparisonSummaryForAssistant } from '@/lib/app/mcp/comparison-summary';
 import { COMPARE_DRAFTS } from '@/lib/app/mcp/definitions';
-import { contextShape, creatorOf } from '@/lib/app/mcp/tool-support';
+import { contextShape, creatorOf, idShape } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -64,7 +64,7 @@ function draftsShape(args: unknown): Record<string, unknown>[] | undefined {
     if (!isRecord(draft)) return { draft: '[value]' };
     return {
       ...(typeof draft.text === 'string' ? { textChars: draft.text.length } : {}),
-      ...(typeof draft.assessmentId === 'string' ? { assessmentId: draft.assessmentId } : {}),
+      ...(draft.assessmentId !== undefined ? { assessmentId: idShape(draft.assessmentId) } : {}),
       ...(draft.label !== undefined ? { label: '[label]' } : {}),
     };
   });
@@ -99,7 +99,7 @@ export class CompareDraftsCapability extends BaseCapability<Args, ComparisonSumm
       args: {
         // Each draft's size or the review it names, never its words or label.
         drafts: draftsShape(sent),
-        projectId: typeof sent.projectId === 'string' ? sent.projectId : undefined,
+        projectId: idShape(sent.projectId),
         context: contextShape(isRecord(sent.context) ? sent.context : undefined),
       },
       resultPreview: result.success

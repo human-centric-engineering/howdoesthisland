@@ -25,7 +25,7 @@ const issueList = (details: Record<string, unknown> | undefined): string[] => {
 
 /**
  * Which draft of a comparison a refusal is about (t-93): the API says so in
- * `details.position` (from 0) and, for a review reviewed another way, the
+ * `details.position` (from 0, as the tools' answers count) and, for a review reviewed another way, the
  * fields in `details.differs`. An assistant told only the message could not
  * tell which draft to fix.
  */
@@ -40,7 +40,8 @@ const draftOf = (
     ? details.differs.filter((f): f is string => typeof f === 'string')
     : [];
   return {
-    prefix: `Draft ${position + 1}: `,
+    // Counted from 0, as `position` is in every answer the tools give.
+    prefix: `The draft at position ${position}: `,
     suffix: differs.length > 0 ? ` It differs in: ${differs.join(', ')}.` : '',
   };
 };

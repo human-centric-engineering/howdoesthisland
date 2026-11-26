@@ -82,6 +82,6 @@ describe('refusalOf', () => {
     expect(
       refusalOf(new APIError('No.', 'REFUSED', 409, { position: 0, differs: ['version', 3] }))
         ?.message
-    ).toBe('Draft 1: No. It differs in: version.');
+    ).toBe('The draft at position 0: No. It differs in: version.');
   });
 });

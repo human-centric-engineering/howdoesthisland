@@ -116,7 +116,7 @@ export const COMPARE_DRAFTS: CapabilityFunctionDefinition = {
       drafts: {
         type: 'array',
         description:
-          'The drafts, in the order to show them. Each is {"text": ..., "label": ...} or {"assessmentId": ..., "label": ...}; the label (optional) is what the verdict and the scores call it, for example "Opening A".',
+          'The drafts, in the order to show them; answers name each by its position, counting from 0. Each is {"text": ..., "label": ...} or {"assessmentId": ..., "label": ...}; the label (optional) is what the verdict and the scores call it, for example "Opening A".',
         minItems: MCP_MIN_DRAFTS,
         maxItems: MCP_MAX_DRAFTS,
         items: {
@@ -157,7 +157,7 @@ export const COMPARE_DRAFTS: CapabilityFunctionDefinition = {
 export const GET_COMPARISON: CapabilityFunctionDefinition = {
   name: 'get_comparison',
   description:
-    "Read one of the workspace's comparisons by its id: its status, each draft's overall score and band, which draft leads on each appeal and by how much, and, once every draft's review has ended, the editor's verdict on which draft lands better, why, and the appeals that decide it. Each draft carries its review's assessmentId, which get_assessment reads for that draft's own recommendations.",
+    "Read one of the workspace's comparisons by its id: its status, each draft's overall score and band, which draft leads on each appeal and by how much, and, once every draft's review has ended, the editor's verdict on which draft lands better, why, and the appeals that decide it. Drafts are named by position, counting from 0 in the order they were sent, and the verdict's draft is one of those positions. Each draft carries its review's assessmentId, which get_assessment reads for that draft's own recommendations.",
   parameters: {
     type: 'object',
     properties: {

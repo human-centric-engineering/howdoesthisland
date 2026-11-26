@@ -55,6 +55,12 @@ export function creatorOf(context: CapabilityContext): string | ToolRefusal {
 /** A context key or value that reads as a catalogue id, not as free text. */
 const CATALOGUE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
+/** What the audit trail keeps of a value sent as an id: it, if it reads as one, else `[value]`. */
+export function idShape(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return typeof value === 'string' && CATALOGUE_ID.test(value) ? value : '[value]';
+}
+
 /**
  * What the audit trail keeps of a context: each key and value that reads as a
  * catalogue id, and `[value]` for anything else. Recorded before the framework

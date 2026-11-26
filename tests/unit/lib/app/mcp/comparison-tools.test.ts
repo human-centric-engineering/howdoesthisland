@@ -277,7 +277,7 @@ describe('compare_drafts', () => {
       success: false,
       error: {
         code: 'REVIEW_NOT_COMPARABLE',
-        message: 'Draft 2: That review has not finished yet.',
+        message: 'The draft at position 1: That review has not finished yet.',
       },
     });
     expect(mocks.releaseHolds).toHaveBeenCalledTimes(1);
@@ -395,13 +395,21 @@ describe('compare_drafts', () => {
       projectId: undefined,
       context: undefined,
     });
-    expect(preview({ drafts: [null, 'Sarah', { text: 7, label: 'Sarah' }], projectId: 3 })).toEqual(
-      {
-        drafts: [{ draft: '[value]' }, { draft: '[value]' }, { label: '[label]' }],
-        projectId: undefined,
-        context: undefined,
-      }
-    );
+    expect(
+      preview({
+        drafts: [null, 'Sarah', { text: 7, label: 'Sarah' }, { assessmentId: 'Sarah at Acme' }],
+        projectId: 'Jane Doe, recently bereaved',
+      })
+    ).toEqual({
+      drafts: [
+        { draft: '[value]' },
+        { draft: '[value]' },
+        { label: '[label]' },
+        { assessmentId: '[value]' },
+      ],
+      projectId: '[value]',
+      context: undefined,
+    });
   });
 
   it('answers a comparison deleted while it ran as not found, not as unread', async () => {
@@ -438,7 +446,7 @@ describe('compare_drafts', () => {
     expect(result.error).toEqual({
       code: 'REVIEW_NOT_COMPARABLE',
       message:
-        'Draft 3: That review was not reviewed the way this comparison is. It differs in: project, judges.',
+        'The draft at position 2: That review was not reviewed the way this comparison is. It differs in: project, judges.',
     });
   });
 
@@ -495,6 +503,15 @@ describe('get_comparison', () => {
     await expect(tool.execute(tool.validate({ comparisonId: 'cmp-1' }), asCreator)).rejects.toThrow(
       'db down'
     );
+  });
+
+  it('keeps only an id-shaped comparisonId of arguments sent as they were', () => {
+    const redacted = tool.redactProvenance(
+      { comparisonId: 'Sarah at Acme', note: 'Jane Doe' } as never,
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'no' } }
+    );
+
+    expect(redacted.args).toEqual({ comparisonId: '[value]' });
   });
 
   it('keeps the id and the status in the audit trail', () => {

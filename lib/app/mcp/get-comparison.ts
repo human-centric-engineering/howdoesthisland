@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { comparisonIdParamSchema } from '@/lib/app/comparisons/validations';
 import type { ComparisonSummaryForAssistant } from '@/lib/app/mcp/comparison-summary';
 import { GET_COMPARISON } from '@/lib/app/mcp/definitions';
+import { idShape } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -47,8 +48,13 @@ export class GetComparisonCapability extends BaseCapability<Args, ComparisonSumm
     args: Args,
     result: CapabilityResult<ComparisonSummaryForAssistant>
   ): ProvenanceRedaction {
+    // Only the id, and only if it reads as one: a chat turn's trace passes the
+    // arguments as sent, stray keys and all.
+    const sent: unknown = args;
+    const comparisonId: unknown =
+      typeof sent === 'object' && sent !== null ? Reflect.get(sent, 'comparisonId') : undefined;
     return {
-      args,
+      args: { comparisonId: idShape(comparisonId) },
       resultPreview: result.success
         ? JSON.stringify({ id: result.data?.id, status: result.data?.status })
         : JSON.stringify(result.error),
