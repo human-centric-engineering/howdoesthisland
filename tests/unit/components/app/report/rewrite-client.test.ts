@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIClientError } from '@/lib/api/client';
+import { createComparisonSchema } from '@/lib/app/comparisons/validations';
 import {
   answersFor,
   compareDraftBody,
@@ -379,14 +380,37 @@ describe('compareDraftBody (t-84)', () => {
     });
   });
 
-  it('keeps each label within the 80 characters a draft’s label takes, never cutting a character in half', () => {
+  it('keeps each label within the 80 UTF-16 units the server counts, never cutting a character in half', () => {
     const [first, second] = compareDraftBody(
-      { ...original, title: `${'x'.repeat(60)}😀😀${'y'.repeat(30)}` },
+      { ...original, title: `${'x'.repeat(59)}😀😀${'y'.repeat(30)}` },
       draft
     ).drafts as { label: string }[];
-    expect(Array.from(first.label)).toHaveLength(80);
-    expect(second.label).toBe(`${'x'.repeat(60)}😀 (balanced rewrite)`);
-    expect(Array.from(second.label)).toHaveLength(80);
+    // An emoji is two units: 59 + 2 + 2 + 17 = 80.
+    expect(first.label).toBe(`${'x'.repeat(59)}😀😀${'y'.repeat(17)}`);
+    expect(first.label).toHaveLength(80);
+    // 80 − 19 for the suffix leaves 61: one emoji fits, the second would split.
+    expect(second.label).toBe(`${'x'.repeat(59)}😀 (balanced rewrite)`);
+    expect(second.label).toHaveLength(80);
+  });
+
+  it('is a body the server takes, for a title of emoji alone', () => {
+    const body = compareDraftBody({ ...original, title: '🚀'.repeat(60) }, draft);
+    const parsed = createComparisonSchema.safeParse(body);
+    expect(parsed.success).toBe(true);
+    const [first, second] = body.drafts as { label: string }[];
+    expect(first.label).toBe('🚀'.repeat(40));
+    expect(second.label).toBe(`${'🚀'.repeat(30)} (balanced rewrite)`);
+  });
+
+  it('keeps the draft’s label within the limit when its rewrite’s name alone fills it', () => {
+    const [, second] = compareDraftBody(original, { ...draft, focusName: 'z'.repeat(90) })
+      .drafts as { label: string }[];
+    expect(second.label.length).toBeLessThanOrEqual(80);
+    expect(
+      createComparisonSchema.safeParse(
+        compareDraftBody(original, { ...draft, focusName: 'z'.repeat(90) })
+      ).success
+    ).toBe(true);
   });
 });
 

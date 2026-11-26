@@ -120,7 +120,13 @@ async function checkInput(
  */
 export async function enqueueAssessments<T>(
   inputs: readonly EnqueueAssessmentInput[],
-  alsoWrite: (tx: Prisma.TransactionClient, enqueued: EnqueuedAssessment[]) => Promise<T>
+  alsoWrite: (tx: Prisma.TransactionClient, enqueued: EnqueuedAssessment[]) => Promise<T>,
+  /**
+   * The transaction is sized for several reviews' rows; the default is
+   * `inputs.length > 1`. A caller whose `alsoWrite` does more than one review's
+   * share (a comparison that reuses reviews and locks them, t-84) says so.
+   */
+  { several = inputs.length > 1 }: { several?: boolean } = {}
 ): Promise<{ enqueued: EnqueuedAssessment[]; also: T }> {
   const orgId = requireOrgId();
   // A comparison's drafts share one version: its engine is loaded once.
@@ -195,7 +201,7 @@ export async function enqueueAssessments<T>(
       }
       return { enqueued, also: await alsoWrite(tx, enqueued) };
     },
-    inputs.length > 1 ? SEVERAL_TRANSACTION : undefined
+    several ? SEVERAL_TRANSACTION : undefined
   );
 
   noteMaintenanceWork('app:assessment-queued');

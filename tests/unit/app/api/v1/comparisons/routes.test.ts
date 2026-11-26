@@ -936,6 +936,17 @@ describe('POST /api/v1/comparisons — a draft that is a review the workspace ha
     expect(fake.assessments.filter((a) => a.id === original)).toHaveLength(1);
   });
 
+  it('writes a draft and its original in a transaction sized for a comparison, not one review', async () => {
+    const original = await existingReview(DRAFT_A);
+
+    await compare({ drafts: [{ assessmentId: original }, { text: DRAFT_B }] });
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000,
+    });
+  });
+
   it('refuses a review reviewed another way with 409, saying what differs, storing nothing', async () => {
     const original = await existingReview(DRAFT_A, { context: { contentType: 'landing_page' } });
     const sets = fake.sets.length;

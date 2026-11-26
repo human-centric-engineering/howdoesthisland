@@ -381,7 +381,10 @@ export async function createComparison(
             })),
           });
           return set.id;
-        }
+        },
+        // A comparison writes a set and every draft's place, and waits on the
+        // lock of a reused review a run is writing: never one review's share.
+        { several: true }
       )
     );
   } finally {

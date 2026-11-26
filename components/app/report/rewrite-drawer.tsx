@@ -15,7 +15,7 @@
  * original joins by its review, so it is not reviewed or charged again. When
  * that review no longer compares (its project's settings changed since),
  * the refusal offers **Review both again**, which reviews the original's copy
- * beside the draft, charged as two reviews.
+ * beside the draft, charged as two reviews (and the editor's verdict).
  *
  * Opening the drawer reads the review's earlier rewrites (one call for the
  * whole list, each with its draft), and any of them reopens. One still being
@@ -533,8 +533,10 @@ export function RewriteDrawer({
               <FieldHelp title="Review this draft">
                 Reviews this draft with the original&rsquo;s reader settings, project and{' '}
                 {WORDS.aiReviewers}, and opens it side by side with the original&rsquo;s{' '}
-                {WORDS.review}. Only the draft is charged, as any {WORDS.review} is: the original is
-                not reviewed again.
+                {WORDS.review}, with the editor&rsquo;s verdict on which lands better. The
+                draft&rsquo;s {WORDS.review} is charged, as any is, and so is the verdict when the{' '}
+                {WORDS.review} calls enough {WORDS.aiReviewers} for one. The original is not
+                reviewed again.
               </FieldHelp>
             </div>
             <SaveError failure={review.failure} />

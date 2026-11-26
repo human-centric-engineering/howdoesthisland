@@ -278,8 +278,8 @@ export function compareDraftRefusalOf(err: unknown): (Refusal & { reviewAgain: b
     return {
       message:
         reason === 'partly_scored'
-          ? 'This review was only partly scored, so the draft could not be weighed against it. Review both again to compare them: that is charged as two reviews.'
-          : 'This review was made with settings that have changed since, so its scores would not compare with a new review of the draft. Review both again to compare them: that is charged as two reviews.',
+          ? 'This review was only partly scored, so the draft could not be weighed against it. Review both again to compare them: that is charged as two reviews and the editor’s verdict on them.'
+          : 'This review was made with settings that have changed since, so its scores would not compare with a new review of the draft. Review both again to compare them: that is charged as two reviews and the editor’s verdict on them.',
       usagePage: null,
       reviewAgain: true,
     };
@@ -324,8 +324,17 @@ export const originalReviewSchema = z.object({
 export type OriginalReview = z.infer<typeof originalReviewSchema>;
 
 /** Cut `text` to `max` code points, so a character outside the BMP is never split. */
+/**
+ * `text` cut to at most `max` UTF-16 code units, as the server's `.max()`
+ * counts a label, never splitting a character (an emoji is two units).
+ */
 function cut(text: string, max: number): string {
-  return Array.from(text).slice(0, max).join('').trimEnd();
+  let out = '';
+  for (const char of text) {
+    if (out.length + char.length > max) break;
+    out += char;
+  }
+  return out.trimEnd();
 }
 
 /**
@@ -335,7 +344,8 @@ function cut(text: string, max: number): string {
  * none, so it is quick again (`judges` takes at least one).
  *
  * The original joins by its review's id, so it is not reviewed or charged
- * again. With `reviewAgain`, when that review no longer compares (its
+ * again; the draft's review is, and so is the editor's verdict on the two
+ * when the review calls enough AI reviewers for one (t-88). With `reviewAgain`, when that review no longer compares (its
  * project's settings changed since), its copy is sent as text instead and
  * reviewed beside the draft.
  *
@@ -351,7 +361,7 @@ export function compareDraftBody(
   const kind = `${draft.focusName.toLowerCase()} rewrite`;
   const suffix = ` (${kind})`;
   const draftLabel = title
-    ? `${cut(title, DRAFT_LABEL_MAX - Array.from(suffix).length)}${suffix}`
+    ? cut(`${cut(title, Math.max(0, DRAFT_LABEL_MAX - suffix.length))}${suffix}`, DRAFT_LABEL_MAX)
     : cut(`${draft.focusName} rewrite`, DRAFT_LABEL_MAX);
   const originalLabel = title || 'Original';
   return {
