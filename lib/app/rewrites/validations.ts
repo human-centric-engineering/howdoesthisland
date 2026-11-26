@@ -16,9 +16,9 @@ export const MAX_ANSWER_CHARS = 500;
 /**
  * The writer's answers to an earlier rewrite's placeholders (t-83), keyed by
  * placeholder id (`p1`, …). Each is checked against that rewrite's
- * placeholders once it is read.
+ * placeholders once it is read. Exported for `rewrite_draft` (t-94).
  */
-const answersSchema = z
+export const answersSchema = z
   .record(
     z.string().min(1).max(16),
     z
@@ -34,6 +34,14 @@ const answersSchema = z
     `At most ${MAX_PLACEHOLDERS} answers.`
   );
 
+/** A rewrite's focus, checked against the review's framework once that is known. */
+export const focusField = z.string().min(1).max(32).optional();
+
+/** Both or neither: a fill names the rewrite its answers are for. */
+export const fillsTogether = (body: { fromRewriteId?: string; answers?: unknown }): boolean =>
+  (body.fromRewriteId === undefined) === (body.answers === undefined);
+export const FILLS_TOGETHER_ERROR = 'Send fromRewriteId and answers together, or neither.';
+
 /** POST /api/v1/rewrites. */
 export const createRewriteSchema = z
   .strictObject({
@@ -42,7 +50,7 @@ export const createRewriteSchema = z
      * `balanced` (the default), or an appeal the framework names. With
      * `fromRewriteId`, that rewrite's focus is the default.
      */
-    focus: z.string().min(1).max(32).optional(),
+    focus: focusField,
     /** Stream the draft as server-sent events, rather than answer once it is done. */
     stream: z.boolean().default(false),
     /** A finished rewrite of the same review whose placeholders `answers` fills (t-83). */
@@ -50,10 +58,7 @@ export const createRewriteSchema = z
     /** Answers to `fromRewriteId`'s placeholders, by id. Those left out stay in the draft. */
     answers: answersSchema.optional(),
   })
-  .refine((body) => (body.fromRewriteId === undefined) === (body.answers === undefined), {
-    message: 'Send fromRewriteId and answers together, or neither.',
-    path: ['answers'],
-  });
+  .refine(fillsTogether, { message: FILLS_TOGETHER_ERROR, path: ['answers'] });
 export type CreateRewriteRequest = z.infer<typeof createRewriteSchema>;
 
 /** GET /api/v1/rewrites: one review's rewrites, newest first. */

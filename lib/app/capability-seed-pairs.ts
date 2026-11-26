@@ -29,7 +29,9 @@ import { AssessDraftCapability } from '@/lib/app/mcp/assess-draft';
 import { CompareDraftsCapability } from '@/lib/app/mcp/compare-drafts';
 import { GetAssessmentCapability } from '@/lib/app/mcp/get-assessment';
 import { GetComparisonCapability } from '@/lib/app/mcp/get-comparison';
+import { GetRewriteCapability } from '@/lib/app/mcp/get-rewrite';
 import { QuickScanCapability } from '@/lib/app/mcp/quick-scan';
+import { RewriteDraftCapability } from '@/lib/app/mcp/rewrite-draft';
 
 /** One capability slug and the class whose definition its seed must write. */
 export interface AppCapabilityPair {
@@ -54,12 +56,14 @@ export interface AppCapabilityPair {
  * ```
  */
 export const APP_CAPABILITY_PAIRS: readonly AppCapabilityPair[] = [
-  // `prisma/seeds/app-howdoesthisland/003-mcp-tools.ts` (t-92, t-93).
+  // `prisma/seeds/app-howdoesthisland/003-mcp-tools.ts` (t-92, t-93, t-94).
   { slug: 'quick_scan', instance: new QuickScanCapability() },
   { slug: 'assess_draft', instance: new AssessDraftCapability() },
   { slug: 'get_assessment', instance: new GetAssessmentCapability() },
   { slug: 'compare_drafts', instance: new CompareDraftsCapability() },
   { slug: 'get_comparison', instance: new GetComparisonCapability() },
+  { slug: 'rewrite_draft', instance: new RewriteDraftCapability() },
+  { slug: 'get_rewrite', instance: new GetRewriteCapability() },
 ];
 
 /**

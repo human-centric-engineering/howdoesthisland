@@ -61,6 +61,8 @@ beforeEach(() => {
     { name: 'review_it', slug: 'assess_draft' },
     { name: 'quick_scan', slug: 'quick_scan' },
     { name: 'compare_drafts', slug: 'compare_drafts' },
+    { name: 'rewrite_draft', slug: 'rewrite_draft' },
+    { name: 'get_rewrite', slug: 'get_rewrite' },
   ] as never);
   vi.mocked(handleMcpRequest).mockImplementation(async (req) => ({
     jsonrpc: '2.0',
@@ -103,6 +105,24 @@ describe('POST /mcp — a batch of request-holding tool calls', () => {
       { jsonrpc: '2.0', id: 3, error: refusal },
     ]);
     expect(vi.mocked(handleMcpRequest).mock.calls.map(([req]) => req.id)).toEqual([1]);
+  });
+
+  it('counts rewrite_draft with them, and lets get_rewrite through (t-94)', async () => {
+    const response = await post([
+      call(1, 'rewrite_draft'),
+      call(2, 'get_rewrite'),
+      call(3, 'assess_draft'),
+      call(4, 'rewrite_draft'),
+    ]);
+
+    const refusal = { code: JsonRpcErrorCode.INVALID_REQUEST, message: BATCH_SOLO_MESSAGE };
+    expect(await response.json()).toEqual([
+      { jsonrpc: '2.0', id: 1, result: {} },
+      { jsonrpc: '2.0', id: 2, result: {} },
+      { jsonrpc: '2.0', id: 3, error: refusal },
+      { jsonrpc: '2.0', id: 4, error: refusal },
+    ]);
+    expect(vi.mocked(handleMcpRequest).mock.calls.map(([req]) => req.id)).toEqual([1, 2]);
   });
 
   it('answers nothing for a refused notification, which has no id', async () => {

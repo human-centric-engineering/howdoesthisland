@@ -18,13 +18,17 @@ import { AssessDraftCapability } from '@/lib/app/mcp/assess-draft';
 import { CompareDraftsCapability } from '@/lib/app/mcp/compare-drafts';
 import { GetAssessmentCapability } from '@/lib/app/mcp/get-assessment';
 import { GetComparisonCapability } from '@/lib/app/mcp/get-comparison';
+import { GetRewriteCapability } from '@/lib/app/mcp/get-rewrite';
 import { QuickScanCapability } from '@/lib/app/mcp/quick-scan';
+import { RewriteDraftCapability } from '@/lib/app/mcp/rewrite-draft';
 
 export function initAppCapabilities(): void {
-  // HowDoesThisLand as MCP tools (t-92, t-93): `lib/app/mcp/`, `.context/app/mcp.md`.
+  // HowDoesThisLand as MCP tools (t-92, t-93, t-94): `lib/app/mcp/`, `.context/app/mcp.md`.
   registerAppCapability(new QuickScanCapability());
   registerAppCapability(new AssessDraftCapability());
   registerAppCapability(new GetAssessmentCapability());
   registerAppCapability(new CompareDraftsCapability());
   registerAppCapability(new GetComparisonCapability());
+  registerAppCapability(new RewriteDraftCapability());
+  registerAppCapability(new GetRewriteCapability());
 }
