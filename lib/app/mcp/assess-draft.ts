@@ -42,7 +42,7 @@ export const assessDraftArgsSchema = z
     context: contextField,
   })
   .refine((args) => (args.text === undefined) !== (args.url === undefined), {
-    error: 'Give the draft as text or as a url, not both',
+    error: 'Give the draft as text or as a url: exactly one of the two',
     path: ['text'],
   });
 

@@ -7,8 +7,12 @@ import { APIError } from '@/lib/api/errors';
 import { WorkspaceBusyError } from '@/lib/app/assessments/places';
 import type { ToolRefusal } from '@/lib/app/mcp/tool-support';
 
+/**
+ * The fields a refusal names. A validation error lists them under `errors`;
+ * `contextFor`'s `CONTEXT_INVALID` lists them under `issues`.
+ */
 const issueList = (details: Record<string, unknown> | undefined): string[] => {
-  const errors = details?.errors;
+  const errors = Array.isArray(details?.errors) ? details.errors : details?.issues;
   if (!Array.isArray(errors)) return [];
   return errors.flatMap((e: unknown) => {
     if (typeof e !== 'object' || e === null) return [];
@@ -33,7 +37,8 @@ export function refusalOf(err: unknown): ToolRefusal | null {
     const issues = issueList(err.details);
     return {
       code: err.code ?? 'REFUSED',
-      message: issues.length > 0 ? `${err.message}: ${issues.join('; ')}` : err.message,
+      message:
+        issues.length > 0 ? `${err.message.replace(/\.$/, '')}: ${issues.join('; ')}` : err.message,
     };
   }
   return null;

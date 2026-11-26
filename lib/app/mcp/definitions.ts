@@ -103,8 +103,10 @@ export const GET_ASSESSMENT: CapabilityFunctionDefinition = {
 /**
  * Each tool's row, as the seed writes it. `name` and `description` are the
  * admin's presentation, seeded once; `rateLimit` is per minute, per agent
- * (`mcp-system` for every unscoped key), on top of the per-user caps the
- * classes apply themselves.
+ * (`mcp-system` for every unscoped key), so every unscoped key shares one
+ * bucket per tool. Only `assess_draft` adds a per-person cap of its own
+ * (`aiAssessmentLimiter`, as the API does); the proxy's `mcp` tier still caps
+ * each key.
  */
 export const MCP_TOOL_ROWS = [
   {

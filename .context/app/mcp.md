@@ -40,7 +40,8 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   `McpApiKey.createdBy` as `context.userId`. `assess_draft` needs one, for the
   per-person cap (`aiAssessmentLimiter`, keyed `user:<id>`, the same bucket as
   the API) and the review's `createdByUserId`. A key whose creator has gone
-  (`createdBy` is `SetNull`) is refused with `KEY_HAS_NO_OWNER`. The two tools
+  (`createdBy` is `SetNull`), or is no longer a member of the key's workspace,
+  is refused with `KEY_HAS_NO_OWNER` before anything is prepared or charged. The two tools
   that only read, or spend nothing, still work for it.
 - **Credits, the review budget and the running limit hold as over the API**,
   because the tool takes the route's steps, in the route's order.
@@ -52,8 +53,10 @@ scoped agent). **There is no session and no request behind a tool call.** So:
   id and status (`ready: false`, with the quick scan's early read). It runs on
   (`keepRunningAfterResponse`), and `get_assessment` reads it later. On Vercel
   that continuation is bounded by the MCP route's function duration, which the
-  route does not raise. A review cut off there is picked up by assessment
-  recovery, as any abandoned run is.
+  route raises to 300 seconds as `/api/v1/assessments` does (divergence row 32).
+  A review cut off anyway (a long JSON-RPC batch of reviews runs them one after
+  another in one request) is picked up by assessment recovery, as any abandoned
+  run is.
 - **Refusals reach the assistant in the library's words.** An `APIError` (no
   credits, a context the framework refuses, not found) becomes the tool's error
   with its code. Anything else is thrown for the dispatcher to log, and it

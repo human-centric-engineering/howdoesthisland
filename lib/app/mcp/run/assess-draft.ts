@@ -4,6 +4,11 @@
  * The route's steps in the route's order (`prepareAssessment`, the per-person
  * cap, `holdReviewBudget`, `createAssessment`), so credits, the review budget
  * and the workspace's running limit hold exactly as they do over the API.
+ *
+ * Before any of it, the key's creator must still be a member of the key's
+ * workspace: a key outlives its creator's removal (only erasure nulls
+ * `createdBy`), and the person a review is charged to must be one who can
+ * spend there.
  */
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import {
@@ -20,12 +25,24 @@ import {
 } from '@/lib/app/mcp/assessment-summary';
 import { refusalOf } from '@/lib/app/mcp/run/refusal';
 import { MCP_WAIT_MS, type ToolOutcome } from '@/lib/app/mcp/tool-support';
+import { prisma } from '@/lib/db/client';
+import { verifiedMembership } from '@/lib/tenancy/entry';
 import { requireOrgId } from '@/lib/tenancy/context';
 
 export async function assessDraftTool(
   body: AssessmentRequest,
   userId: string
 ): Promise<ToolOutcome<AssessmentSummaryForAssistant>> {
+  const membership = await verifiedMembership(userId, requireOrgId(), prisma);
+  if ('refused' in membership) {
+    return {
+      refusal: {
+        code: 'KEY_HAS_NO_OWNER',
+        message:
+          'The person who made this MCP key is no longer in the workspace, so it cannot start work that spends credits. Ask a workspace owner for a new key.',
+      },
+    };
+  }
   try {
     const prepared = await prepareAssessment(body);
     try {

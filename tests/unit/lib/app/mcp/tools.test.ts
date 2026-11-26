@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   summariseAssessment: vi.fn(),
   readAssessmentSummary: vi.fn(),
   release: vi.fn(),
+  verifiedMembership: vi.fn(),
 }));
 
 vi.mock('@/lib/app/assessments/api/scan', () => ({ runQuickScan: mocks.runQuickScan }));
@@ -44,6 +45,7 @@ vi.mock('@/lib/tenancy/context', async (importOriginal) => ({
   requireOrgId: () => 'org-1',
 }));
 vi.mock('@/lib/db/client', () => ({ prisma: {} }));
+vi.mock('@/lib/tenancy/entry', () => ({ verifiedMembership: mocks.verifiedMembership }));
 
 import { APIError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { WorkspaceBusyError } from '@/lib/app/assessments/places';
@@ -60,6 +62,7 @@ const DRAFT = 'Our platform will revolutionise how teams work. Sarah at Acme sav
 
 beforeEach(() => {
   mocks.isQuickScanEnabled.mockReturnValue(true);
+  mocks.verifiedMembership.mockResolvedValue({ role: 'MEMBER' });
   mocks.limiterCheck.mockReturnValue({ success: true, limit: 3, remaining: 2, reset: 0 });
   mocks.prepareAssessment.mockResolvedValue({
     judges: ['ethos', 'logos'],
@@ -233,6 +236,24 @@ describe('assess_draft', () => {
     expect(result).toEqual({
       success: false,
       error: { code: 'KEY_HAS_NO_OWNER', message: expect.stringContaining('new key') },
+    });
+    expect(mocks.prepareAssessment).not.toHaveBeenCalled();
+    expect(mocks.holdReviewBudget).not.toHaveBeenCalled();
+    expect(mocks.createAssessment).not.toHaveBeenCalled();
+  });
+
+  it('refuses a key whose creator has left the workspace, before anything is prepared or charged', async () => {
+    mocks.verifiedMembership.mockResolvedValue({ refused: 'not-a-member' });
+
+    const result = await tool.execute(tool.validate({ text: DRAFT }), asCreator);
+
+    expect(mocks.verifiedMembership).toHaveBeenCalledWith('user-1', 'org-1', expect.anything());
+    expect(result).toEqual({
+      success: false,
+      error: {
+        code: 'KEY_HAS_NO_OWNER',
+        message: expect.stringContaining('no longer in the workspace'),
+      },
     });
     expect(mocks.prepareAssessment).not.toHaveBeenCalled();
     expect(mocks.holdReviewBudget).not.toHaveBeenCalled();

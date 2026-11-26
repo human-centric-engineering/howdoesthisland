@@ -41,6 +41,23 @@ describe('refusalOf', () => {
     });
   });
 
+  it('names each field a context refusal lists under issues', () => {
+    const err = new APIError(
+      'The context does not fit this framework version.',
+      'CONTEXT_INVALID',
+      400,
+      {
+        issues: [{ path: 'contentType', message: 'Unknown value "landing"' }],
+      }
+    );
+
+    expect(refusalOf(err)).toEqual({
+      code: 'CONTEXT_INVALID',
+      message:
+        'The context does not fit this framework version: contentType: Unknown value "landing"',
+    });
+  });
+
   it('keeps the message as it is when details carry no list', () => {
     expect(refusalOf(new ValidationError('Invalid', { errors: 'nope' }))).toEqual({
       code: 'VALIDATION_ERROR',

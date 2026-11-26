@@ -37,13 +37,18 @@ export interface ToolRefusal {
 /** What a tool's work answers: its data, or a refusal the class turns into a tool error. */
 export type ToolOutcome<T> = { data: T } | { refusal: ToolRefusal };
 
-/** The person a spending tool acts for: the key's creator, or a refusal when the key has none. */
+/**
+ * The person a spending tool acts for: the key's creator, or a refusal when
+ * the key has none (its creator was erased). That the creator is still a
+ * member of the key's workspace is checked with the work, which may read the
+ * database (`lib/app/mcp/run/assess-draft.ts`).
+ */
 export function creatorOf(context: CapabilityContext): string | ToolRefusal {
   if (context.userId) return context.userId;
   return {
     code: 'KEY_HAS_NO_OWNER',
     message:
-      'This MCP key no longer belongs to anyone in the workspace, so it cannot start work that spends credits. Ask a workspace owner for a new key.',
+      'The person who made this MCP key no longer has an account, so it cannot start work that spends credits. Ask a workspace owner for a new key.',
   };
 }
 

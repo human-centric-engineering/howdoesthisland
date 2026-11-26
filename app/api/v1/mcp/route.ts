@@ -55,6 +55,12 @@ function jsonRpcErrorResponse(code: JsonRpcErrorCode, message: string, status: n
   return Response.json({ jsonrpc: '2.0', id: null, error: { code, message } }, { status, headers });
 }
 
+/**
+ * Long enough for a review `assess_draft` answered before it finished to run on
+ * under `after()`, as `/api/v1/assessments` allows (HowDoesThisLand, t-92).
+ */
+export const maxDuration = 300;
+
 const MAX_BODY_SIZE = 1_048_576; // 1MB
 const MAX_BATCH_SIZE = 20;
 /** Spec revision 2025-06-18 onward: the client echoes the negotiated version per request. */
