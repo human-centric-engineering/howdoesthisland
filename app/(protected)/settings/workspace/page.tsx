@@ -1,7 +1,7 @@
 /**
  * Workspace settings (t-8, t-9, j4): the caller's own invitations into other
  * workspaces, who is in the active workspace, inviting people into it, and
- * which model each judge and the editor runs on.
+ * which model each judge and the editor runs on, and its MCP keys.
  *
  * A thin shell over the API: `GET /api/v1/workspaces/invitations` for the
  * caller's invitations, `GET /api/v1/orgs` for the active workspace and the
@@ -11,7 +11,9 @@
  * rather than core's `MemberInviteForm`, which answers 409 for an address
  * with an account and so tells an admin who has one; the app's route invites
  * both and answers the same either way. Judge models are the app's
- * `GET /api/v1/workspaces/[id]/judges`, shown by `JudgeModels`.
+ * `GET /api/v1/workspaces/[id]/judges`, shown by `JudgeModels`. MCP keys are
+ * the app's `GET /api/v1/workspaces/[id]/mcp-keys`, shown by `McpKeysManager`
+ * (t-95).
  *
  * This page adds no rule of its own: the API decides who may do what. Core
  * lets an `OWNER` or `ADMIN` read the roster and invite, and nobody else, so
@@ -35,6 +37,9 @@ import { WorkspaceInviteForm } from '@/components/app/workspaces/workspace-invit
 import { WorkspaceInvitations } from '@/components/app/workspaces/workspace-invitations';
 import { JudgeModels } from '@/components/app/settings/judge-models';
 import { judgeModelListSchema, judgeModelsEndpoint } from '@/components/app/settings/schemas';
+import { McpKeysManager } from '@/components/app/settings/mcp-keys/mcp-keys-manager';
+import { mcpKeyListSchema, mcpKeysEndpoint } from '@/components/app/settings/mcp-keys/schemas';
+import type { McpKeyRow } from '@/components/app/settings/mcp-keys/schemas';
 import type { JudgeModelChoiceView } from '@/components/app/settings/schemas';
 import {
   myInvitationsSchema,
@@ -84,15 +89,19 @@ export default async function WorkspaceSettingsPage() {
   const administers = orgAdministers(active.role);
   let members: OrgMember[] | null = null;
   let judges: JudgeModelChoiceView[] | null = null;
+  let mcpKeys: McpKeyRow[] | null = null;
   if (administers) {
-    const [loaded, loadedJudges] = await Promise.all([
+    const [loaded, loadedJudges, loadedMcpKeys] = await Promise.all([
       loadServerData<unknown>(API.ORGS.members(active.id)),
       loadServerData<unknown>(judgeModelsEndpoint(active.id)),
+      loadServerData<unknown>(mcpKeysEndpoint(active.id)),
     ]);
     const parsed = loaded.ok ? workspaceMembersSchema.safeParse(loaded.data) : null;
     members = parsed?.success ? parsed.data.members : null;
     const parsedJudges = loadedJudges.ok ? judgeModelListSchema.safeParse(loadedJudges.data) : null;
     judges = parsedJudges?.success ? parsedJudges.data.agents : null;
+    const parsedMcpKeys = loadedMcpKeys.ok ? mcpKeyListSchema.safeParse(loadedMcpKeys.data) : null;
+    mcpKeys = parsedMcpKeys?.success ? parsedMcpKeys.data.keys : null;
   }
 
   return (
@@ -101,7 +110,8 @@ export default async function WorkspaceSettingsPage() {
         <p className="hd-slug">Workspace</p>
         <h1 className="text-2xl font-bold">{active.name}</h1>
         <p className="text-muted-foreground">
-          Who is in this workspace, their roles, inviting people in, and the models its judges use.
+          Who is in this workspace, their roles, inviting people in, the models its judges use, and
+          its AI assistant keys.
         </p>
       </div>
 
@@ -124,6 +134,15 @@ export default async function WorkspaceSettingsPage() {
             <JudgeModels orgId={active.id} agents={judges} />
           ) : (
             <LoadFailedNotice what="the judge models" />
+          )}
+          {mcpKeys ? (
+            <McpKeysManager
+              orgId={active.id}
+              initialKeys={mcpKeys}
+              renderedAt={new Date().toISOString()}
+            />
+          ) : (
+            <LoadFailedNotice what="the AI assistant keys" />
           )}
         </>
       ) : (
