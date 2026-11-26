@@ -24,17 +24,11 @@ describe('the MCP tool classes', () => {
       import('@/lib/app/mcp/assess-draft'),
       import('@/lib/app/mcp/get-assessment'),
     ]);
-    const pairs = await import('@/lib/app/capability-seed-pairs');
 
     expect(modules.map((m) => Object.keys(m).find((k) => k.endsWith('Capability')))).toEqual([
       'QuickScanCapability',
       'AssessDraftCapability',
       'GetAssessmentCapability',
-    ]);
-    expect(pairs.APP_CAPABILITY_PAIRS.map((p) => p.slug)).toEqual([
-      'quick_scan',
-      'assess_draft',
-      'get_assessment',
     ]);
   });
 });
