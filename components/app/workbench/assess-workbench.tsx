@@ -104,7 +104,7 @@ const FILE_TOO_LARGE_FOR_HOST =
   'This file is too large for this server to accept. Paste its text instead, or try a smaller file.';
 
 const COMPARE_STARTED_UNREADABLE =
-  'The comparison has started, but this page could not read the reply, so it cannot open it. There is no need to start it again: find it under Comparisons on Home, where each draft’s review is listed too.';
+  'The comparison has started, but this page could not read the reply, so it cannot open it. There is no need to start it again: find it on the Comparisons page (/compare), which links to each draft’s review.';
 
 /** The draft a comparison's refusal names (`details.position`), if it is one of these. */
 function refusedDraftOf(err: unknown, count: number): number | null {

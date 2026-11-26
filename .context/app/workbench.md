@@ -146,7 +146,8 @@ each linking to its report. Code: `components/app/history/`.
   offers to clear the filters instead. With no reviews and no comparisons, `/home`
   reads neither the catalogue nor the projects. With only comparisons it hides
   the filters and points to `/assess`. If the comparisons cannot be read, their
-  section is left out and the reviews still show. A page past the last links back to the
+  section is replaced by a link to `/compare` and the reviews still show; the
+  desk is not called empty, since it may not be. A page past the last links back to the
   newest. An archived project with no reviews says to restore it, not to
   choose it on `/assess`.
 - **Delete asks first**: it takes the copy, the result and any share link, and

@@ -45,7 +45,7 @@ export const comparisonSchema = z.object({
   status: z.enum(['running', 'completed', 'partial', 'failed']),
   framework: z.object({ slug: z.string(), version: z.string() }),
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
-  createdAt: z.string(),
+  createdAt: z.iso.datetime(),
   drafts: z.array(comparisonDraftSchema),
   /** Per appeal, once two drafts are scored; empty before. */
   appeals: z.array(
@@ -132,7 +132,7 @@ export const comparisonRowSchema = z.object({
   id: z.string(),
   status: comparisonSchema.shape.status,
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
-  createdAt: z.string(),
+  createdAt: z.iso.datetime(),
   drafts: z.array(
     comparisonDraftSchema.pick({
       position: true,

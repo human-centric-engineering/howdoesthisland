@@ -97,6 +97,10 @@ describe('comparisonListSchema (t-90)', () => {
   it('refuses a row it cannot show', () => {
     expect(comparisonListSchema.safeParse([{ id: 'cmp-1' }]).success).toBe(false);
   });
+
+  it('refuses a row whose date is not a timestamp, which the list could not format', () => {
+    expect(comparisonListSchema.safeParse([aComparisonRow({ createdAt: '' })]).success).toBe(false);
+  });
 });
 
 describe('comparisonListEndpoint', () => {

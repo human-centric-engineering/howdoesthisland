@@ -190,7 +190,6 @@ describe('/home', () => {
   it('counts what it shows when the list carries no pagination meta', async () => {
     requireServerData.mockImplementation(async (path: string) => {
       if (path.startsWith('/api/v1/assessments?')) return { data: [aReview()], meta: null };
-      if (path === COMPARISONS) return { data: [], meta: null };
       if (path === '/api/v1/frameworks/howdoesthisland')
         return { data: { name: 'HowDoesThisLand', latestVersion: null }, meta: null };
       throw new Error(`unexpected ${path}`);
@@ -245,8 +244,11 @@ describe('/home', () => {
     render(await page());
     expect(screen.queryByText('Nothing on the desk yet.')).toBeNull();
     expect(screen.getByRole('region', { name: 'Recent comparisons' })).toBeInTheDocument();
-    // Nothing to filter, and a way to add a review rather than a dead end.
+    // Nothing to filter, so the filters' choices are not even read, and a way
+    // to add a review rather than a dead end.
     expect(screen.queryByRole('combobox')).toBeNull();
+    expect(requireAllServerData).not.toHaveBeenCalled();
+    expect(requireServerData.mock.calls).toEqual([[LIST]]);
     expect(screen.getByText('No reviews here')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Review some copy' })[1]).toHaveAttribute(
       'href',
@@ -263,6 +265,26 @@ describe('/home', () => {
     render(await page());
     expect(screen.getByRole('table')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Recent comparisons' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'See them on the Comparisons page' })).toHaveAttribute(
+      'href',
+      '/compare'
+    );
+    expect(screen.getByRole('link', { name: 'Comparisons' })).toHaveAttribute('href', '/compare');
+  });
+
+  it('does not call the desk empty when no review is left and the comparisons cannot be read', async () => {
+    answer([], 0);
+    loadServerData.mockResolvedValue({
+      ok: false,
+      failure: { kind: 'failed', status: null, code: null },
+    });
+    render(await page());
+    expect(screen.queryByText('Nothing on the desk yet.')).toBeNull();
+    expect(screen.getByText('No reviews here')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See them on the Comparisons page' })).toHaveAttribute(
+      'href',
+      '/compare'
+    );
   });
 
   it('leaves out comparisons whose rows do not parse, keeping the reviews', async () => {

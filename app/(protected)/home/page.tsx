@@ -87,23 +87,19 @@ export default async function HomePage({
   ]);
   const reviews = reviewListSchema.parse(loaded.data);
   const total = parsePaginationMeta(loaded.meta)?.total ?? reviews.length;
-  const { comparisons, total: comparisonTotal } = recent;
-  // A comparison whose drafts' reviews were all deleted is still on the desk.
-  if (total === 0 && !filtered && comparisonTotal === 0) return <HomeEmptyState />;
-
-  const [catalogue, projects] = await Promise.all([
-    loadFilterCatalogue(),
-    // Archived ones too: their reviews are still listed, so they can be
-    // filtered by, and a filter on one still names it.
-    requireAllServerData<{ id: string }>(`${PROJECTS_ENDPOINT}?archived=true`).then((rows) =>
-      projectListSchema
-        .parse(rows)
-        .map(({ id, name, archived }) => ({ id, name: archived ? `${name} (archived)` : name }))
-    ),
-  ]);
-
-  // Nothing to filter yet: only comparisons are on the desk.
+  const { comparisons, total: comparisonTotal, failed: comparisonsFailed } = recent;
+  // Nothing to filter yet: at most comparisons are on the desk.
   const noReviews = total === 0 && !filtered;
+  // A comparison whose drafts' reviews were all deleted is still on the desk,
+  // and one that could not be read may be: only a desk known to be empty is.
+  if (noReviews && comparisonTotal === 0 && !comparisonsFailed) return <HomeEmptyState />;
+  // Offered whenever there may be comparisons: /compare reads them itself.
+  const offerComparisons = comparisonTotal > 0 || comparisonsFailed;
+
+  // With no reviews no filters are shown, so their choices are not read.
+  const { catalogue, projects } = noReviews
+    ? { catalogue: NO_FILTERS, projects: [] }
+    : await loadFilterChoices();
 
   return (
     <div className="space-y-6">
@@ -113,7 +109,7 @@ export default async function HomePage({
           <h1 className="text-2xl font-bold">Recent {WORDS.review}s</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          {comparisonTotal > 0 ? (
+          {offerComparisons ? (
             <Button asChild variant="outline">
               <Link href={COMPARISONS_PATH}>Comparisons</Link>
             </Button>
@@ -175,30 +171,63 @@ export default async function HomePage({
           <ComparisonList comparisons={comparisons} total={comparisonTotal} />
         </section>
       ) : null}
+      {comparisonsFailed ? (
+        <p className="text-muted-foreground pt-4 text-sm">
+          Your comparisons could not be shown here.{' '}
+          <Link href={COMPARISONS_PATH} className="underline underline-offset-4">
+            See them on the Comparisons page
+          </Link>
+          .
+        </p>
+      ) : null}
     </div>
   );
 }
 
 /**
- * The latest few comparisons, or none when they cannot be read: a failure here
- * leaves the section out rather than failing the page. `loadServerData` logs a
+ * The latest few comparisons. A failure here leaves the section out, with a
+ * pointer to `/compare`, rather than failing the page; `failed` says so, so
+ * the desk is not called empty when it may not be. `loadServerData` logs a
  * failed call; a row that does not parse is logged here.
  */
-async function loadRecentComparisons(): Promise<{ comparisons: ComparisonRow[]; total: number }> {
-  const none = { comparisons: [], total: 0 };
+async function loadRecentComparisons(): Promise<{
+  comparisons: ComparisonRow[];
+  total: number;
+  failed: boolean;
+}> {
+  const failed = { comparisons: [], total: 0, failed: true };
   const loaded = await loadServerData<unknown>(comparisonListEndpoint(1, COMPARISON_RECENT_LIMIT));
-  if (!loaded.ok) return none;
+  if (!loaded.ok) return failed;
   const parsed = comparisonListSchema.safeParse(loaded.data);
   if (!parsed.success) {
     logger.warn('Recent comparisons did not parse; leaving them off /home', {
       issues: parsed.error.issues.length,
     });
-    return none;
+    return failed;
   }
   return {
     comparisons: parsed.data,
     total: parsePaginationMeta(loaded.meta)?.total ?? parsed.data.length,
+    failed: false,
   };
+}
+
+/** What the review filters offer: the latest catalogue and the workspace's projects. */
+async function loadFilterChoices(): Promise<{
+  catalogue: FilterCatalogue;
+  projects: { id: string; name: string }[];
+}> {
+  const [catalogue, projects] = await Promise.all([
+    loadFilterCatalogue(),
+    // Archived ones too: their reviews are still listed, so they can be
+    // filtered by, and a filter on one still names it.
+    requireAllServerData<{ id: string }>(`${PROJECTS_ENDPOINT}?archived=true`).then((rows) =>
+      projectListSchema
+        .parse(rows)
+        .map(({ id, name, archived }) => ({ id, name: archived ? `${name} (archived)` : name }))
+    ),
+  ]);
+  return { catalogue, projects };
 }
 
 /** The framework's latest catalogue, as far as the filters read it. */
