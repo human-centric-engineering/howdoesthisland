@@ -10,6 +10,9 @@ import { holdsPlaceholder, MAX_PLACEHOLDERS } from '@/lib/app/frameworks/placeho
 
 const id = z.string().min(1).max(64);
 
+/** The longest a placeholder id an answer is keyed to may be. */
+export const MAX_ANSWER_KEY_CHARS = 16;
+
 /** The longest one answer to a placeholder may be. */
 export const MAX_ANSWER_CHARS = 500;
 
@@ -20,7 +23,7 @@ export const MAX_ANSWER_CHARS = 500;
  */
 export const answersSchema = z
   .record(
-    z.string().min(1).max(16),
+    z.string().min(1).max(MAX_ANSWER_KEY_CHARS),
     z
       .string()
       .trim()

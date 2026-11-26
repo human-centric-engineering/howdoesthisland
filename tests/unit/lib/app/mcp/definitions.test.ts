@@ -14,6 +14,7 @@ import {
   GET_ASSESSMENT,
   GET_COMPARISON,
   GET_REWRITE,
+  MCP_ANSWER_KEY_MAX,
   MCP_ANSWER_MAX,
   MCP_LABEL_MAX,
   MCP_MAX_ANSWERS,
@@ -35,7 +36,7 @@ import { getComparisonArgsSchema } from '@/lib/app/mcp/get-comparison';
 import { rewriteDraftArgsSchema } from '@/lib/app/mcp/rewrite-draft';
 import { getRewriteArgsSchema } from '@/lib/app/mcp/get-rewrite';
 import { MAX_PLACEHOLDERS } from '@/lib/app/frameworks/placeholders';
-import { MAX_ANSWER_CHARS } from '@/lib/app/rewrites/validations';
+import { MAX_ANSWER_CHARS, MAX_ANSWER_KEY_CHARS } from '@/lib/app/rewrites/validations';
 
 const parameters = z.object({
   type: z.literal('object'),
@@ -95,7 +96,11 @@ describe('the bounds the definitions restate', () => {
       MAX_DRAFTS,
       DRAFT_LABEL_MAX,
     ]);
-    expect([MCP_ANSWER_MAX, MCP_MAX_ANSWERS]).toEqual([MAX_ANSWER_CHARS, MAX_PLACEHOLDERS]);
+    expect([MCP_ANSWER_MAX, MCP_ANSWER_KEY_MAX, MCP_MAX_ANSWERS]).toEqual([
+      MAX_ANSWER_CHARS,
+      MAX_ANSWER_KEY_CHARS,
+      MAX_PLACEHOLDERS,
+    ]);
   });
 
   it('seed one row per tool, under its own handler class', () => {
@@ -152,6 +157,7 @@ describe('the answers of rewrite_draft', () => {
       properties: z.object({
         answers: z.object({
           type: z.literal('object'),
+          propertyNames: z.object({ type: z.literal('string'), maxLength: z.number() }),
           additionalProperties: z.object({ type: z.literal('string'), maxLength: z.number() }),
           minProperties: z.number(),
           maxProperties: z.number(),
@@ -164,6 +170,7 @@ describe('the answers of rewrite_draft', () => {
 
   it('advertises a string per placeholder id, as many as a draft can have', () => {
     expect(answers.additionalProperties.maxLength).toBe(MAX_ANSWER_CHARS);
+    expect(answers.propertyNames.maxLength).toBe(MAX_ANSWER_KEY_CHARS);
     expect([answers.minProperties, answers.maxProperties]).toEqual([1, MAX_PLACEHOLDERS]);
   });
 

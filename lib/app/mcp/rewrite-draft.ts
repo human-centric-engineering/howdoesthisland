@@ -45,6 +45,9 @@ export const rewriteDraftArgsSchema = z
 
 type Args = z.infer<typeof rewriteDraftArgsSchema>;
 
+/** A placeholder id as `parsePlaceholders` numbers them: the only answer key the trail keeps. */
+const PLACEHOLDER_ID = /^p\d{1,3}$/;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -79,9 +82,10 @@ export class RewriteDraftCapability extends BaseCapability<Args, RewriteSummaryF
         assessmentId: idShape(sent.assessmentId),
         focus: idShape(sent.focus),
         fromRewriteId: idShape(sent.fromRewriteId),
-        // Which placeholders were answered, never the answers: they are the writer's facts.
+        // Which placeholders were answered, never the answers: they are the writer's
+        // facts. A key that is not a placeholder id may be one too, sent as sent.
         answers: isRecord(sent.answers)
-          ? Object.keys(sent.answers).map((key) => idShape(key))
+          ? Object.keys(sent.answers).map((key) => (PLACEHOLDER_ID.test(key) ? key : '[value]'))
           : undefined,
       },
       resultPreview: result.success

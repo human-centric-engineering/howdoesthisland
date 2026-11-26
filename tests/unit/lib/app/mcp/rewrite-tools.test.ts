@@ -365,6 +365,13 @@ describe('rewrite_draft', () => {
   });
 
   it('reads arguments as sent defensively, as a chat turn’s trace passes them', () => {
+    const keyed = tool.redactProvenance(
+      { assessmentId: 'a-1', answers: { p2: 'x', AcmeCorp1200: 'y' } },
+      { success: false, error: { code: 'VALIDATION_ERROR', message: 'no' } }
+    ).args;
+    // A key that is not a placeholder id may carry the writer's fact.
+    expect(keyed.answers).toEqual(['p2', '[value]']);
+
     const args = tool.redactProvenance({ assessmentId: 'free text here', answers: 'x' } as never, {
       success: false,
       error: { code: 'VALIDATION_ERROR', message: 'no' },

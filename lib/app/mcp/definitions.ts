@@ -30,6 +30,8 @@ export const MCP_MAX_DRAFTS = 5;
 export const MCP_LABEL_MAX = 80;
 /** As `MAX_ANSWER_CHARS` and `MAX_PLACEHOLDERS` in `lib/app/rewrites/validations.ts` and `lib/app/frameworks/placeholders.ts`. */
 export const MCP_ANSWER_MAX = 500;
+/** As the key bound in `answersSchema`: a placeholder id (`p1`, …). */
+export const MCP_ANSWER_KEY_MAX = 16;
 export const MCP_MAX_ANSWERS = 30;
 
 const textProperty = {
@@ -207,6 +209,7 @@ export const REWRITE_DRAFT: CapabilityFunctionDefinition = {
         type: 'object',
         description:
           'With fromRewriteId: the writer\'s answers, keyed by placeholder id, for example {"p1": "1,200 customers"}. Placeholders left out stay in the draft. Never invent an answer: ask the writer.',
+        propertyNames: { type: 'string', minLength: 1, maxLength: MCP_ANSWER_KEY_MAX },
         additionalProperties: { type: 'string', minLength: 1, maxLength: MCP_ANSWER_MAX },
         minProperties: 1,
         maxProperties: MCP_MAX_ANSWERS,
