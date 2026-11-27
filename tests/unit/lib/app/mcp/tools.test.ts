@@ -86,11 +86,11 @@ afterEach(() => {
 describe('quick_scan', () => {
   const tool = new QuickScanCapability();
 
-  it('runs the route’s quick scan and answers its summary, with no person behind the key', async () => {
+  it('runs the route’s quick scan and answers its summary, for a member of the key’s workspace', async () => {
     mocks.runQuickScan.mockResolvedValue({ overall: 41 });
     mocks.summariseQuickScan.mockReturnValue({ overall: 41, band: 'Weak', caveat: 'surface' });
 
-    const result = await tool.execute(tool.validate({ text: DRAFT }), noCreator);
+    const result = await tool.execute(tool.validate({ text: DRAFT }), asCreator);
 
     expect(mocks.runQuickScan).toHaveBeenCalledWith({ text: DRAFT });
     expect(mocks.summariseQuickScan).toHaveBeenCalledWith({ overall: 41 });
@@ -444,10 +444,10 @@ describe('assess_draft', () => {
 describe('get_assessment', () => {
   const tool = new GetAssessmentCapability();
 
-  it('answers the workspace’s assessment summarised, with no person behind the key', async () => {
+  it('answers the workspace’s assessment summarised, for a member of the key’s workspace', async () => {
     mocks.readAssessmentSummary.mockResolvedValue({ id: 'a-1', status: 'completed', ready: true });
 
-    const result = await tool.execute(tool.validate({ assessmentId: 'a-1' }), noCreator);
+    const result = await tool.execute(tool.validate({ assessmentId: 'a-1' }), asCreator);
 
     expect(mocks.readAssessmentSummary).toHaveBeenCalledWith('a-1');
     expect(result).toEqual({

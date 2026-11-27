@@ -470,10 +470,10 @@ describe('compare_drafts', () => {
 describe('get_comparison', () => {
   const tool = new GetComparisonCapability();
 
-  it('reads the comparison in the key’s workspace, with no person behind the key', async () => {
+  it('reads the comparison in the key’s workspace, for a member of it', async () => {
     mocks.getComparison.mockResolvedValue(detail('completed', 'completed'));
 
-    const result = await tool.execute(tool.validate({ comparisonId: 'cmp-1' }), noCreator);
+    const result = await tool.execute(tool.validate({ comparisonId: 'cmp-1' }), asCreator);
 
     expect(mocks.getComparison).toHaveBeenCalledWith('cmp-1');
     expect(result.data).toMatchObject({

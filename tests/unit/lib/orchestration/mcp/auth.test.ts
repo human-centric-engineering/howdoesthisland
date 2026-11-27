@@ -11,6 +11,11 @@ vi.mock('@/lib/db/client', () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    // FORK (HowDoesThisLand t-96, divergence row 34): the key's creator must be
+    // a member of its org; each test's creator is one, unless it says otherwise.
+    orgMembership: {
+      findUnique: vi.fn(async () => ({ role: 'MEMBER', org: { status: 'ACTIVE' } })),
+    },
   },
 }));
 

@@ -5,8 +5,9 @@
  * A tool, not an MCP resource, though `lib/app/mcp-resources.ts` prefers
  * resources for reads: a workspace's own agents and workflows dispatch
  * capabilities, not resources, and this is how `assess_draft`'s answer is
- * read once the review has finished. Reads only, so it needs no person
- * behind the key; another workspace's id is not found, as over the API.
+ * read once the review has finished. Reads only, but the
+ * person behind the key must still be in its workspace (`run/caller.ts`);
+ * another workspace's id is not found, as over the API.
  *
  * The work is loaded on the first call: why, in `tool-support.ts`.
  */
@@ -14,6 +15,7 @@ import { z } from 'zod';
 import { assessmentIdParamSchema } from '@/lib/app/assessments/api/validations';
 import type { AssessmentSummaryForAssistant } from '@/lib/app/mcp/assessment-summary';
 import { GET_ASSESSMENT } from '@/lib/app/mcp/definitions';
+import { callerOf } from '@/lib/app/mcp/tool-support';
 import {
   BaseCapability,
   type ProvenanceRedaction,
@@ -35,10 +37,10 @@ export class GetAssessmentCapability extends BaseCapability<Args, AssessmentSumm
 
   async execute(
     args: Args,
-    _context: CapabilityContext
+    context: CapabilityContext
   ): Promise<CapabilityResult<AssessmentSummaryForAssistant>> {
     const { getAssessmentTool } = await import('@/lib/app/mcp/run/get-assessment');
-    const outcome = await getAssessmentTool(args.assessmentId);
+    const outcome = await getAssessmentTool(args.assessmentId, callerOf(context));
     if ('refusal' in outcome) return this.error(outcome.refusal.message, outcome.refusal.code);
     return this.success(outcome.data);
   }

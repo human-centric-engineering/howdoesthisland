@@ -406,7 +406,7 @@ describe('get_rewrite', () => {
       completedAt: null,
     });
 
-    const result = await inOrg(() => tool.execute({ rewriteId: 'rw-1' }, noCreator));
+    const result = await inOrg(() => tool.execute({ rewriteId: 'rw-1' }, asCreator));
 
     expect(result.data).toMatchObject({ id: 'rw-1', status: 'running', ready: false, draft: null });
   });
@@ -428,8 +428,8 @@ describe('get_rewrite', () => {
       completedAt: new Date(),
     });
 
-    const theirs = await inOrg(() => tool.execute({ rewriteId: 'rw-b' }, noCreator));
-    const none = await inOrg(() => tool.execute({ rewriteId: 'rw-none' }, noCreator));
+    const theirs = await inOrg(() => tool.execute({ rewriteId: 'rw-b' }, asCreator));
+    const none = await inOrg(() => tool.execute({ rewriteId: 'rw-none' }, asCreator));
 
     expect(theirs.error?.code).toBe('NOT_FOUND');
     expect(none.error?.code).toBe('NOT_FOUND');
@@ -438,7 +438,7 @@ describe('get_rewrite', () => {
   it('throws a failure that is not a refusal, for the dispatcher to log', async () => {
     vi.spyOn(fake.db.rewrite, 'findFirst').mockRejectedValueOnce(new Error('connection lost'));
 
-    await expect(inOrg(() => tool.execute({ rewriteId: 'rw-1' }, noCreator))).rejects.toThrow(
+    await expect(inOrg(() => tool.execute({ rewriteId: 'rw-1' }, asCreator))).rejects.toThrow(
       'connection lost'
     );
   });

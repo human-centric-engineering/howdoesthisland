@@ -52,6 +52,28 @@ export function creatorOf(context: CapabilityContext): string | ToolRefusal {
   };
 }
 
+/** Who a tool that does not spend runs for: checked with its work (`run/caller.ts`). */
+export interface ToolCaller {
+  userId: string | null;
+  /** The call came over MCP, so `userId` is the key's creator. */
+  viaMcp: boolean;
+}
+
+/**
+ * The caller a context carries. Core's context says nothing of where a call
+ * came from, so this reads it off the fields each of core's four dispatchers
+ * sets: a chat turn sets `conversationId`, both workflow executors set
+ * `workflowExecutionId`, and the MCP transport (`tool-registry.ts`) sets
+ * neither. A dispatcher core adds later is read as MCP until this learns it,
+ * which refuses a non-member rather than letting one through.
+ */
+export function callerOf(context: CapabilityContext): ToolCaller {
+  return {
+    userId: context.userId,
+    viaMcp: context.conversationId === undefined && context.workflowExecutionId === undefined,
+  };
+}
+
 /** A context key or value that reads as a catalogue id, not as free text. */
 const CATALOGUE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
