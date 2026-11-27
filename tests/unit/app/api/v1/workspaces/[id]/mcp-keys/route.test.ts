@@ -9,6 +9,7 @@
  * @see app/api/v1/workspaces/[id]/mcp-keys/route.ts
  * @see lib/app/workspaces/mcp-keys-access.ts
  */
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { DEFAULT_ORG_ROLE, ORG_ADMIN_ROLE, ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
@@ -150,8 +151,10 @@ describe('GET /api/v1/workspaces/[id]/mcp-keys', () => {
     expect(prisma.mcpApiKey.findMany).not.toHaveBeenCalled();
   });
 
-  it('refuses a platform admin acting in another workspace, naming how to proceed', async () => {
-    mockGetSession.mockResolvedValue(session(OTHER, 'ADMIN'));
+  // Sunrise 0.21.0: a platform admin is one only in the install org, so that is
+  // where one acting elsewhere is working from (in a customer org they are not).
+  it('refuses a platform admin working from the install org, naming how to proceed', async () => {
+    mockGetSession.mockResolvedValue(session(INSTALL_ORG_ID, 'ADMIN'));
     const res = await get();
     expect(res.status).toBe(403);
     expect((await json(res)).error.message).toContain('Switch to this workspace');

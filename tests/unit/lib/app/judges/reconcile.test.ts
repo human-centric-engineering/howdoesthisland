@@ -145,6 +145,8 @@ const fake = vi.hoisted(() => {
         ),
     },
     aiProviderModel: { findMany: async () => state.models.filter((m) => m.isActive) },
+    // An org's own AI key (Sunrise 0.20.0, §137): none, so the platform's key is used.
+    aiOrgProviderKey: { findUnique: async () => null },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   };
   return { state, db };

@@ -45,6 +45,10 @@ vi.mock('@/lib/tenancy/context', async (importOriginal) => ({
 }));
 
 vi.mock('@/lib/app/welcome', () => ({ appWelcomeRoute: '/welcome' }));
+// FORK (HowDoesThisLand): the landing route at Sunrise's default (`/dashboard`),
+// which these cases are written against; ours is `/home` (t-4). Ledger:
+// .context/app/platform-divergences.md row 7.
+vi.mock('@/lib/app/auth-landing', () => ({ appAuthLandingRoute: null, appAuthLandingLabel: null }));
 
 import { isOrgOnboarded, markOrgOnboarded, welcomeRedirectFor } from '@/lib/tenancy/onboarding';
 import { ORG_AWAITING_ONBOARDING_KEY, readOrgOnboarded } from '@/lib/tenancy/org-settings';

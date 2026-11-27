@@ -13,6 +13,7 @@
  * address with an account.
  */
 
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -33,7 +34,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormError, SaveError } from '@/components/forms/form-error';
-import { OrgRoleHelp, ORG_ROLE_LABELS } from '@/components/admin/members/org-role-help';
+import { OrgRoleHelp } from '@/components/admin/members/org-role-help';
 import { apiClient } from '@/lib/api/client';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
 import { DEFAULT_ORG_ROLE, ORG_ROLES } from '@/lib/tenancy/roles';
@@ -63,6 +64,8 @@ export interface WorkspaceInviteFormProps {
 }
 
 export function WorkspaceInviteForm({ orgId }: WorkspaceInviteFormProps) {
+  // The role names, from Sunrise's catalogue (since Sunrise 0.20.0).
+  const roleLabel = useTranslations('admin.members.roles');
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
@@ -169,7 +172,7 @@ export function WorkspaceInviteForm({ orgId }: WorkspaceInviteFormProps) {
                 <SelectContent>
                   {ORG_ROLES.map((role) => (
                     <SelectItem key={role} value={role}>
-                      {ORG_ROLE_LABELS[role]}
+                      {roleLabel(role)}
                     </SelectItem>
                   ))}
                 </SelectContent>
