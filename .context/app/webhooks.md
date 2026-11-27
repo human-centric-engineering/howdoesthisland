@@ -72,7 +72,11 @@ The rules, each refused with 400 `VALIDATION_ERROR` unless it says otherwise:
 
 - `eventType` is one of the app's events above, never a core event.
 - `url` starts `https://` and is a public address (`isSafeProviderUrl`), since
-  the server posts to it.
+  the server posts to it. That check reads the address as text, so each delivery
+  is also pinned to a checked address when it connects
+  (`withOutboundDispatcher` in core's `postHook`, ledger row 37). A name whose DNS
+  answer is private is refused. Its `lastError` then reads the same as a name that
+  does not exist, so the deliveries list maps nothing of the operator's network.
 - `headers`: at most 10, valid names, no line breaks, not `X-Sunrise-Signature`
   or `X-Sunrise-Timestamp`. Their values are sent with each delivery and never
   read back; the audit log records which fields changed, never a value.
