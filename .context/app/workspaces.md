@@ -30,14 +30,25 @@ makes on `/admin` all get the same.
 
 The hook is **idempotent**: Sunrise retries one that throws, from its
 `orgCreatedHooks` maintenance job, so each value is written only while the org
-has none. A provider policy or a budget a platform admin set is never
-overwritten. A provider with no row is logged at `error` and skipped.
+has none. The grant and the budget are one serializable write that decides
+"only while unset" on the row it replaces, and it marks the `app` slice
+(`workspaceEquipped`): a retry that finds the mark writes nothing, so a
+provider policy or a budget a platform admin set, or removed, since is never
+overwritten. A retry also gives the platform agents out again.
+
+If the judges' provider (Anthropic) has no row, as on a fresh install not yet
+seeded, the hook throws before writing anything, so it stays owed and a retry
+grants it once the row exists. The embedder's (OpenAI) missing is logged at
+`error` and the rest granted.
 
 They differ in who joins and when. A signup workspace is made by Sunrise
 before the user row exists, named `My workspace` (never the person's name: the
 org row outlives their erasure), and its hooks wait until the founder can act
 there (a verified address, or a sign-in). Sunrise sweeps the ones whose signup
-failed. A team workspace is created with its `OWNER` in the same transaction
+failed. Before t-91 the app made signup workspaces itself, marked
+`settings.app.signupWorkspace`, and swept them with its own job; Sunrise's
+sweep does not match that mark. No deployed database held one when the job
+was removed (owner, t-91), so none was migrated. A team workspace is created with its `OWNER` in the same transaction
 and equipped straight away.
 
 ## The cap
@@ -51,7 +62,10 @@ the create cannot share a transaction, so once the org exists the person's
 owned workspaces are ranked by when they
 became owner. One ranked past the cap is erased (`eraseOrg`, in a system
 scope) and refused the same way, so of two racing creates the earlier keeps
-its place. In a narrow commit-order window both can stay, leaving the person
+its place. The equip hook ranks it the same way first
+(`lib/app/workspaces/ownership.ts`) and leaves it unequipped, so if the erase
+fails it has no provider and no budget. Only a team workspace is ranked: an
+org a platform admin makes for someone is equipped whatever they own. In a narrow commit-order window both can stay, leaving the person
 one over; closing that needs a per-person lock this tier cannot take.
 
 ## The routes the UI uses are core's

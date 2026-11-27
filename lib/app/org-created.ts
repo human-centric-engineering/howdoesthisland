@@ -41,6 +41,8 @@
  * Full guide: CUSTOMIZATION.md §4 · .context/tenancy/identity.md
  */
 import { registerOrgCreatedHook } from '@/lib/tenancy/org-created-hooks';
+import { logger } from '@/lib/logging';
+import { isPastOwnershipCap } from '@/lib/app/workspaces/ownership';
 
 /** The hook's key, recorded on each new org until it succeeds. Keep it stable. */
 export const EQUIP_WORKSPACE_HOOK = 'app:equip-workspace';
@@ -53,10 +55,24 @@ export const EQUIP_WORKSPACE_HOOK = 'app:equip-workspace';
  * admin makes, straight after the create.
  */
 export function initAppOrgCreatedHooks(): void {
-  registerOrgCreatedHook(EQUIP_WORKSPACE_HOOK, async ({ orgId, retry, signal }) => {
-    // Imported on use: `provision.ts` imports `createOrg`, whose module loads
-    // this one through the hook registry, so a static import is a cycle.
-    const { equipWorkspace } = await import('@/lib/app/workspaces/provision');
-    await equipWorkspace(orgId, EQUIP_WORKSPACE_HOOK, { reconcile: retry, signal });
-  });
+  registerOrgCreatedHook(
+    EQUIP_WORKSPACE_HOOK,
+    async ({ orgId, source, ownerUserId, retry, signal }) => {
+      // A team workspace a racing create made past its owner's cap is erased
+      // straight after (`createTeamWorkspace`); left unequipped, a failed erase
+      // leaves it with no provider and no budget. Only a team workspace: an org
+      // a platform admin makes for someone is theirs to give, cap or not.
+      if (source === 'app' && ownerUserId && (await isPastOwnershipCap(ownerUserId, orgId))) {
+        logger.warn('New workspace is past its owner’s cap; left unequipped', {
+          orgId,
+          ownerUserId,
+        });
+        return;
+      }
+      // Imported on use: `provision.ts` imports `createOrg`, whose module loads
+      // this one through the hook registry, so a static import is a cycle.
+      const { equipWorkspace } = await import('@/lib/app/workspaces/provision');
+      await equipWorkspace(orgId, EQUIP_WORKSPACE_HOOK, { reconcile: retry, signal });
+    }
+  );
 }

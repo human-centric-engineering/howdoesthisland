@@ -18,10 +18,10 @@
  * own), so creates racing from one person (a double submit, two tabs) can
  * each pass the first check. So once the org exists the person's owned
  * workspaces are ranked by when they became owner: one ranked past the cap is
- * erased and refused with the same 409. It was equipped by then (the hook runs
- * inside `createOrg`), so if that erase fails too it is left with a budget,
- * but with no CopyCredits it can run nothing, and a platform admin can erase
- * it. Every racer reads the same order, so
+ * erased and refused with the same 409. The equip hook, which runs inside
+ * `createOrg`, ranks it the same way first and leaves it unequipped, so if
+ * that erase fails too it is left with no provider and no budget, and a
+ * platform admin can erase it. Every racer reads the same order, so
  * the earliest keeps its place and only the overshoot is undone. One window
  * remains: if the earlier insert commits after the later one has ranked, both
  * stay and the person ends one over. Closing it needs a lock per person held
@@ -36,6 +36,7 @@ import { runAsSystem } from '@/lib/tenancy/context';
 import { ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 import { MAX_OWNED_WORKSPACES } from '@/lib/app/workspaces/validations';
 import { createWorkspaceOrg, slugStem } from '@/lib/app/workspaces/provision';
+import { isPastOwnershipCap } from '@/lib/app/workspaces/ownership';
 
 /** The workspace a caller gets back: what the switcher needs to show it. */
 export interface CreatedWorkspace {
@@ -70,23 +71,6 @@ export async function countOwnedWorkspaces(userId: string): Promise<number> {
 }
 
 /**
- * Where `orgId` falls among the workspaces this person owns, earliest first
- * (0-based; ties broken by membership id so every reader agrees). The
- * install org is left out, as the count leaves it out.
- */
-async function ownedWorkspaceRank(userId: string, orgId: string): Promise<number> {
-  const owned = await prisma.orgMembership.findMany({
-    where: { userId, role: ORG_OWNER_ROLE, orgId: { not: INSTALL_ORG_ID } },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { orgId: true },
-  });
-  const rank = owned.findIndex((membership) => membership.orgId === orgId);
-  // Not found means the membership is not visible: treat it as past the cap
-  // rather than equip a workspace the ranking could not place.
-  return rank === -1 ? Number.POSITIVE_INFINITY : rank;
-}
-
-/**
  * Create a team workspace owned by `ownerUserId`. Throws
  * {@link WorkspaceLimitError} past the cap; a failure to create the org
  * propagates. A failure equipping it does not throw: the hook stays owed and
@@ -100,7 +84,7 @@ export async function createTeamWorkspace(input: {
   if (owned >= MAX_OWNED_WORKSPACES) throw new WorkspaceLimitError(MAX_OWNED_WORKSPACES);
 
   const org = await createWorkspaceOrg(input.name, slugStem(input.name), input.ownerUserId);
-  if ((await ownedWorkspaceRank(input.ownerUserId, org.id)) >= MAX_OWNED_WORKSPACES) {
+  if (await isPastOwnershipCap(input.ownerUserId, org.id)) {
     await undoOverCapWorkspace(org.id, input.ownerUserId);
     throw new WorkspaceLimitError(MAX_OWNED_WORKSPACES);
   }
@@ -119,8 +103,8 @@ export const CAP_UNDO_ACTOR = 'app:team-workspace-cap';
  * Erase a workspace a racing create made past the cap. System scope: the
  * request entered the caller's current org, not this one. A failure is logged
  * and swallowed, since the refusal stands either way: the org has its owner
- * and its budget but no CopyCredits, so it can run nothing, and a platform
- * admin can erase it.
+ * but was left unequipped (no provider, no budget), so it can run nothing,
+ * and a platform admin can erase it.
  */
 async function undoOverCapWorkspace(orgId: string, ownerUserId: string): Promise<void> {
   try {

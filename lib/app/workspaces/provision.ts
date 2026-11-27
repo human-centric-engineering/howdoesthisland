@@ -26,8 +26,10 @@
  * already placed, so the hook asks for them again (`reconcile`).
  *
  * A failure throws: the hook stays owed and Sunrise's `orgCreatedHooks`
- * maintenance job runs it again. A provider with no row is logged at `error`
- * and not thrown, since retrying cannot create it.
+ * maintenance job runs it again. So does the judges' provider having no row
+ * (a fresh install not yet seeded): nothing is written, and a retry once the
+ * row exists grants it. The embedder's missing is logged at `error` and the
+ * rest granted, since the workspace can still assess without it.
  */
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
@@ -150,6 +152,21 @@ async function findWorkspaceProviders(): Promise<{
  */
 const EQUIPPED_MARK = 'workspaceEquipped';
 
+/**
+ * The judges' provider has no row, so a new workspace cannot be granted it.
+ * Thrown before anything is written, so the hook stays owed and a retry once
+ * the row exists grants it; until then the workspace's judges and editor have
+ * no model.
+ */
+export class JudgeProviderMissingError extends Error {
+  constructor(readonly orgId: string) {
+    super(
+      `The judges’ provider (${JUDGE_PROVIDER_SLUG}) does not exist; workspace ${orgId} stays owed its grant`
+    );
+    this.name = 'JudgeProviderMissingError';
+  }
+}
+
 /** What {@link equipWorkspace} did. */
 export interface EquipResult {
   /** The judges' provider was granted by this run. */
@@ -210,7 +227,8 @@ export async function equipWorkspace(
 
         const grantKept =
           equippedBefore || orgProviderPolicySchema.safeParse(settings[ORG_PROVIDERS_KEY]).success;
-        const grantWritten = !grantKept && providers.approved.length > 0;
+        if (!grantKept && !providers.judges) throw new JudgeProviderMissingError(orgId);
+        const grantWritten = !grantKept;
         // No jurisdiction restriction: none is ruled for this app yet.
         if (grantWritten) settings[ORG_PROVIDERS_KEY] = { approved: providers.approved };
 
@@ -239,16 +257,13 @@ export async function equipWorkspace(
   );
   const { grantKept, grantWritten, budgetKept } = outcome;
 
-  // Only when a grant was due: a kept policy is the admin's, whatever exists.
-  // The judges' provider missing means the workspace's judges and editor have
-  // no model until a platform admin creates it and grants it on `/admin`.
-  if (!grantKept && providers.missing.length > 0) {
-    logger.error(
-      providers.missing.includes(JUDGE_PROVIDER_SLUG)
-        ? 'The judges’ provider does not exist; the new workspace’s judges have no model'
-        : 'A workspace provider does not exist; the new workspace is not granted it',
-      { orgId, missing: providers.missing }
-    );
+  // Only when a grant was written: a kept policy is the admin's, whatever
+  // exists. Only the embedder's can be missing here (the judges' throws).
+  if (grantWritten && providers.missing.length > 0) {
+    logger.error('A workspace provider does not exist; the new workspace is not granted it', {
+      orgId,
+      missing: providers.missing,
+    });
   }
 
   // This process at once; other processes within each cache's TTL. A policy
@@ -276,9 +291,7 @@ export async function equipWorkspace(
   }
 
   const granted = grantWritten && providers.judges;
-  const fields = { orgId, granted, grantWritten, grantKept, budgetKept };
-  if (grantWritten || grantKept) logger.info('Workspace equipped', fields);
-  else logger.warn('Workspace has no provider: none exists to grant', fields);
+  logger.info('Workspace equipped', { orgId, granted, grantWritten, grantKept, budgetKept });
   return { granted, grantKept, budgetKept };
 }
 

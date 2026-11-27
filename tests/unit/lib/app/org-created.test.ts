@@ -21,6 +21,12 @@ vi.mock('@/lib/tenancy/org-created-hooks', () => ({ registerOrgCreatedHook: mock
 const mockEquip = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/app/workspaces/provision', () => ({ equipWorkspace: mockEquip }));
 
+const mockPastCap = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/app/workspaces/ownership', () => ({ isPastOwnershipCap: mockPastCap }));
+
+const mockLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/logging', () => ({ logger: mockLogger }));
+
 import { EQUIP_WORKSPACE_HOOK, initAppOrgCreatedHooks } from '@/lib/app/org-created';
 import type { OrgCreatedHook } from '@/lib/tenancy/org-created-hooks';
 
@@ -34,13 +40,16 @@ function registeredHook(): OrgCreatedHook {
 }
 
 /** The context Sunrise passes a hook; only the fields the hook reads matter. */
-function ctx(retry: boolean): Parameters<OrgCreatedHook>[0] {
+function ctx(
+  retry: boolean,
+  over: { source?: string; ownerUserId?: string | null } = {}
+): Parameters<OrgCreatedHook>[0] {
   return {
     orgId: ORG_ID,
     slug: 'my-workspace',
     name: 'My workspace',
-    source: 'signup',
-    ownerUserId: null,
+    source: over.source ?? 'signup',
+    ownerUserId: over.ownerUserId ?? null,
     retry,
     signal: new AbortController().signal,
   } as unknown as Parameters<OrgCreatedHook>[0];
@@ -49,6 +58,7 @@ function ctx(retry: boolean): Parameters<OrgCreatedHook>[0] {
 beforeEach(() => {
   vi.clearAllMocks();
   mockEquip.mockResolvedValue({ granted: true, grantKept: false, budgetKept: false });
+  mockPastCap.mockResolvedValue(false);
 });
 
 describe('initAppOrgCreatedHooks', () => {
@@ -77,6 +87,40 @@ describe('initAppOrgCreatedHooks', () => {
       signal: expect.any(AbortSignal),
     });
   });
+
+  it('leaves a team workspace past its owner’s cap unequipped, and is done', async () => {
+    mockPastCap.mockResolvedValue(true);
+
+    await expect(
+      registeredHook()(ctx(false, { source: 'app', ownerUserId: 'user-1' }))
+    ).resolves.toBeUndefined();
+
+    expect(mockPastCap).toHaveBeenCalledWith('user-1', ORG_ID);
+    expect(mockEquip).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('past its owner’s cap'),
+      expect.objectContaining({ orgId: ORG_ID, ownerUserId: 'user-1' })
+    );
+  });
+
+  it('equips a team workspace within its owner’s cap', async () => {
+    await registeredHook()(ctx(false, { source: 'app', ownerUserId: 'user-1' }));
+
+    expect(mockPastCap).toHaveBeenCalledWith('user-1', ORG_ID);
+    expect(mockEquip).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['admin', 'signup'])(
+    'does not rank an org made by %s against the cap, and equips it',
+    async (source) => {
+      mockPastCap.mockResolvedValue(true);
+
+      await registeredHook()(ctx(false, { source, ownerUserId: 'user-1' }));
+
+      expect(mockPastCap).not.toHaveBeenCalled();
+      expect(mockEquip).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it('lets an equip failure through, so the hook stays owed and is retried', async () => {
     mockEquip.mockRejectedValue(new Error('write failed'));

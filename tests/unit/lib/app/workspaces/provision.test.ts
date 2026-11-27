@@ -100,7 +100,12 @@ vi.mock('@/lib/orchestration/agents/reconcile-platform-agents', () => ({
 }));
 
 import { OrgLifecycleError } from '@/lib/tenancy/lifecycle';
-import { createWorkspaceOrg, equipWorkspace, slugStem } from '@/lib/app/workspaces/provision';
+import {
+  createWorkspaceOrg,
+  equipWorkspace,
+  JudgeProviderMissingError,
+  slugStem,
+} from '@/lib/app/workspaces/provision';
 import { readOrgProviderPolicy, readOrgQuotas } from '@/lib/tenancy/org-settings';
 
 const OPENAI_ID = 'cmprov0000000000000openai';
@@ -228,19 +233,6 @@ describe('equipWorkspace on an org that already has values (a retry)', () => {
     expect(mockReconcile).not.toHaveBeenCalled();
   });
 
-  it('warns, not "equipped", when no provider exists to grant', async () => {
-    store.providers.clear();
-
-    await equipWorkspace(ORG_ID, 'src');
-
-    expect(mockLogger.info).not.toHaveBeenCalledWith('Workspace equipped', expect.anything());
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('no provider'),
-      expect.objectContaining({ grantWritten: false, grantKept: false })
-    );
-    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
-  });
-
   it('does not give back a budget an admin removed after an earlier attempt equipped it', async () => {
     await equipWorkspace(ORG_ID, 'src');
     // The admin clears the cap: the slice now reads the same as never set.
@@ -334,51 +326,52 @@ describe('equipWorkspace reconcile', () => {
     expect(mockReconcile).not.toHaveBeenCalled();
   });
 
-  it('does not reconcile when no provider row exists to grant', async () => {
-    store.providers.clear();
-
-    await equipWorkspace(ORG_ID, 'src', { reconcile: true });
-
-    expect(mockReconcile).not.toHaveBeenCalled();
-  });
-
-  it('reconciles when only the embedder’s provider was granted', async () => {
+  it('does not reconcile when the judges’ provider row is missing', async () => {
     store.providers.delete('anthropic');
 
-    const result = await equipWorkspace(ORG_ID, 'src', { reconcile: true });
-
-    expect(result.granted).toBe(false);
-    expect(mockReconcile).toHaveBeenCalledTimes(1);
+    await expect(equipWorkspace(ORG_ID, 'src', { reconcile: true })).rejects.toBeInstanceOf(
+      JudgeProviderMissingError
+    );
+    expect(mockReconcile).not.toHaveBeenCalled();
   });
 });
 
 describe('equipWorkspace with a missing provider row', () => {
-  it('without any row: grants nothing, still sets the budget, logs at error, does not throw', async () => {
+  it('without any row: throws and writes nothing, so the hook stays owed', async () => {
     store.providers.clear();
+
+    await expect(equipWorkspace(ORG_ID, 'src')).rejects.toBeInstanceOf(JudgeProviderMissingError);
+    expect(fakePrisma.org.update).not.toHaveBeenCalled();
+    expect(store.settings.get(ORG_ID)).toBeNull();
+  });
+
+  it('without the judges’ row: throws and writes nothing, not even the embedder’s grant', async () => {
+    store.providers.delete('anthropic');
+
+    await expect(equipWorkspace(ORG_ID, 'src')).rejects.toBeInstanceOf(JudgeProviderMissingError);
+    expect(fakePrisma.org.update).not.toHaveBeenCalled();
+  });
+
+  it('grants on the retry once the judges’ row exists', async () => {
+    store.providers.delete('anthropic');
+    await expect(equipWorkspace(ORG_ID, 'src')).rejects.toBeInstanceOf(JudgeProviderMissingError);
+
+    store.providers.set('anthropic', ANTHROPIC_ID);
+    const result = await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(result).toEqual({ granted: true, grantKept: false, budgetKept: false });
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: BOTH });
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an admin’s grant even while the judges’ row is missing', async () => {
+    store.providers.delete('anthropic');
+    store.settings.set(ORG_ID, { providers: { approved: [OPENAI_ID] } });
 
     const result = await equipWorkspace(ORG_ID, 'src');
 
-    expect(result).toEqual({ granted: false, grantKept: false, budgetKept: false });
-    const settings = store.settings.get(ORG_ID);
-    // No policy written at all: the org stays "never granted", so a later retry can still grant.
-    expect(settings).not.toHaveProperty('providers');
-    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'The judges’ provider does not exist; the new workspace’s judges have no model',
-      expect.objectContaining({ orgId: ORG_ID, missing: ['anthropic', 'openai'] })
-    );
-  });
-
-  it('without the judges’ row: grants the rest and says the judges have no model', async () => {
-    store.providers.delete('anthropic');
-
-    await equipWorkspace(ORG_ID, 'src');
-
-    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: [OPENAI_ID] });
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'The judges’ provider does not exist; the new workspace’s judges have no model',
-      expect.objectContaining({ orgId: ORG_ID, missing: ['anthropic'] })
-    );
+    expect(result).toEqual({ granted: false, grantKept: true, budgetKept: false });
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
   });
 
   it('without the embedder’s row: grants the judges’ and says which is missing', async () => {
