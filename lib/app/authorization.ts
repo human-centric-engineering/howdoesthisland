@@ -1,3 +1,10 @@
+import {
+  DEFAULT_AUTHORIZATION_POLICY,
+  registerAuthorizationPolicy,
+  type AuthorizationPolicy,
+} from '@/lib/auth/authorization';
+import { isPlatformAdmin } from '@/lib/auth/roles';
+
 /**
  * App authorization policy registration.
  *
@@ -200,7 +207,50 @@
  * lib/auth/authorization.ts
  */
 export function initAppAuthorizationPolicy(): void {
-  // No app authorization policy by default: platform admin administers
-  // everything and reads everyone, and everyone else reads themselves — which
-  // is Sunrise's single-tenant behaviour.
+  registerAuthorizationPolicy(platformAdminOnlyPolicy());
+}
+
+/**
+ * HowDoesThisLand's policy (t-64): **only a platform admin administers.**
+ *
+ * Every person who signs up owns a workspace of their own
+ * (`lib/app/workspaces/provision.ts`). At `TENANCY_MODE=multi` Sunrise's
+ * default lets an org OWNER or ADMIN administer their own org, which here
+ * would open to every customer the `/admin` area, the org-tier orchestration
+ * routes (agents, workflows, knowledge, evaluations, provider tests, and
+ * minting embed, MCP and webhook tokens), and `/admin/members`,
+ * `/admin/support-access` and `/admin/waitlist`. Many of those spend on AI
+ * providers, and none is charged in CopyCredits. The admin area and
+ * orchestration are HCE's. A customer reaches them only through a
+ * client-facing surface the app builds on purpose, under `withAuth` and the
+ * app's own workspace checks (`/settings`, invitations, judge models, usage,
+ * workspace MCP keys), none of which asks this face.
+ *
+ * Upstream: sunrise#1309 asks for the org tier at `multi` to be opt-in, or
+ * loudly documented, because it is easy to miss in a fork whose signups own
+ * their workspaces.
+ *
+ * **An intersection with the default, not a body of our own.**
+ * `canAdminister` is the default's answer AND "the viewer is a platform
+ * admin", so it can only narrow the default. Every rule the default keeps for
+ * a platform admin still applies: an API key administers only with the
+ * `admin` scope (#746), and whatever the default refuses stays refused.
+ *
+ * `canRead` and `subjectScope` stay the default's, so the read decision, the
+ * subject filter and the ownerless-row answers are unchanged, and no route
+ * owes a new ownership declaration. That also keeps core's org routes that
+ * `canRead` admits an org's OWNER/ADMIN to, which the app's workspace settings
+ * use (the roster at `GET /api/v1/orgs/[id]/members`).
+ *
+ * Built when registered, not when this module loads: `lib/auth/authorization.ts`
+ * imports this file, so at load time `DEFAULT_AUTHORIZATION_POLICY` may not
+ * exist yet.
+ */
+export function platformAdminOnlyPolicy(): AuthorizationPolicy {
+  const base = DEFAULT_AUTHORIZATION_POLICY;
+  return {
+    ...base,
+    canAdminister: async (viewer, resource, scope) =>
+      isPlatformAdmin(viewer) && (await base.canAdminister(viewer, resource, scope)),
+  };
 }
