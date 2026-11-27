@@ -335,3 +335,9 @@ The default admits an org's OWNER or ADMIN to their own org there, and none of
 them spends: the roster (`/api/v1/orgs/[id]/members`, which `/settings/workspace`
 uses), core's org invitations, and support-access grants (consent for HCE to
 enter the workspace).
+
+**Support access has no customer screen.** Its API
+(`/api/v1/orgs/[id]/support-grants`) still admits a workspace OWNER or ADMIN, but
+the only screen that calls it was `/admin/support-access`, which t-64 closes.
+Until a section under `/settings/workspace` calls it, a workspace cannot grant
+HCE support access from the product.

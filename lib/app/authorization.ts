@@ -1,3 +1,10 @@
+import {
+  DEFAULT_AUTHORIZATION_POLICY,
+  registerAuthorizationPolicy,
+  type AuthorizationPolicy,
+} from '@/lib/auth/authorization';
+import { isPlatformAdmin } from '@/lib/auth/roles';
+
 /**
  * App authorization policy registration.
  *
@@ -199,13 +206,6 @@
  * Full guide: .context/auth/authorization.md · CUSTOMIZATION.md §4 ·
  * lib/auth/authorization.ts
  */
-import {
-  DEFAULT_AUTHORIZATION_POLICY,
-  registerAuthorizationPolicy,
-  type AuthorizationPolicy,
-} from '@/lib/auth/authorization';
-import { isPlatformAdmin } from '@/lib/auth/roles';
-
 export function initAppAuthorizationPolicy(): void {
   registerAuthorizationPolicy(platformAdminOnlyPolicy());
 }
