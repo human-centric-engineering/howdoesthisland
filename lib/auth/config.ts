@@ -33,7 +33,7 @@ import { asksSignupOrg, signupOrgMemberships } from '@/lib/tenancy/signup-org';
 import { completeSignupOrg, completeFoundedSignupOrgs } from '@/lib/tenancy/lifecycle';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { requiresEmailVerification } from '@/lib/auth/verification-status';
-import { isMultiTenant } from '@/lib/tenancy/context';
+import { isMultiTenant, runAsSystem } from '@/lib/tenancy/context'; // FORK (t-91): runAsSystem
 import {
   getPendingSignup,
   getRedeemedInvitation,
@@ -589,7 +589,13 @@ export async function userCreateAfterHook(
     // membership at all — so a floor skipped beside a written primary would
     // never be repaired.
     try {
-      const { founded } = await writeNewUserMemberships(user.id, memberships);
+      // FORK (t-91): at `multi` the write carries raw SQL (the founder's
+      // awaiting-founder release), which the data layer refuses on an auth
+      // hook's stack, which entered no org. Ledger row 36, sunrise#TBD.
+      const write = () => writeNewUserMemberships(user.id, memberships);
+      const { founded } = isMultiTenant()
+        ? await runAsSystem('auth: write a new user’s memberships', write)
+        : await write();
       // An org of their own, made by the before hook (§134 t-1062): its app
       // setup and platform agents waited for its founder, who is now in it
       // and can act there (an unverified address keeps it waiting, for the
@@ -1157,7 +1163,12 @@ export async function sessionCreateBeforeHook(
       return { data: { activeOrgId: pending.membership.orgId } };
     }
 
-    const { orgId, healed, founded } = await activeOrgForSession(session.userId);
+    // FORK (t-91): the heal inside writes with raw SQL, refused at `multi` on
+    // an auth hook's stack, which entered no org. Ledger row 36, sunrise#TBD.
+    const choose = () => activeOrgForSession(session.userId);
+    const { orgId, healed, founded } = isMultiTenant()
+      ? await runAsSystem('auth: choose a new session’s org', choose)
+      : await choose();
     // A signup org whose setup waited for its founder (§134 t-1062): one the
     // heal just gave them, and any they own still marked, which a session
     // proves they can now act in (an accepted invitation, an OAuth address the
