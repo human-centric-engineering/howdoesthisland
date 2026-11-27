@@ -860,4 +860,56 @@ describe('listInvitationsFor', () => {
 
     expect(result.map((r) => r.id)).toEqual(['i2']);
   });
+
+  describe('an OWNER invitation shows the role accepting would confer now (t-27)', () => {
+    const ownerRow = (id: string, invitedByUserId: string | null) => ({
+      ...row(id, invitedByUserId, { id: ORG, name: 'Design Team' }),
+      role: 'OWNER',
+    });
+
+    beforeEach(() => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([] as never);
+    });
+
+    it('shows OWNER while the sender is still an owner of the workspace', async () => {
+      vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([
+        ownerRow('i1', 'u-a'),
+      ] as never);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        role: 'USER',
+        orgMemberships: [{ role: 'OWNER' }],
+      } as never);
+
+      expect((await listInvitationsFor(INVITEE_ID))[0].role).toBe('OWNER');
+      expect(prisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'u-a' } })
+      );
+    });
+
+    it('shows MEMBER once the sender has lost owner standing, or is gone', async () => {
+      vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([
+        ownerRow('i1', 'u-a'),
+        ownerRow('i2', null),
+      ] as never);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        role: 'USER',
+        orgMemberships: [{ role: 'ADMIN' }],
+      } as never);
+
+      const result = await listInvitationsFor(INVITEE_ID);
+
+      expect(result.map((r) => r.role)).toEqual(['MEMBER', 'MEMBER']);
+      // Only the row that names a sender reads one.
+      expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads no standing for an invitation of any other role', async () => {
+      vi.mocked(prisma.workspaceInvitation.findMany).mockResolvedValue([
+        row('i1', 'u-a', { id: ORG, name: 'Design Team' }),
+      ] as never);
+
+      expect((await listInvitationsFor(INVITEE_ID))[0].role).toBe('MEMBER');
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+  });
 });

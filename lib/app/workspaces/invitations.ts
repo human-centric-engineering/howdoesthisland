@@ -251,6 +251,7 @@ async function inviteNewPerson(input: InviteIntoWorkspaceInput) {
 export interface InvitationForInvitee {
   id: string;
   workspace: { id: string; name: string };
+  /** The role accepting would confer now, which for a lapsed OWNER invitation is MEMBER (t-27). */
   role: OrgRole;
   invitedBy: string | null;
   expiresAt: Date;
@@ -293,14 +294,28 @@ export async function listInvitationsFor(userId: string): Promise<InvitationForI
         })
       : [];
     const nameOf = new Map(inviters.map((user) => [user.id, user.name]));
+    // The role accepting would confer now (t-27): an OWNER invitation whose
+    // sender has lost owner standing is shown, and accepted, as MEMBER. Only
+    // OWNER rows read anything.
+    const roles = await Promise.all(
+      rows.map((row) =>
+        row.org
+          ? roleAtAcceptance({
+              orgId: row.org.id,
+              role: row.role,
+              invitedByUserId: row.invitedByUserId,
+            })
+          : Promise.resolve(row.role)
+      )
+    );
 
-    return rows.flatMap((row) =>
+    return rows.flatMap((row, i) =>
       row.org
         ? [
             {
               id: row.id,
               workspace: row.org,
-              role: row.role,
+              role: roles[i],
               invitedBy: row.invitedByUserId ? (nameOf.get(row.invitedByUserId) ?? null) : null,
               expiresAt: row.expiresAt,
               createdAt: row.createdAt,
@@ -383,6 +398,12 @@ function alreadyAnswered(): WorkspaceInvitationError {
  * invitations since Sunrise 0.19.0 (#1235, `invitedOrgRole` in
  * `lib/tenancy/membership.ts`), and narrows the same way rather than refusing:
  * the invitee still joins, and an owner can promote them.
+ *
+ * The standing is read just before `addMember()` writes, not under a lock, as
+ * core's is. A demotion that commits in the milliseconds between the two
+ * still lets the invitee in as OWNER. The hole this closes is the invitation
+ * that waits days after its sender lost standing, which that window does not
+ * reopen.
  */
 async function roleAtAcceptance(invitation: {
   orgId: string;
