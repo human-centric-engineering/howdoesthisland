@@ -149,7 +149,7 @@ describe('createTeamWorkspace', () => {
     expect(mockCreateWorkspaceOrg).not.toHaveBeenCalled();
   });
 
-  it('lets a createOrg failure propagate, without equipping or logging success', async () => {
+  it('lets a createOrg failure propagate, without logging success', async () => {
     mockCreateWorkspaceOrg.mockRejectedValue(new Error('db down'));
 
     await expect(
@@ -180,7 +180,7 @@ describe('createTeamWorkspace', () => {
       expect(mockEraseOrg).not.toHaveBeenCalled();
     });
 
-    it('erases the racer ranked past the cap in a system scope, unequipped, and refuses', async () => {
+    it('erases the racer ranked past the cap in a system scope, and refuses', async () => {
       vi.mocked(prisma.orgMembership.findMany).mockResolvedValue(
         ranked(MAX_OWNED_WORKSPACES) as never
       );

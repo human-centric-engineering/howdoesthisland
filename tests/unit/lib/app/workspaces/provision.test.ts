@@ -248,7 +248,6 @@ describe('equipWorkspace on an org that already has values (a retry)', () => {
 
     expect(result).toEqual({ granted: false, grantKept: true, budgetKept: true });
     expect(fakePrisma.org.update).not.toHaveBeenCalled();
-    expect(mockReconcile).not.toHaveBeenCalled();
   });
 });
 
@@ -267,10 +266,21 @@ describe('equipWorkspace reconcile', () => {
     expect(events[3]).toBe('reconcile');
   });
 
-  it('does not reconcile when the grant was kept, however it is asked', async () => {
+  it('reconciles on a retry that finds the grant already stored', async () => {
+    // An earlier attempt wrote the grant, then threw on the budget before its
+    // reconcile: this retry is the last chance to place the agents.
     store.settings.set(ORG_ID, { providers: { approved: [OPENAI_ID] } });
 
-    await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+    const result = await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(result).toMatchObject({ grantKept: true, budgetKept: false });
+    expect(mockReconcile).toHaveBeenCalledWith(ORG_ID, 'src');
+  });
+
+  it('does not reconcile a kept grant unless asked', async () => {
+    store.settings.set(ORG_ID, { providers: { approved: [OPENAI_ID] } });
+
+    await equipWorkspace(ORG_ID, 'src');
 
     expect(mockReconcile).not.toHaveBeenCalled();
   });

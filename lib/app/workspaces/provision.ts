@@ -34,6 +34,7 @@ import { logger } from '@/lib/logging';
 import { createOrg, OrgLifecycleError, type OrgRecord } from '@/lib/tenancy/lifecycle';
 import {
   ORG_PROVIDERS_KEY,
+  readOrgProviderPolicy,
   readOrgQuotas,
   writeOrgProviderPolicy,
   writeOrgQuotas,
@@ -183,13 +184,20 @@ export async function equipWorkspace(
     settings[ORG_PROVIDERS_KEY] !== undefined && settings[ORG_PROVIDERS_KEY] !== null;
   const grant = grantKept ? { written: false, judges: false } : await grantProviders(orgId);
 
-  const quotas = readOrgQuotas(org.settings, { orgId });
-  const budgetKept = quotas.monthlyBudgetUsd !== undefined;
+  const budgetKept = readOrgQuotas(org.settings, { orgId }).monthlyBudgetUsd !== undefined;
   if (!budgetKept) {
-    // Keeps any other cap already set; `writeOrgQuotas` replaces the caps whole.
-    await withConflictRetry(() =>
-      writeOrgQuotas(orgId, { ...quotas, monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })
-    );
+    // Keeps any other cap already set; `writeOrgQuotas` replaces the caps
+    // whole, so each attempt reads them afresh: a retry after a clash with a
+    // concurrent quotas write merges onto that write, not over it.
+    await withConflictRetry(async () => {
+      const current = await prisma.org.findUnique({
+        where: { id: orgId },
+        select: { settings: true },
+      });
+      const quotas = readOrgQuotas(current?.settings, { orgId });
+      if (quotas.monthlyBudgetUsd !== undefined) return;
+      await writeOrgQuotas(orgId, { ...quotas, monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD });
+    });
   }
 
   // This process at once; other processes within each cache's TTL. A policy
@@ -201,7 +209,11 @@ export async function equipWorkspace(
 
   // Never throws; the platformAgents maintenance job catches up on a failure.
   // Imported on use, as `createOrg` does; an import failure is logged too.
-  if (options.reconcile && grant.written) {
+  // On a retry it runs whenever the org has a grant, not only when this run
+  // wrote it: an earlier attempt may have written the grant and then thrown
+  // (or timed out) before its reconcile, and that retry would otherwise skip
+  // it for good. The reconcile is idempotent.
+  if (options.reconcile && (grant.written || grantKept)) {
     await import('@/lib/orchestration/agents/reconcile-platform-agents')
       .then(({ tryReconcilePlatformAgents }) => tryReconcilePlatformAgents(orgId, source))
       .catch((error: unknown) => {
@@ -213,4 +225,21 @@ export async function equipWorkspace(
 
   logger.info('Workspace equipped', { orgId, granted: grant.judges, grantKept, budgetKept });
   return { granted: grant.judges, grantKept, budgetKept };
+}
+
+/**
+ * Whether the org's provider policy approves the judges' provider. For the
+ * smokes, which check that `createWorkspaceOrg` (through the equip hook) left
+ * the workspace able to run its judges.
+ */
+export async function workspaceHasJudgeProvider(orgId: string): Promise<boolean> {
+  const [org, provider] = await Promise.all([
+    prisma.org.findUnique({ where: { id: orgId }, select: { settings: true } }),
+    prisma.aiProviderConfig.findUnique({
+      where: { slug: JUDGE_PROVIDER_SLUG },
+      select: { id: true },
+    }),
+  ]);
+  if (!org || !provider) return false;
+  return readOrgProviderPolicy(org.settings, { orgId }).approved.includes(provider.id);
 }

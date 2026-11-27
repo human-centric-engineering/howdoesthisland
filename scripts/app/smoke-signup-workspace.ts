@@ -87,7 +87,9 @@ async function hookSettled(orgId: string): Promise<boolean> {
     const org = await system(() =>
       prisma.org.findUnique({ where: { id: orgId }, select: { settings: true } })
     );
-    const owed = org ? readOrgCreatedOwed(org.settings) : null;
+    // An org that is gone has not settled its hook: it is not there to check.
+    if (!org) return false;
+    const owed = readOrgCreatedOwed(org.settings);
     if (!owed?.owed.includes(EQUIP_WORKSPACE_HOOK)) return true;
     if (Date.now() > until) return false;
     await new Promise((resolve) => setTimeout(resolve, 250));
