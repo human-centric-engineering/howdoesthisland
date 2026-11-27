@@ -591,7 +591,7 @@ export async function userCreateAfterHook(
     try {
       // FORK (t-91): at `multi` the write carries raw SQL (the founder's
       // awaiting-founder release), which the data layer refuses on an auth
-      // hook's stack, which entered no org. Ledger row 36, sunrise#TBD.
+      // hook's stack, which entered no org. Ledger row 36, sunrise#1366.
       const write = () => writeNewUserMemberships(user.id, memberships);
       const { founded } = isMultiTenant()
         ? await runAsSystem('auth: write a new user’s memberships', write)
@@ -1164,7 +1164,7 @@ export async function sessionCreateBeforeHook(
     }
 
     // FORK (t-91): the heal inside writes with raw SQL, refused at `multi` on
-    // an auth hook's stack, which entered no org. Ledger row 36, sunrise#TBD.
+    // an auth hook's stack, which entered no org. Ledger row 36, sunrise#1366.
     const choose = () => activeOrgForSession(session.userId);
     const { orgId, healed, founded } = isMultiTenant()
       ? await runAsSystem('auth: choose a new session’s org', choose)
