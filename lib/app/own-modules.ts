@@ -57,10 +57,7 @@
  * ```
  */
 export const appOwnModules: readonly string[] = [
-  // The signup-org resolver this fork carries (t-6, sunrise#1232). It is a
-  // seam we added, not one Sunrise ships, and nobody forks this app.
-  'lib/app/signup-org.ts',
-  // The workspace a signup gets, and the sweep for abandoned ones (t-7).
+  // What every new workspace is given, team workspaces and invitations (t-7, t-8).
   'lib/app/workspaces/',
   // The framework store: tables, definitions, import and publish (t-10).
   'lib/app/frameworks/',

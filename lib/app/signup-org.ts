@@ -53,6 +53,21 @@
  *
  * Full guide: CUSTOMIZATION.md §4 · .context/tenancy/identity.md
  */
+import { registerSignupOrgResolver } from '@/lib/tenancy/signup-org';
+
+/**
+ * The name a self-serve signup's workspace starts with, which its owner can
+ * change. Deliberately not the person's: the org row outlives their erasure,
+ * so a name copied from theirs would survive it (owner ruling, t-91).
+ */
+export const SIGNUP_WORKSPACE_NAME = 'My workspace';
+
+/**
+ * HowDoesThisLand (t-7, D1; moved onto Sunrise's seam in t-91): every
+ * self-serve signup gets a workspace of their own, as its `OWNER`. That is
+ * Sunrise's default; this only names it. What the workspace is given is the
+ * org-created hook's (`lib/app/org-created.ts`).
+ */
 export function initAppSignupOrgResolver(): void {
-  // No app signup-org resolver by default.
+  registerSignupOrgResolver(() => ({ kind: 'own', name: SIGNUP_WORKSPACE_NAME }));
 }

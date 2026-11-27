@@ -2,10 +2,10 @@
  * Team workspaces: a workspace a person creates for working with others (t-8, D1).
  *
  * The creator is its founding `OWNER`, written in the same transaction as the
- * org (`createOrg`'s `ownerUserId`), so it is never memberless and never
- * carries the signup marker the sweep looks for. It is then equipped exactly
- * as a signup workspace is (`equipWorkspace`): Anthropic and OpenAI granted, the default
- * monthly budget, platform agents reconciled.
+ * org (`createOrg`'s `ownerUserId`), so it is never memberless. `createOrg`
+ * equips it as it equips every new org, through the org-created hook
+ * (`lib/app/org-created.ts`, `equipWorkspace`): Anthropic and OpenAI granted,
+ * the default monthly budget, then its platform agents.
  *
  * **The cap.** A person may own at most {@link MAX_OWNED_WORKSPACES}
  * workspaces, their own signup workspace included. It counts the workspaces
@@ -16,10 +16,12 @@
  *
  * The count and the create cannot share a transaction (`createOrg` runs its
  * own), so creates racing from one person (a double submit, two tabs) can
- * each pass the first check. So once the org exists, and **before** it is
- * equipped, the person's owned workspaces are ranked by when they became
- * owner: one ranked past the cap is erased, never granted a provider or a
- * budget, and refused with the same 409. Every racer reads the same order, so
+ * each pass the first check. So once the org exists the person's owned
+ * workspaces are ranked by when they became owner: one ranked past the cap is
+ * erased and refused with the same 409. It was equipped by then (the hook runs
+ * inside `createOrg`), so if that erase fails too it is left with a budget,
+ * but with no CopyCredits it can run nothing, and a platform admin can erase
+ * it. Every racer reads the same order, so
  * the earliest keeps its place and only the overshoot is undone. One window
  * remains: if the earlier insert commits after the later one has ranked, both
  * stay and the person ends one over. Closing it needs a lock per person held
@@ -33,7 +35,7 @@ import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { runAsSystem } from '@/lib/tenancy/context';
 import { ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 import { MAX_OWNED_WORKSPACES } from '@/lib/app/workspaces/validations';
-import { createWorkspaceOrg, equipWorkspace, slugStem } from '@/lib/app/workspaces/provision';
+import { createWorkspaceOrg, slugStem } from '@/lib/app/workspaces/provision';
 
 /** The workspace a caller gets back: what the switcher needs to show it. */
 export interface CreatedWorkspace {
@@ -87,8 +89,8 @@ async function ownedWorkspaceRank(userId: string, orgId: string): Promise<number
 /**
  * Create a team workspace owned by `ownerUserId`. Throws
  * {@link WorkspaceLimitError} past the cap; a failure to create the org
- * propagates. A failure equipping it is logged and does not throw (see
- * `equipWorkspace`): the workspace exists and is theirs.
+ * propagates. A failure equipping it does not throw: the hook stays owed and
+ * Sunrise retries it, and the workspace is theirs meanwhile.
  */
 export async function createTeamWorkspace(input: {
   name: string;
@@ -102,13 +104,10 @@ export async function createTeamWorkspace(input: {
     await undoOverCapWorkspace(org.id, input.ownerUserId);
     throw new WorkspaceLimitError(MAX_OWNED_WORKSPACES);
   }
-  const { granted } = await equipWorkspace(org.id, 'app.team-workspace');
-
   logger.info('Team workspace created', {
     orgId: org.id,
     slug: org.slug,
     ownerUserId: input.ownerUserId,
-    granted,
   });
   return { id: org.id, slug: org.slug, name: org.name, role: ORG_OWNER_ROLE };
 }
@@ -117,11 +116,11 @@ export async function createTeamWorkspace(input: {
 export const CAP_UNDO_ACTOR = 'app:team-workspace-cap';
 
 /**
- * Erase a workspace a racing create made past the cap. System scope, as the
- * signup sweep erases: the request entered the caller's current org, not this
- * one. A failure is logged and swallowed, since the refusal stands either way:
- * the org has its owner but no grant or budget, so it can spend nothing, and a
- * platform admin can erase it.
+ * Erase a workspace a racing create made past the cap. System scope: the
+ * request entered the caller's current org, not this one. A failure is logged
+ * and swallowed, since the refusal stands either way: the org has its owner
+ * and its budget but no CopyCredits, so it can run nothing, and a platform
+ * admin can erase it.
  */
 async function undoOverCapWorkspace(orgId: string, ownerUserId: string): Promise<void> {
   try {

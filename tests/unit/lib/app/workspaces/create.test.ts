@@ -2,7 +2,9 @@
  * Tests: `createTeamWorkspace` and the ownership cap (t-8).
  *
  * Collaborators are mocked at the module edge: the org create (`createWorkspaceOrg`)
- * and the equip step (`equipWorkspace`) have their own tests in `provision.test.ts`.
+ * has its own tests in `provision.test.ts`. Equipping the org (its provider grant
+ * and budget) is not this module's: `createOrg` runs the org-created hook, tested
+ * in `org-created.test.ts` and `provision.test.ts`.
  * `slugStem` stays real, so the slug the org is asked for is the one the name
  * produces.
  */
@@ -16,13 +18,11 @@ vi.mock('@/lib/db/client', () => ({
 }));
 
 const mockCreateWorkspaceOrg = vi.hoisted(() => vi.fn());
-const mockEquipWorkspace = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/app/workspaces/provision', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/app/workspaces/provision')>();
   return {
     ...actual,
     createWorkspaceOrg: mockCreateWorkspaceOrg,
-    equipWorkspace: mockEquipWorkspace,
   };
 });
 
@@ -52,7 +52,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.orgMembership.count).mockResolvedValue(0);
   mockCreateWorkspaceOrg.mockResolvedValue(ORG);
-  mockEquipWorkspace.mockResolvedValue({ granted: true });
   mockEraseOrg.mockResolvedValue({ erasedAt: new Date(), members: 1 });
   vi.mocked(prisma.orgMembership.findMany).mockResolvedValue(ranked(0) as never);
 });
@@ -99,12 +98,6 @@ describe('createTeamWorkspace', () => {
     expect(mockCreateWorkspaceOrg).toHaveBeenCalledWith('Design Team', 'design-team', USER_ID);
   });
 
-  it('equips the new org under the team-workspace source label', async () => {
-    await createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID });
-
-    expect(mockEquipWorkspace).toHaveBeenCalledWith(ORG.id, 'app.team-workspace');
-  });
-
   it('returns the workspace with the caller as OWNER', async () => {
     const result = await createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID });
 
@@ -116,16 +109,13 @@ describe('createTeamWorkspace', () => {
     });
   });
 
-  it('logs the creation with whether the grant landed', async () => {
-    mockEquipWorkspace.mockResolvedValue({ granted: false });
-
+  it('logs the creation', async () => {
     await createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID });
 
     expect(mockLogger.info).toHaveBeenCalledWith('Team workspace created', {
       orgId: ORG.id,
       slug: ORG.slug,
       ownerUserId: USER_ID,
-      granted: false,
     });
   });
 
@@ -148,7 +138,6 @@ describe('createTeamWorkspace', () => {
     expect(error).toBeInstanceOf(WorkspaceLimitError);
     expect((error as WorkspaceLimitError).details).toEqual({ limit: MAX_OWNED_WORKSPACES });
     expect(mockCreateWorkspaceOrg).not.toHaveBeenCalled();
-    expect(mockEquipWorkspace).not.toHaveBeenCalled();
   });
 
   it('refuses above the cap too', async () => {
@@ -166,7 +155,6 @@ describe('createTeamWorkspace', () => {
     await expect(
       createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
     ).rejects.toThrow('db down');
-    expect(mockEquipWorkspace).not.toHaveBeenCalled();
     expect(mockLogger.info).not.toHaveBeenCalled();
   });
 
@@ -190,7 +178,6 @@ describe('createTeamWorkspace', () => {
         select: { orgId: true },
       });
       expect(mockEraseOrg).not.toHaveBeenCalled();
-      expect(mockEquipWorkspace).toHaveBeenCalled();
     });
 
     it('erases the racer ranked past the cap in a system scope, unequipped, and refuses', async () => {
@@ -204,7 +191,6 @@ describe('createTeamWorkspace', () => {
 
       expect(mockRunAsSystem).toHaveBeenCalledTimes(1);
       expect(mockEraseOrg).toHaveBeenCalledWith({ orgId: ORG.id, actorUserId: CAP_UNDO_ACTOR });
-      expect(mockEquipWorkspace).not.toHaveBeenCalled();
     });
 
     it('treats a new workspace missing from the ranking as past the cap', async () => {
@@ -214,7 +200,6 @@ describe('createTeamWorkspace', () => {
         createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
       ).rejects.toBeInstanceOf(WorkspaceLimitError);
       expect(mockEraseOrg).toHaveBeenCalledWith({ orgId: ORG.id, actorUserId: CAP_UNDO_ACTOR });
-      expect(mockEquipWorkspace).not.toHaveBeenCalled();
     });
 
     it('still refuses, and logs, when the undo itself fails', async () => {
@@ -228,7 +213,6 @@ describe('createTeamWorkspace', () => {
         createTeamWorkspace({ name: 'Design Team', ownerUserId: USER_ID })
       ).rejects.toBeInstanceOf(WorkspaceLimitError);
 
-      expect(mockEquipWorkspace).not.toHaveBeenCalled();
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Team workspace past the ownership cap could not be undone',
         failure,

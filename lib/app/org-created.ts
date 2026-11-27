@@ -40,6 +40,23 @@
  *
  * Full guide: CUSTOMIZATION.md §4 · .context/tenancy/identity.md
  */
+import { registerOrgCreatedHook } from '@/lib/tenancy/org-created-hooks';
+
+/** The hook's key, recorded on each new org until it succeeds. Keep it stable. */
+export const EQUIP_WORKSPACE_HOOK = 'app:equip-workspace';
+
+/**
+ * HowDoesThisLand (t-7, D1; moved here in t-91): every new workspace, however
+ * it was made, is granted its providers and given the default budget
+ * (`lib/app/workspaces/provision.ts`). A self-serve signup's workspace runs it
+ * once its founder can act there; a team workspace and an org a platform
+ * admin makes, straight after the create.
+ */
 export function initAppOrgCreatedHooks(): void {
-  // No app org-created hooks by default.
+  registerOrgCreatedHook(EQUIP_WORKSPACE_HOOK, async ({ orgId, retry }) => {
+    // Imported on use: `provision.ts` imports `createOrg`, whose module loads
+    // this one through the hook registry, so a static import is a cycle.
+    const { equipWorkspace } = await import('@/lib/app/workspaces/provision');
+    await equipWorkspace(orgId, EQUIP_WORKSPACE_HOOK, { reconcile: retry });
+  });
 }

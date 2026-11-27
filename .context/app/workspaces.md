@@ -7,30 +7,38 @@ the app's side; the org model itself is core's
 
 ## Where each piece lives
 
-| Piece                                    | Where                                                                                                                                               |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A workspace of one's own at signup (t-7) | `lib/app/signup-org.ts` → `lib/app/workspaces/provision.ts`                                                                                         |
-| Sweeping signup workspaces nobody joined | `lib/app/workspaces/sweep.ts`, registered in `lib/app/jobs.ts`                                                                                      |
-| Creating a team workspace (t-8)          | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`                                                                                          |
-| Switching workspace                      | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot                                                                            |
-| Members and invitations                  | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)                                                                               |
-| Support access (t-97)                    | `/settings/workspace`, `components/app/workspaces/workspace-support-access.tsx` over core's `/api/v1/orgs/[id]/support-grants`                      |
-| Inviting, account or not (t-9)           | `POST /api/v1/workspaces/[id]/invitations` → `lib/app/workspaces/invitations.ts`                                                                    |
-| Answering an invitation (t-9)            | `GET /api/v1/workspaces/invitations`, `POST …/invitations/[invitationId]/accept` and `/decline`                                                     |
-| The app's own settings (`settings.app`)  | `lib/app/workspaces/app-settings.ts`, the one writer of that key; the retention window's route is in [`assessments.md`](./assessments.md#retention) |
+| Piece                                     | Where                                                                                                                                               |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A workspace of one's own at signup (t-7)  | Sunrise's signup-org seam (`lib/tenancy/signup-org.ts`); `lib/app/signup-org.ts` only names it                                                      |
+| Equipping every new workspace (t-7, t-91) | `lib/app/org-created.ts` → `equipWorkspace()` in `lib/app/workspaces/provision.ts`                                                                  |
+| Creating a team workspace (t-8)           | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`                                                                                          |
+| Switching workspace                       | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot                                                                            |
+| Members and invitations                   | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)                                                                               |
+| Support access (t-97)                     | `/settings/workspace`, `components/app/workspaces/workspace-support-access.tsx` over core's `/api/v1/orgs/[id]/support-grants`                      |
+| Inviting, account or not (t-9)            | `POST /api/v1/workspaces/[id]/invitations` → `lib/app/workspaces/invitations.ts`                                                                    |
+| Answering an invitation (t-9)             | `GET /api/v1/workspaces/invitations`, `POST …/invitations/[invitationId]/accept` and `/decline`                                                     |
+| The app's own settings (`settings.app`)   | `lib/app/workspaces/app-settings.ts`, the one writer of that key; the retention window's route is in [`assessments.md`](./assessments.md#retention) |
 
 ## What every new workspace gets
 
-Both kinds go through `equipWorkspace()` in `provision.ts`, so they cannot
-drift: OpenAI approved, a $10 monthly budget (owner ruling under D6), and the
-platform agents reconciled again once the grant exists. A step that fails is
-logged at `error` and the workspace is still created; a platform admin can
-finish it on `/admin`.
+Every new org, however it was made, runs Sunrise's org-created hooks, and ours
+(`app:equip-workspace`, in `lib/app/org-created.ts`) calls `equipWorkspace()`:
+Anthropic and OpenAI approved, and a $10 monthly budget (owner ruling under
+D6). Sunrise then gives out the platform agents, so they pick their models
+from the grant. Team workspaces, signup workspaces and orgs a platform admin
+makes on `/admin` all get the same.
 
-They differ in who joins and when. A signup workspace is created before the
-user row exists and joined by the signup-org seam, so it carries a marker the
-sweep reads until someone has joined. A team workspace is created with its
-`OWNER` in the same transaction, so it is never memberless and never marked.
+The hook is **idempotent**: Sunrise retries one that throws, from its
+`orgCreatedHooks` maintenance job, so each value is written only while the org
+has none. A provider policy or a budget a platform admin set is never
+overwritten. A provider with no row is logged at `error` and skipped.
+
+They differ in who joins and when. A signup workspace is made by Sunrise
+before the user row exists, named `My workspace` (never the person's name: the
+org row outlives their erasure), and its hooks wait until the founder can act
+there (a verified address, or a sign-in). Sunrise sweeps the ones whose signup
+failed. A team workspace is created with its `OWNER` in the same transaction
+and equipped straight away.
 
 ## The cap
 
@@ -39,8 +47,8 @@ A person may own at most `MAX_OWNED_WORKSPACES` (10, in
 memberships outside the install org, not workspaces created, so it needs no
 record of who made what: handing a workspace over frees a place. Past it,
 `POST /api/v1/workspaces` answers 409 `WORKSPACE_LIMIT_REACHED`. The count and
-the create cannot share a transaction, so once the org exists, and before it
-is granted anything, the person's owned workspaces are ranked by when they
+the create cannot share a transaction, so once the org exists the person's
+owned workspaces are ranked by when they
 became owner. One ranked past the cap is erased (`eraseOrg`, in a system
 scope) and refused the same way, so of two racing creates the earlier keeps
 its place. In a narrow commit-order window both can stay, leaving the person

@@ -693,16 +693,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppJobsForTests();
       // getAppJobs() triggers the lazy init, so this exercises the REAL seam.
-      // FORK (HowDoesThisLand): pinned to our jobs, the signup-workspace
-      // sweep (t-7), assessment recovery (t-22), rewrite recovery (t-81),
+      // FORK (HowDoesThisLand): pinned to our jobs, assessment recovery (t-22), rewrite recovery (t-81),
       // comparison-verdict recovery (t-88) and the retention purge (t-26). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppJobs().map((job) => [job.name, job.intervalMs, job.scope])).toEqual([
-        [
-          'app:signup-workspace-sweep',
-          15 * 60 * 1000,
-          { system: 'signup workspaces span orgs; Org is a system model' },
-        ],
         ['app:assessment-recovery', 15 * 60 * 1000, 'per-org'],
         ['app:rewrite-recovery', 15 * 60 * 1000, 'per-org'],
         ['app:comparison-verdict-recovery', 15 * 60 * 1000, 'per-org'],
@@ -756,7 +750,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       orgCreatedHooks.__resetOrgCreatedHooksForTests();
       // Reading the owed keys runs the lazy init, so this exercises the REAL
       // seam; an empty list is what makes createOrg() write nothing extra.
-      expect(orgCreatedHooks.orgCreatedHookKeys()).toEqual([]);
+      // FORK (HowDoesThisLand): pinned to our one hook, which equips every new
+      // workspace (t-7, t-91). Ledger: .context/app/platform-divergences.md row 2.
+      expect(orgCreatedHooks.orgCreatedHookKeys()).toEqual(['app:equip-workspace']);
     },
   },
   {
@@ -766,7 +762,9 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       signupOrg.__resetSignupOrgResolverForTests();
       // The read runs the lazy init, so this exercises the REAL seam; no
       // resolver is what gives each self-serve signup an org of their own.
-      expect(signupOrg.hasSignupOrgResolver()).toBe(false);
+      // FORK (HowDoesThisLand): pinned to our resolver, which only names that
+      // org (t-91). Ledger: .context/app/platform-divergences.md row 2.
+      expect(signupOrg.hasSignupOrgResolver()).toBe(true);
     },
   },
   {

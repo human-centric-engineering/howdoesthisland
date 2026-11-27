@@ -1,17 +1,15 @@
 /**
- * Tests: `provisionSignupWorkspace` — the workspace an uninvited signup gets
- * (t-7), and the resolver that hands it to the signup-org seam.
+ * Tests: `equipWorkspace`, the body of the org-created hook that gives every
+ * new workspace its providers and its default budget (t-7, D1; on Sunrise's
+ * seams since t-91), and `createWorkspaceOrg`, the org create it runs after.
  *
  * The database is a small stateful fake of `Org.settings` and the provider
- * table, so the grant, the budget and the marker are read back from what was
- * stored rather than from the calls made. The real settings writers run
- * against it. What only a real database can show (the membership, the active
- * org, the agents' bindings) is the smoke script's:
- * `scripts/app/smoke-signup-workspace.ts`.
+ * table, so the grant and the budget are read back from what was stored
+ * rather than from the calls made. The real settings writers run against it.
+ * What only a real database can show (the membership, the agents' bindings) is
+ * not covered here.
  *
- * FORK NOTE: the last block reads the real `lib/app/signup-org.ts` on purpose:
- * it pins that this app's filled seam hands signups to
- * `provisionSignupWorkspace`. Changing the resolver should fail it.
+ * The hook that calls it is tested in `org-created.test.ts`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
@@ -88,7 +86,7 @@ vi.mock('@/lib/orchestration/llm/org-provider-policy', () => ({
 vi.mock('@/lib/orchestration/llm/spend-caps', () => ({ forgetOrgCap: mockForgetCap }));
 vi.mock('@/lib/security/org-request-cap', () => ({ forgetOrgRequestCap: mockForgetRequestCap }));
 
-/** Records the grant the reconcile would have seen, which is what matters. */
+/** Records the settings the reconcile would have seen, which is what matters. */
 const reconciledWith = vi.hoisted(() => [] as unknown[]);
 const mockReconcile = vi.hoisted(() =>
   vi.fn((orgId: string) => {
@@ -102,22 +100,14 @@ vi.mock('@/lib/orchestration/agents/reconcile-platform-agents', () => ({
 }));
 
 import { OrgLifecycleError } from '@/lib/tenancy/lifecycle';
-import {
-  createWorkspaceOrg,
-  equipWorkspace,
-  provisionSignupWorkspace,
-  slugStem,
-  workspaceName,
-  writeSignupWorkspaceMarker,
-} from '@/lib/app/workspaces/provision';
+import { createWorkspaceOrg, equipWorkspace, slugStem } from '@/lib/app/workspaces/provision';
 import { readOrgProviderPolicy, readOrgQuotas } from '@/lib/tenancy/org-settings';
-import { appSignupOrgResolver } from '@/lib/app/signup-org';
 
 const OPENAI_ID = 'cmprov0000000000000openai';
 const ANTHROPIC_ID = 'cmprov000000000anthropic';
 /** The judges' provider first, then the embedder's. */
 const BOTH = [ANTHROPIC_ID, OPENAI_ID];
-const ada = { name: 'Ada Lovelace', email: 'ada@example.com' };
+const ORG_ID = 'cmorg00000000000000equip01';
 
 /** createOrg as the lifecycle does it: a free slug gets a new org row. */
 function createOrgAgainst(taken: Set<string>) {
@@ -151,17 +141,10 @@ beforeEach(() => {
   events.length = 0;
   reconciledWith.length = 0;
   createOrgAgainst(new Set());
+  store.settings.set(ORG_ID, null);
 });
 
-describe('workspace naming', () => {
-  it('names the workspace for the person', () => {
-    expect(workspaceName(ada)).toBe('Ada Lovelace’s workspace');
-  });
-
-  it('falls back to the address when no name was given', () => {
-    expect(workspaceName({ name: '  ', email: 'grace@example.com' })).toBe('grace’s workspace');
-  });
-
+describe('slugStem', () => {
   it.each([
     ['Ada Lovelace', 'ada-lovelace'],
     ['  Zoë  O’Brien-Smith ', 'zoe-o-brien-smith'],
@@ -173,271 +156,229 @@ describe('workspace naming', () => {
   });
 });
 
-describe('provisionSignupWorkspace', () => {
-  it('creates the workspace, grants OpenAI and a $10 budget, and marks it', async () => {
-    const orgId = await provisionSignupWorkspace(ada);
+describe('equipWorkspace on a fresh org', () => {
+  it('grants the judges’ provider then the embedder’s, and sets the $10 budget', async () => {
+    const result = await equipWorkspace(ORG_ID, 'src');
 
-    expect(mockCreateOrg).toHaveBeenCalledWith({
-      slug: 'ada-lovelace',
-      name: 'Ada Lovelace’s workspace',
-    });
-    const settings = store.settings.get(orgId);
-    expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
-    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
-    expect(settings).toMatchObject({ app: { signupWorkspace: true } });
-  });
-
-  it('gives out the agents again only after the grant is stored and the caches are forgotten', async () => {
-    const orgId = await provisionSignupWorkspace(ada);
-
-    expect(mockReconcile).toHaveBeenCalledWith(orgId, 'app.signup-workspace');
-    // What the reconcile saw was the granted policy, not the empty one.
-    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: BOTH });
-    expect(events.indexOf('reconcile')).toBeGreaterThan(events.indexOf('forget-policy'));
-    expect(mockForgetPolicy).toHaveBeenCalledWith(orgId);
-    expect(mockForgetCap).toHaveBeenCalledWith(orgId);
-    expect(mockForgetRequestCap).toHaveBeenCalledWith(orgId);
-  });
-
-  it('retries a taken slug with a suffix', async () => {
-    createOrgAgainst(new Set(['ada-lovelace']));
-
-    await provisionSignupWorkspace(ada);
-
-    expect(mockCreateOrg).toHaveBeenCalledTimes(2);
-    expect(mockCreateOrg.mock.calls[1][0].slug).toMatch(/^ada-lovelace-[0-9a-f]{6}$/);
-  });
-
-  it('gives up after four taken slugs, so the seam falls back', async () => {
-    mockCreateOrg.mockRejectedValue(new OrgLifecycleError('SLUG_TAKEN', 'taken'));
-
-    await expect(provisionSignupWorkspace(ada)).rejects.toThrow(/No free workspace slug/);
-    expect(mockCreateOrg).toHaveBeenCalledTimes(4);
-  });
-
-  it('lets any other create failure through, so the seam falls back', async () => {
-    mockCreateOrg.mockRejectedValue(new Error('db down'));
-
-    await expect(provisionSignupWorkspace(ada)).rejects.toThrow('db down');
-  });
-
-  it('without any provider row, still returns the workspace, with no grant and no reconcile', async () => {
-    store.providers.clear();
-
-    const orgId = await provisionSignupWorkspace(ada);
-
-    expect(readOrgProviderPolicy(store.settings.get(orgId))).toEqual({ approved: [] });
-    expect(readOrgQuotas(store.settings.get(orgId))).toEqual({ monthlyBudgetUsd: 10 });
-    expect(mockReconcile).not.toHaveBeenCalled();
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'The judges’ provider does not exist; the new workspace’s judges have no model',
-      expect.objectContaining({ orgId, missing: ['anthropic', 'openai'] })
-    );
-  });
-
-  it('without the judges’ provider row, grants the rest and says the judges have no model', async () => {
-    store.providers.delete('anthropic');
-
-    const orgId = await provisionSignupWorkspace(ada);
-
-    expect(readOrgProviderPolicy(store.settings.get(orgId))).toEqual({ approved: [OPENAI_ID] });
-    expect(mockReconcile).toHaveBeenCalled();
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'The judges’ provider does not exist; the new workspace’s judges have no model',
-      expect.objectContaining({ orgId, missing: ['anthropic'] })
-    );
-  });
-
-  it('without the embedder’s provider row, grants the judges’ and says which is missing', async () => {
-    store.providers.delete('openai');
-
-    const orgId = await provisionSignupWorkspace(ada);
-
-    expect(readOrgProviderPolicy(store.settings.get(orgId))).toEqual({ approved: [ANTHROPIC_ID] });
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'A workspace provider does not exist; the new workspace is not granted it',
-      expect.objectContaining({ orgId, missing: ['openai'] })
-    );
-  });
-
-  it('when the settings writes fail, still returns the workspace and logs each step', async () => {
-    store.failUpdate = true;
-
-    const orgId = await provisionSignupWorkspace(ada);
-
-    expect(orgId).toMatch(/^cmorg/);
-    const steps = mockLogger.error.mock.calls
-      .filter(([message]) => message === 'New workspace not fully set up')
-      .map(([, , context]) => (context as { step: string }).step);
-    expect(steps).toEqual(['mark', 'grant', 'budget']);
-    expect(mockReconcile).not.toHaveBeenCalled();
-  });
-});
-
-describe('provisionSignupWorkspace on a write clash', () => {
-  it('retries a clashing settings write, so the workspace is still marked', async () => {
-    store.conflicts = 2; // the mark clashes twice, then lands on its third try
-
-    const orgId = await provisionSignupWorkspace(ada);
-
-    const settings = store.settings.get(orgId);
-    expect(settings).toMatchObject({ app: { signupWorkspace: true } });
-    expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
-    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
-    expect(mockLogger.error).not.toHaveBeenCalled();
-  });
-
-  it('gives up on a write after three clashes, logs that step, and carries on', async () => {
-    store.conflicts = 3;
-
-    const orgId = await provisionSignupWorkspace(ada);
-
-    expect(mockLogger.error).toHaveBeenCalledTimes(1);
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      'New workspace not fully set up',
-      store.conflictError,
-      { orgId, step: 'mark' }
-    );
-    const settings = store.settings.get(orgId);
-    expect(settings).not.toMatchObject({ app: { signupWorkspace: true } });
-    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
-  });
-
-  it('does not retry a write that failed for another reason', async () => {
-    store.failUpdate = true;
-
-    await provisionSignupWorkspace(ada);
-
-    // One attempt each at the mark, the grant and the budget.
-    expect(fakePrisma.org.update).toHaveBeenCalledTimes(3);
-  });
-});
-
-describe('writeSignupWorkspaceMarker', () => {
-  it('clearing it keeps every other key, and drops an emptied app key', async () => {
-    store.settings.set('o1', { quotas: { monthlyBudgetUsd: 10 }, app: { signupWorkspace: true } });
-
-    await writeSignupWorkspaceMarker('o1', false);
-
-    expect(store.settings.get('o1')).toEqual({ quotas: { monthlyBudgetUsd: 10 } });
-  });
-
-  it('keeps the rest of the app key', async () => {
-    store.settings.set('o1', { app: { signupWorkspace: true, retention: 30 } });
-
-    await writeSignupWorkspaceMarker('o1', false);
-
-    expect(store.settings.get('o1')).toEqual({ app: { retention: 30 } });
-  });
-});
-
-describe('appSignupOrgResolver', () => {
-  it('answers the id of a new workspace for the person signing up', async () => {
-    expect(appSignupOrgResolver).not.toBeNull();
-
-    const orgId = await appSignupOrgResolver?.({ ...ada, emailVerified: false });
-
-    expect(mockCreateOrg).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Ada Lovelace’s workspace' })
-    );
-    expect(store.settings.has(orgId as string)).toBe(true);
-  });
-});
-
-describe('equipWorkspace', () => {
-  const ORG_ID = 'cmorg00000000000000equip01';
-
-  beforeEach(() => {
-    store.settings.set(ORG_ID, null);
-  });
-
-  it('writes the OpenAI grant and the $10 budget, and reports granted', async () => {
-    const result = await equipWorkspace(ORG_ID, 'app.team-workspace');
-
-    expect(result).toEqual({ granted: true });
+    expect(result).toEqual({ granted: true, grantKept: false, budgetKept: false });
     const settings = store.settings.get(ORG_ID);
     expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
     expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
   });
 
-  it('reconciles the agents once the grant exists, labelled with the source', async () => {
-    await equipWorkspace(ORG_ID, 'app.team-workspace');
-
-    expect(mockReconcile).toHaveBeenCalledWith(ORG_ID, 'app.team-workspace');
-    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: BOTH });
-  });
-
-  it('reports the workspace granted only when the judges’ provider is among the grant', async () => {
-    await expect(equipWorkspace(ORG_ID, 'src')).resolves.toEqual({ granted: true });
-    store.providers.delete('anthropic');
-    // OpenAI alone is still written and reconciled for, but the judges cannot run.
-    await expect(equipWorkspace(ORG_ID, 'src')).resolves.toEqual({ granted: false });
-    expect(mockReconcile).toHaveBeenCalledTimes(2);
-  });
-
-  it('runs the first steps before the grant', async () => {
-    const order: string[] = [];
-    fakePrisma.aiProviderConfig.findMany.mockImplementationOnce(() => {
-      order.push('grant-lookup');
-      return Promise.resolve([...store.providers].map(([slug, id]) => ({ slug, id })));
-    });
-    const first = vi.fn(() => {
-      order.push('first');
-      return Promise.resolve();
-    });
-
-    await equipWorkspace(ORG_ID, 'src', [['first', first]]);
-
-    expect(order).toEqual(['first', 'grant-lookup']);
-  });
-
-  it('logs a failing first step and still runs later steps, the grant and the reconcile', async () => {
-    const boom = new Error('step failed');
-    const after = vi.fn(() => Promise.resolve());
-
-    const result = await equipWorkspace(ORG_ID, 'src', [
-      ['one', () => Promise.reject(boom)],
-      ['two', after],
-    ]);
-
-    expect(result).toEqual({ granted: true });
-    expect(after).toHaveBeenCalledTimes(1);
-    expect(mockLogger.error).toHaveBeenCalledWith('New workspace not fully set up', boom, {
-      orgId: ORG_ID,
-      step: 'one',
-    });
-    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
-    expect(mockReconcile).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not reconcile when no provider could be granted', async () => {
-    store.providers.clear();
-
-    const result = await equipWorkspace(ORG_ID, 'src');
-
-    expect(result).toEqual({ granted: false });
-    expect(mockReconcile).not.toHaveBeenCalled();
-    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
-  });
-
-  it('does not reconcile when the grant write fails', async () => {
-    store.failUpdate = true;
-
-    const result = await equipWorkspace(ORG_ID, 'src');
-
-    expect(result).toEqual({ granted: false });
-    expect(mockReconcile).not.toHaveBeenCalled();
-  });
-
-  it('forgets the cached policy and caps before reconciling', async () => {
+  it('forgets the three caches for the org', async () => {
     await equipWorkspace(ORG_ID, 'src');
 
+    expect(mockForgetPolicy).toHaveBeenCalledWith(ORG_ID);
+    expect(mockForgetCap).toHaveBeenCalledWith(ORG_ID);
+    expect(mockForgetRequestCap).toHaveBeenCalledWith(ORG_ID);
+  });
+
+  it('does not reconcile the agents by default: Sunrise places them after the hooks', async () => {
+    await equipWorkspace(ORG_ID, 'src');
+
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('logs that the workspace was equipped, with what was kept', async () => {
+    await equipWorkspace(ORG_ID, 'src');
+
+    expect(mockLogger.info).toHaveBeenCalledWith('Workspace equipped', {
+      orgId: ORG_ID,
+      granted: true,
+      grantKept: false,
+      budgetKept: false,
+    });
+  });
+});
+
+describe('equipWorkspace on an org that already has values (a retry)', () => {
+  it('keeps an existing provider policy and does not look the providers up', async () => {
+    store.settings.set(ORG_ID, { providers: { approved: ['cmadminchoice0000000000001'] } });
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toEqual({ granted: false, grantKept: true, budgetKept: false });
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({
+      approved: ['cmadminchoice0000000000001'],
+    });
+    expect(fakePrisma.aiProviderConfig.findMany).not.toHaveBeenCalled();
+    // The budget was still missing, so it is still given.
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
+  });
+
+  it('treats an admin’s deliberately empty grant as set, not as absent', async () => {
+    store.settings.set(ORG_ID, { providers: { approved: [] } });
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result.grantKept).toBe(true);
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: [] });
+  });
+
+  it('keeps an existing monthly budget', async () => {
+    store.settings.set(ORG_ID, { quotas: { monthlyBudgetUsd: 250 } });
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toEqual({ granted: true, grantKept: false, budgetKept: true });
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 250 });
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: BOTH });
+  });
+
+  it('adds the budget beside another cap already set, without dropping it', async () => {
+    store.settings.set(ORG_ID, { quotas: { requestsPerMinute: 30 } });
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result.budgetKept).toBe(false);
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({
+      requestsPerMinute: 30,
+      monthlyBudgetUsd: 10,
+    });
+  });
+
+  it('writes nothing when both are already set', async () => {
+    store.settings.set(ORG_ID, {
+      providers: { approved: [OPENAI_ID] },
+      quotas: { monthlyBudgetUsd: 5 },
+    });
+
+    const result = await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(result).toEqual({ granted: false, grantKept: true, budgetKept: true });
+    expect(fakePrisma.org.update).not.toHaveBeenCalled();
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+});
+
+describe('equipWorkspace reconcile', () => {
+  it('gives the agents out again only after the grant is stored and the caches are forgotten', async () => {
+    await equipWorkspace(ORG_ID, 'app:equip-workspace', { reconcile: true });
+
+    expect(mockReconcile).toHaveBeenCalledWith(ORG_ID, 'app:equip-workspace');
+    // What the reconcile saw was the granted policy, not the empty one.
+    expect(readOrgProviderPolicy(reconciledWith[0])).toEqual({ approved: BOTH });
     expect(events.slice(0, 3).sort()).toEqual([
       'forget-cap',
       'forget-policy',
       'forget-request-cap',
     ]);
     expect(events[3]).toBe('reconcile');
+  });
+
+  it('does not reconcile when the grant was kept, however it is asked', async () => {
+    store.settings.set(ORG_ID, { providers: { approved: [OPENAI_ID] } });
+
+    await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('does not reconcile when no provider row exists to grant', async () => {
+    store.providers.clear();
+
+    await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('reconciles when only the embedder’s provider was granted', async () => {
+    store.providers.delete('anthropic');
+
+    const result = await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(result.granted).toBe(false);
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('equipWorkspace with a missing provider row', () => {
+  it('without any row: grants nothing, still sets the budget, logs at error, does not throw', async () => {
+    store.providers.clear();
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toEqual({ granted: false, grantKept: false, budgetKept: false });
+    const settings = store.settings.get(ORG_ID);
+    // No policy written at all: the org stays "never granted", so a later retry can still grant.
+    expect(settings).not.toHaveProperty('providers');
+    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'The judges’ provider does not exist; the new workspace’s judges have no model',
+      expect.objectContaining({ orgId: ORG_ID, missing: ['anthropic', 'openai'] })
+    );
+  });
+
+  it('without the judges’ row: grants the rest and says the judges have no model', async () => {
+    store.providers.delete('anthropic');
+
+    await equipWorkspace(ORG_ID, 'src');
+
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: [OPENAI_ID] });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'The judges’ provider does not exist; the new workspace’s judges have no model',
+      expect.objectContaining({ orgId: ORG_ID, missing: ['anthropic'] })
+    );
+  });
+
+  it('without the embedder’s row: grants the judges’ and says which is missing', async () => {
+    store.providers.delete('openai');
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result.granted).toBe(true);
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: [ANTHROPIC_ID] });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'A workspace provider does not exist; the new workspace is not granted it',
+      expect.objectContaining({ orgId: ORG_ID, missing: ['openai'] })
+    );
+  });
+});
+
+describe('equipWorkspace failures', () => {
+  it('throws when the org does not exist, writing nothing', async () => {
+    await expect(equipWorkspace('cmnoorg0000000000000000001', 'src')).rejects.toThrow(
+      /no org cmnoorg0000000000000000001/
+    );
+    expect(fakePrisma.org.update).not.toHaveBeenCalled();
+    expect(mockForgetPolicy).not.toHaveBeenCalled();
+  });
+
+  it('throws when the settings cannot be read, so the hook is retried', async () => {
+    fakePrisma.org.findUnique.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(equipWorkspace(ORG_ID, 'src')).rejects.toThrow('db down');
+  });
+
+  it('throws when a write fails, and does not reconcile', async () => {
+    store.failUpdate = true;
+
+    await expect(equipWorkspace(ORG_ID, 'src', { reconcile: true })).rejects.toThrow(
+      'write failed'
+    );
+    expect(mockReconcile).not.toHaveBeenCalled();
+    // One attempt only: a failure that is not a clash is not retried here.
+    expect(fakePrisma.org.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a clashing write, so both values still land', async () => {
+    store.conflicts = 2; // the grant clashes twice, then lands on its third try
+
+    await equipWorkspace(ORG_ID, 'src');
+
+    const settings = store.settings.get(ORG_ID);
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
+    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
+    expect(fakePrisma.org.update).toHaveBeenCalledTimes(4);
+  });
+
+  it('gives up on a write after three clashes and throws the last', async () => {
+    store.conflicts = 3;
+
+    await expect(equipWorkspace(ORG_ID, 'src')).rejects.toBe(store.conflictError);
+    expect(fakePrisma.org.update).toHaveBeenCalledTimes(3);
+    expect(store.settings.get(ORG_ID)).toBeNull();
   });
 });
 

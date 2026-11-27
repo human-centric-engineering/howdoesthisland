@@ -83,8 +83,9 @@ the embedding model.
 
 ## Check that a signup gets its workspace
 
-Every uninvited signup gets a workspace of its own, granted OpenAI and a $10
-monthly budget (`lib/app/workspaces/provision.ts`). With the database in shape:
+Every uninvited signup gets a workspace of its own, granted Anthropic and
+OpenAI and a $10 monthly budget by the org-created hook
+(`lib/app/org-created.ts`). With the database in shape:
 
 ```bash
 RESEND_API_KEY= npx tsx --env-file=.env.local scripts/app/smoke-signup-workspace.ts
@@ -92,9 +93,9 @@ RESEND_API_KEY= npx tsx --env-file=.env.local scripts/app/smoke-signup-workspace
 
 It signs up one person by password and one by OAuth (no identity provider is
 reached), reads back each one's membership, active org, provider grant, budget
-and platform agents, then runs the sweep that erases signup workspaces nobody
-joined (`lib/app/workspaces/sweep.ts`). It cleans up after itself. Exit 0 means
-it passed.
+and platform agents, then checks an org made directly with `createOrg` is
+equipped too, and that running the hook again keeps a budget an admin changed.
+It cleans up after itself. Exit 0 means it passed.
 
 ## Gotchas
 

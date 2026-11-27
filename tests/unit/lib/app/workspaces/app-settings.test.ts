@@ -1,6 +1,6 @@
 /**
  * Tests: the one writer of `Org.settings.app` (t-26), and the two that write
- * through it: the retention window and the signup-workspace marker.
+ * through it: the retention window and the judge-reply window.
  *
  * The database is a small stateful fake of one org's `settings` column, so
  * what survives a write is read back from what was stored rather than from
@@ -48,7 +48,6 @@ vi.mock('@/lib/db/client', () => ({ prisma: fakePrisma }));
 
 import { readAppSettings, writeAppSettings } from '@/lib/app/workspaces/app-settings';
 import { readWorkspaceSettings, writeWorkspaceSettings } from '@/lib/app/retention/settings';
-import { writeSignupWorkspaceMarker } from '@/lib/app/workspaces/provision';
 
 const ORG = 'cmorg000000000000000team1';
 
@@ -156,32 +155,6 @@ describe('the judge reply window', () => {
     expect(store.settings.get(ORG)).toEqual({
       app: { retention: { days: 120 }, judgeReplyRetention: { days: 7 } },
     });
-  });
-});
-
-describe('the signup marker goes through the same writer', () => {
-  it('setting and clearing it keeps the retention window and every core slice', async () => {
-    store.settings.set(ORG, { ...CORE_SLICES, app: { retention: { days: 30 } } });
-
-    await writeSignupWorkspaceMarker(ORG, true);
-    expect(store.settings.get(ORG)).toEqual({
-      ...CORE_SLICES,
-      app: { retention: { days: 30 }, signupWorkspace: true },
-    });
-
-    await writeSignupWorkspaceMarker(ORG, false);
-    expect(store.settings.get(ORG)).toEqual({ ...CORE_SLICES, app: { retention: { days: 30 } } });
-  });
-
-  it('retries a serializable clash on a fresh read, as the window does', async () => {
-    store.settings.set(ORG, { app: {} });
-    store.failures = 2;
-    store.failWith = serializableClash();
-
-    await writeSignupWorkspaceMarker(ORG, true);
-
-    expect(fakePrisma.org.update).toHaveBeenCalledTimes(3);
-    expect(store.settings.get(ORG)).toEqual({ app: { signupWorkspace: true } });
   });
 });
 
