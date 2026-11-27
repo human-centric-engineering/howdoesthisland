@@ -63,6 +63,7 @@ vi.stubGlobal('fetch', mocks.fetch);
 import {
   SWEEP_GRACE_MS,
   notifyAfterReview,
+  notifyAfterVerdict,
   sendAssessmentFinished,
   sendComparisonFinished,
   sweepFinishedEvents,
@@ -403,5 +404,52 @@ describe('the sweep', () => {
     expect(swept).toEqual({ assessments: 0, comparisons: 0, failed: 0 });
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(other.notifiedAt).toBeNull();
+  });
+});
+
+describe('when a send fails', () => {
+  it('notifyAfterReview logs and goes on to the comparison when the review’s send fails', async () => {
+    const first = review('COMPLETED', { notifiedAt: new Date() });
+    const last = review('COMPLETED');
+    const set = comparison([first, last], { verdictStatus: 'SKIPPED', verdict: null });
+    // The review's delivery row fails; the comparison's succeeds.
+    mocks.deliveryCreate.mockRejectedValueOnce(new Error('database away'));
+
+    await runAsOrg(ORG_A, async () => notifyAfterReview(ORG_A, String(last.id)));
+    await vi.waitFor(() => expect(set.notifiedAt).toBeInstanceOf(Date));
+    expect(last.notifiedAt).toBeNull();
+  });
+
+  it('notifyAfterVerdict leaves a comparison it could not queue for the sweep', async () => {
+    const set = comparison([review('COMPLETED', { notifiedAt: new Date() })]);
+    mocks.deliveryCreate.mockRejectedValueOnce(new Error('database away'));
+    await runAsOrg(ORG_A, async () => notifyAfterVerdict(String(set.id)));
+    await settle();
+    expect(set.notifiedAt).toBeNull();
+  });
+
+  it('the sweep counts what it could not queue and leaves it owed', async () => {
+    const owed = review('FAILED', { completedAt: null });
+    const owedSet = comparison([review('COMPLETED', { notifiedAt: new Date() })]);
+    mocks.deliveryCreate.mockRejectedValue(new Error('database away'));
+    const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());
+    expect(swept).toEqual({ assessments: 0, comparisons: 0, failed: 2 });
+    expect(owed.notifiedAt).toBeNull();
+    expect(owedSet.notifiedAt).toBeNull();
+  });
+
+  it('a review with no completion time is sent with completedAt null', async () => {
+    const row = review('FAILED', { completedAt: null });
+    await runAsOrg(ORG_A, () => sendAssessmentFinished(String(row.id)));
+    await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    expect(dataOf(posts()[0]).completedAt).toBeNull();
+  });
+
+  it('a comparison already sent, or gone, sends nothing', async () => {
+    const sent = comparison([review('COMPLETED', { notifiedAt: new Date() })], {
+      notifiedAt: new Date(),
+    });
+    expect(await runAsOrg(ORG_A, () => sendComparisonFinished(String(sent.id)))).toBe(false);
+    expect(await runAsOrg(ORG_A, () => sendComparisonFinished('set-none'))).toBe(false);
   });
 });

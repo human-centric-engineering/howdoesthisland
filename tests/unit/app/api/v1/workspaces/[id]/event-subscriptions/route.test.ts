@@ -193,11 +193,22 @@ describe('who may reach the webhook routes', () => {
     expect(mockPrisma.aiEventHook.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('answers WORKSPACES_UNAVAILABLE at single tenancy', async () => {
+  it('answers WORKSPACES_UNAVAILABLE at single tenancy, on every route', async () => {
     mockEnv.TENANCY_MODE = 'single';
-    const res = await collection.GET(req(BASE), wsParams());
-    expect(res.status).toBe(400);
-    expect((await json(res)).error.code).toBe('WORKSPACES_UNAVAILABLE');
+    const answers = await Promise.all([
+      collection.GET(req(BASE), wsParams()),
+      create(valid),
+      item.GET(req(`${BASE}/${SUB}`), subParams()),
+      item.PATCH(req(`${BASE}/${SUB}`, 'PATCH', { isEnabled: false }), subParams()),
+      item.DELETE(req(`${BASE}/${SUB}`, 'DELETE'), subParams()),
+      rotate.POST(req(`${BASE}/${SUB}/rotate-secret`, 'POST'), subParams()),
+      deliveries.GET(req(`${BASE}/${SUB}/deliveries`), subParams()),
+    ]);
+    for (const res of answers) {
+      expect(res.status).toBe(400);
+      expect((await json(res)).error.code).toBe('WORKSPACES_UNAVAILABLE');
+    }
+    expect(mockPrisma.aiEventHook.findFirst).not.toHaveBeenCalled();
   });
 
   it('refuses making or rotating a secret during a support session', async () => {
@@ -395,5 +406,133 @@ describe('GET …/deliveries', () => {
     ]);
     expect(body.data[0]).not.toHaveProperty('payload');
     expect(body.meta).toMatchObject({ page: 1, limit: 5, total: 1 });
+  });
+});
+
+describe('GET …/event-subscriptions/{subscriptionId}', () => {
+  it('reads one, scoped to the workspace’s app hooks, with its project filter', async () => {
+    mockPrisma.aiEventHook.findFirst.mockResolvedValue(
+      hookRow({
+        filter: { projectId: PROJECT },
+        action: { type: 'webhook', url: 'https://x.example.com/h' },
+      })
+    );
+    const res = await item.GET(req(`${BASE}/${SUB}`), subParams());
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.data.subscription).toMatchObject({ projectId: PROJECT, headerNames: [] });
+    expect(mockPrisma.aiEventHook.findFirst.mock.calls[0]?.[0].where).toMatchObject({
+      id: SUB,
+      orgId: WS,
+    });
+  });
+
+  it('reads a hook whose stored action or filter it cannot parse without throwing', async () => {
+    mockPrisma.aiEventHook.findFirst.mockResolvedValue(
+      hookRow({ action: 'not an action', filter: ['nonsense'], creator: null, secret: null })
+    );
+    const body = await json(await item.GET(req(`${BASE}/${SUB}`), subParams()));
+    expect(body.data.subscription).toMatchObject({
+      url: '',
+      headerNames: [],
+      projectId: null,
+      hasSecret: false,
+      createdByName: null,
+    });
+  });
+
+  it('refuses a malformed subscription id', async () => {
+    const res = await item.GET(req(`${BASE}/nope`), {
+      params: Promise.resolve({ id: WS, subscriptionId: 'nope' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('the service’s other changes', () => {
+  it('replaces the headers keeping the address, and changes name, event and switch', async () => {
+    const res = await item.PATCH(
+      req(`${BASE}/${SUB}`, 'PATCH', {
+        name: 'CMS 2',
+        eventType: 'app.comparison.finished',
+        isEnabled: false,
+        headers: { 'X-New': 'v' },
+        projectId: PROJECT,
+      }),
+      subParams()
+    );
+    expect(res.status).toBe(200);
+    const data = mockPrisma.aiEventHook.updateMany.mock.calls[0]?.[0].data;
+    expect(data).toEqual({
+      name: 'CMS 2',
+      eventType: 'app.comparison.finished',
+      isEnabled: false,
+      action: { type: 'webhook', url: 'https://cms.example.com/hook', headers: { 'X-New': 'v' } },
+      filter: { projectId: PROJECT },
+    });
+  });
+
+  it('writes an empty filter for the whole workspace, which core matches as no filter', async () => {
+    await item.PATCH(req(`${BASE}/${SUB}`, 'PATCH', { projectId: null }), subParams());
+    expect(mockPrisma.aiEventHook.updateMany.mock.calls[0]?.[0].data).toEqual({ filter: {} });
+    await create(valid);
+    expect(mockPrisma.aiEventHook.create.mock.calls[0]?.[0].data.filter).toEqual({});
+  });
+
+  it('keeps a hook with no headers headerless when only the address changes', async () => {
+    mockPrisma.aiEventHook.findFirst.mockResolvedValue(
+      hookRow({ action: { type: 'webhook', url: 'https://cms.example.com/hook' } })
+    );
+    await item.PATCH(
+      req(`${BASE}/${SUB}`, 'PATCH', { url: 'https://n.example.com/h' }),
+      subParams()
+    );
+    expect(mockPrisma.aiEventHook.updateMany.mock.calls[0]?.[0].data.action).toEqual({
+      type: 'webhook',
+      url: 'https://n.example.com/h',
+    });
+  });
+
+  it('answers 404 when the row went between the read and the write', async () => {
+    mockPrisma.aiEventHook.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.aiEventHook.deleteMany.mockResolvedValue({ count: 0 });
+    expect(
+      (await item.PATCH(req(`${BASE}/${SUB}`, 'PATCH', { isEnabled: false }), subParams())).status
+    ).toBe(404);
+    expect((await item.DELETE(req(`${BASE}/${SUB}`, 'DELETE'), subParams())).status).toBe(404);
+    expect(
+      (await rotate.POST(req(`${BASE}/${SUB}/rotate-secret`, 'POST'), subParams())).status
+    ).toBe(404);
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
+  it('refuses to make a subscription in a workspace other than the one entered', async () => {
+    mockOrgForMint.fn = () => OTHER;
+    expect((await create(valid)).status).toBe(403);
+    expect(mockPrisma.aiEventHook.create).not.toHaveBeenCalled();
+  });
+
+  it('lists every delivery when no status is asked for, and one with no event id as null', async () => {
+    mockPrisma.aiEventHookDelivery.findMany.mockResolvedValue([
+      {
+        id: 'del-2',
+        eventType: 'app.assessment.finished',
+        payload: { data: {} },
+        status: 'failed',
+        attempts: 3,
+        lastAttemptAt: null,
+        nextRetryAt: null,
+        lastResponseCode: 500,
+        lastError: 'boom',
+        createdAt: new Date(),
+      },
+    ]);
+    mockPrisma.aiEventHookDelivery.count.mockResolvedValue(1);
+    const body = await json(await deliveries.GET(req(`${BASE}/${SUB}/deliveries`), subParams()));
+    expect(mockPrisma.aiEventHookDelivery.findMany.mock.calls[0]?.[0].where).toEqual({
+      orgId: WS,
+      hookId: SUB,
+    });
+    expect(body.data[0].eventId).toBeNull();
   });
 });
