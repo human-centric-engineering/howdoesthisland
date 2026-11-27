@@ -61,7 +61,8 @@ owner manages people inside the app's frame rather than in `/admin`.
 
 A workspace's consent for HCE support to work inside it. The settings page
 shows the open grant (its level, its reason and when it ends) or says there is
-none, then every grant and what support did under them. It reads core's
+none, then its most recent grants (core lists up to 50) and what support did
+under them. It reads core's
 `GET /api/v1/orgs/[id]/support-grants` and renders core's own
 `SupportGrantForm`, `SupportGrantsTable` and `SupportActivityTable`, unedited,
 which `/admin/support-access` used until t-64 closed `/admin` to platform

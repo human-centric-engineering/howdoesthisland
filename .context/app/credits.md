@@ -336,6 +336,7 @@ them spends: the roster (`/api/v1/orgs/[id]/members`, which `/settings/workspace
 uses), core's org invitations, and support-access grants (consent for HCE to
 enter the workspace).
 
-**Support access is on `/settings/workspace`** (t-97), the only screen that
-calls those routes now that t-64 closed `/admin/support-access`. See
+**Support access is on `/settings/workspace`** (t-97), the customer's screen
+for those routes now that t-64 keeps `/admin/support-access` to platform
+admins. See
 [`workspaces.md`](./workspaces.md#support-access-t-97).
