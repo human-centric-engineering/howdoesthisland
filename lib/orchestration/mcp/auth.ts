@@ -67,7 +67,9 @@ export function generateApiKey(): { plaintext: string; hash: string; prefix: str
  *
  * Returns the auth context if valid, or null if the key is missing,
  * inactive, or expired — or if it cannot enter an org (§106, t-673): its
- * org is suspended, or it carries none at `multi`. The org's status is read
+ * org is suspended, or it carries none at `multi` — or if its creator is
+ * not a member of that org, or was erased (HowDoesThisLand t-96, divergence
+ * row 34, sunrise#1358). The org's status is read
  * with the key, and the context's `orgId` is the read rule's answer, so the
  * transport runs each request inside `runAsOrg(auth.orgId, …)`. Updates
  * `lastUsedAt` fire-and-forget.
@@ -124,9 +126,11 @@ export async function authenticateMcpRequest(
   // it: the install org at `single`. HowDoesThisLand carries this (t-96,
   // platform-divergences row 34) until upstream answers it.
   if (entry.orgId !== INSTALL_ORG_ID || isMultiTenant()) {
-    const creator: Awaited<ReturnType<typeof verifiedMembership>> = key.createdBy
-      ? await verifiedMembership(key.createdBy, entry.orgId, prisma)
-      : { refused: 'not-a-member' };
+    if (!key.createdBy) {
+      logger.warn('MCP auth: key creator was erased', { keyPrefix: key.keyPrefix });
+      return null;
+    }
+    const creator = await verifiedMembership(key.createdBy, entry.orgId, prisma);
     if ('refused' in creator) {
       logger.warn('MCP auth: key creator is not a member of its org', {
         keyPrefix: key.keyPrefix,
