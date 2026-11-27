@@ -53,10 +53,10 @@ export const EQUIP_WORKSPACE_HOOK = 'app:equip-workspace';
  * admin makes, straight after the create.
  */
 export function initAppOrgCreatedHooks(): void {
-  registerOrgCreatedHook(EQUIP_WORKSPACE_HOOK, async ({ orgId, retry }) => {
+  registerOrgCreatedHook(EQUIP_WORKSPACE_HOOK, async ({ orgId, retry, signal }) => {
     // Imported on use: `provision.ts` imports `createOrg`, whose module loads
     // this one through the hook registry, so a static import is a cycle.
     const { equipWorkspace } = await import('@/lib/app/workspaces/provision');
-    await equipWorkspace(orgId, EQUIP_WORKSPACE_HOOK, { reconcile: retry });
+    await equipWorkspace(orgId, EQUIP_WORKSPACE_HOOK, { reconcile: retry, signal });
   });
 }

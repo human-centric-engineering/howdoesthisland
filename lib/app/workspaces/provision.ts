@@ -32,13 +32,14 @@
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { createOrg, OrgLifecycleError, type OrgRecord } from '@/lib/tenancy/lifecycle';
+import type { Prisma } from '@prisma/client';
 import {
   ORG_PROVIDERS_KEY,
+  ORG_QUOTAS_KEY,
   readOrgProviderPolicy,
   readOrgQuotas,
-  writeOrgProviderPolicy,
-  writeOrgQuotas,
 } from '@/lib/tenancy/org-settings';
+import { orgProviderPolicySchema } from '@/lib/validations/tenancy';
 import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-policy';
 import { forgetOrgCap } from '@/lib/orchestration/llm/spend-caps';
 import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
@@ -117,43 +118,35 @@ export async function createWorkspaceOrg(
 }
 
 /**
- * Approve the workspace for its providers (`WORKSPACE_PROVIDER_SLUGS`): those
- * of them that exist. Returns whether a grant was written, and whether it
- * includes the judges' provider.
+ * The workspace providers (`WORKSPACE_PROVIDER_SLUGS`) that exist, as the ids
+ * to approve, in the list's order so the stored policy reads the same in every
+ * org. Platform config, not the org's, so it is read outside the write.
  *
- * A provider with no row is left out and logged at `error`; the judges'
- * missing means the workspace's judges and editor have no model until a
- * platform admin creates it and grants it on `/admin`.
+ * A provider with no row is left out, and named in `missing`.
  */
-async function grantProviders(orgId: string): Promise<{ written: boolean; judges: boolean }> {
+async function findWorkspaceProviders(): Promise<{
+  approved: string[];
+  judges: boolean;
+  missing: string[];
+}> {
   const providers = await prisma.aiProviderConfig.findMany({
     where: { slug: { in: [...WORKSPACE_PROVIDER_SLUGS] } },
     select: { id: true, slug: true },
   });
-  const missing = WORKSPACE_PROVIDER_SLUGS.filter((s) => !providers.some((p) => p.slug === s));
-  if (missing.length > 0) {
-    logger.error(
-      missing.includes(JUDGE_PROVIDER_SLUG)
-        ? 'The judges’ provider does not exist; the new workspace’s judges have no model'
-        : 'A workspace provider does not exist; the new workspace is not granted it',
-      { orgId, missing }
-    );
-  }
-  if (providers.length === 0) return { written: false, judges: false };
-  // In the list's order, so the stored policy reads the same in every org.
-  const approved = WORKSPACE_PROVIDER_SLUGS.flatMap((s) =>
-    providers.filter((p) => p.slug === s).map((p) => p.id)
-  );
-  // No jurisdiction restriction: none is ruled for this app yet.
-  await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved }));
-  return { written: true, judges: providers.some((p) => p.slug === JUDGE_PROVIDER_SLUG) };
+  return {
+    approved: WORKSPACE_PROVIDER_SLUGS.flatMap((s) =>
+      providers.filter((p) => p.slug === s).map((p) => p.id)
+    ),
+    judges: providers.some((p) => p.slug === JUDGE_PROVIDER_SLUG),
+    missing: WORKSPACE_PROVIDER_SLUGS.filter((s) => !providers.some((p) => p.slug === s)),
+  };
 }
 
 /** What {@link equipWorkspace} did. */
 export interface EquipResult {
   /** The judges' provider was granted by this run. */
   granted: boolean;
-  /** The org already had a provider policy, so none was written. */
+  /** The org already had a readable provider policy, so none was written. */
   grantKept: boolean;
   /** The org already had a monthly budget, so none was written. */
   budgetKept: boolean;
@@ -164,40 +157,81 @@ export interface EquipResult {
  * and the default budget, each only while the org has none (see the module
  * header). The body of the `app:equip-workspace` org-created hook.
  *
+ * Both are one serializable read-modify-write: "only while unset" is decided
+ * on the row the write replaces, so a platform admin's grant or budget saved
+ * at the same moment either commits first and is kept, or clashes and is
+ * re-read on the retry. Never overwritten. And the two land together, so no
+ * attempt leaves the grant without the budget.
+ *
+ * The core slice writers are not used: each replaces its slice whole, so the
+ * check would sit in a different transaction from the write. The slices are
+ * written in the shapes those writers store, and read back through core's
+ * readers. A stored policy that core cannot read (and so reads as approved
+ * for nothing) is not kept: it is replaced by the grant.
+ *
  * Throws on a failed read or write, so the hook stays owed and is retried.
  *
  * @param source the reconcile's trigger label, for its logs.
- * @param options.reconcile give the org's platform agents out again after a
- *   grant. Only a retry needs it: on the run straight after a create Sunrise
- *   places the agents itself, after the hooks.
+ * @param options.reconcile give the org's platform agents out again. Only a
+ *   retry needs it: on the run straight after a create Sunrise places the
+ *   agents itself, after the hooks.
+ * @param options.signal the hook's: aborted once its time is up. The write
+ *   and the reconcile are each skipped once it has, and the hook stays owed.
  */
 export async function equipWorkspace(
   orgId: string,
   source: string,
-  options: { reconcile?: boolean } = {}
+  options: { reconcile?: boolean; signal?: AbortSignal } = {}
 ): Promise<EquipResult> {
-  const org = await prisma.org.findUnique({ where: { id: orgId }, select: { settings: true } });
-  if (!org) throw new Error(`equipWorkspace: no org ${orgId}`);
-  const settings = isRecord(org.settings) ? org.settings : {};
+  const { signal } = options;
+  const providers = await findWorkspaceProviders();
+  signal?.throwIfAborted();
 
-  const grantKept =
-    settings[ORG_PROVIDERS_KEY] !== undefined && settings[ORG_PROVIDERS_KEY] !== null;
-  const grant = grantKept ? { written: false, judges: false } : await grantProviders(orgId);
+  const outcome = await withConflictRetry(() =>
+    prisma.$transaction(
+      async (tx) => {
+        const row = await tx.org.findUnique({ where: { id: orgId }, select: { settings: true } });
+        if (!row) throw new Error(`equipWorkspace: no org ${orgId}`);
+        const settings: Record<string, unknown> = isRecord(row.settings) ? { ...row.settings } : {};
 
-  const budgetKept = readOrgQuotas(org.settings, { orgId }).monthlyBudgetUsd !== undefined;
-  if (!budgetKept) {
-    // Keeps any other cap already set; `writeOrgQuotas` replaces the caps
-    // whole, so each attempt reads them afresh: a retry after a clash with a
-    // concurrent quotas write merges onto that write, not over it.
-    await withConflictRetry(async () => {
-      const current = await prisma.org.findUnique({
-        where: { id: orgId },
-        select: { settings: true },
-      });
-      const quotas = readOrgQuotas(current?.settings, { orgId });
-      if (quotas.monthlyBudgetUsd !== undefined) return;
-      await writeOrgQuotas(orgId, { ...quotas, monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD });
-    });
+        const grantKept = orgProviderPolicySchema.safeParse(settings[ORG_PROVIDERS_KEY]).success;
+        const grantWritten = !grantKept && providers.approved.length > 0;
+        // No jurisdiction restriction: none is ruled for this app yet.
+        if (grantWritten) settings[ORG_PROVIDERS_KEY] = { approved: providers.approved };
+
+        const budgetKept = readOrgQuotas(row.settings, { orgId }).monthlyBudgetUsd !== undefined;
+        if (!budgetKept) {
+          // Beside every other cap and the meter limits, as stored.
+          const quotas = settings[ORG_QUOTAS_KEY];
+          settings[ORG_QUOTAS_KEY] = {
+            ...(isRecord(quotas) ? quotas : {}),
+            monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD,
+          };
+        }
+
+        if (grantWritten || !budgetKept) {
+          await tx.org.update({
+            where: { id: orgId },
+            data: { settings: settings as Prisma.InputJsonObject },
+          });
+        }
+        return { grantKept, grantWritten, budgetKept };
+      },
+      { isolationLevel: 'Serializable' }
+    )
+  );
+  const { grantKept, grantWritten, budgetKept } = outcome;
+
+  // Only when a grant was due: a kept policy is the admin's, whatever exists.
+  // The judges' provider missing means the workspace's judges and editor have
+  // no model until a platform admin creates it and grants it on `/admin`.
+  if (!grantKept && providers.missing.length > 0) {
+    logger.error(
+      providers.missing.includes(JUDGE_PROVIDER_SLUG)
+        ? 'The judges’ provider does not exist; the new workspace’s judges have no model'
+        : 'A workspace provider does not exist; the new workspace is not granted it',
+      { orgId, missing: providers.missing }
+    );
   }
 
   // This process at once; other processes within each cache's TTL. A policy
@@ -210,10 +244,11 @@ export async function equipWorkspace(
   // Never throws; the platformAgents maintenance job catches up on a failure.
   // Imported on use, as `createOrg` does; an import failure is logged too.
   // On a retry it runs whenever the org has a grant, not only when this run
-  // wrote it: an earlier attempt may have written the grant and then thrown
-  // (or timed out) before its reconcile, and that retry would otherwise skip
-  // it for good. The reconcile is idempotent.
-  if (options.reconcile && (grant.written || grantKept)) {
+  // wrote it: an earlier attempt may have written the grant and then timed
+  // out before its reconcile, and that retry would otherwise skip it for
+  // good. The reconcile is idempotent.
+  if (options.reconcile && (grantWritten || grantKept)) {
+    signal?.throwIfAborted();
     await import('@/lib/orchestration/agents/reconcile-platform-agents')
       .then(({ tryReconcilePlatformAgents }) => tryReconcilePlatformAgents(orgId, source))
       .catch((error: unknown) => {
@@ -223,8 +258,11 @@ export async function equipWorkspace(
       });
   }
 
-  logger.info('Workspace equipped', { orgId, granted: grant.judges, grantKept, budgetKept });
-  return { granted: grant.judges, grantKept, budgetKept };
+  const granted = grantWritten && providers.judges;
+  const fields = { orgId, granted, grantWritten, grantKept, budgetKept };
+  if (grantWritten || grantKept) logger.info('Workspace equipped', fields);
+  else logger.warn('Workspace given its budget but no provider: none exists to grant', fields);
+  return { granted, grantKept, budgetKept };
 }
 
 /**

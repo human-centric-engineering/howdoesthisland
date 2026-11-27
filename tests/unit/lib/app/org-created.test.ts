@@ -63,13 +63,19 @@ describe('initAppOrgCreatedHooks', () => {
   it('equips the org on the first run without asking for a reconcile', async () => {
     await registeredHook()(ctx(false));
 
-    expect(mockEquip).toHaveBeenCalledWith(ORG_ID, 'app:equip-workspace', { reconcile: false });
+    expect(mockEquip).toHaveBeenCalledWith(ORG_ID, 'app:equip-workspace', {
+      reconcile: false,
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('asks for a reconcile on a retry, when the agents are already placed', async () => {
     await registeredHook()(ctx(true));
 
-    expect(mockEquip).toHaveBeenCalledWith(ORG_ID, 'app:equip-workspace', { reconcile: true });
+    expect(mockEquip).toHaveBeenCalledWith(ORG_ID, 'app:equip-workspace', {
+      reconcile: true,
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('lets an equip failure through, so the hook stays owed and is retried', async () => {

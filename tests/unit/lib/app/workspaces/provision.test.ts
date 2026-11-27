@@ -186,6 +186,7 @@ describe('equipWorkspace on a fresh org', () => {
     expect(mockLogger.info).toHaveBeenCalledWith('Workspace equipped', {
       orgId: ORG_ID,
       granted: true,
+      grantWritten: true,
       grantKept: false,
       budgetKept: false,
     });
@@ -193,7 +194,7 @@ describe('equipWorkspace on a fresh org', () => {
 });
 
 describe('equipWorkspace on an org that already has values (a retry)', () => {
-  it('keeps an existing provider policy and does not look the providers up', async () => {
+  it('keeps an existing provider policy, and logs no missing provider for it', async () => {
     store.settings.set(ORG_ID, { providers: { approved: ['cmadminchoice0000000000001'] } });
 
     const result = await equipWorkspace(ORG_ID, 'src');
@@ -202,8 +203,41 @@ describe('equipWorkspace on an org that already has values (a retry)', () => {
     expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({
       approved: ['cmadminchoice0000000000001'],
     });
-    expect(fakePrisma.aiProviderConfig.findMany).not.toHaveBeenCalled();
+    expect(mockLogger.error).not.toHaveBeenCalled();
     // The budget was still missing, so it is still given.
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
+  });
+
+  it('replaces a policy core cannot read, which grants nothing', async () => {
+    store.settings.set(ORG_ID, { providers: { approved: 'x' } });
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toMatchObject({ granted: true, grantKept: false });
+    expect(readOrgProviderPolicy(store.settings.get(ORG_ID))).toEqual({ approved: BOTH });
+  });
+
+  it('writes nothing once its signal has aborted, so the hook stays owed', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('hook timed out'));
+
+    await expect(
+      equipWorkspace(ORG_ID, 'src', { reconcile: true, signal: controller.signal })
+    ).rejects.toThrow('hook timed out');
+    expect(fakePrisma.org.update).not.toHaveBeenCalled();
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('warns, not "equipped", when no provider exists to grant', async () => {
+    store.providers.clear();
+
+    await equipWorkspace(ORG_ID, 'src');
+
+    expect(mockLogger.info).not.toHaveBeenCalledWith('Workspace equipped', expect.anything());
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('no provider'),
+      expect.objectContaining({ grantWritten: false, grantKept: false })
+    );
     expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
   });
 
@@ -373,14 +407,34 @@ describe('equipWorkspace failures', () => {
   });
 
   it('retries a clashing write, so both values still land', async () => {
-    store.conflicts = 2; // the grant clashes twice, then lands on its third try
+    store.conflicts = 2; // the one write clashes twice, then lands on its third try
 
     await equipWorkspace(ORG_ID, 'src');
 
     const settings = store.settings.get(ORG_ID);
     expect(readOrgProviderPolicy(settings)).toEqual({ approved: BOTH });
     expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 10 });
-    expect(fakePrisma.org.update).toHaveBeenCalledTimes(4);
+    expect(fakePrisma.org.update).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps an admin’s values that landed during a clash, re-deciding on the retry', async () => {
+    store.conflicts = 1;
+    // The clash is an admin's save of a grant and a budget, committed first.
+    fakePrisma.org.update.mockImplementationOnce(() => {
+      store.conflicts--;
+      store.settings.set(ORG_ID, {
+        providers: { approved: [OPENAI_ID] },
+        quotas: { monthlyBudgetUsd: 50 },
+      });
+      return Promise.reject(store.conflictError);
+    });
+
+    const result = await equipWorkspace(ORG_ID, 'src');
+
+    expect(result).toEqual({ granted: false, grantKept: true, budgetKept: true });
+    const settings = store.settings.get(ORG_ID);
+    expect(readOrgProviderPolicy(settings)).toEqual({ approved: [OPENAI_ID] });
+    expect(readOrgQuotas(settings)).toEqual({ monthlyBudgetUsd: 50 });
   });
 
   it('gives up on a write after three clashes and throws the last', async () => {
