@@ -32,7 +32,8 @@ import { requireAuth } from '@/lib/auth/utils';
 import { API } from '@/lib/api/endpoints';
 import { loadServerData, requireServerData } from '@/lib/api/server-load';
 import { isMultiTenant } from '@/lib/tenancy/context';
-import { orgAdministers } from '@/lib/tenancy/roles';
+import { ORG_OWNER_ROLE, orgAdministers } from '@/lib/tenancy/roles';
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { LoadFailedNotice } from '@/components/admin/load-failed-notice';
 import { MembersTable, type OrgMember } from '@/components/admin/members/members-table';
 import { WorkspaceInviteForm } from '@/components/app/workspaces/workspace-invite-form';
@@ -101,7 +102,10 @@ export default async function WorkspaceSettingsPage() {
       loadServerData<unknown>(API.ORGS.members(active.id)),
       loadServerData<unknown>(judgeModelsEndpoint(active.id)),
       loadServerData<unknown>(mcpKeysEndpoint(active.id)),
-      loadServerData<unknown>(API.ORGS.supportGrants(active.id)),
+      // The install workspace needs no grant, so its section shows none.
+      active.id === INSTALL_ORG_ID
+        ? null
+        : loadServerData<unknown>(API.ORGS.supportGrants(active.id)),
     ]);
     const parsed = loaded.ok ? workspaceMembersSchema.safeParse(loaded.data) : null;
     members = parsed?.success ? parsed.data.members : null;
@@ -109,7 +113,7 @@ export default async function WorkspaceSettingsPage() {
     judges = parsedJudges?.success ? parsedJudges.data.agents : null;
     const parsedMcpKeys = loadedMcpKeys.ok ? mcpKeyListSchema.safeParse(loadedMcpKeys.data) : null;
     mcpKeys = parsedMcpKeys?.success ? parsedMcpKeys.data.keys : null;
-    const parsedGrants = loadedGrants.ok ? supportGrantsSchema.safeParse(loadedGrants.data) : null;
+    const parsedGrants = loadedGrants?.ok ? supportGrantsSchema.safeParse(loadedGrants.data) : null;
     supportGrants = parsedGrants?.success ? parsedGrants.data.grants : null;
   }
 
@@ -153,7 +157,16 @@ export default async function WorkspaceSettingsPage() {
           ) : (
             <LoadFailedNotice what="the AI assistant keys" />
           )}
-          <WorkspaceSupportAccess orgId={active.id} orgRole={active.role} grants={supportGrants} />
+          <WorkspaceSupportAccess
+            orgId={active.id}
+            orgRole={active.role}
+            grants={supportGrants}
+            ownerIds={
+              members
+                ? members.filter((member) => member.role === ORG_OWNER_ROLE).map((m) => m.id)
+                : null
+            }
+          />
         </>
       ) : (
         <p className="text-muted-foreground">

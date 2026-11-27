@@ -16,6 +16,13 @@
  *
  * The install workspace is the platform's own, so its staff need no grant to
  * work in it, and the API refuses one.
+ *
+ * "Open" (not revoked, not expired) is not the same as "support can enter".
+ * Core's entry check (`verifiedSupportGrant`, `lib/tenancy/entry.ts`) also
+ * needs whoever made the grant to still be an OWNER here, and the grants
+ * route does not say whether that holds. So the summary checks the granter
+ * against the roster the page already loaded, and claims entry only when it
+ * can see they are still an owner.
  */
 
 import { ClientDate } from '@/components/ui/client-date';
@@ -36,10 +43,18 @@ export interface WorkspaceSupportAccessProps {
   orgRole: OrgRole;
   /** The workspace's grants, newest first; `null` when they could not be loaded. */
   grants: SupportGrantRow[] | null;
+  /** The ids of this workspace's owners; `null` when the roster could not be loaded. */
+  ownerIds: string[] | null;
 }
 
 /** Whether support may enter now, and on what terms. */
-function OpenGrantSummary({ grants }: { grants: SupportGrantRow[] }) {
+function OpenGrantSummary({
+  grants,
+  ownerIds,
+}: {
+  grants: SupportGrantRow[];
+  ownerIds: string[] | null;
+}) {
   const open = grants.find((grant) => grant.open);
   if (!open) {
     return (
@@ -48,19 +63,39 @@ function OpenGrantSummary({ grants }: { grants: SupportGrantRow[] }) {
       </p>
     );
   }
+  const terms = (
+    <>
+      at <strong>{SUPPORT_GRANT_LEVEL_LABELS[open.level]}</strong> level until{' '}
+      <ClientDate date={open.expiresAt} showTime />
+    </>
+  );
+  // A deleted granter, or one the roster shows is no longer an owner, makes
+  // the grant unusable. With no roster, say only what the grant says.
+  const granterIsOwner = open.grantedBy && ownerIds ? ownerIds.includes(open.grantedBy.id) : null;
+  const lapsed = open.grantedBy === null || granterIsOwner === false;
   return (
     <div className="space-y-1 text-sm" data-testid="support-open-grant">
-      <p>
-        Support can enter this workspace at{' '}
-        <strong>{SUPPORT_GRANT_LEVEL_LABELS[open.level]}</strong> level until{' '}
-        <ClientDate date={open.expiresAt} showTime />.
-      </p>
+      {lapsed ? (
+        <p>
+          A grant is open {terms}, but whoever made it is no longer an owner of this workspace, so
+          support cannot use it. An owner can grant again to let support in.
+        </p>
+      ) : granterIsOwner ? (
+        <p>Support can enter this workspace {terms}.</p>
+      ) : (
+        <p>A grant is open {terms}.</p>
+      )}
       <p className="text-muted-foreground break-words whitespace-pre-wrap">Reason: {open.reason}</p>
     </div>
   );
 }
 
-export function WorkspaceSupportAccess({ orgId, orgRole, grants }: WorkspaceSupportAccessProps) {
+export function WorkspaceSupportAccess({
+  orgId,
+  orgRole,
+  grants,
+  ownerIds,
+}: WorkspaceSupportAccessProps) {
   if (!orgAdministers(orgRole)) return null;
   const isOwner = orgRole === ORG_OWNER_ROLE;
 
@@ -82,13 +117,13 @@ export function WorkspaceSupportAccess({ orgId, orgRole, grants }: WorkspaceSupp
         </p>
       ) : grants ? (
         <>
-          <OpenGrantSummary grants={grants} />
+          <OpenGrantSummary grants={grants} ownerIds={ownerIds} />
           {isOwner ? (
             <SupportGrantForm orgId={orgId} replacesOpenGrant={grants.some((g) => g.open)} />
           ) : (
             <p className="text-muted-foreground text-sm">
-              Only an owner of this workspace can grant support access. You can revoke an open
-              grant.
+              Only an owner of this workspace can grant support access.
+              {grants.some((g) => g.open) && ' You can revoke the open grant below.'}
             </p>
           )}
           <SupportGrantsTable orgId={orgId} grants={grants} />
@@ -97,7 +132,14 @@ export function WorkspaceSupportAccess({ orgId, orgRole, grants }: WorkspaceSupp
       ) : (
         // No form without the list: granting replaces the open grant, and the
         // owner is told so only when the page knows there is one.
-        <LoadFailedNotice what="this workspace's support grants" />
+        <>
+          <LoadFailedNotice what="this workspace's support grants" />
+          {isOwner && (
+            <p className="text-muted-foreground text-sm">
+              Support access cannot be granted until they load.
+            </p>
+          )}
+        </>
       )}
     </section>
   );

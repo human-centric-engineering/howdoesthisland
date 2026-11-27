@@ -46,6 +46,9 @@ const REVOKED: SupportGrantRow = {
   open: false,
 };
 
+/** The workspace's owners, as the page reads them from the roster. */
+const OWNERS = ['u-owner'];
+
 /** The activity table's own fetch: one page, empty. */
 const fetchMock = vi.fn();
 
@@ -68,7 +71,14 @@ describe('WorkspaceSupportAccess', () => {
 
   describe('for an OWNER', () => {
     it('shows the open grant, the history and the grant form', async () => {
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[OPEN, REVOKED]} />);
+      render(
+        <WorkspaceSupportAccess
+          orgId="ws-1"
+          orgRole="OWNER"
+          grants={[OPEN, REVOKED]}
+          ownerIds={OWNERS}
+        />
+      );
 
       const summary = screen.getByTestId('support-open-grant');
       expect(summary).toHaveTextContent('Support can enter this workspace at Read-only level');
@@ -83,8 +93,50 @@ describe('WorkspaceSupportAccess', () => {
       );
     });
 
+    it('says support cannot use an open grant whose granter is no longer an owner', () => {
+      render(
+        <WorkspaceSupportAccess
+          orgId="ws-1"
+          orgRole="OWNER"
+          grants={[OPEN]}
+          ownerIds={['u-other']}
+        />
+      );
+
+      const summary = screen.getByTestId('support-open-grant');
+      expect(summary).toHaveTextContent('A grant is open at Read-only level until');
+      expect(summary).toHaveTextContent(
+        'no longer an owner of this workspace, so support cannot use it'
+      );
+      expect(summary).not.toHaveTextContent('Support can enter');
+    });
+
+    it('says support cannot use an open grant whose granter account is gone', () => {
+      render(
+        <WorkspaceSupportAccess
+          orgId="ws-1"
+          orgRole="OWNER"
+          grants={[{ ...OPEN, grantedBy: null }]}
+          ownerIds={OWNERS}
+        />
+      );
+
+      expect(screen.getByTestId('support-open-grant')).toHaveTextContent('support cannot use it');
+    });
+
+    it('claims no entry when the roster could not be loaded', () => {
+      render(
+        <WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[OPEN]} ownerIds={null} />
+      );
+
+      const summary = screen.getByTestId('support-open-grant');
+      expect(summary).toHaveTextContent('A grant is open at Read-only level until');
+      expect(summary).not.toHaveTextContent('Support can enter');
+      expect(summary).not.toHaveTextContent('cannot use it');
+    });
+
     it('says nothing is granted when there is no open grant', () => {
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[]} />);
+      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[]} ownerIds={OWNERS} />);
 
       expect(screen.getByTestId('support-open-grant')).toHaveTextContent(
         'Support cannot enter this workspace'
@@ -98,7 +150,7 @@ describe('WorkspaceSupportAccess', () => {
     it("grants through core's route for this workspace", async () => {
       vi.mocked(apiClient.post).mockResolvedValue({ grant: OPEN, replacedGrantIds: [] });
       const user = userEvent.setup();
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[]} />);
+      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[]} ownerIds={OWNERS} />);
 
       await user.type(screen.getByRole('textbox', { name: /^Reason/ }), 'Ticket 42');
       await user.click(screen.getByRole('button', { name: /Grant access/ }));
@@ -115,7 +167,7 @@ describe('WorkspaceSupportAccess', () => {
         new APIClientError('Only an owner may grant support access', 'FORBIDDEN', 403)
       );
       const user = userEvent.setup();
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[]} />);
+      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[]} ownerIds={OWNERS} />);
 
       await user.type(screen.getByRole('textbox', { name: /^Reason/ }), 'Ticket 42');
       await user.click(screen.getByRole('button', { name: /Grant access/ }));
@@ -129,7 +181,9 @@ describe('WorkspaceSupportAccess', () => {
     it("revokes the open grant through core's route for this workspace", async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ revoked: true });
       const user = userEvent.setup();
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[OPEN]} />);
+      render(
+        <WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[OPEN]} ownerIds={OWNERS} />
+      );
 
       await user.click(screen.getByRole('button', { name: 'Revoke' }));
       await user.click(
@@ -147,7 +201,9 @@ describe('WorkspaceSupportAccess', () => {
         new APIClientError('Support grant not found', 'NOT_FOUND', 404)
       );
       const user = userEvent.setup();
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[OPEN]} />);
+      render(
+        <WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={[OPEN]} ownerIds={OWNERS} />
+      );
 
       await user.click(screen.getByRole('button', { name: 'Revoke' }));
       const dialog = screen.getByRole('alertdialog');
@@ -160,19 +216,39 @@ describe('WorkspaceSupportAccess', () => {
 
   describe('for an ADMIN', () => {
     it('shows the grants and revoke, with no grant form', () => {
-      render(<WorkspaceSupportAccess orgId="ws-1" orgRole="ADMIN" grants={[OPEN, REVOKED]} />);
+      render(
+        <WorkspaceSupportAccess
+          orgId="ws-1"
+          orgRole="ADMIN"
+          grants={[OPEN, REVOKED]}
+          ownerIds={OWNERS}
+        />
+      );
 
       expect(screen.getByTestId('support-open-grant')).toHaveTextContent('Read-only');
       expect(screen.getByText(/Only an owner of this workspace can grant/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Grant access|Replace grant/ })).toBeNull();
       expect(screen.queryByRole('textbox', { name: /^Reason/ })).toBeNull();
+      expect(screen.getByText(/You can revoke the open grant below/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+    });
+
+    it('offers no revoke when no grant is open', () => {
+      render(
+        <WorkspaceSupportAccess orgId="ws-1" orgRole="ADMIN" grants={[REVOKED]} ownerIds={OWNERS} />
+      );
+
+      expect(screen.getByText(/Only an owner of this workspace can grant/)).toBeInTheDocument();
+      expect(screen.queryByText(/You can revoke/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull();
     });
 
     it("revokes through core's route for this workspace", async () => {
       vi.mocked(apiClient.delete).mockResolvedValue({ revoked: true });
       const user = userEvent.setup();
-      render(<WorkspaceSupportAccess orgId="ws-2" orgRole="ADMIN" grants={[OPEN]} />);
+      render(
+        <WorkspaceSupportAccess orgId="ws-2" orgRole="ADMIN" grants={[OPEN]} ownerIds={OWNERS} />
+      );
 
       await user.click(screen.getByRole('button', { name: 'Revoke' }));
       await user.click(
@@ -187,22 +263,32 @@ describe('WorkspaceSupportAccess', () => {
 
   it('shows a MEMBER nothing', () => {
     const { container } = render(
-      <WorkspaceSupportAccess orgId="ws-1" orgRole="MEMBER" grants={[OPEN]} />
+      <WorkspaceSupportAccess orgId="ws-1" orgRole="MEMBER" grants={[OPEN]} ownerIds={OWNERS} />
     );
 
     expect(container).toBeEmptyDOMElement();
   });
 
   it('says the grants could not be loaded, with no form, when they failed', () => {
-    render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={null} />);
+    render(<WorkspaceSupportAccess orgId="ws-1" orgRole="OWNER" grants={null} ownerIds={OWNERS} />);
 
     expect(screen.getByText(/this workspace's support grants/)).toBeInTheDocument();
+    expect(screen.getByText(/cannot be granted until they load/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Grant access/ })).toBeNull();
     expect(screen.queryByTestId('support-open-grant')).toBeNull();
   });
 
+  it('does not tell an ADMIN that granting waits on the load', () => {
+    render(<WorkspaceSupportAccess orgId="ws-1" orgRole="ADMIN" grants={null} ownerIds={OWNERS} />);
+
+    expect(screen.getByText(/this workspace's support grants/)).toBeInTheDocument();
+    expect(screen.queryByText(/cannot be granted until they load/)).toBeNull();
+  });
+
   it('offers no grant in the install workspace, which needs none', () => {
-    render(<WorkspaceSupportAccess orgId="install" orgRole="OWNER" grants={[]} />);
+    render(
+      <WorkspaceSupportAccess orgId="install" orgRole="OWNER" grants={[]} ownerIds={OWNERS} />
+    );
 
     expect(screen.getByText(/platform.s own workspace/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Grant access/ })).toBeNull();

@@ -70,12 +70,15 @@ vi.mock('@/components/app/workspaces/workspace-support-access', () => ({
     orgId,
     orgRole,
     grants,
+    ownerIds,
   }: {
     orgId: string;
     orgRole: string;
     grants: Array<{ id: string }> | null;
+    ownerIds: string[] | null;
   }) => (
     <div
+      data-owners={ownerIds ? ownerIds.join(',') : 'failed'}
       data-testid="support-access"
       data-org={orgId}
       data-role={orgRole}
@@ -283,6 +286,31 @@ describe('WorkspaceSettingsPage', () => {
     expect(section).toHaveAttribute('data-org', 'org-1');
     expect(section).toHaveAttribute('data-role', role);
     expect(section).toHaveAttribute('data-grants', 'g-1');
+    // The roster's owners, so the section can tell whether a grant still admits support.
+    expect(section).toHaveAttribute('data-owners', 'me');
+  });
+
+  it('hands the section no owners when the roster fails', async () => {
+    m.requireServerData.mockResolvedValue(orgs('OWNER'));
+    mockLoads({ roster: { ok: false, failure: { kind: 'http', status: 500 } } });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByTestId('support-access')).toHaveAttribute('data-owners', 'failed');
+  });
+
+  it('does not load support grants for the install workspace', async () => {
+    m.requireServerData.mockResolvedValue({
+      data: {
+        activeOrgId: 'install',
+        orgs: [{ id: 'install', name: 'Platform', status: 'ACTIVE', role: 'OWNER', active: true }],
+      },
+    });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(m.loadServerData).not.toHaveBeenCalledWith('/api/v1/orgs/install/support-grants');
+    expect(screen.getByTestId('support-access')).toHaveAttribute('data-org', 'install');
   });
 
   it('hands the section null when the grants body is malformed', async () => {

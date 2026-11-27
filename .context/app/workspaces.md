@@ -75,6 +75,16 @@ but no form (owner ruling at t-97). A `MEMBER` cannot read the grants and sees
 no section. The install workspace needs no grant, so the section says so and
 offers none.
 
+An open grant (not revoked, not expired) is not always one support can use.
+Core's entry check (`verifiedSupportGrant` in `lib/tenancy/entry.ts`) also
+needs whoever made it to still be an owner of the workspace, and the grants
+route does not report that. So the summary checks the granter against the
+roster the page already loads: it says support can enter only when it can see
+the granter is still an owner, says the grant is unusable when they are not or
+their account is gone, and says only that a grant is open when the roster did
+not load. A route field saying whether the grant admits support would remove
+that check; it is not in core today.
+
 Core's components say "organisation" where the rest of the page says
 "workspace". They are left as they are rather than diverged for wording.
 
