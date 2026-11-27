@@ -4,7 +4,7 @@
  * use are left out; zod drops them.
  */
 import { z } from 'zod';
-import { ORG_ROLES, ORG_STATUSES } from '@/lib/tenancy/roles';
+import { ORG_ROLES, ORG_STATUSES, SUPPORT_GRANT_LEVELS } from '@/lib/tenancy/roles';
 
 /** One row of `GET /api/v1/orgs`. */
 export const workspaceSummarySchema = z.object({
@@ -69,3 +69,22 @@ export const acceptedInvitationSchema = z.object({ orgId: z.string(), role: z.en
 
 /** `POST /api/v1/workspaces/[id]/invitations` data. */
 export const sentInvitationSchema = z.object({ email: z.string(), message: z.string() });
+
+/** A person named on a support grant; `null` once their account is gone. */
+const grantPersonSchema = z.object({ id: z.string(), name: z.string().nullable() }).nullable();
+
+/** One grant of `GET /api/v1/orgs/[id]/support-grants`, in the shape core's `SupportGrantsTable` takes (t-97). */
+export const supportGrantSchema = z.object({
+  id: z.string(),
+  level: z.enum(SUPPORT_GRANT_LEVELS),
+  reason: z.string(),
+  expiresAt: z.string(),
+  createdAt: z.string(),
+  revokedAt: z.string().nullable(),
+  grantedBy: grantPersonSchema,
+  revokedBy: grantPersonSchema,
+  open: z.boolean(),
+});
+
+/** `GET /api/v1/orgs/[id]/support-grants` data. */
+export const supportGrantsSchema = z.object({ grants: z.array(supportGrantSchema) });

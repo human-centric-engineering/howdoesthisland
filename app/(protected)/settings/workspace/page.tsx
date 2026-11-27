@@ -13,7 +13,9 @@
  * both and answers the same either way. Judge models are the app's
  * `GET /api/v1/workspaces/[id]/judges`, shown by `JudgeModels`. MCP keys are
  * the app's `GET /api/v1/workspaces/[id]/mcp-keys`, shown by `McpKeysManager`
- * (t-95).
+ * (t-95). Support access is core's `GET /api/v1/orgs/[id]/support-grants`,
+ * shown by `WorkspaceSupportAccess` over core's support-access components
+ * (t-97).
  *
  * This page adds no rule of its own: the API decides who may do what. Core
  * lets an `OWNER` or `ADMIN` read the roster and invite, and nobody else, so
@@ -35,6 +37,8 @@ import { LoadFailedNotice } from '@/components/admin/load-failed-notice';
 import { MembersTable, type OrgMember } from '@/components/admin/members/members-table';
 import { WorkspaceInviteForm } from '@/components/app/workspaces/workspace-invite-form';
 import { WorkspaceInvitations } from '@/components/app/workspaces/workspace-invitations';
+import { WorkspaceSupportAccess } from '@/components/app/workspaces/workspace-support-access';
+import type { SupportGrantRow } from '@/components/admin/support-access/support-grants-table';
 import { JudgeModels } from '@/components/app/settings/judge-models';
 import { judgeModelListSchema, judgeModelsEndpoint } from '@/components/app/settings/schemas';
 import { McpKeysManager } from '@/components/app/settings/mcp-keys/mcp-keys-manager';
@@ -43,6 +47,7 @@ import type { McpKeyRow } from '@/components/app/settings/mcp-keys/schemas';
 import type { JudgeModelChoiceView } from '@/components/app/settings/schemas';
 import {
   myInvitationsSchema,
+  supportGrantsSchema,
   WORKSPACE_INVITATIONS_ENDPOINT,
   workspaceListSchema,
   workspaceMembersSchema,
@@ -90,11 +95,13 @@ export default async function WorkspaceSettingsPage() {
   let members: OrgMember[] | null = null;
   let judges: JudgeModelChoiceView[] | null = null;
   let mcpKeys: McpKeyRow[] | null = null;
+  let supportGrants: SupportGrantRow[] | null = null;
   if (administers) {
-    const [loaded, loadedJudges, loadedMcpKeys] = await Promise.all([
+    const [loaded, loadedJudges, loadedMcpKeys, loadedGrants] = await Promise.all([
       loadServerData<unknown>(API.ORGS.members(active.id)),
       loadServerData<unknown>(judgeModelsEndpoint(active.id)),
       loadServerData<unknown>(mcpKeysEndpoint(active.id)),
+      loadServerData<unknown>(API.ORGS.supportGrants(active.id)),
     ]);
     const parsed = loaded.ok ? workspaceMembersSchema.safeParse(loaded.data) : null;
     members = parsed?.success ? parsed.data.members : null;
@@ -102,6 +109,8 @@ export default async function WorkspaceSettingsPage() {
     judges = parsedJudges?.success ? parsedJudges.data.agents : null;
     const parsedMcpKeys = loadedMcpKeys.ok ? mcpKeyListSchema.safeParse(loadedMcpKeys.data) : null;
     mcpKeys = parsedMcpKeys?.success ? parsedMcpKeys.data.keys : null;
+    const parsedGrants = loadedGrants.ok ? supportGrantsSchema.safeParse(loadedGrants.data) : null;
+    supportGrants = parsedGrants?.success ? parsedGrants.data.grants : null;
   }
 
   return (
@@ -110,8 +119,8 @@ export default async function WorkspaceSettingsPage() {
         <p className="hd-slug">Workspace</p>
         <h1 className="text-2xl font-bold">{active.name}</h1>
         <p className="text-muted-foreground">
-          Who is in this workspace, their roles, inviting people in, the models its judges use, and
-          its AI assistant keys.
+          Who is in this workspace, their roles, inviting people in, the models its judges use, its
+          AI assistant keys, and support access.
         </p>
       </div>
 
@@ -144,6 +153,7 @@ export default async function WorkspaceSettingsPage() {
           ) : (
             <LoadFailedNotice what="the AI assistant keys" />
           )}
+          <WorkspaceSupportAccess orgId={active.id} orgRole={active.role} grants={supportGrants} />
         </>
       ) : (
         <p className="text-muted-foreground">
