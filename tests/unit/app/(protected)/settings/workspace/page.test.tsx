@@ -65,6 +65,28 @@ vi.mock('@/components/admin/members/members-table', () => ({
   ),
 }));
 
+vi.mock('@/components/app/workspaces/workspace-support-access', () => ({
+  WorkspaceSupportAccess: ({
+    orgId,
+    orgRole,
+    grants,
+    ownerIds,
+  }: {
+    orgId: string;
+    orgRole: string;
+    grants: Array<{ id: string }> | null;
+    ownerIds: string[] | null;
+  }) => (
+    <div
+      data-owners={ownerIds ? ownerIds.join(',') : 'failed'}
+      data-testid="support-access"
+      data-org={orgId}
+      data-role={orgRole}
+      data-grants={grants ? grants.map((grant) => grant.id).join(',') : 'failed'}
+    />
+  ),
+}));
+
 import WorkspaceSettingsPage from '@/app/(protected)/settings/workspace/page';
 
 const orgs = (role: string, active = true) => ({
@@ -100,10 +122,31 @@ const ROSTER = {
   },
 };
 
-/** Answers the two server loads by URL: the caller's invitations and the roster. */
-function mockLoads(overrides: { invitations?: unknown; roster?: unknown } = {}) {
+const GRANTS = {
+  ok: true,
+  data: {
+    orgId: 'org-1',
+    grants: [
+      {
+        id: 'g-1',
+        level: 'ADMIN',
+        reason: 'Ticket 42',
+        expiresAt: '2026-12-01T00:00:00.000Z',
+        createdAt: '2026-11-27T00:00:00.000Z',
+        revokedAt: null,
+        grantedBy: { id: 'me', name: 'Me' },
+        revokedBy: null,
+        open: true,
+      },
+    ],
+  },
+};
+
+/** Answers the server loads by URL: the caller's invitations, the support grants, and the roster. */
+function mockLoads(overrides: { invitations?: unknown; roster?: unknown; grants?: unknown } = {}) {
   m.loadServerData.mockImplementation(async (url: string) => {
     if (url === '/api/v1/workspaces/invitations') return overrides.invitations ?? INVITATIONS;
+    if (url === '/api/v1/orgs/org-1/support-grants') return overrides.grants ?? GRANTS;
     return overrides.roster ?? ROSTER;
   });
 }
@@ -231,5 +274,60 @@ describe('WorkspaceSettingsPage', () => {
     render(await WorkspaceSettingsPage());
 
     expect(screen.getByText(/the members of this workspace/)).toBeInTheDocument();
+  });
+
+  it.each(['OWNER', 'ADMIN'])("hands an %s the active workspace's support grants", async (role) => {
+    m.requireServerData.mockResolvedValue(orgs(role));
+
+    render(await WorkspaceSettingsPage());
+
+    expect(m.loadServerData).toHaveBeenCalledWith('/api/v1/orgs/org-1/support-grants');
+    const section = screen.getByTestId('support-access');
+    expect(section).toHaveAttribute('data-org', 'org-1');
+    expect(section).toHaveAttribute('data-role', role);
+    expect(section).toHaveAttribute('data-grants', 'g-1');
+    // The roster's owners, so the section can tell whether a grant still admits support.
+    expect(section).toHaveAttribute('data-owners', 'me');
+  });
+
+  it('hands the section no owners when the roster fails', async () => {
+    m.requireServerData.mockResolvedValue(orgs('OWNER'));
+    mockLoads({ roster: { ok: false, failure: { kind: 'http', status: 500 } } });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByTestId('support-access')).toHaveAttribute('data-owners', 'failed');
+  });
+
+  it('does not load support grants for the install workspace', async () => {
+    m.requireServerData.mockResolvedValue({
+      data: {
+        activeOrgId: 'install',
+        orgs: [{ id: 'install', name: 'Platform', status: 'ACTIVE', role: 'OWNER', active: true }],
+      },
+    });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(m.loadServerData).not.toHaveBeenCalledWith('/api/v1/orgs/install/support-grants');
+    expect(screen.getByTestId('support-access')).toHaveAttribute('data-org', 'install');
+  });
+
+  it('hands the section null when the grants body is malformed', async () => {
+    m.requireServerData.mockResolvedValue(orgs('OWNER'));
+    mockLoads({ grants: { ok: true, data: { grants: [{ id: 'g-1', level: 'GOD' }] } } });
+
+    render(await WorkspaceSettingsPage());
+
+    expect(screen.getByTestId('support-access')).toHaveAttribute('data-grants', 'failed');
+  });
+
+  it('neither loads nor shows support access for a member', async () => {
+    m.requireServerData.mockResolvedValue(orgs('MEMBER'));
+
+    render(await WorkspaceSettingsPage());
+
+    expect(m.loadServerData).not.toHaveBeenCalledWith('/api/v1/orgs/org-1/support-grants');
+    expect(screen.queryByTestId('support-access')).not.toBeInTheDocument();
   });
 });

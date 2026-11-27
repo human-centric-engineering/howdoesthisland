@@ -14,6 +14,7 @@ the app's side; the org model itself is core's
 | Creating a team workspace (t-8)          | `POST /api/v1/workspaces` → `lib/app/workspaces/create.ts`                                                                                          |
 | Switching workspace                      | `components/app/workspaces/workspace-switcher.tsx`, in the header's slot                                                                            |
 | Members and invitations                  | `/settings/workspace` (`app/(protected)/settings/workspace/page.tsx`)                                                                               |
+| Support access (t-97)                    | `/settings/workspace`, `components/app/workspaces/workspace-support-access.tsx` over core's `/api/v1/orgs/[id]/support-grants`                      |
 | Inviting, account or not (t-9)           | `POST /api/v1/workspaces/[id]/invitations` → `lib/app/workspaces/invitations.ts`                                                                    |
 | Answering an invitation (t-9)            | `GET /api/v1/workspaces/invitations`, `POST …/invitations/[invitationId]/accept` and `/decline`                                                     |
 | The app's own settings (`settings.app`)  | `lib/app/workspaces/app-settings.ts`, the one writer of that key; the retention window's route is in [`assessments.md`](./assessments.md#retention) |
@@ -55,6 +56,38 @@ app's own route and form (below). It adds no rule of its own. Core
 admits only a workspace's `OWNER` or `ADMIN` to the roster and invitations, so
 a `MEMBER` is told to ask one of them instead. The page exists so a workspace
 owner manages people inside the app's frame rather than in `/admin`.
+
+## Support access (t-97)
+
+A workspace's consent for HCE support to work inside it. The settings page
+shows the open grant (its level, its reason and when it ends) or says there is
+none, then its most recent grants (core lists up to 50) and what support did
+under them. It reads core's
+`GET /api/v1/orgs/[id]/support-grants` and renders core's own
+`SupportGrantForm`, `SupportGrantsTable` and `SupportActivityTable`, unedited,
+which `/admin/support-access` used until t-64 closed `/admin` to platform
+admins.
+
+Core's rules decide who gets what, and the section only mirrors them. Only an
+`OWNER` can grant (`grantSupportAccess` checks the caller's own role, never
+platform standing), so only an owner gets the form. Anyone who can see a grant
+can end it, because ending access is always safe, so an `ADMIN` gets revoke
+but no form (owner ruling at t-97). A `MEMBER` cannot read the grants and sees
+no section. The install workspace needs no grant, so the section says so and
+offers none.
+
+An open grant (not revoked, not expired) is not always one support can use.
+Core's entry check (`verifiedSupportGrant` in `lib/tenancy/entry.ts`) also
+needs whoever made it to still be an owner of the workspace, and the grants
+route does not report that. So the summary checks the granter against the
+roster the page already loads: it says support can enter only when it can see
+the granter is still an owner, says the grant is unusable when they are not or
+their account is gone, and says only that a grant is open when the roster did
+not load. A route field saying whether the grant admits support would remove
+that check; it is not in core today.
+
+Core's components say "organisation" where the rest of the page says
+"workspace". They are left as they are rather than diverged for wording.
 
 ## Inviting people (t-9)
 
