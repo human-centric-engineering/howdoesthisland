@@ -7,7 +7,8 @@
  */
 import { z } from 'zod';
 import { cuidSchema, paginationQuerySchema, slugSchema } from '@/lib/validations/common';
-import { emailSchema } from '@/lib/validations/auth';
+import { createEmailSchema } from '@/lib/validations/auth';
+import { englishValidation, type ValidationT } from '@/lib/validations/messages';
 import { ORG_ROLES, ORG_STATUSES, SUPPORT_GRANT_LEVELS } from '@/lib/tenancy/roles';
 import { ORG_ID_SHAPE } from '@/lib/tenancy/resolver';
 import { PRIVACY_TIGHTENING_MODES } from '@/lib/orchestration/privacy/settings-policy';
@@ -255,6 +256,148 @@ export type OrgQuotas = z.infer<typeof orgQuotasSchema>;
 /** The caps an org's `quotas` slice may name, for the per-key read. */
 export const ORG_QUOTA_KEYS = ['monthlyBudgetUsd', 'requestsPerMinute'] as const;
 
+/**
+ * An entitlement switch's key (§135 t-1033): lower-case words joined by
+ * underscores, starting with a letter, such as `lead_gen`. It is what is
+ * stored on an org and what a surface will name to require it, so it is the
+ * one spelling that must not change once orgs hold it.
+ */
+export const ENTITLEMENT_KEY_PATTERN = /^[a-z][a-z0-9_]{0,47}$/;
+
+export const entitlementKeySchema = z
+  .string()
+  .regex(
+    ENTITLEMENT_KEY_PATTERN,
+    'A switch key is lower-case letters, digits and underscores, starting with a letter, at most 48 characters'
+  );
+
+/**
+ * The most switches an app may register, and so the most one change may set
+ * on, or off. A sanity limit, not a product limit.
+ */
+export const MAX_ORG_ENTITLEMENT_SWITCHES = 100;
+
+/**
+ * The most keys one org may hold in each stored list: room for every
+ * registered switch and for keys kept after an app stopped registering them,
+ * which every save keeps. A sanity limit on a bad write.
+ */
+const MAX_STORED_ENTITLEMENT_KEYS = 1000;
+
+/** Sorted and without duplicates; the limit counts what is left. */
+const entitlementKeyList = (max: number) =>
+  z
+    .array(entitlementKeySchema)
+    .max(MAX_STORED_ENTITLEMENT_KEYS * 2, 'Too many switches')
+    .transform((keys) => [...new Set(keys)].sort())
+    .refine((keys) => keys.length <= max, `At most ${max} switches`);
+
+const noKeyBothOnAndOff = (value: { on: string[]; off: string[] }) =>
+  !value.on.some((key) => value.off.includes(key));
+const BOTH_ON_AND_OFF = { message: 'A switch cannot be both on and off', path: ['off'] };
+
+/**
+ * One org's switches as STORED in `Org.settings.entitlements` (§135 t-1033):
+ * the keys set on and the keys set off. A key in neither has not been set on
+ * this org, so it gets that switch's `whenNothingSet`, which is a different
+ * answer from a key set off. Recording both is what lets a switch an app
+ * registers later reach an org that was saved before it existed. Each list is
+ * kept sorted and without duplicates, so two writes of the same set store the
+ * same value, and no key is in both.
+ */
+export const orgEntitlementsSchema = z
+  .object({
+    on: entitlementKeyList(MAX_STORED_ENTITLEMENT_KEYS),
+    off: entitlementKeyList(MAX_STORED_ENTITLEMENT_KEYS),
+  })
+  .strict()
+  .refine(noKeyBothOnAndOff, BOTH_ON_AND_OFF);
+
+export type OrgEntitlements = z.infer<typeof orgEntitlementsSchema>;
+
+/**
+ * `PATCH /api/v1/admin/orgs/[id]/entitlements` body: the registered switches
+ * to set on and to set off. A switch named in neither is left as it is, so a
+ * caller never turns off a switch it did not know about (one registered after
+ * its form loaded, or by a newer build during a deploy). Both keys are
+ * required, and empty lists change nothing.
+ */
+export const orgEntitlementsInputSchema = z
+  .object({
+    on: entitlementKeyList(MAX_ORG_ENTITLEMENT_SWITCHES),
+    off: entitlementKeyList(MAX_ORG_ENTITLEMENT_SWITCHES),
+  })
+  .strict()
+  .refine(noKeyBothOnAndOff, BOTH_ON_AND_OFF);
+
+export type OrgEntitlementsInput = z.infer<typeof orgEntitlementsInputSchema>;
+
+/**
+ * A meter's key (§135 t-1035): the same spelling as a switch key, such as
+ * `completed_conversations`. It is what an org's limit is stored under, so it
+ * must not change once orgs hold a limit for it.
+ */
+export const meterKeySchema = z
+  .string()
+  .regex(
+    ENTITLEMENT_KEY_PATTERN,
+    'A meter key is lower-case letters, digits and underscores, starting with a letter, at most 48 characters'
+  );
+
+/** The most meters an app may register. A sanity limit, not a product limit. */
+export const MAX_METERS = 50;
+
+/** The largest limit a meter may have: a sanity bound on a typo, not a plan. */
+export const MAX_METER_LIMIT = 1_000_000_000;
+
+/**
+ * One meter's limit: how many the org may have within the meter's window.
+ * Zero is allowed and refuses the first one.
+ */
+export const meterLimitSchema = z
+  .number()
+  .int('A limit must be a whole number')
+  .min(0, 'A limit must be zero or more')
+  .max(MAX_METER_LIMIT, 'A limit must be at most 1,000,000,000');
+
+/**
+ * The limits stored for one org, `Org.settings.quotas.meters` (§135 t-1035):
+ * meter key → limit. A meter with no entry has no limit. Bounded by a sanity
+ * limit on stored keys, since keys for meters an app no longer registers are
+ * kept by every save.
+ */
+const MAX_STORED_METER_LIMITS = 1000;
+
+export const orgMeterLimitsSchema = z
+  .record(meterKeySchema, meterLimitSchema)
+  .refine(
+    (limits) => Object.keys(limits).length <= MAX_STORED_METER_LIMITS,
+    'Too many meter limits'
+  );
+
+export type OrgMeterLimits = z.infer<typeof orgMeterLimitsSchema>;
+
+/**
+ * `PATCH /api/v1/admin/orgs/[id]/meters` body: the limits to set, by meter
+ * key, `null` to clear one. A meter not named is left as it is, so a caller
+ * never clears a limit it did not know about. At least one key.
+ */
+export const orgMeterLimitsInputSchema = z
+  .object({
+    limits: z
+      .record(meterKeySchema, meterLimitSchema.nullable())
+      .refine((limits) => Object.keys(limits).length > 0, 'Name at least one meter')
+      // Clearing names kept keys too, so the bound is what can be stored; a
+      // limit set on a key nothing registers is refused by the route.
+      .refine(
+        (limits) => Object.keys(limits).length <= MAX_STORED_METER_LIMITS,
+        `At most ${MAX_STORED_METER_LIMITS} meters`
+      ),
+  })
+  .strict();
+
+export type OrgMeterLimitsInput = z.infer<typeof orgMeterLimitsInputSchema>;
+
 /** The kinds of name an org may protect: people and organisations (§127, t-1010). */
 export const ORG_PROTECTED_TERM_TYPES = ['PERSON', 'ORG'] as const;
 
@@ -387,16 +530,22 @@ export type UpdateOrgMemberInput = z.infer<typeof updateOrgMemberSchema>;
  * no org: the invitee joins the org the URL names, as a platform USER. Keys
  * outside the schema are dropped, so a `role` sent here sets nothing.
  */
-export const inviteOrgMemberSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, 'Name is required')
-    .max(100, 'Name must be less than 100 characters'),
-  email: emailSchema,
-  /** Absent ⇒ MEMBER on acceptance. OWNER needs the inviter's owner standing. */
-  orgRole: z.enum(ORG_ROLES).optional(),
-});
+type InviteOrgMemberShape = {
+  name: z.ZodString;
+  email: z.ZodString;
+  orgRole: z.ZodOptional<z.ZodEnum<{ [K in (typeof ORG_ROLES)[number]]: K }>>;
+};
+
+/** The invitation body, with its messages from `t` (§138 t-1074): the form passes its translator. */
+export function createInviteOrgMemberSchema(t: ValidationT): z.ZodObject<InviteOrgMemberShape> {
+  return z.object({
+    name: z.string().trim().min(1, t('nameRequired')).max(100, t('nameTooLong')),
+    email: createEmailSchema(t),
+    /** Absent ⇒ MEMBER on acceptance. OWNER needs the inviter's owner standing. */
+    orgRole: z.enum(ORG_ROLES).optional(),
+  });
+}
+export const inviteOrgMemberSchema = createInviteOrgMemberSchema(englishValidation);
 
 export type InviteOrgMemberInput = z.infer<typeof inviteOrgMemberSchema>;
 
@@ -413,21 +562,31 @@ export const SUPPORT_GRANT_MAX_HOURS = 7 * 24;
  * to vendor support acting inside the org. The reason is required: it is the
  * record of what the org agreed to, and the vendor reads it on entry.
  */
-export const createSupportGrantSchema = z.object({
-  /** Absent ⇒ ADMIN (ruling 2): the OWNER restricts by choosing READ_ONLY. */
-  level: z.enum(SUPPORT_GRANT_LEVELS).optional(),
-  reason: z
-    .string()
-    .trim()
-    .min(1, 'Say why support needs access')
-    .max(1000, 'Reason must be 1000 characters or fewer'),
-  durationHours: z
-    .number()
-    .int('Duration must be a whole number of hours')
-    .min(1, 'Duration must be at least 1 hour')
-    .max(SUPPORT_GRANT_MAX_HOURS, `Duration must be at most ${SUPPORT_GRANT_MAX_HOURS} hours`)
-    .optional(),
-});
+type CreateSupportGrantShape = {
+  level: z.ZodOptional<z.ZodEnum<{ [K in (typeof SUPPORT_GRANT_LEVELS)[number]]: K }>>;
+  reason: z.ZodString;
+  durationHours: z.ZodOptional<z.ZodNumber>;
+};
+
+/** The grant body, with its messages from `t` (§138 t-1074): the form passes its translator. */
+export function buildSupportGrantSchema(t: ValidationT): z.ZodObject<CreateSupportGrantShape> {
+  return z.object({
+    /** Absent ⇒ ADMIN (ruling 2): the OWNER restricts by choosing READ_ONLY. */
+    level: z.enum(SUPPORT_GRANT_LEVELS).optional(),
+    reason: z
+      .string()
+      .trim()
+      .min(1, t('supportReasonRequired'))
+      .max(1000, t('supportReasonTooLong')),
+    durationHours: z
+      .number()
+      .int(t('durationWhole'))
+      .min(1, t('durationTooShort'))
+      .max(SUPPORT_GRANT_MAX_HOURS, t('durationTooLong', { max: String(SUPPORT_GRANT_MAX_HOURS) }))
+      .optional(),
+  });
+}
+export const createSupportGrantSchema = buildSupportGrantSchema(englishValidation);
 
 export type CreateSupportGrantInput = z.infer<typeof createSupportGrantSchema>;
 
@@ -466,3 +625,46 @@ export const listOrgAuditLogQuerySchema = paginationQuerySchema.extend({
     .transform((types) => (types.length > 0 ? types : undefined))
     .optional(),
 });
+
+/** `[id]/provider-keys/[providerId]` segments (§137 t-1045). */
+export const providerKeyParamsSchema = z.object({ id: orgIdSchema, providerId: cuidSchema });
+
+/**
+ * The longest AI key accepted, here and by the store
+ * (`lib/orchestration/llm/org-provider-keys.ts` reads it from this file, so
+ * the form, the route and the store have one limit).
+ */
+export const PROVIDER_KEY_MAX_LENGTH = 1024;
+
+/**
+ * Anything but printable ASCII: a space, a line break, a zero-width space or
+ * any other character pasted in from a document. Vendor keys are printable
+ * ASCII, and a header value cannot carry most of the rest, so a key holding one
+ * would fail at the vendor client as if the vendor had refused it. One
+ * pattern for the form, the route and the store.
+ */
+export const KEY_DISALLOWED_CHARACTER = /[^\x21-\x7e]/;
+
+/**
+ * `PUT /api/v1/orgs/[id]/provider-keys/[providerId]` body (§137 t-1045): the
+ * key to save, or to replace the saved one with. Surrounding spaces and line
+ * breaks from a paste are trimmed; anything inside the key that is not
+ * printable ASCII is refused, since no vendor key has it.
+ */
+/** The key body, with its messages from `t` (§138 t-1074): the form passes its translator. */
+export function createSaveProviderKeySchema(t: ValidationT): z.ZodObject<{ apiKey: z.ZodString }> {
+  return z.object({
+    apiKey: z
+      .string()
+      .trim()
+      .min(1, t('providerKeyRequired'))
+      .max(
+        PROVIDER_KEY_MAX_LENGTH,
+        t('providerKeyTooLong', { max: String(PROVIDER_KEY_MAX_LENGTH) })
+      )
+      .refine((key) => !KEY_DISALLOWED_CHARACTER.test(key), {
+        message: t('providerKeyBadCharacter'),
+      }),
+  });
+}
+export const saveProviderKeySchema = createSaveProviderKeySchema(englishValidation);

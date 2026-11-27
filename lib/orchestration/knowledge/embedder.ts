@@ -17,8 +17,13 @@ import {
   NoEligibleProviderError,
   NoProviderConfiguredError,
 } from '@/lib/orchestration/llm/agent-resolver';
-import { getProvider, isApiKeyEnvVarSet } from '@/lib/orchestration/llm/provider-manager';
+import {
+  getProvider,
+  isApiKeyEnvVarSet,
+  usesOrgOwnKey,
+} from '@/lib/orchestration/llm/provider-manager';
 import { ProviderError } from '@/lib/orchestration/llm/provider';
+import { operatorContentScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 
 /**
  * Static fallback embedding model. Only used when neither
@@ -638,7 +643,7 @@ async function callEmbeddingProvider(
   provider: EmbeddingProvider,
   texts: string[],
   inputType?: 'document' | 'query'
-): Promise<{ embeddings: number[][]; inputTokens: number }> {
+): Promise<{ embeddings: number[][]; inputTokens: number; ownKey: boolean }> {
   const llm = await getProvider(provider.slug, {
     task: 'embeddings',
     source: provider.source,
@@ -666,6 +671,8 @@ async function callEmbeddingProvider(
 
   return {
     embeddings: result.embeddings,
+    // Whether the call went out on the org's own key (§137), for its cost row.
+    ownKey: usesOrgOwnKey(llm),
     inputTokens: result.inputTokens ?? estimateEmbeddingTokens(texts),
   };
 }
@@ -793,7 +800,11 @@ export async function embedText(
     textLength: text.length,
   });
 
-  const { embeddings, inputTokens } = await callEmbeddingProvider(provider, [text], inputType);
+  const { embeddings, inputTokens, ownKey } = await callEmbeddingProvider(
+    provider,
+    [text],
+    inputType
+  );
   const cost = calculateEmbeddingCost(provider.model, inputTokens);
 
   // Best-effort cost log. Embeddings should never fail a caller because
@@ -815,6 +826,7 @@ export async function embedText(
     ...(attribution?.metadata ? { metadata: attribution.metadata } : {}),
     model: provider.model,
     provider: provider.providerType,
+    ownKey,
     inputTokens,
     outputTokens: 0,
     operation: CostOperation.EMBEDDING,
@@ -853,6 +865,19 @@ export async function embedBatch(
   inputType?: 'document' | 'query',
   attribution?: EmbeddingAttribution
 ): Promise<EmbedBatchResult> {
+  // Knowledge being ingested is the operator's content, not a user's: the
+  // privacy layer does not classify it for confidential content (§130).
+  return runInPrivacyScope(operatorContentScope('knowledge-embedding'), () =>
+    embedBatchInScope(texts, batchSize, inputType, attribution)
+  );
+}
+
+async function embedBatchInScope(
+  texts: string[],
+  batchSize: number,
+  inputType: 'document' | 'query' | undefined,
+  attribution: EmbeddingAttribution | undefined
+): Promise<EmbedBatchResult> {
   const provider = await resolveProvider();
   const allEmbeddings: number[][] = [];
   let totalInputTokens = 0;
@@ -868,6 +893,8 @@ export async function embedBatch(
   // A batch of the wrong width ends the run, after the batches so far are
   // costed: the vendor billed them all.
   let mismatch: ProviderError | null = null;
+  /** Every batch went out on the org's own key; `null` before the first. */
+  let batchesOnOwnKey: boolean | null = null;
 
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);
@@ -880,8 +907,14 @@ export async function embedBatch(
       batchSize: batch.length,
     });
 
-    const { embeddings, inputTokens } = await callEmbeddingProvider(provider, batch, inputType);
+    const { embeddings, inputTokens, ownKey } = await callEmbeddingProvider(
+      provider,
+      batch,
+      inputType
+    );
     totalInputTokens += inputTokens;
+    // The run's one row is the org's own only if every batch was.
+    batchesOnOwnKey = (batchesOnOwnKey ?? true) && ownKey;
     mismatch = widthMismatch(provider, embeddings);
     if (mismatch) break;
     allEmbeddings.push(...embeddings);
@@ -920,6 +953,7 @@ export async function embedBatch(
     ...(attribution?.metadata ? { metadata: attribution.metadata } : {}),
     model: provider.model,
     provider: provider.providerType,
+    ownKey: batchesOnOwnKey === true,
     inputTokens: totalInputTokens,
     outputTokens: 0,
     operation: CostOperation.EMBEDDING,

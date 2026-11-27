@@ -16,8 +16,32 @@
 
 import { isEmailEnabled } from '@/lib/email/client';
 import { prisma } from '@/lib/db/client';
+import { confidentialModelProblem } from '@/lib/orchestration/llm/confidential-route';
 import { classifyProvidersByCredential } from '@/lib/orchestration/llm/provider-credentials';
+import { getOrchestrationSettings } from '@/lib/orchestration/settings';
+import {
+  retiringModelsInUse,
+  type RetiringModelsInUse,
+} from '@/lib/orchestration/model-lifecycle/uses';
+import { isSealedSecretKeyConfigured } from '@/lib/security/sealed-secrets';
+import { isMultiTenant } from '@/lib/tenancy/context';
 import type { ConfigHealthCheck } from '@/lib/config-health/types';
+
+/**
+ * A retiring-model check's presence signal: `false` when a model in `state`
+ * is known to be in use; `true` when none is and none is unknown. Throws
+ * when none is known but the app's report on one failed (§136 t-1067), so
+ * the runner reports the check as unable to run rather than clear or alert.
+ */
+function inUseIn(state: 'retiring' | 'retired', uses: RetiringModelsInUse): boolean {
+  if (uses[state] > 0) return false;
+  if (uses.unknown[state] > 0) {
+    throw new Error(
+      `The app's own uses of ${uses.unknown[state]} ${state} model(s) could not be read`
+    );
+  }
+  return true;
+}
 
 /**
  * Substrings that mark a `DATABASE_URL` as going through a pooler: Neon's
@@ -72,6 +96,99 @@ export const CONFIG_HEALTH_CHECKS: ConfigHealthCheck[] = [
       }
       return false;
     },
+  },
+  {
+    key: 'confidential_model',
+    label: 'Model for confidential messages',
+    severity: 'warning',
+    description:
+      'A confidential-content policy sends some messages only to local or trusted providers, and ' +
+      'no usable model for confidential messages is set, so such a message is refused on an agent ' +
+      'whose provider is neither, rather than answered.',
+    remediation:
+      'Under Admin → Orchestration → Settings → LLM privacy, choose a model for confidential ' +
+      'messages: a chat model on a local provider, or on one ticked "Trusted with confidential ' +
+      'content". Leave it unset only if refusing those messages is what you want.',
+    docsPath: '.context/privacy/llm-privacy-layer.md',
+    // Satisfied unless a policy that moves conversations is in force, here or
+    // on an agent, and the model it would move them to is missing or unusable
+    // (§130 t-1038). An agent already on a local or trusted provider never
+    // moves, but the policy says confidential content may arrive, so the
+    // check asks about the policy rather than each agent's provider.
+    detect: async (): Promise<boolean> => {
+      const moving = ['approved_only', 'local_only'];
+      const settings = await getOrchestrationSettings();
+      const strict =
+        moving.includes(settings.privacyConfidentialPersonal) ||
+        moving.includes(settings.privacyConfidentialCommercial) ||
+        (await prisma.aiAgent.findFirst({
+          // A deactivated agent answers nothing, so needs no model.
+          where: {
+            isActive: true,
+            OR: [
+              { privacyConfidentialPersonal: { in: moving } },
+              { privacyConfidentialCommercial: { in: moving } },
+            ],
+          },
+          select: { id: true },
+        })) !== null;
+      if (!strict) return true;
+      return (
+        settings.confidentialModel !== null &&
+        (await confidentialModelProblem(settings.confidentialModel)) === null
+      );
+    },
+  },
+  {
+    key: 'org_provider_keys_master_key',
+    label: "Master key for organisations' own AI keys",
+    severity: 'critical',
+    // Only multi reads orgs' keys: at single the one org's key is the install's.
+    applicable: () => isMultiTenant(),
+    description:
+      "Organisations' own AI keys are switched on, and no master key to open them is configured, " +
+      'so every AI call from an organisation that has saved its own key is refused.',
+    remediation:
+      'Configure SEALED_SECRET_KEYS and SEALED_SECRET_ACTIVE_KEY with the master key the saved ' +
+      'keys were sealed under. If it is lost, those organisations must save their keys again.',
+    docsPath: '.context/security/sealed-secrets.md',
+    // §137 t-1044. Satisfied while the switch is off: then nothing needs it.
+    detect: async (): Promise<boolean> => {
+      const settings = await getOrchestrationSettings();
+      return !settings.orgProviderKeysEnabled || isSealedSecretKeyConfigured();
+    },
+  },
+  {
+    key: 'retired_model_in_use',
+    label: 'Retired AI model still in use',
+    severity: 'critical',
+    description:
+      'A model its provider has retired is still used by an agent, a workflow, a default ' +
+      "setting or the app's own code, so calls to it fail.",
+    remediation:
+      'Under Admin → Orchestration → Providers → Models, open each model marked Retired: it lists ' +
+      'what still uses it. Move those to its replacement, or to another model. A default shown as ' +
+      "the system's suggestion is fixed by saving a default under Settings.",
+    docsPath: '.context/orchestration/llm-providers.md',
+    // §136 t-1065. Counts every org's agents and workflows: the catalogue is
+    // shared, so a retired model one org still uses is the operator's to see.
+    // And the app's own uses (§136 t-1067); a failed report of them makes
+    // this check unable to run, never an alert, unless a retired model is
+    // known to be in use anyway.
+    detect: async (): Promise<boolean> => inUseIn('retired', await retiringModelsInUse()),
+  },
+  {
+    key: 'retiring_model_in_use',
+    label: 'Retiring AI model in use',
+    severity: 'warning',
+    description:
+      'A model its provider is about to retire is still used by an agent, a workflow, a default ' +
+      "setting or the app's own code. It works until its retirement day, then calls to it fail.",
+    remediation:
+      'Under Admin → Orchestration → Providers → Models, open each model marked Retiring: it lists ' +
+      'what uses it and its replacement. Move those before the day.',
+    docsPath: '.context/orchestration/llm-providers.md',
+    detect: async (): Promise<boolean> => inUseIn('retiring', await retiringModelsInUse()),
   },
   {
     key: 'email',

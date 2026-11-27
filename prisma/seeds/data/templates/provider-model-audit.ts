@@ -76,18 +76,19 @@ Each proposal MUST carry a non-empty \`sources\` array. Each entry attributes th
 
 - \`{ "source": "web_search", "confidence": "high" | "medium", "reference": "<URL from the numbered search result>", "snippet": "<≤200 chars from the result's description>", "note": "<one line: what the result said that supports the claim>" }\`
 - \`{ "source": "training_knowledge", "confidence": "medium" | "low", "note": "<one line: why your prior knowledge supports the claim>" }\` — NEVER \`"high"\` for training-only claims, no exceptions. If you are inferring from a model's name pattern (e.g. assuming "Qwen2.5-72B" is an embedding model because of the size suffix), that is \`training_knowledge\` with \`"low"\` confidence and the note must say so explicitly.
-- \`{ "source": "prior_step", "confidence": "high", "stepId": "load_models", "reference": "output.models[i].field", "note": "value already in the registry" }\` — for claims that come directly from the input data.
+- \`{ "source": "prior_step", "confidence": "high", "stepId": "load_models", "reference": "output.models[i].field", "note": "value already in the registry" }\` — for claims that come directly from the input data. It shows a field's current value only, so it never supports a change on its own: a change needs a source for its new value.
 
 The change's own \`confidence\` field is the minimum confidence across its sources. If you have only a training-only "low" source, the change confidence is "low".
 
 If you have NO source that supports a proposed change, DO NOT emit the change. Silence is preferable to confabulation.
 `.trim();
 
-// Pre-rendered helper: take the brave search transform output (an array
-// of { title, url, description } or null) and produce a numbered block
-// the LLM can cite by \`[N]\`. Lives in the prompt template via
-// {{#each}}-style rendering — the LLM sees concrete numbered rows it can
-// reference, mirroring the chat-citations [N] pattern.
+// The search step's output as the producers see it: the external_call
+// executor's \`{ status, body }\`, where \`body\` is the Brave transform's
+// array of \`{ title, url, description }\` — or \`null\` when the step was
+// skipped (no key, host not allowed). The LLM cites a result by its URL;
+// \`validate_proposals\` checks each \`web_search\` reference against
+// \`body\` (t-1076).
 const SEARCH_RESULTS_BLOCK = `
 **Available web search results (cite each by [N] in your sources).** May be empty if the search step was skipped.
 
@@ -96,6 +97,8 @@ const SEARCH_RESULTS_BLOCK = `
 \`\`\`
 
 When citing \`[N]\` set \`reference\` to the URL of result [N] and \`snippet\` to a ≤200-char excerpt from its description.
+
+A \`web_search\` source must be one of these results, with its URL copied exactly. The results are the \`body\` array above. If the block is \`null\` or empty, or \`body\` holds no results, no search ran: there are no web results, so never cite \`web_search\` — use another kind of source, or leave the claim out. The validator checks every \`web_search\` reference against these results.
 `.trim();
 
 // Chat pricing (t-774). A price lands in recorded costs and budget caps once
@@ -110,6 +113,49 @@ const PRICING_INSTRUCTIONS = `
 - \`costPerMillionTokens\` is a legacy single blended rate; never propose it — the split pair replaces it.
 - If the model's current input and output prices already match the source, propose no change.
 `.trim();
+
+// Leave a field out rather than "change" it to nothing (t-1076). On a
+// small default model the analysers reported every price they could not
+// find as a change to `null` with no sources — 24 such changes per attempt —
+// and the schema guard refused the whole set three times running.
+const CHANGE_RULES = `
+**Only propose a change you can make.** A change needs a new value that a source supports. If you cannot find a field's value, or its current value is already right, leave that field out of \`changes\` — never propose \`null\`, an empty value, "unknown" or "not available". The one exception is a price: when one of the pair changes, the pricing rules below say to restate the other at its current value, and that restatement belongs in \`changes\`. A model with no changes is left out of \`models\` entirely, and an empty \`models\` array is a good result: it means the registry is already right.
+`.trim();
+
+/**
+ * The block a producer sees when a guard sent the run back to it (t-1076).
+ *
+ * It shows the guard's whole complaint — the schema guard lists every issue,
+ * by path into the three producers' combined output — and the producer's
+ * own previous output, so a path like `analyse_chat.models.2.changes.0`
+ * points at something the model can see. Before this the retry carried the
+ * first of 38 issues and nothing else, and both retries failed the same way.
+ */
+function retryPreamble(stepId: string): string {
+  // Four-backtick fences: a small model often wraps its JSON in its own
+  // triple-backtick fence, which would close a triple-backtick one early.
+  return `{{#if vars.__retryContext}}**Your previous attempt was rejected** (retry {{vars.__retryContext.attempt}} of {{vars.__retryContext.maxRetries}}) by the \`{{vars.__retryContext.fromStep}}\` check. It said:
+
+\`\`\`\`
+{{vars.__retryContext.failureReason}}
+\`\`\`\`
+
+Work out which problems are yours:
+- A problem whose path begins with \`${stepId}\` is about your output; one whose path begins with another step's name (\`analyse_chat\`, \`analyse_embedding\`, \`discover_new_models\`) is not. A path such as \`${stepId}.models.2.changes.0.sources\` means: in your previous output below, the entry at index 2 of \`models\` (counting from 0), its first change, its \`sources\` field. A path that is just \`${stepId}\` means your whole output was wrong — usually not a single JSON object.
+- A complaint about a change's reason names the step and model it is about (for example \`analyse_chat\`, model \`gpt-4.1\`). It is yours only if it names \`${stepId}\`. Never copy a change out of a complaint into your output: if the change is not already in your previous output, the complaint is not yours.
+
+Fix every problem that is yours. If you cannot fix a change, leave it out — leaving a change out is always allowed. If none of the problems are yours, return your previous output unchanged.
+
+Your previous output:
+
+\`\`\`\`
+{{${stepId}.output}}
+\`\`\`\`
+
+Now produce the corrected output, following the instructions below.
+
+{{/if}}`;
+}
 
 export const PROVIDER_MODEL_AUDIT_TEMPLATE: WorkflowTemplate = {
   slug: 'tpl-provider-model-audit',
@@ -161,7 +207,7 @@ export const PROVIDER_MODEL_AUDIT_TEMPLATE: WorkflowTemplate = {
         type: 'llm_call',
         config: {
           prompt:
-            'You are a data preparation assistant. Parse the following input and produce a structured JSON summary of the models to audit.\n\nInput:\n{{input}}\n\nRespond with a JSON object containing:\n- "modelIds": array of model IDs to audit\n- "modelCount": total number of models\n- "scope": "all" if auditing everything, "subset" if specific models were selected\n\nIf the input contains model data objects, extract the key fields (name, modelId, providerSlug, tierRole, capabilities, costEfficiency, reasoningDepth, latency, contextLength, toolUse, bestRole, costPerMillionTokens, inputCostPerMillionTokens, outputCostPerMillionTokens) for each model into a "models" array.\n\nRespond with ONLY the JSON object, no markdown fencing.',
+            'You are a data preparation assistant. Parse the following input and produce a structured JSON summary of the models to audit.\n\nInput:\n{{input}}\n\nRespond with a JSON object containing:\n- "modelIds": array of model IDs to audit\n- "modelCount": total number of models\n- "scope": "all" if auditing everything, "subset" if specific models were selected\n\nIf the input contains model data objects, extract the key fields (name, modelId, providerSlug, description, tierRole, deploymentProfiles, capabilities, costEfficiency, reasoningDepth, latency, contextLength, toolUse, bestRole, dimensions, quality, schemaCompatible, inputCostPerMillionTokens, outputCostPerMillionTokens), copying each value exactly as given for each model into a "models" array.\n\nRespond with ONLY the JSON object, no markdown fencing.',
           temperature: 0.1,
         },
         nextSteps: [{ targetStepId: 'search_provider_info' }],
@@ -275,9 +321,9 @@ export const PROVIDER_MODEL_AUDIT_TEMPLATE: WorkflowTemplate = {
           'Evaluates every chat/completion model in scope and proposes field-level changes (tier role, latency, cost-efficiency, context length, tool use, deployment profiles, input/output prices) with per-claim source attribution.',
         type: 'llm_call',
         config: {
-          prompt: `{{#if vars.__retryContext}}**Previous attempt failed schema validation.** Reason: {{vars.__retryContext.failureReason}} (attempt {{vars.__retryContext.attempt}} of {{vars.__retryContext.maxRetries}}). Re-evaluate the data, fix the specific issues identified above, and produce corrected output. Pay particular attention to enum values — they must match the allowed lists exactly, every change MUST carry a non-empty \`sources\` array, and every change's \`reason\` MUST explicitly reference the model's current value.
+          prompt: `${retryPreamble('analyse_chat')}You are an AI model evaluation expert. Analyse the chat and completion model entries and propose corrections where the data appears inaccurate or outdated. Also identify any models that have been deprecated or discontinued by their provider.
 
-{{/if}}You are an AI model evaluation expert. Analyse the chat and completion model entries and propose corrections where the data appears inaccurate or outdated. Also identify any models that have been deprecated or discontinued by their provider.
+**In-scope models only.** A model belongs in this analysis unless its capabilities array contains \`'embedding'\`. Emit NO changes for an embedding model — the embedding analyser handles it.
 
 Model data:
 {{load_models.output}}
@@ -288,6 +334,8 @@ Routing context (capability type):
 ${SEARCH_RESULTS_BLOCK}
 
 ${SOURCES_INSTRUCTIONS}
+
+${CHANGE_RULES}
 
 **Two orthogonal classifications.** \`tierRole\` describes what the model is *for* (its capability tier); \`deploymentProfiles\` describes where it *runs*. These are independent — a model can be \`tierRole: 'thinking'\` AND \`deploymentProfiles: ['sovereign']\` simultaneously. Never propose a tier role change because a model "is a chat model" or "runs locally" — those are capability and deployment-locus facts, not tier signals.
 
@@ -338,14 +386,18 @@ Respond with a JSON object containing two arrays:
   }
 ]
 
-2. "deactivateModels" — models that should be removed from the active registry:
+2. "deactivateModels" — models the vendor has deprecated, retired or announced a retirement for:
 [
   {
     "modelId": "<id>",
     "reason": "Model deprecated by <provider> on <date> — replaced by <successor>",
+    "retiresAt": "<YYYY-MM-DD the vendor stops serving it>" | null,
+    "replacedBy": "<the vendor's model id of the successor on the SAME provider>" | null,
     "sources": [ { "source": "...", "confidence": "...", "reference": "...", "snippet": "...", "note": "..." } ]
   }
 ]
+
+"retiresAt" is the day the vendor stops serving the model, from the vendor's own deprecation notice. A day still to come keeps the model working until then, so agents using it can be moved first; leave it null only when no day is announced. "replacedBy" is the successor the vendor names, as its API model id on the same provider (for example "gpt-5.1", not "openai-gpt-5-1"); it may be a model you are proposing as new in this audit. Never name a successor on another provider. Set "replacedBy" only together with "retiresAt".
 
 Only include models that need changes or deactivation. If no deactivations are needed, use an empty array.
 Respond with ONLY the JSON object, no markdown fencing.`,
@@ -360,9 +412,7 @@ Respond with ONLY the JSON object, no markdown fencing.`,
           'Evaluates embedding models specifically — dimensions, quality tier, deployment profiles — and flags any that have been deprecated or superseded.',
         type: 'llm_call',
         config: {
-          prompt: `{{#if vars.__retryContext}}**Previous attempt failed schema validation.** Reason: {{vars.__retryContext.failureReason}} (attempt {{vars.__retryContext.attempt}} of {{vars.__retryContext.maxRetries}}). Re-evaluate the data, fix the specific issues identified above, and produce corrected output. Pay particular attention to enum values — they must match the allowed lists exactly, every change MUST carry a non-empty \`sources\` array, and every change's \`reason\` MUST explicitly reference the model's current value.
-
-{{/if}}You are an AI model evaluation expert specialising in embedding models. Analyse the embedding model entries and propose corrections where the data appears inaccurate or outdated. Also identify any models that have been deprecated or discontinued by their provider.
+          prompt: `${retryPreamble('analyse_embedding')}You are an AI model evaluation expert specialising in embedding models. Analyse the embedding model entries and propose corrections where the data appears inaccurate or outdated. Also identify any models that have been deprecated or discontinued by their provider.
 
 **In-scope models only.** A model belongs in this analysis when its capabilities array contains \`'embedding'\`. If you find a row whose capabilities do NOT include embedding (e.g. it's a chat/reasoning LLM that the router mis-classified), emit NO changes for it — the chat analyser handles it. Do not propose tier or capability edits to argue it isn't an embedding model; just skip it.
 
@@ -375,6 +425,8 @@ Routing context (capability type):
 ${SEARCH_RESULTS_BLOCK}
 
 ${SOURCES_INSTRUCTIONS}
+
+${CHANGE_RULES}
 
 For each in-scope embedding model, evaluate:
 1. **Tier role** — Should be \`embedding\` (the dedicated tier for vector-embedding models)
@@ -412,14 +464,18 @@ Respond with a JSON object containing two arrays:
   }
 ]
 
-2. "deactivateModels" — models that should be removed from the active registry:
+2. "deactivateModels" — models the vendor has deprecated, retired or announced a retirement for:
 [
   {
     "modelId": "<id>",
     "reason": "Model deprecated by <provider> on <date> — replaced by <successor>",
+    "retiresAt": "<YYYY-MM-DD the vendor stops serving it>" | null,
+    "replacedBy": "<the vendor's model id of the successor on the SAME provider>" | null,
     "sources": [ { "source": "...", "confidence": "...", "reference": "...", "snippet": "...", "note": "..." } ]
   }
 ]
+
+"retiresAt" is the day the vendor stops serving the model, from the vendor's own deprecation notice. A day still to come keeps the model working until then, so agents using it can be moved first; leave it null only when no day is announced. "replacedBy" is the successor the vendor names, as its API model id on the same provider (for example "gpt-5.1", not "openai-gpt-5-1"); it may be a model you are proposing as new in this audit. Never name a successor on another provider. Set "replacedBy" only together with "retiresAt".
 
 Only include models that need changes or deactivation. If no deactivations are needed, use an empty array.
 Respond with ONLY the JSON object, no markdown fencing.`,
@@ -442,9 +498,7 @@ Respond with ONLY the JSON object, no markdown fencing.`,
         type: 'agent_call',
         config: {
           agentSlug: 'provider-model-auditor',
-          message: `{{#if vars.__retryContext}}**Previous attempt failed schema validation.** Reason: {{vars.__retryContext.failureReason}} (attempt {{vars.__retryContext.attempt}} of {{vars.__retryContext.maxRetries}}). Re-evaluate and produce a corrected new-model proposal set. Pay particular attention to enum values — they must match the allowed lists exactly, and every proposed model MUST carry a non-empty \`sources\` array.
-
-{{/if}}You are an AI model landscape expert. Your task is to identify models missing from the registry and propose complete entries for admin review.
+          message: `${retryPreamble('discover_new_models')}You are an AI model landscape expert. Your task is to identify models missing from the registry and propose complete entries for admin review.
 
 ## Output contract
 
@@ -463,7 +517,7 @@ Each entry in \`newModels\`:
 - \`name\`: Human-readable name (e.g. "Claude Sonnet 4.5")
 - \`slug\`: Lowercase letters / digits / hyphens only, prefixed with the provider (e.g. "anthropic-claude-sonnet-4-5")
 - \`providerSlug\`: Must match an existing provider slug from the registry
-- \`modelId\`: API model identifier in **canonical short form** — the bare id the provider's API accepts, WITHOUT date suffixes. Match the format the registry already uses. Examples: \`claude-opus-4\` (NOT \`claude-opus-4-20250514\`), \`gpt-5\` (NOT \`gpt-5-2026-01-15\`), \`o3-mini\`.
+- \`modelId\`: API model identifier in **canonical short form** — the bare id the provider's API accepts, WITHOUT date suffixes. Match the format the registry already uses. Examples: \`claude-haiku-4-5\` (NOT \`claude-haiku-4-5-20251001\`), \`gpt-5\` (NOT \`gpt-5-2025-08-07\`), \`o3\`.
 - \`description\`: Brief — purpose and strengths in one sentence.
 - \`capabilities\`: array of one or more of: \`chat\`, \`reasoning\`, \`embedding\`, \`audio\`, \`image\`, \`moderation\`, \`vision\`, \`documents\`. Use these exact tokens — do not invent values like \`multimodal\` or \`pdf\`. \`image\` = image generation; \`vision\` = image input to a chat model.
 - \`tierRole\`: one of \`thinking\` / \`worker\` / \`infrastructure\` / \`control_plane\` / \`embedding\` (the model's capability tier).
@@ -484,20 +538,20 @@ ${PRICING_INSTRUCTIONS}
 
 ## Worked example
 
-Suppose the registry contains only \`claude-sonnet-4\` (anthropic). Web search result [2] reads "Claude Sonnet 4.5 released October 2025" at https://anthropic.com/news/sonnet-4-5 with description "Anthropic announces Claude Sonnet 4.5, available via API from October 2025." A well-formed proposal looks like this:
+Suppose the registry contains only \`claude-sonnet-4-5\` (anthropic). Web search result [2] reads "Introducing Claude Sonnet 4.6" at https://www.anthropic.com/news/claude-sonnet-4-6 with description "Anthropic announces Claude Sonnet 4.6, available via the API." A well-formed proposal looks like this:
 
 \`\`\`json
 {
-  "name": "Claude Sonnet 4.5",
-  "slug": "anthropic-claude-sonnet-4-5",
+  "name": "Claude Sonnet 4.6",
+  "slug": "anthropic-claude-sonnet-4-6",
   "providerSlug": "anthropic",
-  "modelId": "claude-sonnet-4-5",
-  "description": "Anthropic's mid-tier 4.5-generation chat model, balancing reasoning quality and cost.",
+  "modelId": "claude-sonnet-4-6",
+  "description": "Anthropic's mid-tier 4.6-generation chat model, balancing reasoning quality and cost.",
   "capabilities": ["chat", "vision", "documents"],
-  "tierRole": "infrastructure",
+  "tierRole": "worker",
   "deploymentProfiles": ["hosted"],
   "reasoningDepth": "high",
-  "latency": "medium",
+  "latency": "fast",
   "costEfficiency": "high",
   "contextLength": "very_high",
   "toolUse": "strong",
@@ -505,14 +559,14 @@ Suppose the registry contains only \`claude-sonnet-4\` (anthropic). Web search r
   "sources": [{
     "source": "web_search",
     "confidence": "high",
-    "reference": "https://anthropic.com/news/sonnet-4-5",
-    "snippet": "Anthropic announces Claude Sonnet 4.5, available via API from October 2025.",
+    "reference": "https://www.anthropic.com/news/claude-sonnet-4-6",
+    "snippet": "Anthropic announces Claude Sonnet 4.6, available via the API.",
     "note": "Result [2] announces the model's release."
   }]
 }
 \`\`\`
 
-Note: \`modelId\` is the bare canonical form (\`claude-sonnet-4-5\`, not the dated release id); the source is \`web_search\` with a verifiable URL; confidence is \`high\` because it's a vendor announcement.
+Note: \`modelId\` is the bare canonical form (\`claude-sonnet-4-6\`, not a dated release id); the source is \`web_search\` with a verifiable URL; confidence is \`high\` because it's a vendor announcement.
 
 ## Data
 
@@ -553,12 +607,19 @@ Only propose models you can attribute. A proposal with only \`training_knowledge
         id: 'validate_proposals',
         name: 'Validate proposed shape (deterministic schema)',
         description:
-          'Runs the `audit-proposals` Zod schema against the combined output of the three producer branches. Catches enum-membership / required-field / source-shape issues deterministically — no LLM call, no hallucination surface. The retry edge sends a precise Zod-issue path back to the producer (which step + which field) so the next attempt can fix the exact problem.',
+          'Runs the `audit-proposals` Zod schema against the combined output of the three producer branches, plus the web search results so every `web_search` source can be checked against them. Catches enum-membership / required-field / source-shape issues deterministically — no LLM call, no hallucination surface. The retry edge sends a precise Zod-issue path back to the producer (which step + which field) so the next attempt can fix the exact problem.',
         type: 'guard',
         config: {
           mode: 'schema',
           schemaName: 'audit-proposals',
-          inputStepIds: ['analyse_chat', 'analyse_embedding', 'discover_new_models'],
+          // The search results too: a `web_search` source must be one of
+          // them (t-1076), and `null` (search skipped) means there are none.
+          inputStepIds: [
+            'search_provider_info',
+            'analyse_chat',
+            'analyse_embedding',
+            'discover_new_models',
+          ],
           failAction: 'block',
           maxRetries: 2,
         },
@@ -610,10 +671,11 @@ Worked examples:
 - FAIL: \`{ "field": "tierRole", "currentValue": "worker", "proposedValue": "thinking", "reason": "This is a chat model, not an embedding model." }\` (irrelevant — currentValue is "worker", not "embedding")
 - FAIL: \`{ "field": "deploymentProfiles", "currentValue": ["hosted"], "proposedValue": ["sovereign"], "reason": "This is an open-weight model." }\` (doesn't engage with why "hosted" is wrong)
 
-Reply with exactly PASS or FAIL on the first line, then a brief reason on the second line. If FAIL, quote the offending change object so the producer can fix it on retry.
+Reply with exactly PASS or FAIL on the first line, then a brief reason on the second line. If FAIL, for each offending change name the stream it is in (\`analyse_chat\` for the first stream, \`analyse_embedding\` for the second) and its \`model_id\`, then quote the change object, so the step that produced it — and only that step — fixes it on retry.
 
 {{#if vars.__retryContext}}
-RETRY CONTEXT: a previous attempt failed: {{vars.__retryContext.failureReason}}. Apply the same checks; quote the offending change for the next iteration.
+RETRY CONTEXT: this is retry {{vars.__retryContext.attempt}} of {{vars.__retryContext.maxRetries}}; the run was last sent back by the \`{{vars.__retryContext.fromStep}}\` check, which said: {{vars.__retryContext.failureReason}}
+If that check was \`validate_proposals\`, it was about the proposals' structure and they have since passed it: ignore it and judge only the rationales above. If it was this check, see whether the same problem is back. Either way, apply the same checks and quote the offending change for the next iteration.
 {{/if}}`,
           mode: 'llm',
           failAction: 'block',
@@ -625,7 +687,7 @@ RETRY CONTEXT: a previous attempt failed: {{vars.__retryContext.failureReason}}.
           // offending change — the retry context then asked the producer
           // to fix a change that didn't exist. gpt-5 is reliable enough
           // not to regurgitate few-shot example data as real input.
-          modelOverride: 'gpt-5',
+          modelOverride: 'openai::gpt-5',
         },
         nextSteps: [
           { targetStepId: 'refine_findings', condition: 'pass' },
@@ -831,13 +893,17 @@ RETRY CONTEXT: a previous attempt failed: {{vars.__retryContext.failureReason}}.
                 id: 'deactivateModels',
                 title: 'Proposed deactivations',
                 description:
-                  'Models the audit flagged as deprecated or discontinued. Soft-delete only — they can be reactivated later.',
+                  'Models the audit flagged as deprecated or discontinued. With a retirement day still to come the model is marked retiring and stays on; otherwise it is turned off. Soft-delete only — it can be reactivated later.',
                 source:
                   '__merge__:{{analyse_chat.output.deactivateModels}},{{analyse_embedding.output.deactivateModels}}',
                 itemKey: 'modelId',
                 itemTitle: '{{item.modelId}}',
                 fields: [
                   { key: 'reason', label: 'Reason', display: 'text', readonly: true },
+                  // §136 t-1064: a day still to come marks the model retiring
+                  // and keeps it on; a day already here retires it.
+                  { key: 'retiresAt', label: 'Retires on', display: 'text', readonly: true },
+                  { key: 'replacedBy', label: 'Successor', display: 'text', readonly: true },
                   { key: 'sources', label: 'Sources', display: 'sources', readonly: true },
                 ],
               },
@@ -912,7 +978,7 @@ RETRY CONTEXT: a previous attempt failed: {{vars.__retryContext.failureReason}}.
         config: {
           agentSlug: 'audit-report-writer',
           message:
-            'Compile a consolidated, human-readable audit report from the following results.\n\n## Audit Scope\n{{load_models.output}}\n\n## Model Classification\n{{classify_models.output}}\n\n## Web Search Context\n{{search_provider_info.output}}\n\n## Chat Model Analysis\n{{analyse_chat.output}}\n\n## Embedding Model Analysis\n{{analyse_embedding.output}}\n\n## New Models Discovered\n{{discover_new_models.output}}\n\n## Validation Results\n{{validate_proposals.output}}\n\n## Reflection/Refinement\n{{refine_findings.output}}\n\n## Quality Score\n{{score_audit.output}}\n\n## Changes Applied\n{{apply_changes.output}}\n\n## New Models Added\n{{add_new_models.output}}\n\n## Models Deactivated\n{{deactivate_models.output}}\n\nWrite a structured report with these sections:\n1. **Executive Summary** — one paragraph overview of what was audited and key outcomes\n2. **Changes Applied** — table or list of field changes made, grouped by provider\n3. **New Models Added** — list of newly registered models with key attributes\n4. **Models Deactivated** — list of deactivated models with reasons\n5. **Quality Assessment** — summary of the audit quality scores\n6. **Recommendations** — any follow-up actions recommended (e.g. models needing manual review, providers to watch)\n\nUse clear formatting. Be specific — cite model names, providers, and field values.',
+            'Compile a consolidated, human-readable audit report from the following results.\n\n## Audit Scope\n{{load_models.output}}\n\n## Model Classification\n{{classify_models.output}}\n\n## Web Search Context\n{{search_provider_info.output}}\n\n## Chat Model Analysis\n{{analyse_chat.output}}\n\n## Embedding Model Analysis\n{{analyse_embedding.output}}\n\n## New Models Discovered\n{{discover_new_models.output}}\n\n## Validation Results\n{{validate_proposals.output}}\n\n## Reflection/Refinement\n{{refine_findings.output}}\n\n## Quality Score\n{{score_audit.output}}\n\n## Changes Applied\n{{apply_changes.output}}\n\n## New Models Added\n{{add_new_models.output}}\n\n## Models Deactivated\n{{deactivate_models.output}}\n\nWrite a structured report with these sections:\n1. **Executive Summary** — one paragraph overview of what was audited and key outcomes\n2. **Changes Applied** — table or list of field changes made, grouped by provider\n3. **New Models Added** — list of newly registered models with key attributes\n4. **Models Deactivated or Retiring** — each model turned off, marked retiring or retired, with its reason, its retirement day and its successor; name any successor that was not recorded and why (`replacementNote`)\n5. **Quality Assessment** — summary of the audit quality scores\n6. **Recommendations** — any follow-up actions recommended (e.g. models needing manual review, providers to watch)\n\nUse clear formatting. Be specific — cite model names, providers, and field values.',
           maxToolIterations: 1,
         },
         nextSteps: [{ targetStepId: 'supervisor_review' }],
@@ -944,7 +1010,7 @@ RETRY CONTEXT: a previous attempt failed: {{vars.__retryContext.failureReason}}.
         type: 'supervisor',
         config: {
           assessmentCriteria:
-            'Audit success means: (1) every proposed change cites a defensible source — web search, training knowledge with explicit confidence, or a prior step output; (2) the validator passed only proposals consistent with their cited evidence; (3) approved capability dispatches actually mutated the database (apply_changes / add_new_models / deactivate_models report nonzero counts when proposals existed); (4) the compiled report does not contradict the trace; (5) the audit explored every model in scope rather than silently dropping any.',
+            'Audit success means: (1) every proposed change cites a defensible source — web search, training knowledge with explicit confidence, or a prior step output; (2) the validator passed only proposals consistent with their cited evidence; (3) approved capability dispatches actually mutated the database (apply_changes / add_new_models / deactivate_models report nonzero counts when proposals existed; for deactivate_models a model marked `retiring` or `retired` counts as written); (4) the compiled report does not contradict the trace; (5) the audit explored every model in scope rather than silently dropping any.',
           redTeamPrompts: [
             'Did any proposal change a field without a corresponding source?',
             'Did the validator pass a proposal that contradicts an earlier step output?',

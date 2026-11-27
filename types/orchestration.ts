@@ -7,7 +7,11 @@
  */
 
 import type { EmbeddingsPolicy } from '@/lib/orchestration/privacy/settings-policy';
-import type { PrivacyMode } from '@/lib/privacy/adapters/types';
+import type {
+  ConfidentialPolicy,
+  PrivacyMode,
+  SensitivityGroup,
+} from '@/lib/privacy/adapters/types';
 import type {
   User,
   AiAgent,
@@ -1177,7 +1181,29 @@ export interface PrivacySummary {
   refused?: string[];
   /** Placeholders a reply wrote that no call issued, left visible as written. */
   unresolved?: number;
+  /**
+   * Confidential content found in what the calls sent, by group: category
+   * names only, each list sorted (§130). Absent when none was found.
+   */
+  sensitivity?: Partial<Record<SensitivityGroup, string[]>>;
+  /**
+   * What the confidential-content policy did with the calls that held each
+   * group's content (§130): every decision any of them got, in
+   * {@link CONFIDENTIAL_DECISIONS} order, so a turn whose chat call was sent
+   * and whose knowledge-search embedding was refused reads both. Absent for a
+   * group nothing was found of.
+   */
+  confidential?: Partial<Record<SensitivityGroup, ConfidentialDecision[]>>;
 }
+
+/**
+ * What a confidential-content policy did with a call holding a group's
+ * content (§130), least to most strict: sent (`allowed`), sent and the user
+ * told once (`warned`), or not sent (`refused`).
+ */
+export const CONFIDENTIAL_DECISIONS = ['allowed', 'warned', 'refused'] as const;
+
+export type ConfidentialDecision = (typeof CONFIDENTIAL_DECISIONS)[number];
 
 /**
  * Diagnostic metadata stored in `AiMessage.metadata`.
@@ -1255,7 +1281,7 @@ export interface MessageMetadata {
    * (`isLeftOutOfHistory`), so the next turn does not carry the details the
    * policy refused, and the conversation can go on.
    */
-  excludedFromHistory?: 'privacy_blocked';
+  excludedFromHistory?: 'privacy_blocked' | 'privacy_confidential';
   /**
    * Set on the assistant message persisted when the streaming chat
    * handler aborts a turn before the LLM signalled completion. The
@@ -1755,8 +1781,33 @@ export interface OrchestrationSettings {
    * refuses an embedding call to a provider that is not `isLocal`.
    */
   privacyEmbeddingsPolicy: EmbeddingsPolicy;
+  /**
+   * What a call holding confidential content of each group may do (§130).
+   * `allow` on an install upgraded to it; on a new one, `warn` for Personal
+   * and `allow` for Commercial. An agent's own policy only tightens these.
+   */
+  privacyConfidentialPersonal: ConfidentialPolicy;
+  privacyConfidentialCommercial: ConfidentialPolicy;
+  /**
+   * The model for confidential messages (§130 t-1038): a turn whose agent's
+   * provider a group's policy does not permit is answered on it instead.
+   * `null` when not set, and then such a turn is refused.
+   */
+  confidentialModel: ConfidentialModelBinding | null;
+  /**
+   * Organisations' own AI keys (§137 t-1044): while on, an org's calls on a
+   * provider row it has saved a key for go out on that key. Off by default;
+   * turned on only while a sealed-secret master key is configured.
+   */
+  orgProviderKeysEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** A provider and one of its models: the model for confidential messages (§130 t-1038). */
+export interface ConfidentialModelBinding {
+  providerSlug: string;
+  model: string;
 }
 
 /**

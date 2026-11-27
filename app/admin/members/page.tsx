@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 
+import { AccessExplainerLink } from '@/components/admin/access-explainer/access-explainer-link';
 import { MemberInviteForm } from '@/components/admin/members/member-invite-form';
 import { MembersTable, type OrgMember } from '@/components/admin/members/members-table';
 import { API } from '@/lib/api/endpoints';
@@ -8,10 +10,10 @@ import { loadServerData } from '@/lib/api/server-load';
 import { requestActingOrg, requestPrincipal } from '@/lib/auth/admin-page-viewer';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 
-export const metadata: Metadata = {
-  title: 'Members',
-  description: 'The people in this organisation, and their roles.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('admin.members');
+  return { title: t('metaTitle'), description: t('metaDescription') };
+}
 
 /**
  * Admin — Members of the org being administered (§111 t-813).
@@ -32,30 +34,31 @@ async function getMembers(orgId: string): Promise<OrgMember[] | null> {
 export default async function MembersPage() {
   const [org, entry] = await Promise.all([requestActingOrg(), requestPrincipal()]);
   const members = org ? await getMembers(org.id) : null;
+  const t = await getTranslations('admin.members');
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Members{org ? ` of ${org.name}` : ''}</h1>
-        <p className="text-muted-foreground text-sm">
-          Who is in this organisation, and what each person may do in it.
-        </p>
+        <h1 className="text-2xl font-semibold">
+          {org ? t('titleOf', { org: org.name }) : t('title')}
+        </h1>
+        <p className="text-muted-foreground text-sm">{t('intro')}</p>
+        <AccessExplainerLink className="mt-1" />
       </header>
 
       {!org ? (
-        <p className="text-muted-foreground text-sm">
-          You are not acting in an organisation, so there are no members to show.
-        </p>
+        <p className="text-muted-foreground text-sm">{t('noOrg')}</p>
       ) : (
         <>
           {org.id === INSTALL_ORG_ID && (
             <p className="text-muted-foreground text-sm">
-              Roles in the install organisation follow each person&apos;s platform role. Invite
-              people and change their roles from{' '}
-              <Link href="/admin/users" className="underline">
-                Users
-              </Link>
-              .
+              {t.rich('installOrgNote', {
+                link: (chunks) => (
+                  <Link href="/admin/users" className="underline">
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
           )}
           <MemberInviteForm orgId={org.id} />
@@ -67,7 +70,7 @@ export default async function MembersPage() {
             />
           ) : (
             <p role="alert" className="text-destructive text-sm">
-              The members of this organisation could not be loaded.
+              {t('loadFailed')}
             </p>
           )}
         </>

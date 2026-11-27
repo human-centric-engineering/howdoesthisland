@@ -242,7 +242,7 @@ describe('getOrgCapState', () => {
       exceeded: true,
     });
     expect(db.aiCostLog.aggregate).toHaveBeenCalledWith({
-      where: { orgId: ORG_A, createdAt: { gte: utcMonthStart() } },
+      where: { orgId: ORG_A, createdAt: { gte: utcMonthStart() }, ownKey: false },
       _sum: { totalCostUsd: true },
     });
   });
@@ -324,7 +324,11 @@ describe('the cached month-to-date totals', () => {
     expect(await getMonthToDateOrgSpend(ORG_A)).toBe(0);
     expect(db.aiCostLog.aggregate).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        where: { orgId: ORG_A, createdAt: { gte: new Date('2026-11-01T00:00:00Z') } },
+        where: {
+          orgId: ORG_A,
+          createdAt: { gte: new Date('2026-11-01T00:00:00Z') },
+          ownKey: false,
+        },
       })
     );
   });
@@ -401,7 +405,44 @@ describe('spendCapRefusal', () => {
     expect(refused).toMatchObject({ cap: 'org', providerSlug: 'openai' });
     await expect(spendCapRefusal('ollama', true)).resolves.toBeNull();
   });
+
+  it('with `quiet`, refuses the same but logs no refused call, as an ask ahead of any call (§137 t-1057)', async () => {
+    capOrg(INSTALL_ORG_ID, 5);
+    spendByOrg[INSTALL_ORG_ID] = 5;
+
+    await expect(spendCapRefusal('openai', false, { quiet: true })).resolves.toMatchObject({
+      cap: 'org',
+    });
+    const refusedCall = (message: unknown) =>
+      typeof message === 'string' && message.startsWith('Refusing a');
+    expect(mockLogger.warn.mock.calls.filter(([m]) => refusedCall(m))).toHaveLength(0);
+
+    // Without it, the same refusal is logged.
+    await spendCapRefusal('openai', false);
+    expect(mockLogger.warn.mock.calls.filter(([m]) => refusedCall(m))).toHaveLength(1);
+  });
+
+  it('with `quiet`, logs no refused own-key call either', async () => {
+    const hold: PaidCallHold = { cap: 'org', agentCapReached: true };
+    const asked = await drainOne(
+      withPaidCallHold(
+        hold,
+        (async function* () {
+          yield await spendCapRefusal('anthropic', false, { ownKey: true, quiet: true });
+        })()
+      )
+    );
+
+    expect(asked).toMatchObject({ cap: 'agent' });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
 });
+
+/** The one value `gen` yields. */
+async function drainOne<T>(gen: AsyncGenerator<T, void, unknown>): Promise<T | undefined> {
+  for await (const value of gen) return value;
+  return undefined;
+}
 
 describe('globalCapStateOrSkip / orgCapStateOrSkip', () => {
   it("answers null for a cap that cannot be read, logged with the caller's context", async () => {

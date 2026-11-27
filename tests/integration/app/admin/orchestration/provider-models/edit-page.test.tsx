@@ -19,7 +19,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { apiFailure, apiSuccess } from '@/tests/helpers/api';
 
@@ -107,8 +108,32 @@ function makeModel(overrides: Record<string, unknown> = {}) {
     quality: null,
     strengths: null,
     setup: null,
+    // What the model route adds (§136 t-1065): nothing retiring, nothing using it.
+    lifecycle: { state: 'current', replacement: null },
+    uses: {
+      agents: [],
+      workflows: [],
+      otherOrgAgents: 0,
+      otherOrgAgentsFollowingPlatform: 0,
+      otherOrgWorkflows: 0,
+      settings: [],
+      sharedWith: [],
+    },
     ...overrides,
   };
+}
+
+/**
+ * Answer the page's two loads: the model by id, and the provider's catalogue
+ * (§136 t-1064: the replacement options) as one page of a list.
+ */
+async function answerWith(model: Record<string, unknown>, catalogue: unknown[] = [model]) {
+  const { serverFetch } = await import('@/lib/api/server-fetch');
+  vi.mocked(serverFetch).mockImplementation(async (path: string) =>
+    path.includes('/provider-models?')
+      ? apiSuccess(catalogue, { page: 1, limit: 100, total: catalogue.length, totalPages: 1 })
+      : apiSuccess(model)
+  );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -123,8 +148,7 @@ describe('EditProviderModelPage (server component)', () => {
   });
 
   it('renders model name in heading', async () => {
-    const { serverFetch } = await import('@/lib/api/server-fetch');
-    vi.mocked(serverFetch).mockResolvedValue(apiSuccess(makeModel()));
+    await answerWith(makeModel());
 
     const { default: EditPage } =
       await import('@/app/admin/orchestration/provider-models/[id]/page');
@@ -140,8 +164,7 @@ describe('EditProviderModelPage (server component)', () => {
   });
 
   it('shows seed-managed warning when isDefault is true', async () => {
-    const { serverFetch } = await import('@/lib/api/server-fetch');
-    vi.mocked(serverFetch).mockResolvedValue(apiSuccess(makeModel({ isDefault: true })));
+    await answerWith(makeModel({ isDefault: true }));
 
     const { default: EditPage } =
       await import('@/app/admin/orchestration/provider-models/[id]/page');
@@ -158,8 +181,7 @@ describe('EditProviderModelPage (server component)', () => {
   });
 
   it('hides seed-managed warning when isDefault is false', async () => {
-    const { serverFetch } = await import('@/lib/api/server-fetch');
-    vi.mocked(serverFetch).mockResolvedValue(apiSuccess(makeModel({ isDefault: false })));
+    await answerWith(makeModel({ isDefault: false }));
 
     const { default: EditPage } =
       await import('@/app/admin/orchestration/provider-models/[id]/page');
@@ -175,8 +197,7 @@ describe('EditProviderModelPage (server component)', () => {
   });
 
   it('shows success banner when ?created=1', async () => {
-    const { serverFetch } = await import('@/lib/api/server-fetch');
-    vi.mocked(serverFetch).mockResolvedValue(apiSuccess(makeModel()));
+    await answerWith(makeModel());
 
     const { default: EditPage } =
       await import('@/app/admin/orchestration/provider-models/[id]/page');
@@ -192,8 +213,7 @@ describe('EditProviderModelPage (server component)', () => {
   });
 
   it('hides success banner when created param is absent', async () => {
-    const { serverFetch } = await import('@/lib/api/server-fetch');
-    vi.mocked(serverFetch).mockResolvedValue(apiSuccess(makeModel()));
+    await answerWith(makeModel());
 
     const { default: EditPage } =
       await import('@/app/admin/orchestration/provider-models/[id]/page');
@@ -259,5 +279,158 @@ describe('EditProviderModelPage (server component)', () => {
       })
     ).rejects.toBeInstanceOf(ServerLoadError);
     expect(mockNotFound).not.toHaveBeenCalled();
+  });
+});
+
+describe('EditProviderModelPage — replacement options (§136 t-1064)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('offers active same-provider models not themselves retiring, never the model itself', async () => {
+    const model = makeModel({ id: 'model-1', name: 'GPT-5' });
+    await answerWith(model, [
+      model,
+      makeModel({ id: 'model-2', name: 'GPT-5.1', modelId: 'gpt-5.1', retiresAt: null }),
+      makeModel({ id: 'model-3', name: 'GPT-4o', modelId: 'gpt-4o', isActive: false }),
+      makeModel({
+        id: 'model-4',
+        name: 'GPT-4.1',
+        modelId: 'gpt-4.1',
+        retiresAt: '2099-01-01T00:00:00.000Z',
+      }),
+    ]);
+    const { default: EditPage } =
+      await import('@/app/admin/orchestration/provider-models/[id]/page');
+    const { serverFetch } = await import('@/lib/api/server-fetch');
+
+    render(
+      await EditPage({
+        params: Promise.resolve({ id: 'model-1' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: 'Replacement' }));
+
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
+    expect(options).toEqual(['No replacement', 'GPT-5.1 (gpt-5.1)']);
+    // The catalogue is read for this model's provider only.
+    expect(vi.mocked(serverFetch).mock.calls.map((c) => c[0])).toContain(
+      '/api/v1/admin/orchestration/provider-models?providerSlug=openai&page=1&limit=100'
+    );
+  });
+
+  it('keeps the stored replacement listed after it stops qualifying', async () => {
+    const model = makeModel({
+      id: 'model-1',
+      retiresAt: '2099-01-01T00:00:00.000Z',
+      replacementId: 'model-3',
+    });
+    await answerWith(model, [
+      model,
+      makeModel({ id: 'model-3', name: 'GPT-4o', modelId: 'gpt-4o', isActive: false }),
+    ]);
+    const { default: EditPage } =
+      await import('@/app/admin/orchestration/provider-models/[id]/page');
+
+    render(
+      await EditPage({
+        params: Promise.resolve({ id: 'model-1' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+
+    expect(screen.getByRole('combobox', { name: 'Replacement' })).toHaveTextContent(
+      'GPT-4o (gpt-4o)'
+    );
+    expect(screen.getByDisplayValue('2099-01-01')).toHaveAttribute('id', 'retiresAt');
+  });
+});
+
+describe('EditProviderModelPage — retirement and uses (§136 t-1065)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function renderPage(model: Record<string, unknown>) {
+    await answerWith(model);
+    const { default: EditPage } =
+      await import('@/app/admin/orchestration/provider-models/[id]/page');
+    render(
+      await EditPage({
+        params: Promise.resolve({ id: 'model-1' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    return screen.getByRole('region', { name: 'Retirement and uses' });
+  }
+
+  it('says nothing uses a model nothing uses', async () => {
+    const panel = await renderPage(makeModel());
+    expect(panel).toHaveTextContent('Nothing uses this model.');
+  });
+
+  it('shows a retiring model, its replacement, and every kind of use', async () => {
+    const panel = await renderPage(
+      makeModel({
+        retiresAt: '2027-03-01T00:00:00.000Z',
+        lifecycle: {
+          state: 'retiring',
+          replacement: { id: 'model-2', name: 'GPT-5.1', modelId: 'gpt-5.1' },
+        },
+        uses: {
+          agents: [
+            { id: 'a1', name: 'Cleanup', followsPlatform: true },
+            { id: 'a2', name: 'Support', followsPlatform: false },
+          ],
+          workflows: [{ id: 'w1', name: 'Triage', byIdOnly: true }],
+          otherOrgAgents: 3,
+          otherOrgAgentsFollowingPlatform: 1,
+          otherOrgWorkflows: 1,
+          otherOrgWorkflowsByIdOnly: 1,
+          settings: [
+            { slot: 'chat', source: 'saved' },
+            { slot: 'reasoning', source: 'suggested' },
+            { slot: 'active_embedding', source: 'saved', movedBy: 'embedding_switch' },
+          ],
+          sharedWith: [],
+        },
+      })
+    );
+
+    expect(within(panel).getByText('Retiring on 1 March 2027')).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'GPT-5.1' })).toHaveAttribute(
+      'href',
+      '/admin/orchestration/provider-models/model-2'
+    );
+    expect(within(panel).getByRole('link', { name: 'Cleanup' })).toHaveAttribute(
+      'href',
+      '/admin/orchestration/agents/a1'
+    );
+    // Only the platform-picked agent carries the badge.
+    expect(within(panel).getAllByText('follows the platform')).toHaveLength(1);
+    expect(panel).toHaveTextContent('3 agents in other organisations, 1 following the platform');
+    expect(within(panel).getByRole('link', { name: 'Triage' })).toHaveAttribute(
+      'href',
+      '/admin/orchestration/workflows/w1'
+    );
+    expect(panel).toHaveTextContent('1 workflow in other organisations');
+    expect(panel).toHaveTextContent('Default model for chat');
+    expect(panel).toHaveTextContent("Default model for reasoning (the system's suggestion)");
+    expect(panel).toHaveTextContent('Active embedding model');
+    expect(panel).toHaveTextContent('changing the embedding model means re-embedding');
+  });
+
+  it('shows a retired model with no replacement named', async () => {
+    const panel = await renderPage(
+      makeModel({
+        retiresAt: '2026-01-01T00:00:00.000Z',
+        lifecycle: { state: 'retired', replacement: null },
+      })
+    );
+
+    expect(within(panel).getByText('Retired on 1 January 2026')).toBeInTheDocument();
+    expect(panel).toHaveTextContent('No replacement named yet.');
   });
 });

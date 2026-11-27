@@ -24,8 +24,8 @@
  */
 
 import { logger } from '@/lib/logging';
-import { getDefaultModelForTask } from '@/lib/orchestration/llm/settings-resolver';
-import { getProviderWithFallbacks } from '@/lib/orchestration/llm/provider-manager';
+import { getDefaultModelPinForTask } from '@/lib/orchestration/llm/settings-resolver';
+import { getProviderWithFallbacks, usesOrgOwnKey } from '@/lib/orchestration/llm/provider-manager';
 import type { BindingProvenance } from '@/lib/orchestration/llm/provider-eligibility';
 import { calculateCost, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { CostOperation } from '@/types/orchestration';
@@ -119,6 +119,16 @@ export interface SummarizeResult {
  */
 export interface SummarizeOptions {
   /**
+   * The conversation's own model, on its provider. Used instead of the
+   * routing default when that default names another provider (§136 t-1068):
+   * a summary never leaves the conversation's provider, which is where its
+   * agent sends this conversation (a local or sovereign provider kept for
+   * residency, an org's approved one, the one confidential routing judged).
+   * Without it such a default's model id is sent to the conversation's
+   * provider, as a bare id always was. Ignored when `model` is given.
+   */
+  conversationModel?: string;
+  /**
    * The summary text this call extends. When set, only `messages` (the rows
    * that come *after* what it covers) are sent, and the model is asked to fold
    * them in — so a long conversation never re-derives its whole prefix.
@@ -149,6 +159,13 @@ export interface SummarizeOptions {
    * (§120 t-741). Without it the call is evaluated as unrecorded.
    */
   provenance?: BindingProvenance;
+  /**
+   * The model to summarise with, in place of the routing default. Set by a
+   * turn that moved to the model for confidential messages (§130 t-1038): the
+   * provider passed is that model's, and the routing default may not exist
+   * there, nor be one the policy permits.
+   */
+  model?: string;
   /**
    * The caller's cancellation signal. A client that disconnects mid-turn stops
    * the provider call instead of paying for a summary nobody will read.
@@ -250,7 +267,17 @@ export async function summarizeMessages(
   const extending = typeof options.previousSummary === 'string' && options.previousSummary !== '';
 
   try {
-    const model = await getDefaultModelForTask('routing');
+    // The routing default is a model pin (§136 t-1068). The summary is made on
+    // the conversation's provider and fallbacks whatever the pin names: one
+    // naming another provider gives way to the conversation's own model.
+    const pin = options.model === undefined ? await getDefaultModelPinForTask('routing') : null;
+    const elsewhere = pin?.providerSlug != null && pin.providerSlug !== providerSlug;
+    const model =
+      pin === null
+        ? (options.model ?? '')
+        : elsewhere && options.conversationModel
+          ? options.conversationModel
+          : pin.modelId;
     const { provider, usedSlug } = await getProviderWithFallbacks(
       providerSlug,
       fallbackSlugs,
@@ -299,6 +326,7 @@ export async function summarizeMessages(
           ...(options.userId ? { userId: options.userId } : {}),
           model,
           provider: usedSlug,
+          ownKey: usesOrgOwnKey(provider),
           inputTokens: response.usage.inputTokens,
           outputTokens: response.usage.outputTokens,
           cacheReadTokens: response.usage.cacheReadTokens,

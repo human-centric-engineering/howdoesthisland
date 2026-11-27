@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Check, Loader2, Save, Plus, X } from 'lucide-react';
@@ -26,10 +26,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FieldHelp } from '@/components/ui/field-help';
 import { isSafeProviderUrl } from '@/lib/security/safe-url';
 import { costLogsOutliveExecutions } from '@/lib/validations/orchestration';
-import { CORE_ENTITY_TYPES, type CoreEntityType } from '@/lib/privacy/adapters/types';
 import {
+  CONFIDENTIAL_POLICIES_BY_STRICTNESS,
+  CORE_ENTITY_TYPES,
+  type CoreEntityType,
+} from '@/lib/privacy/adapters/types';
+import {
+  CONFIDENTIAL_GROUP_DESCRIPTIONS,
+  CONFIDENTIAL_POLICY_LABELS,
   EMBEDDINGS_POLICIES,
   type EmbeddingsPolicy,
+  parseConfidentialPolicy,
   parseEmbeddingsPolicy,
   parsePrivacyMode,
   PRIVACY_MODE_LABELS,
@@ -104,6 +111,114 @@ export interface OrchestrationSettings {
   privacyIgnoredEntityTypes?: string[];
   privacyProtectLocalProviders?: boolean;
   privacyEmbeddingsPolicy?: string;
+  /** What a call holding confidential content may do, per group (§130). */
+  privacyConfidentialPersonal?: string;
+  privacyConfidentialCommercial?: string;
+  /** The model for confidential messages (§130 t-1038); `null` when none is set. */
+  confidentialModel?: { providerSlug: string; model: string } | null;
+  /** Organisations' own AI keys (§137 t-1044). */
+  orgProviderKeysEnabled?: boolean;
+  /**
+   * How many orgs hold a saved key: what turning the switch off would refuse.
+   * `null` when it could not be counted.
+   */
+  orgsWithProviderKeys?: number | null;
+  /** Whether a sealed-secret master key is configured, so the switch can be turned on. */
+  sealedSecretKeyConfigured?: boolean;
+}
+
+/** A model that can be the model for confidential messages: on a local or trusted provider. */
+export interface ConfidentialModelOption {
+  providerSlug: string;
+  model: string;
+  /** The model's name and its provider's, for the select. */
+  label: string;
+  where: 'local' | 'trusted';
+}
+
+/** The select's value for "no model for confidential messages". */
+const NO_CONFIDENTIAL_MODEL = 'none';
+
+/** One select value per binding. A provider slug never holds `|`; a model id may hold `:`. */
+function confidentialModelKey(binding: { providerSlug: string; model: string } | null | undefined) {
+  return binding ? `${binding.providerSlug}|${binding.model}` : NO_CONFIDENTIAL_MODEL;
+}
+
+function confidentialModelFromKey(key: string): { providerSlug: string; model: string } | null {
+  const at = key.indexOf('|');
+  if (key === NO_CONFIDENTIAL_MODEL || at <= 0) return null;
+  return { providerSlug: key.slice(0, at), model: key.slice(at + 1) };
+}
+
+/** What each value does, said once for both groups' selects. */
+const CONFIDENTIAL_POLICY_HELP = (
+  <ul className="mt-2 list-disc space-y-1 pl-4">
+    <li>
+      <strong>Allow</strong> sends it and records it on the trace.
+    </li>
+    <li>
+      <strong>Warn</strong> sends it, then tells the user once per conversation.
+    </li>
+    <li>
+      <strong>Trusted or local providers only</strong> sends it only to a provider ticked
+      &ldquo;Trusted with confidential content&rdquo;, or a local one, and refuses it anywhere else.
+    </li>
+    <li>
+      <strong>Local providers only</strong> sends it only to a local provider.
+    </li>
+    <li>
+      <strong>Block</strong> never sends it. The user is told, and the conversation carries on
+      without that message.
+    </li>
+  </ul>
+);
+
+function ConfidentialPolicySelect({
+  control,
+  name,
+  label,
+  help,
+}: {
+  control: Control<SettingsFormData>;
+  name: 'privacyConfidentialPersonal' | 'privacyConfidentialCommercial';
+  label: string;
+  help: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5 sm:max-w-xs">
+      <Label htmlFor={name} className="flex items-center gap-1">
+        {label}
+        <FieldHelp title={`Confidential content: ${label.toLowerCase()}`}>
+          <p>{help}</p>
+          {CONFIDENTIAL_POLICY_HELP}
+          <p className="mt-2">
+            Under the two &ldquo;only&rdquo; settings, a conversation whose agent&apos;s provider is
+            not permitted moves to the model for confidential messages below, if it is. A refused
+            message is not sent anywhere. A classifier that fails counts as finding something under
+            the three strictest settings.
+          </p>
+        </FieldHelp>
+      </Label>
+      <Controller
+        name={name}
+        control={control}
+        render={({ field }) => (
+          <Select value={field.value} onValueChange={field.onChange}>
+            <SelectTrigger id={name}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CONFIDENTIAL_POLICIES_BY_STRICTNESS.map((policy) => (
+                <SelectItem key={policy} value={policy}>
+                  {CONFIDENTIAL_POLICY_LABELS[policy]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      />
+    </div>
+  );
 }
 
 export interface SettingsFormProps {
@@ -120,6 +235,18 @@ export interface SettingsFormProps {
    * reject a private target that the server would happily accept (#553).
    */
   allowPrivateEscalationWebhook?: boolean;
+  /**
+   * The models that can be the model for confidential messages: active chat
+   * models on an active provider that is local or trusted. `null` when they
+   * could not be loaded: the select then shows only what is saved.
+   */
+  confidentialModelOptions?: ConfidentialModelOption[] | null;
+  /**
+   * Whether to show the switch for organisations' own AI keys (§137 t-1044):
+   * at `TENANCY_MODE=multi` only. At `single` there is one org, whose key is
+   * the install's, and the switch would change nothing.
+   */
+  showOrgProviderKeys?: boolean;
 }
 
 // ─── Client-side validation schema ──────────────────────────────────────────
@@ -197,6 +324,10 @@ const settingsFormSchema = z
     privacyProtectedTypes: z.array(z.string()),
     privacyProtectLocalProviders: z.boolean(),
     privacyEmbeddingsPolicy: z.enum(EMBEDDINGS_POLICIES),
+    privacyConfidentialPersonal: z.enum(CONFIDENTIAL_POLICIES_BY_STRICTNESS),
+    privacyConfidentialCommercial: z.enum(CONFIDENTIAL_POLICIES_BY_STRICTNESS),
+    confidentialModel: z.string(),
+    orgProviderKeysEnabled: z.boolean(),
     // Limits
     globalMonthlyBudgetUsd: nullableNumber.pipe(z.number().nonnegative().max(1_000_000).nullable()),
     // Per-execution / per-turn defaults (improvement #39 runaway-loop
@@ -340,9 +471,23 @@ export function SettingsForm({
   initialSettings,
   allowPrivateEscalationWebhook = false,
   embeddingProviderIsLocal = null,
+  confidentialModelOptions = null,
+  showOrgProviderKeys = false,
 }: SettingsFormProps) {
   const readOnly = useSharedSettingsReadOnly();
   const [savedAt, setSavedAt] = React.useState<Date | null>(null);
+  // What the server holds for the model for confidential messages: the page's
+  // copy at load, moved on by each save that sent it. A save sends it only
+  // when it differs from this, never from the stale load-time value.
+  const [savedConfidentialKey, setSavedConfidentialKey] = React.useState(() =>
+    confidentialModelKey(initialSettings.confidentialModel)
+  );
+  // What the server holds for organisations' own keys. Sent only when it
+  // differs: turning it on is refused while no master key is configured, and
+  // that must not stop a save of anything else on a page loaded with it on.
+  const [savedOrgKeysEnabled, setSavedOrgKeysEnabled] = React.useState(
+    initialSettings.orgProviderKeysEnabled === true
+  );
   const [savedEmails, setSavedEmails] = React.useState<string[]>(
     initialSettings.escalationConfig?.emailAddresses ?? []
   );
@@ -465,6 +610,14 @@ export function SettingsForm({
       ),
       privacyProtectLocalProviders: initialSettings.privacyProtectLocalProviders === true,
       privacyEmbeddingsPolicy: parseEmbeddingsPolicy(initialSettings.privacyEmbeddingsPolicy),
+      privacyConfidentialPersonal: parseConfidentialPolicy(
+        initialSettings.privacyConfidentialPersonal
+      ),
+      privacyConfidentialCommercial: parseConfidentialPolicy(
+        initialSettings.privacyConfidentialCommercial
+      ),
+      confidentialModel: confidentialModelKey(initialSettings.confidentialModel),
+      orgProviderKeysEnabled: initialSettings.orgProviderKeysEnabled === true,
       globalMonthlyBudgetUsd: toStr(initialSettings.globalMonthlyBudgetUsd),
       defaultMaxCostPerExecutionUsd: toStr(initialSettings.defaultMaxCostPerExecutionUsd),
       defaultMaxCostPerTurnUsd: toStr(initialSettings.defaultMaxCostPerTurnUsd),
@@ -531,6 +684,29 @@ export function SettingsForm({
     protects(effectivePrivacyMode) &&
     watchedEmbeddingsPolicy === 'local_only' &&
     embeddingProviderIsLocal === false;
+  // A policy that moves a conversation, and no model to move it to (§130
+  // t-1038): such a message is refused instead. Said, not stopped: refusing
+  // may be what the administrator wants.
+  const watchedConfidentialModel = watch('confidentialModel');
+  const watchedOrgKeysEnabled = watch('orgProviderKeysEnabled');
+  // `undefined` (a page from before the field) reads as none; `null` as not known.
+  const orgsWithProviderKeys =
+    initialSettings.orgsWithProviderKeys === undefined ? 0 : initialSettings.orgsWithProviderKeys;
+  const orgKeysMasterKeyMissing = initialSettings.sealedSecretKeyConfigured === false;
+  const movingPolicy = (policy: string) => policy === 'approved_only' || policy === 'local_only';
+  const confidentialRefusedForNoModel =
+    watchedConfidentialModel === NO_CONFIDENTIAL_MODEL &&
+    (movingPolicy(watch('privacyConfidentialPersonal')) ||
+      movingPolicy(watch('privacyConfidentialCommercial')));
+  // The model the page loaded with, listed even when it is not one of the
+  // options, so the select shows what is stored rather than quietly showing
+  // none. Said to be no longer usable only when the options were read.
+  const loadedConfidentialKey = confidentialModelKey(initialSettings.confidentialModel);
+  const loadedConfidentialUnlisted =
+    initialSettings.confidentialModel != null &&
+    !(confidentialModelOptions ?? []).some(
+      (o) => confidentialModelKey(o) === loadedConfidentialKey
+    );
 
   React.useEffect(() => {
     reset(defaults);
@@ -597,6 +773,16 @@ export function SettingsForm({
             ),
             privacyProtectLocalProviders: values.privacyProtectLocalProviders,
             privacyEmbeddingsPolicy: values.privacyEmbeddingsPolicy,
+            privacyConfidentialPersonal: values.privacyConfidentialPersonal,
+            privacyConfidentialCommercial: values.privacyConfidentialCommercial,
+            // Only when changed: the API refuses a model that is no longer
+            // usable, and that must not stop a save of anything else.
+            ...(values.confidentialModel !== savedConfidentialKey
+              ? { confidentialModel: confidentialModelFromKey(values.confidentialModel) }
+              : {}),
+            ...(values.orgProviderKeysEnabled !== savedOrgKeysEnabled
+              ? { orgProviderKeysEnabled: values.orgProviderKeysEnabled }
+              : {}),
             globalMonthlyBudgetUsd: values.globalMonthlyBudgetUsd,
             defaultMaxCostPerExecutionUsd: values.defaultMaxCostPerExecutionUsd,
             defaultMaxCostPerTurnUsd: values.defaultMaxCostPerTurnUsd,
@@ -625,6 +811,8 @@ export function SettingsForm({
         }
       );
       reset(undefined, { keepValues: true });
+      setSavedConfidentialKey(values.confidentialModel);
+      setSavedOrgKeysEnabled(values.orgProviderKeysEnabled);
       if (values.privacyMode !== KEEP_STORED_MODE) setStoredPrivacyModeShown(true);
       setSavedEmails([...escalationEmails]);
       // Only a save that wrote the list moves this page's copy of it on. One
@@ -929,8 +1117,195 @@ export function SettingsForm({
               are not indexed. Choose a local embedding model to use them.
             </p>
           )}
+
+          <div className="space-y-3 border-t pt-4" data-testid="privacy-confidential-section">
+            <div>
+              <h3 className="text-sm font-medium">Confidential content</h3>
+              <p className="text-muted-foreground text-xs">
+                Masking hides who a message is about, not what it says. These decide which providers
+                may see a message that holds confidential content, whatever the mode above. An agent
+                can only make them stricter. Confidential content is spotted by a phrase list: it
+                catches what is said outright (&ldquo;I&apos;ve been signed off with
+                depression&rdquo;) and misses what is only implied. An agent whose whole job is
+                health, HR or a client&apos;s unannounced plans belongs on a local or trusted
+                provider from the start.
+              </p>
+            </div>
+            <ConfidentialPolicySelect
+              control={control}
+              name="privacyConfidentialPersonal"
+              label="Personal"
+              help={
+                <>
+                  {CONFIDENTIAL_GROUP_DESCRIPTIONS.personal} The person it is about did not choose
+                  to share it with an AI provider, and the law puts duties on whoever does.
+                </>
+              }
+            />
+            <ConfidentialPolicySelect
+              control={control}
+              name="privacyConfidentialCommercial"
+              label="Commercial"
+              help={
+                <>
+                  {CONFIDENTIAL_GROUP_DESCRIPTIONS.commercial} A provider you hold a contract with
+                  can be ticked &ldquo;Trusted with confidential content&rdquo; on its provider
+                  page, for &ldquo;trusted or local providers only&rdquo;.
+                </>
+              }
+            />
+            <div className="space-y-1.5 sm:max-w-md">
+              <Label htmlFor="confidentialModel" className="flex items-center gap-1">
+                Model for confidential messages
+                <FieldHelp title="Model for confidential messages">
+                  <p>
+                    Under &ldquo;Trusted or local providers only&rdquo; or &ldquo;Local providers
+                    only&rdquo;, a conversation holding that content, on an agent whose provider is
+                    not permitted, is answered on this model instead, from that message on. The user
+                    is told once that the conversation moved.
+                  </p>
+                  <p className="mt-2">
+                    Only chat models on a local provider, or on one ticked &ldquo;Trusted with
+                    confidential content&rdquo;, are listed. With none chosen, such a message is
+                    refused.
+                  </p>
+                  <p className="mt-2">
+                    A workflow step given its own model, and a capability that picks its own, are
+                    refused rather than moved: that model was chosen on purpose.
+                  </p>
+                </FieldHelp>
+              </Label>
+              <Controller
+                name="confidentialModel"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="confidentialModel" data-testid="confidential-model-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_CONFIDENTIAL_MODEL}>None: refuse instead</SelectItem>
+                      {(confidentialModelOptions ?? []).map((option) => (
+                        <SelectItem
+                          key={confidentialModelKey(option)}
+                          value={confidentialModelKey(option)}
+                        >
+                          {option.label} ({option.where === 'local' ? 'local' : 'trusted'})
+                        </SelectItem>
+                      ))}
+                      {loadedConfidentialUnlisted && initialSettings.confidentialModel && (
+                        <SelectItem value={loadedConfidentialKey}>
+                          {initialSettings.confidentialModel.model} (
+                          {initialSettings.confidentialModel.providerSlug}
+                          {confidentialModelOptions === null ? '' : ', no longer usable'})
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            {confidentialRefusedForNoModel && (
+              <p
+                className="text-xs text-amber-700 dark:text-amber-400"
+                data-testid="privacy-confidential-no-model"
+              >
+                With no model for confidential messages, a message that an agent&apos;s provider is
+                not permitted to see is refused rather than moved.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
+
+      {/* ── Organisations' own AI keys (§137) ──────────────────────────── */}
+      {showOrgProviderKeys && (
+        <Card data-testid="org-provider-keys-section">
+          <CardHeader>
+            <CardTitle className="text-base">Organisations&apos; own AI keys</CardTitle>
+            <p className="text-muted-foreground text-xs">
+              Whether an organisation can send its AI calls on its own account with a provider.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Controller
+                name="orgProviderKeysEnabled"
+                control={control}
+                render={({ field }) => (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={field.value}
+                      // Turning it on needs a master key; turning it off never
+                      // does. Judged on the saved value, so an accidental
+                      // untick on a page loaded with it on can be undone.
+                      disabled={orgKeysMasterKeyMissing && !savedOrgKeysEnabled}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    Let organisations use their own AI keys
+                    <FieldHelp title="Organisations' own AI keys">
+                      <p>
+                        Default: off. When on, an organisation that has saved its own key for a
+                        provider has its calls on that provider sent with that key, so the vendor
+                        bills it and its own agreement with the vendor applies. Other organisations
+                        use this install&apos;s keys as before.
+                      </p>
+                      <p className="mt-2">
+                        Saving a key does not approve a provider: an organisation still uses only
+                        the providers you have approved for it. Keys are stored encrypted under the
+                        install&apos;s master key, so this can be turned on only once that key is
+                        configured.
+                      </p>
+                      <p className="mt-2">
+                        Turning it off does not move those organisations onto this install&apos;s
+                        keys. Their calls on those providers are refused until it is back on, or
+                        until they remove their keys.
+                      </p>
+                    </FieldHelp>
+                  </label>
+                )}
+              />
+            </div>
+            {orgKeysMasterKeyMissing && !savedOrgKeysEnabled && (
+              <p
+                className="text-muted-foreground text-xs"
+                data-testid="org-provider-keys-no-master"
+              >
+                No master key is configured for storing keys, so this can&apos;t be turned on yet.
+                Set <code>SEALED_SECRET_KEYS</code> and <code>SEALED_SECRET_ACTIVE_KEY</code>.
+              </p>
+            )}
+            {savedOrgKeysEnabled && !watchedOrgKeysEnabled && orgsWithProviderKeys === null && (
+              <p
+                className="text-sm text-amber-700 dark:text-amber-400"
+                data-testid="org-provider-keys-turning-off"
+              >
+                How many organisations have saved their own keys could not be read. Any that have
+                will have their AI calls on those providers refused once this is saved, until it is
+                turned back on.
+              </p>
+            )}
+            {savedOrgKeysEnabled &&
+              !watchedOrgKeysEnabled &&
+              orgsWithProviderKeys !== null &&
+              orgsWithProviderKeys > 0 && (
+                <p
+                  className="text-sm text-amber-700 dark:text-amber-400"
+                  data-testid="org-provider-keys-turning-off"
+                >
+                  {orgsWithProviderKeys === 1
+                    ? '1 organisation has'
+                    : `${orgsWithProviderKeys} organisations have`}{' '}
+                  saved their own keys. Once this is saved, their AI calls on those providers are
+                  refused until it is turned back on. They are not moved onto this install&apos;s
+                  keys.
+                </p>
+              )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Voice input ────────────────────────────────────────────────── */}
       <Card>

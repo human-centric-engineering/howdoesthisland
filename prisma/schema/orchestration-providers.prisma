@@ -17,6 +17,12 @@ model AiCostLog {
   outputCostUsd       Float
   totalCostUsd        Float
   isLocal             Boolean  @default(false)
+  // The call went out on the org's own vendor key (§137), so the vendor bills
+  // the org, not the platform. Counted towards the agent's cap only: the org's
+  // and the global monthly caps leave these rows out. Set by `logCost` from
+  // what the provider manager recorded about the call; false on every row
+  // written before it existed, and whenever which key a call used is unclear.
+  ownKey              Boolean  @default(false)
   operation           String // "chat", "tool_call", "embedding", "evaluation"
   metadata            Json?
   // OTEL trace correlation — set when an active tracer span exists at the
@@ -66,33 +72,87 @@ model AiCostLog {
 
 // Configured LLM providers
 model AiProviderConfig {
-  id           String   @id @default(cuid())
-  name         String   @unique
-  slug         String   @unique
-  providerType String // "anthropic", "openai-compatible"
-  baseUrl      String? // API base URL (required for openai-compatible)
-  apiKeyEnvVar String? // env var name e.g. "ANTHROPIC_API_KEY"
-  isLocal      Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  metadata     Json?
-  timeoutMs    Int? // per-provider request timeout; null = use default (30s cloud, 10s local)
-  maxRetries   Int? // per-provider retry count; null = use default (3)
+  id                     String   @id @default(cuid())
+  name                   String   @unique
+  slug                   String   @unique
+  providerType           String // "anthropic", "openai-compatible"
+  baseUrl                String? // API base URL (required for openai-compatible)
+  apiKeyEnvVar           String? // env var name e.g. "ANTHROPIC_API_KEY"
+  isLocal                Boolean  @default(false)
+  isActive               Boolean  @default(true)
+  metadata               Json?
+  timeoutMs              Int? // per-provider request timeout; null = use default (30s cloud, 10s local)
+  maxRetries             Int? // per-provider retry count; null = use default (3)
   // Where the vendor processes data, as an operator-chosen code ("EU", "US").
   // Read by the provider policy (§120 t-742): an org restricted to some
   // jurisdictions is never sent a provider outside them, and null — not
   // recorded — matches no restriction.
-  jurisdiction String?
-  createdBy    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  jurisdiction           String?
+  // "Trusted with confidential content" (§130): a provider the install holds
+  // a contract with, say. A confidential-content policy of `approved_only`
+  // sends a flagged call only to a provider with this ticked, or a local one
+  // (local always counts). Off for every provider until an operator ticks it.
+  trustedForConfidential Boolean  @default(false)
+  createdBy              String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   // Relations
-  creator User? @relation("AiProviderConfigCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  creator User?              @relation("AiProviderConfigCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  // Orgs' own keys for this row (§137 t-1044). A key is for one row, so it goes with it.
+  orgKeys AiOrgProviderKey[]
 
   @@index([createdBy])
   @@index([providerType])
   @@index([isActive])
   @@map("ai_provider_config")
+}
+
+/// An org's own API key for one provider row (§137 t-1044), used for that
+/// org's calls on the row in place of the install's key, while the install's
+/// switch (`AiOrchestrationSettings.orgProviderKeysEnabled`) is on.
+///
+/// The key is held only sealed (`lib/security/sealed-secrets.ts`), for the
+/// purpose `org-provider-key:<orgId>:<providerConfigId>`, so an envelope
+/// copied to another org's or another row's record does not open. It is
+/// opened in `lib/orchestration/llm/org-provider-keys.ts` and nowhere else,
+/// and appears in no export, backup, log line or API response; `hint` is what
+/// a person is shown.
+///
+/// Tenant-owned: one org's, isolated by `org_isolation`, and erased with it.
+/// `orgId` is required, unlike the tables §107 backfilled: a key with no org
+/// would be nobody's. Kept standing when the person who saved it is erased
+/// (`SetNull`): the key is the org's, not theirs.
+model AiOrgProviderKey {
+  id               String           @id @default(cuid())
+  providerConfigId String
+  providerConfig   AiProviderConfig @relation(fields: [providerConfigId], references: [id], onDelete: Cascade)
+  /// The sealed envelope. Never selected outside org-provider-keys.ts.
+  sealedKey        String
+  /// Starts at 1 and rises by one each time the key is replaced. Part of the
+  /// credential identity, so a replaced key is never served by a client built
+  /// with the one before it.
+  version          Int              @default(1)
+  /// The key's last four characters, for display; empty for a key shorter
+  /// than 16 characters. Not enough to use it.
+  hint             String
+  /// Who last saved it, and when. Retained, detached, when they are erased.
+  /// `savedAt` and not `updatedAt`, which a reseal onto a new master key
+  /// moves too.
+  savedById        String?
+  savedBy          User?            @relation("AiOrgProviderKeySavedBy", fields: [savedById], references: [id], onDelete: SetNull)
+  savedAt          DateTime         @default(now())
+
+  orgId String
+  org   Org    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, providerConfigId])
+  @@index([providerConfigId])
+  @@index([savedById])
+  @@map("ai_org_provider_key")
 }
 
 // Provider model matrix — per-model landscape analysis
@@ -162,8 +222,23 @@ model AiProviderModel {
   setup                      String?  @db.Text
 
   // Lifecycle
-  isDefault Boolean  @default(false) // true = seed-managed, re-seedable
-  isActive  Boolean  @default(true)
+  isDefault Boolean @default(false) // true = seed-managed, re-seedable
+  isActive  Boolean @default(true)
+
+  // Vendor retirement (§136 t-1064). `retiresAt` is the day the vendor stops
+  // serving the model: set and in the future = retiring, today or past =
+  // retired; null = no retirement known. The state is derived from the date
+  // (`lib/orchestration/model-lifecycle/state.ts`), so nothing flips it on a
+  // schedule. Independent of `isActive`, which says whether Sunrise offers the
+  // model: a retiring model stays active, because deactivating it drops it from
+  // the model registry while agents still call it. `replacementId` is the
+  // successor the move (t-1066) offers: another catalogue row on the SAME
+  // provider (owner ruling), checked by `checkReplacement` on every write,
+  // which the database cannot express across rows. See
+  // `.context/orchestration/llm-providers.md` § Model lifecycle.
+  retiresAt     DateTime?
+  replacementId String?
+
   metadata  Json?
   createdBy String?
   createdAt DateTime @default(now())
@@ -172,9 +247,12 @@ model AiProviderModel {
   // Relations
   creator                    User?                     @relation("AiProviderModelCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   activeForEmbeddingSettings AiOrchestrationSettings[] @relation("ActiveEmbeddingModel")
+  replacement                AiProviderModel?          @relation("ModelReplacement", fields: [replacementId], references: [id], onDelete: SetNull)
+  replacing                  AiProviderModel[]         @relation("ModelReplacement")
 
   @@unique([providerSlug, modelId])
   @@index([createdBy])
+  @@index([replacementId])
   @@index([isActive])
   @@index([tierRole])
   @@index([providerSlug])
@@ -286,6 +364,30 @@ model AiOrchestrationSettings {
   // stricter, an embedding call to a provider that is not `isLocal` is
   // refused: embedding inputs are counted, never masked (spec § Embeddings).
   privacyEmbeddingsPolicy       String    @default("allow")
+  // What a call holding confidential content may do, per group (§130): one
+  // of allow | warn | approved_only | local_only | block
+  // (lib/privacy/adapters/types.ts). The column defaults are for a row
+  // created from now on (a new install): warn for Personal, allow for
+  // Commercial. The migration that added them filled rows that already
+  // existed with `allow`, so an upgrade only records (owner ruling,
+  // 2026-11-17).
+  privacyConfidentialPersonal   String    @default("warn")
+  privacyConfidentialCommercial String    @default("allow")
+  // The model for confidential messages (§130 t-1038): a turn whose agent's
+  // provider a group's policy does not permit is answered on it instead.
+  // Both set or neither; the API checks it is an active chat model on a local
+  // or trusted provider. Strings, not a foreign key, as an agent's binding
+  // is, so a backup carries it to another install.
+  confidentialModelProvider     String?
+  confidentialModel             String?
+  // Orgs' own AI keys (§137 t-1044): while on, an org that has saved a key
+  // for a provider row has its calls on that row sent with it. Off by
+  // default, and turned on only while a sealed-secret master key is
+  // configured (the settings API checks). Turning it off with keys saved
+  // refuses those orgs' calls on those rows rather than moving them to the
+  // install's key. Not carried by a backup: it is this install's custody
+  // decision, and the keys it governs do not travel either.
+  orgProviderKeysEnabled        Boolean   @default(false)
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
 

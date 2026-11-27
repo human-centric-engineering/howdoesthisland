@@ -1,320 +1,465 @@
 /**
- * Tests: the signup-org seam through the real signup hooks (t-6)
+ * Tests: where a self-serve signup lands, through the signup hooks
+ * (§134 t-1062, sunrise#1232).
  *
- * An uninvited signup runs `userCreateBeforeHook` → `userCreateAfterHook` →
- * `sessionCreateBeforeHook`. The request-state carrier between them
- * (`lib/auth/pending-signup.ts`) is a small stateful fake, so what one hook
- * records is what the next reads; the database is mocked at the client. The
- * fork's resolver (`lib/app/signup-org.ts`) is swapped per test.
+ * Drives the real `userCreateBeforeHook`, `sessionCreateBeforeHook` and
+ * `userCreateAfterHook` in the order better-auth runs them, with the request
+ * state between them played by a one-signup carrier, so what the before hook
+ * decides is what the first session starts in and what the after hook writes.
+ * The decision itself (`lib/tenancy/signup-org.ts`) is real; only the org's
+ * creation and its deferred setup are mocked at `lib/tenancy/lifecycle.ts`,
+ * whose own tests cover what they write.
  *
- * Pinned:
- * - registered, an uninvited password signup and an uninvited OAuth signup each
- *   end with exactly one membership, in the resolved org as OWNER, and a first
- *   session on that org;
- * - invited signups and the first human never ask the resolver, nor does a
- *   signup whose bootstrap check failed before ruling out the first human;
- * - an after hook with no readable record writes the install-org default, at
- *   `single` and at `multi`, without asking the resolver again;
- * - a resolver that throws, answers nothing, or names a missing org falls back
- *   to the install org, logged at `error`;
- * - with no resolver the decision is today's, at `single` and at `multi`.
+ * - At `multi`, an uninvited signup (email and OAuth) and one let in from the
+ *   install org's waitlist found an org of their own, as OWNER, start their
+ *   first session there, and get no install-org membership.
+ * - Invited signups, an org's own waitlist and the first human are never
+ *   asked; at `single` nothing changes, field for field.
+ * - An app's resolver replaces the default, and a fault in it falls back.
+ * - The after hook runs the new org's deferred setup once the founder is in
+ *   it, and only then.
  *
- * The resolver's own arms are in tests/unit/lib/tenancy/signup-org.test.ts.
+ * @see lib/auth/config.ts
+ * @see lib/tenancy/signup-org.ts
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { UserCreateData, SessionCreateData } from '@/lib/auth/config';
 import type { PendingSignup } from '@/lib/auth/pending-signup';
-import type { SignupOrgResolver } from '@/lib/tenancy/signup-org';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { DEFAULT_ORG_ROLE, ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
 
-const mockEnv = vi.hoisted(() => ({
-  TENANCY_MODE: 'multi',
-  SIGNUP_MODE: 'open',
-  REQUIRE_EMAIL_VERIFICATION: false,
-  NODE_ENV: 'test',
-  DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
-  BETTER_AUTH_SECRET: 'x'.repeat(32),
-  BETTER_AUTH_URL: 'http://localhost:3000',
-  NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
-  EMAIL_FROM: 'test@example.com',
-}));
-vi.mock('@/lib/env', () => ({
-  env: mockEnv,
-  isProduction: () => false,
-  isDevelopment: () => false,
-  isTest: () => true,
-}));
-vi.mock('better-auth', () => ({
-  betterAuth: vi.fn(() => ({ api: { getSession: vi.fn() }, handler: vi.fn() })),
-}));
-vi.mock('better-auth/adapters/prisma', () => ({ prismaAdapter: vi.fn(() => ({})) }));
-const mockGetOAuthState = vi.hoisted(() => vi.fn());
-vi.mock('better-auth/api', () => ({
-  getOAuthState: mockGetOAuthState,
-  createAuthMiddleware: vi.fn((fn: unknown) => fn),
-  APIError: class APIError extends Error {
-    constructor(status: string, body?: { message?: string }) {
-      super(body?.message ?? status);
-    }
-  },
-}));
+const NEW_ORG = 'cmorg00000000000000signup';
+const CUSTOMER_ORG = 'cmorg0000000000000customer';
 
-const mockPrisma = vi.hoisted(() => ({
-  user: { update: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
-  authBootstrap: { findUnique: vi.fn(), upsert: vi.fn() },
-  org: { findUnique: vi.fn() },
-  orgMembership: {
-    upsert:
-      vi.fn<
-        (args: { create: { orgId: string; userId: string; role: string } }) => Promise<unknown>
-      >(),
-    count: vi.fn(),
-  },
-  $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
-  verification: { findFirst: vi.fn() },
-}));
-vi.mock('@/lib/db/client', () => ({ prisma: mockPrisma }));
-vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn().mockResolvedValue({ success: true }) }));
-vi.mock('@/lib/email/client', () => ({ validateEmailConfig: vi.fn() }));
-vi.mock('@/lib/utils/invitation-token', () => ({
-  validateInvitationToken: vi.fn(),
-  deleteInvitationToken: vi.fn(),
-  getValidInvitation: vi.fn().mockResolvedValue(null),
-}));
-vi.mock('@/lib/waitlist/link', () => ({
-  linkWaitlistEntryToAccount: vi.fn().mockResolvedValue(true),
-}));
-
-const mockLogger = vi.hoisted(() => ({
-  info: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  error: vi.fn(),
-}));
-vi.mock('@/lib/logging', () => ({ logger: mockLogger }));
-
-// The request state, as one signup request would carry it between the hooks.
-const carrier = vi.hoisted(() => ({
-  pending: null as PendingSignup | null,
-  accepted: false,
-}));
+// One signup's request state: what the before hook records, the session hook
+// and the after hook read.
+const carrier = vi.hoisted(() => ({ pending: null as PendingSignup | null }));
 vi.mock('@/lib/auth/pending-signup', () => ({
   setPendingSignup: vi.fn(async (pending: PendingSignup) => {
     carrier.pending = pending;
   }),
   getPendingSignup: vi.fn(async () => carrier.pending),
-  setInvitationAccepted: vi.fn(async () => {
-    carrier.accepted = true;
-  }),
-  wasInvitationAccepted: vi.fn(async () => carrier.accepted),
+  setInvitationAccepted: vi.fn(),
+  wasInvitationAccepted: vi.fn(async () => false),
   getRedeemedInvitation: vi.fn(async () => null),
 }));
 
-const seam = vi.hoisted(() => ({ resolver: null as SignupOrgResolver | null }));
-vi.mock('@/lib/app/signup-org', () => ({
-  get appSignupOrgResolver() {
-    return seam.resolver;
+const mockEnv = vi.hoisted(() => ({
+  TENANCY_MODE: 'multi',
+  REQUIRE_EMAIL_VERIFICATION: true,
+  NODE_ENV: 'test',
+  BETTER_AUTH_URL: 'http://localhost:3000',
+  BETTER_AUTH_SECRET: 'x'.repeat(32),
+  DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+  NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+}));
+vi.mock('@/lib/env', () => ({ env: mockEnv }));
+
+vi.mock('better-auth', () => ({ betterAuth: vi.fn(() => ({ api: {}, handler: vi.fn() })) }));
+vi.mock('better-auth/adapters/prisma', () => ({ prismaAdapter: vi.fn(() => ({})) }));
+vi.mock('better-auth/api', () => ({
+  getOAuthState: vi.fn(async () => ({})),
+  createAuthMiddleware: vi.fn((fn: unknown) => fn),
+  APIError: class APIError extends Error {
+    constructor(status: string, body: { message?: string } = {}) {
+      super(body.message ?? status);
+    }
   },
+}));
+vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn(async () => undefined) }));
+vi.mock('@/lib/email/client', () => ({ validateEmailConfig: vi.fn() }));
+vi.mock('@/lib/email/registry', () => ({ resolveEmailTemplate: vi.fn(() => null) }));
+vi.mock('@/lib/waitlist/link', () => ({ linkWaitlistEntryToAccount: vi.fn() }));
+vi.mock('@/lib/utils/invitation-token', () => ({
+  validateInvitationToken: vi.fn(),
+  consumeInvitation: vi.fn(),
+  findInvitationByToken: vi.fn(),
+}));
+
+const db = vi.hoisted(() => ({
+  user: {
+    update: vi.fn(),
+    count: vi.fn(),
+    // The first-owner bootstrap asks an invitation's issuer's standing, and
+    // the session hook asks whether an erasure is pending.
+    findUnique: vi.fn(async (): Promise<Record<string, unknown>> => ({
+      role: 'ADMIN',
+      orgMemberships: [],
+    })),
+  },
+  authBootstrap: { findUnique: vi.fn(), upsert: vi.fn() },
+  org: { findUnique: vi.fn() },
+  orgMembership: { upsert: vi.fn(), count: vi.fn(), findMany: vi.fn() },
+  $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+  // The awaiting-founder clear: 1 when the membership's org carried the mark.
+  $executeRaw: vi.fn(),
+}));
+vi.mock('@/lib/db/client', () => ({ prisma: db }));
+
+vi.mock('@/lib/logging', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+const mockCreateSignupOrg = vi.hoisted(() => vi.fn());
+const mockCompleteSignupOrg = vi.hoisted(() => vi.fn());
+const mockCompleteFoundedSignupOrgs = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/tenancy/lifecycle', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/tenancy/lifecycle')>()),
+  createSignupOrg: mockCreateSignupOrg,
+  completeSignupOrg: mockCompleteSignupOrg,
+  completeFoundedSignupOrgs: mockCompleteFoundedSignupOrgs,
 }));
 
 import {
   userCreateBeforeHook,
   userCreateAfterHook,
   sessionCreateBeforeHook,
+  afterEmailVerificationHook,
 } from '@/lib/auth/config';
 import { runInvitedSignup } from '@/lib/auth/signup-mode';
+import {
+  registerSignupOrgResolver,
+  __resetSignupOrgResolverForTests,
+} from '@/lib/tenancy/signup-org';
+import { logger } from '@/lib/logging';
 
-const NEW_ORG = 'cmorg00000000000000newws1';
-const OTHER_ORG = 'cmorg000000000000000other';
-const USER_ID = 'cmuser00000000000000user1';
+const EMAIL_PATH = { path: '/sign-up/email' };
+const OAUTH_PATH = { path: '/callback/google' };
 
-function newUser(): UserCreateData {
+function newUser(over: Partial<UserCreateData> = {}): UserCreateData {
   return {
-    id: USER_ID,
+    id: 'cmuser0000000000000signup',
     email: 'ada@example.com',
-    name: 'Ada',
+    name: 'Ada Lovelace',
     emailVerified: false,
     role: 'USER',
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: new Date('2026-11-19'),
+    updatedAt: new Date('2026-11-19'),
+    ...over,
   };
 }
 
-function session(): SessionCreateData {
+function session(userId: string): SessionCreateData {
   return {
-    userId: USER_ID,
-    token: 'tok',
-    expiresAt: new Date(Date.now() + 60_000),
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    userId,
+    token: 't',
+    expiresAt: new Date('2026-12-19'),
+    createdAt: new Date('2026-11-19'),
+    updatedAt: new Date('2026-11-19'),
   };
 }
 
-/** One signup request, end to end: the row's data, the memberships written, the session's org. */
-async function signUp(path: string, run: <T>(fn: () => Promise<T>) => Promise<T> = (fn) => fn()) {
-  const { data } = await run(() => userCreateBeforeHook(newUser(), { path }));
-  await run(() => userCreateAfterHook(data, { path }));
-  const { data: sessionData } = await sessionCreateBeforeHook(session(), { path });
-  const memberships = mockPrisma.orgMembership.upsert.mock.calls.map(([args]) => args.create);
-  return { data, memberships, activeOrgId: sessionData.activeOrgId };
+/** The before hook, then the session hook (inside the sign-up transaction), then the after hook. */
+async function signUp(
+  user: UserCreateData,
+  ctx: { path: string },
+  wrap: (run: () => Promise<{ data: UserCreateData }>) => Promise<{ data: UserCreateData }> = (
+    run
+  ) => run()
+): Promise<{ row: UserCreateData; activeOrgId: string | null }> {
+  const { data: row } = await wrap(() => userCreateBeforeHook(user, ctx));
+  const { data } = await sessionCreateBeforeHook(session(row.id), ctx);
+  await userCreateAfterHook(row, ctx);
+  return { row, activeOrgId: data.activeOrgId };
 }
+
+/** The memberships the after hook wrote, as `(orgId, role)`. */
+function membershipsWritten(): Array<{ orgId: string; role: string }> {
+  return db.orgMembership.upsert.mock.calls.map(
+    ([args]) => (args as { create: { orgId: string; role: string } }).create
+  );
+}
+
+const waitlistInvitation = (orgId?: string) => ({
+  name: 'Ada',
+  role: 'USER',
+  invitedBy: 'cmuser000000000000admin01',
+  invitedAt: '2026-11-19T00:00:00.000Z',
+  ...(orgId ? { orgId } : {}),
+  waitlistEntryId: 'cmwait00000000000000entry',
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockEnv.TENANCY_MODE = 'multi';
   carrier.pending = null;
-  carrier.accepted = false;
-  seam.resolver = null;
-  mockGetOAuthState.mockResolvedValue(null);
-  // Humans exist and the bootstrap has run: not the first signup.
-  mockPrisma.authBootstrap.findUnique.mockResolvedValue({ id: 'singleton' });
-  mockPrisma.user.count.mockResolvedValue(3);
-  mockPrisma.user.update.mockResolvedValue({});
-  mockPrisma.user.findUnique.mockResolvedValue({ erasureRequestedAt: null });
-  mockPrisma.org.findUnique.mockResolvedValue({ status: 'ACTIVE' });
-  mockPrisma.orgMembership.upsert.mockResolvedValue({ id: 'm1' });
-  // The resolved org is new: nobody is in it yet.
-  mockPrisma.orgMembership.count.mockResolvedValue(0);
+  mockEnv.TENANCY_MODE = 'multi';
+  __resetSignupOrgResolverForTests();
+  // Humans exist already: no first-human bootstrap.
+  db.authBootstrap.findUnique.mockResolvedValue({ id: 'singleton' });
+  db.user.update.mockResolvedValue({});
+  db.orgMembership.upsert.mockResolvedValue({});
+  db.orgMembership.count.mockResolvedValue(1);
+  db.org.findUnique.mockResolvedValue(null);
+  db.$executeRaw.mockResolvedValue(0);
+  mockCreateSignupOrg.mockResolvedValue({ id: NEW_ORG, slug: 'ada-1', name: 'x' });
+  mockCompleteSignupOrg.mockResolvedValue(undefined);
+  mockCompleteFoundedSignupOrgs.mockResolvedValue(undefined);
 });
 
-describe('with a signup-org resolver registered', () => {
-  beforeEach(() => {
-    seam.resolver = vi.fn(async () => NEW_ORG);
-  });
-
+describe('at multi, a self-serve signup founds an org of their own (#1232)', () => {
   it.each([
-    ['password', '/sign-up/email'],
-    ['OAuth', '/callback/google'],
+    ['an email signup', EMAIL_PATH],
+    ['an OAuth signup', OAUTH_PATH],
   ])(
-    'an uninvited %s signup lands in the resolved org only, as OWNER, and its first session starts there',
-    async (_label, path) => {
-      const { data, memberships, activeOrgId } = await signUp(path);
+    '%s with no invitation: OWNER of a new org, first session there, no install-org membership',
+    async (_label, ctx) => {
+      // The founder's membership write removes the new org's mark.
+      db.$executeRaw.mockResolvedValue(1);
+      const user = newUser();
 
-      expect(seam.resolver).toHaveBeenCalledWith({
-        email: 'ada@example.com',
-        name: 'Ada',
-        emailVerified: false,
-      });
-      expect(data).toMatchObject({ signupOrgId: NEW_ORG, signupOrgRole: ORG_OWNER_ROLE });
-      expect(memberships).toEqual([{ orgId: NEW_ORG, userId: USER_ID, role: ORG_OWNER_ROLE }]);
+      const { row, activeOrgId } = await signUp(user, ctx);
+
+      expect(mockCreateSignupOrg).toHaveBeenCalledTimes(1);
+      // Recorded on the row, as every decision is (t-838).
+      expect(row).toEqual({ ...user, signupOrgId: NEW_ORG, signupOrgRole: ORG_OWNER_ROLE });
       expect(activeOrgId).toBe(NEW_ORG);
-      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(membershipsWritten()).toEqual([
+        { orgId: NEW_ORG, userId: user.id, role: ORG_OWNER_ROLE },
+      ]);
+      expect(membershipsWritten().some((m) => m.orgId === INSTALL_ORG_ID)).toBe(false);
+      // Its app setup and platform agents waited for the founder.
+      expect(mockCompleteSignupOrg).toHaveBeenCalledWith(NEW_ORG, user.id);
     }
   );
 
-  it('an invited signup is unchanged: the invitation decides, and the resolver is never asked', async () => {
-    mockPrisma.orgMembership.count.mockResolvedValue(2);
-    const invitation = {
-      name: 'Ada',
-      role: 'USER',
-      invitedBy: 'admin-id',
-      invitedAt: new Date().toISOString(),
-      orgId: OTHER_ORG,
-    };
+  it('someone let in from the install org’s waitlist lands the same way', async () => {
+    db.$executeRaw.mockResolvedValue(1);
+    const user = newUser();
 
-    const { memberships, activeOrgId } = await signUp('/sign-up/email', (fn) =>
-      runInvitedSignup(fn, invitation)
+    const { row, activeOrgId } = await signUp(user, EMAIL_PATH, (run) =>
+      runInvitedSignup(run, waitlistInvitation())
     );
 
-    expect(seam.resolver).not.toHaveBeenCalled();
-    expect(memberships).toEqual([{ orgId: OTHER_ORG, userId: USER_ID, role: DEFAULT_ORG_ROLE }]);
-    expect(activeOrgId).toBe(OTHER_ORG);
-  });
-
-  it('the first human on a fresh database is never asked, and owns the install org', async () => {
-    mockPrisma.authBootstrap.findUnique.mockResolvedValue(null);
-    mockPrisma.user.count.mockResolvedValue(0);
-
-    const { memberships } = await signUp('/sign-up/email');
-
-    expect(seam.resolver).not.toHaveBeenCalled();
-    expect(memberships).toEqual([{ orgId: INSTALL_ORG_ID, userId: USER_ID, role: ORG_OWNER_ROLE }]);
-  });
-
-  it('a bootstrap check that fails before ruling out the first human never asks the resolver', async () => {
-    mockPrisma.authBootstrap.findUnique.mockRejectedValue(new Error('db'));
-
-    const { data, memberships } = await signUp('/sign-up/email');
-
-    expect(seam.resolver).not.toHaveBeenCalled();
-    expect(data).toMatchObject({ signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
-    expect(memberships).toEqual([
-      { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
+    expect(row.signupOrgId).toBe(NEW_ORG);
+    expect(row.signupOrgRole).toBe(ORG_OWNER_ROLE);
+    expect(activeOrgId).toBe(NEW_ORG);
+    expect(membershipsWritten()).toEqual([
+      { orgId: NEW_ORG, userId: user.id, role: ORG_OWNER_ROLE },
     ]);
   });
 
-  it('a bootstrap check that fails after finding other humans still asks the resolver', async () => {
-    mockPrisma.authBootstrap.findUnique.mockResolvedValue(null);
-    mockPrisma.authBootstrap.upsert.mockRejectedValue(new Error('db'));
+  it('runs no deferred setup when the membership written was not a signup org’s', async () => {
+    registerSignupOrgResolver(() => ({ kind: 'join', orgId: CUSTOMER_ORG }));
+    db.org.findUnique.mockResolvedValue({ id: CUSTOMER_ORG, status: 'ACTIVE', settings: {} });
 
-    const { memberships } = await signUp('/sign-up/email');
+    await signUp(newUser(), EMAIL_PATH);
 
-    expect(seam.resolver).toHaveBeenCalledOnce();
-    expect(memberships).toEqual([{ orgId: NEW_ORG, userId: USER_ID, role: ORG_OWNER_ROLE }]);
+    expect(mockCompleteSignupOrg).not.toHaveBeenCalled();
   });
 
-  it.each(['single', 'multi'] as const)(
-    'at %s, an after hook with no readable record writes the install-org default, without asking the resolver',
-    async (mode) => {
-      mockEnv.TENANCY_MODE = mode;
-      // No request state and a row without the record columns.
-      await userCreateAfterHook(newUser(), { path: '/sign-up/email' });
+  it('runs no deferred setup when the membership write fails; the record is left for the sign-in heal', async () => {
+    db.$executeRaw.mockResolvedValue(1);
+    db.orgMembership.upsert.mockRejectedValue(new Error('connection reset'));
 
-      const memberships = mockPrisma.orgMembership.upsert.mock.calls.map(([args]) => args.create);
-      expect(memberships).toEqual([
-        { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
-      ]);
-      expect(seam.resolver).not.toHaveBeenCalled();
-    }
-  );
+    const { row } = await signUp(newUser(), EMAIL_PATH);
 
-  it.each([
-    ['throws', () => Promise.reject(new Error('org service down')), 'Signup org resolver failed'],
-    ['answers nothing', () => null, 'Signup org resolver named no org'],
-    ['names a missing org', () => 'cmorg0000000000000missing', 'does not exist'],
-  ])(
-    'a resolver that %s falls back to the install org, logged at error',
-    async (_label, resolve, message) => {
-      seam.resolver = resolve;
-      mockPrisma.org.findUnique.mockResolvedValue(null);
-
-      const { data, memberships, activeOrgId } = await signUp('/sign-up/email');
-
-      expect(data).toMatchObject({ signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
-      expect(memberships).toEqual([
-        { orgId: INSTALL_ORG_ID, userId: USER_ID, role: DEFAULT_ORG_ROLE },
-      ]);
-      expect(activeOrgId).toBe(INSTALL_ORG_ID);
-      const logged = mockLogger.error.mock.calls.find(([text]) => String(text).includes(message));
-      expect(logged?.at(-1)).toMatchObject({ email: 'ada@example.com' });
-    }
-  );
+    expect(row.signupOrgId).toBe(NEW_ORG);
+    expect(mockCompleteSignupOrg).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to create org membership for new user',
+      expect.any(Error),
+      expect.any(Object)
+    );
+  });
 });
 
-describe('with no resolver registered (rest state)', () => {
-  it.each(['single', 'multi'] as const)(
-    'at %s an uninvited signup is decided exactly as before',
-    async (mode) => {
-      mockEnv.TENANCY_MODE = mode;
+describe('at multi, who is never asked', () => {
+  it('an org’s own waitlist invitation lands in that org, as before', async () => {
+    const user = newUser();
 
-      const { data } = await userCreateBeforeHook(newUser(), { path: '/sign-up/email' });
+    const { row } = await signUp(user, EMAIL_PATH, (run) =>
+      runInvitedSignup(run, waitlistInvitation(CUSTOMER_ORG))
+    );
 
-      // The row as it was always written, field for field.
-      expect(data).toEqual({
-        ...newUser(),
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-        signupOrgId: INSTALL_ORG_ID,
-        signupOrgRole: DEFAULT_ORG_ROLE,
-      });
-      expect(carrier.pending).toEqual({
-        membership: { orgId: INSTALL_ORG_ID, role: DEFAULT_ORG_ROLE },
-      });
-      // Nothing extra was read or logged.
-      expect(mockPrisma.org.findUnique).not.toHaveBeenCalled();
-      expect(mockPrisma.orgMembership.count).not.toHaveBeenCalled();
-      expect(mockLogger.error).not.toHaveBeenCalled();
-    }
-  );
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+    expect(row.signupOrgId).toBe(CUSTOMER_ORG);
+  });
+
+  it('an invitation into the install org (not from its waitlist) lands there, as before', async () => {
+    const user = newUser();
+    const { waitlistEntryId: _dropped, ...adminInvitation } = waitlistInvitation();
+
+    const { row } = await signUp(user, EMAIL_PATH, (run) => runInvitedSignup(run, adminInvitation));
+
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+    expect(row).toEqual({ ...user, signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
+  });
+
+  it('an invitation into another org lands there, as before', async () => {
+    const user = newUser();
+    const { waitlistEntryId: _dropped, ...invitation } = waitlistInvitation(CUSTOMER_ORG);
+
+    const { row } = await signUp(user, EMAIL_PATH, (run) => runInvitedSignup(run, invitation));
+
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+    expect(row.signupOrgId).toBe(CUSTOMER_ORG);
+  });
+
+  it('the first human on a fresh database: OWNER of the install org, not asked', async () => {
+    db.authBootstrap.findUnique.mockResolvedValue(null);
+    db.user.count.mockResolvedValue(0);
+    const resolver = vi.fn(() => ({ kind: 'own' as const }));
+    registerSignupOrgResolver(resolver);
+
+    const { row } = await signUp(newUser(), EMAIL_PATH);
+
+    expect(resolver).not.toHaveBeenCalled();
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+    expect(row.signupOrgId).toBe(INSTALL_ORG_ID);
+    expect(row.signupOrgRole).toBe(ORG_OWNER_ROLE);
+  });
+});
+
+describe('an app’s resolver, through the hooks', () => {
+  it('joining an existing org: the membership, the row and the first session all name it', async () => {
+    registerSignupOrgResolver(({ email }) =>
+      email.endsWith('@example.com') ? { kind: 'join', orgId: CUSTOMER_ORG } : { kind: 'own' }
+    );
+    db.org.findUnique.mockResolvedValue({ id: CUSTOMER_ORG, status: 'ACTIVE', settings: {} });
+    const user = newUser();
+
+    const { row, activeOrgId } = await signUp(user, EMAIL_PATH);
+
+    expect(row).toEqual({ ...user, signupOrgId: CUSTOMER_ORG, signupOrgRole: DEFAULT_ORG_ROLE });
+    expect(activeOrgId).toBe(CUSTOMER_ORG);
+    expect(membershipsWritten()).toEqual([
+      { orgId: CUSTOMER_ORG, userId: user.id, role: DEFAULT_ORG_ROLE },
+    ]);
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+  });
+
+  it('keeping the install org: the decision as before this shipped', async () => {
+    registerSignupOrgResolver(() => ({ kind: 'install' }));
+    const user = newUser();
+
+    const { row } = await signUp(user, EMAIL_PATH);
+
+    expect(row).toEqual({ ...user, signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
+  });
+
+  it('a resolver that throws never refuses the signup: install org, logged at error', async () => {
+    registerSignupOrgResolver(() => {
+      throw new Error('CRM down');
+    });
+    const user = newUser();
+
+    const { row } = await signUp(user, OAUTH_PATH);
+
+    expect(row).toEqual({ ...user, signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Signup-org resolver failed'),
+      expect.any(Error),
+      expect.objectContaining({ email: user.email, signupMethod: 'oauth' })
+    );
+  });
+
+  it('an org that cannot be created never refuses the signup either', async () => {
+    mockCreateSignupOrg.mockRejectedValue(new Error('connection reset'));
+    const user = newUser();
+
+    const { row } = await signUp(user, EMAIL_PATH);
+
+    expect(row).toEqual({ ...user, signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
+  });
+});
+
+describe('at single, nothing changes', () => {
+  it('an uninvited signup is recorded field for field as before, and nothing is asked or created', async () => {
+    mockEnv.TENANCY_MODE = 'single';
+    const resolver = vi.fn(() => ({ kind: 'own' as const }));
+    registerSignupOrgResolver(resolver);
+    const user = newUser();
+
+    const { row, activeOrgId } = await signUp(user, EMAIL_PATH);
+
+    expect(row).toEqual({ ...user, signupOrgId: INSTALL_ORG_ID, signupOrgRole: DEFAULT_ORG_ROLE });
+    expect(carrier.pending).toEqual({
+      membership: { orgId: INSTALL_ORG_ID, role: DEFAULT_ORG_ROLE },
+    });
+    expect(activeOrgId).toBe(INSTALL_ORG_ID);
+    expect(resolver).not.toHaveBeenCalled();
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+    expect(mockCompleteSignupOrg).not.toHaveBeenCalled();
+  });
+
+  it('a waitlist invitation from the install org lands in the install org', async () => {
+    mockEnv.TENANCY_MODE = 'single';
+
+    const { row } = await signUp(newUser(), EMAIL_PATH, (run) =>
+      runInvitedSignup(run, waitlistInvitation())
+    );
+
+    expect(row.signupOrgId).toBe(INSTALL_ORG_ID);
+    expect(mockCreateSignupOrg).not.toHaveBeenCalled();
+  });
+});
+
+describe('a signup org’s deferred setup, off the request (t-1062)', () => {
+  it('tells a resolver an idToken signup through /sign-in/social is OAuth', async () => {
+    const resolver = vi.fn(() => ({ kind: 'own' as const }));
+    registerSignupOrgResolver(resolver);
+
+    await signUp(newUser(), { path: '/sign-in/social' });
+
+    expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ signupMethod: 'oauth' }));
+  });
+
+  it('the sign-in heal that founds a signup org runs its setup', async () => {
+    const userId = 'cmuser00000000000000healed';
+    db.orgMembership.findMany.mockResolvedValue([]);
+    db.user.findUnique.mockResolvedValueOnce({ erasureRequestedAt: null }).mockResolvedValueOnce({
+      role: 'USER',
+      accountType: null,
+      signupOrgId: NEW_ORG,
+      signupOrgRole: ORG_OWNER_ROLE,
+    });
+    db.org.findUnique.mockResolvedValue({ id: NEW_ORG });
+    db.$executeRaw.mockResolvedValue(1);
+
+    const { data } = await sessionCreateBeforeHook(session(userId), EMAIL_PATH);
+
+    expect(data.activeOrgId).toBe(NEW_ORG);
+    await vi.waitFor(() => expect(mockCompleteSignupOrg).toHaveBeenCalledWith(NEW_ORG, userId));
+  });
+
+  it('the session minted at an OAuth signup releases the founder’s org too', async () => {
+    const user = newUser();
+
+    await signUp(user, OAUTH_PATH);
+
+    await vi.waitFor(() =>
+      expect(mockCompleteFoundedSignupOrgs).toHaveBeenCalledWith(user.id, { signingIn: true })
+    );
+  });
+
+  it('every sign-in at multi releases the signup orgs the user founded, as able to act', async () => {
+    const userId = 'cmuser00000000000000signin';
+    db.orgMembership.findMany.mockResolvedValue([
+      { orgId: NEW_ORG, createdAt: new Date(), org: { status: 'ACTIVE' } },
+    ]);
+
+    await sessionCreateBeforeHook(session(userId), EMAIL_PATH);
+    await vi.waitFor(() =>
+      expect(mockCompleteFoundedSignupOrgs).toHaveBeenCalledWith(userId, { signingIn: true })
+    );
+
+    mockCompleteFoundedSignupOrgs.mockClear();
+    mockEnv.TENANCY_MODE = 'single';
+    await sessionCreateBeforeHook(session(userId), EMAIL_PATH);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockCompleteFoundedSignupOrgs).not.toHaveBeenCalled();
+  });
+
+  it('verifying an address sets up the signup orgs that waited for it, at multi only', async () => {
+    const verified = { id: 'cmuser0000000000000signup', email: 'ada@example.com', name: 'Ada' };
+
+    await afterEmailVerificationHook(verified);
+    await vi.waitFor(() => expect(mockCompleteFoundedSignupOrgs).toHaveBeenCalledWith(verified.id));
+
+    mockCompleteFoundedSignupOrgs.mockClear();
+    mockEnv.TENANCY_MODE = 'single';
+    await afterEmailVerificationHook(verified);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockCompleteFoundedSignupOrgs).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
+import { runAsLivenessProbe } from '@/lib/tenancy/context';
 
 /**
  * Database utility functions
@@ -8,10 +9,17 @@ import { logger } from '@/lib/logging';
 
 /**
  * Check if database connection is working
+ *
+ * Runs its `SELECT 1` in the liveness-probe scope, as `getDatabaseHealth()`
+ * does and for the same reason: at `TENANCY_MODE=multi` the data layer refuses
+ * raw SQL with no tenant context, so a caller with no org would be told the
+ * database is down (#1262, t-1055).
  */
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await runAsLivenessProbe(async () => {
+      await prisma.$queryRaw`SELECT 1`;
+    });
     return true;
   } catch (error) {
     logger.error('Database connection failed', error);
@@ -30,6 +38,13 @@ export async function disconnectDatabase(): Promise<void> {
 /**
  * Get database health status
  * Useful for health check endpoints
+ *
+ * The probe always enters the system scope (`runAsLivenessProbe`, logged at
+ * debug), whatever its caller has entered. The unauthenticated `/api/health`
+ * route has no org, and at `TENANCY_MODE=multi` the data layer refuses raw SQL
+ * with no tenant context (#1262); the admin stats route leaves its org for the
+ * probe. `SELECT 1` reads no rows, so the bypass reaches nothing. Run nothing
+ * else inside it.
  */
 export async function getDatabaseHealth(): Promise<{
   connected: boolean;
@@ -38,7 +53,9 @@ export async function getDatabaseHealth(): Promise<{
   const start = Date.now();
 
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await runAsLivenessProbe(async () => {
+      await prisma.$queryRaw`SELECT 1`;
+    });
     const latency = Date.now() - start;
 
     return {

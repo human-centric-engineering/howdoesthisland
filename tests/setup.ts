@@ -261,6 +261,29 @@ vi.mock('next/navigation', async () => {
 });
 
 /**
+ * next-intl, read from the real source catalogue (§138 t-1073).
+ *
+ * Components take their text from `lib/i18n/messages/en.json`, so a test
+ * renders the English a viewer sees with no provider wrapper, and a key the
+ * catalogue lacks fails the test. `next-intl/server` cannot load outside a
+ * request, so it is replaced outright. See `tests/helpers/i18n.ts`; a file
+ * that needs another locale mocks the module itself.
+ */
+vi.mock('next-intl', async (importOriginal) => {
+  const { nextIntlClientMock } = await import('@/tests/helpers/i18n');
+  return { ...(await importOriginal<typeof import('next-intl')>()), ...nextIntlClientMock };
+});
+vi.mock('next-intl/server', async () => {
+  // Load the client mock first. The helper imports `next-intl`, so a file that
+  // reaches `next-intl/server` first (a server page) would otherwise build the
+  // client mock from inside the helper's own evaluation, get it half-built,
+  // and leave its client components on the real hooks (§138 t-1074).
+  await import('next-intl');
+  const { nextIntlServerMock } = await import('@/tests/helpers/i18n');
+  return nextIntlServerMock;
+});
+
+/**
  * Mock Next.js headers
  *
  * Used in Server Components and API routes
@@ -385,15 +408,22 @@ vi.mock('@/lib/app/waitlist-config', () => ({ waitlistConfig: null }));
  * `vi.mock(…, (importOriginal) => importOriginal())`: `defaults.test.ts`
  * ("seams ship empty", which must be able to fail in a fork),
  * `stale-writers.test.ts` (reads the fork's `registerStaleWriter()` calls) and
- * `admin-tier-roster.test.ts` (judges the fork's org-tier pages). A test that
- * needs a seam filled mocks it itself, as `org-tier-admin-pages.test.ts`,
- * `user-created-hooks.test.ts` and `erasure-hooks-seam.test.ts` do.
+ * `admin-tier-roster.test.ts` (judges the fork's org-tier pages and the
+ * switches they require). A fourth, `setup-seam-pins.test.ts`, reads each
+ * real init with `vi.importActual` only to check the pin replaces it. A test that needs a seam filled mocks it itself, as
+ * `org-tier-admin-pages.test.ts`, `user-created-hooks.test.ts`,
+ * `erasure-hooks-seam.test.ts`, `org-created-hooks.test.ts`,
+ * `signup-org.test.ts` and `app-pins.test.ts` do.
  * A fork tests its own filled seam in `tests/unit/lib/app/<seam>.test.ts`,
  * which may read the real seam too. `defaults.test.ts` fails any other file
  * that reads a pinned seam past its pin, or unmocks one.
  *
- * Six seams are pinned, not every lazy init in `lib/app/`: these are the ones
- * a measured fill failed. The rest are #636's sweep.
+ * Twelve seams are pinned in this file, not every lazy init in `lib/app/`:
+ * the four above (llm-providers, brand, emails, waitlist-config) and the eight
+ * inits below (admin-tier, user-created, erasure, org-created, signup-org,
+ * model-pins, entitlements, access-explainer). The rest are #636's sweep.
+ * `tests/unit/setup-seam-pins.test.ts` fails if one of the eight inits stops
+ * being replaced.
  */
 // Each keeps the module's other exports, as the brand pin derives its keys: a
 // fork may export more from these files, and a mock that dropped it would fail
@@ -430,6 +460,52 @@ vi.mock('@/lib/app/authorization', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   initAppAuthorizationPolicy: () => {
     // Registers no policy: Sunrise's shipped default.
+  },
+}));
+// Not from a measured fill: pinned when the seam was added (t-1061), because a
+// filled one changes what `createOrg()` writes, and the lifecycle tests assert
+// that write exactly.
+vi.mock('@/lib/app/org-created', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  initAppOrgCreatedHooks: () => {
+    // Registers no hook: Sunrise's shipped default.
+  },
+}));
+// Pinned when the seam was added (t-1062), for the same reason: a filled one
+// changes where every self-serve signup at `multi` lands, which the signup
+// hook tests assert exactly.
+vi.mock('@/lib/app/signup-org', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  initAppSignupOrgResolver: () => {
+    // Registers no resolver: Sunrise's shipped default.
+  },
+}));
+// Pinned when the seam was added (t-1067): a filled one adds the app's pins to
+// every model's uses and can refuse every move, which the uses, delete and
+// move tests assert exactly.
+vi.mock('@/lib/app/model-pins', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  initAppModelPins: () => {
+    // Registers no reporter and no check: Sunrise's shipped default.
+  },
+}));
+// From a fork's fill (#1324): ConQuest registers its packages as switches,
+// one keyed `lead_gen`. The registry runs the app's init on its first read, so
+// that switch landed over the `lead_gen` fixture `admin/layout.test.tsx` and
+// `admin-page-viewer-locked.test.ts` register, and both failed in the fork.
+vi.mock('@/lib/app/entitlements', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  initAppEntitlements: () => {
+    // Registers no switch and no meter: Sunrise's shipped default.
+  },
+}));
+
+// Pinned when the seam was added (§143 t-1090): a filled one regroups and
+// rewords what the access-explainer tests assert exactly.
+vi.mock('@/lib/app/access-explainer', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  initAppAccessExplainer: () => {
+    // Registers no area, surface, audience or section: Sunrise's shipped default.
   },
 }));
 

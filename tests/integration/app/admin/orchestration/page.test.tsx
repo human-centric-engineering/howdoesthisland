@@ -61,8 +61,22 @@ vi.mock('@/lib/logging', () => ({
 // on what the dashboard *page* is responsible for: composing children,
 // computing the setup-banner gate, and surviving fetch failure.
 vi.mock('@/components/admin/orchestration/costs/cost-trend-chart', () => ({
-  CostTrendChart: ({ title }: { title?: string }) => (
-    <div data-testid="cost-trend-chart">{title ?? ''}</div>
+  CostTrendChart: ({
+    title,
+    trend,
+    days,
+  }: {
+    title?: string;
+    trend?: Array<{ date: string }> | null;
+    days?: number;
+  }) => (
+    <div
+      data-testid="cost-trend-chart"
+      data-days={days ?? ''}
+      data-dates={(trend ?? []).map((p) => p.date).join(',')}
+    >
+      {title ?? ''}
+    </div>
   ),
 }));
 
@@ -71,7 +85,9 @@ vi.mock('@/components/admin/orchestration/dashboard-activity-feed', () => ({
 }));
 
 vi.mock('@/components/admin/orchestration/dashboard-stats-cards', () => ({
-  DashboardStatsCards: () => <div data-testid="dashboard-stats-cards" />,
+  DashboardStatsCards: ({ todayCostUsd }: { todayCostUsd: number | null }) => (
+    <div data-testid="dashboard-stats-cards" data-today-cost={String(todayCostUsd)} />
+  ),
 }));
 
 vi.mock('@/components/admin/orchestration/top-capabilities-panel', () => ({
@@ -114,6 +130,7 @@ const HAPPY_BODIES: Array<{ match: string; data: unknown; meta?: unknown }> = [
     match: '/costs/summary',
     data: {
       totals: { today: 1.5, week: 7, month: 22 },
+      ownKey: { today: 0.5, week: 0.5, month: 0.5 },
       byAgent: [],
       byModel: [],
       trend: [
@@ -303,6 +320,15 @@ describe('OrchestrationDashboardPage (server component)', () => {
       expect(screen.getByTestId('dashboard-activity-feed')).toBeInTheDocument();
     });
 
+    it("shows today's spend on the platform's keys, as the costs page does (§137)", async () => {
+      await setupHappyPathMocks(ALL_CONFIGURED);
+
+      await renderPage();
+
+      // 1.50 in all, 0.50 of it on an organisation's own key.
+      expect(screen.getByTestId('dashboard-stats-cards')).toHaveAttribute('data-today-cost', '1');
+    });
+
     it("counts only the org's own agents, not its platform agents (§116 t-725)", async () => {
       await setupHappyPathMocks(ALL_CONFIGURED);
 
@@ -318,9 +344,10 @@ describe('OrchestrationDashboardPage (server component)', () => {
       ]);
     });
 
-    it('passes the recent week of trend data into the chart', async () => {
-      // The page slices `trend.slice(-7)` to render the 7-day chart —
-      // this exercises the success branch of getCostSummary.
+    it('passes the trend into the chart with a 7-day window', async () => {
+      // The chart takes the window by date: `trend` omits days with no spend,
+      // so its last seven points can reach back further than a week.
+      // This exercises the success branch of getCostSummary.
       await setupHappyPathMocks(ALL_CONFIGURED);
 
       await renderPage();
@@ -330,6 +357,11 @@ describe('OrchestrationDashboardPage (server component)', () => {
       // value, so seeing it confirms the page actually rendered the
       // chart with its happy-path props.
       expect(screen.getByTestId('cost-trend-chart')).toHaveTextContent('7-day spend trend');
+      expect(screen.getByTestId('cost-trend-chart')).toHaveAttribute('data-days', '7');
+      expect(screen.getByTestId('cost-trend-chart')).toHaveAttribute(
+        'data-dates',
+        '2026-04-01,2026-04-02'
+      );
     });
 
     it('shows a notice only for the panel whose fetch failed', async () => {
@@ -445,6 +477,17 @@ describe('OrchestrationDashboardPage — an org admin’s half (§111 t-812)', (
     const urls = await fetchedUrls();
     expect(urls.some((u) => u.includes('/costs/summary'))).toBe(true);
     expect(urls.some((u) => u.includes('/observability/dashboard-stats'))).toBe(true);
+  });
+
+  it('links to roles and access, from the dashboard an org admin lands on (t-1091)', async () => {
+    await setupHappyPathMocks({ hasProvider: true, hasAgent: true, hasDefaultChatModel: true });
+
+    await renderPage();
+
+    expect(screen.getByRole('link', { name: 'See roles and access' })).toHaveAttribute(
+      'href',
+      '/admin/access'
+    );
   });
 
   it('neither fetches nor renders the setup wizard, setup banner or quarantines', async () => {

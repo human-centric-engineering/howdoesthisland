@@ -1,0 +1,1858 @@
+{
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "language": "Language"
+  },
+  "validation": {
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordTooLong": "Password must be less than 100 characters",
+    "passwordUppercase": "Password must contain at least one uppercase letter",
+    "passwordLowercase": "Password must contain at least one lowercase letter",
+    "passwordNumber": "Password must contain at least one number",
+    "passwordSpecial": "Password must contain at least one special character",
+    "passwordRequired": "Password is required",
+    "currentPasswordRequired": "Current password is required",
+    "newPasswordSameAsCurrent": "New password must be different from current password",
+    "passwordsDontMatch": "Passwords don't match",
+    "emailRequired": "Email is required",
+    "emailInvalid": "Invalid email address",
+    "emailTooLong": "Email must be less than 255 characters",
+    "nameRequired": "Name is required",
+    "nameEmpty": "Name cannot be empty",
+    "nameTooLong": "Name must be less than 100 characters",
+    "resetTokenRequired": "Reset token is required",
+    "verificationTokenRequired": "Verification token is required",
+    "tokenRequired": "Token is required",
+    "bioTooLong": "Bio must be less than 500 characters",
+    "phoneTooLong": "Phone number must be less than 20 characters",
+    "phoneInvalid": "Invalid phone number format",
+    "timezoneTooLong": "Timezone must be less than 50 characters",
+    "localeInvalid": "Language must be a language tag, like \"en\" or \"pt-BR\"",
+    "locationTooLong": "Location must be less than 100 characters",
+    "subjectRequired": "Subject is required",
+    "subjectTooLong": "Subject must be less than 200 characters",
+    "messageTooShort": "Message must be at least 10 characters",
+    "messageTooLong": "Message must be less than 5000 characters",
+    "chooseOption": "Choose one of the options for {label}",
+    "answerTooLong": "{label} must be {max} characters or fewer",
+    "answerRequired": "{label} is required",
+    "supportReasonRequired": "Say why support needs access",
+    "supportReasonTooLong": "Reason must be 1000 characters or fewer",
+    "durationWhole": "Duration must be a whole number of hours",
+    "durationTooShort": "Duration must be at least 1 hour",
+    "durationTooLong": "Duration must be at most {max} hours",
+    "providerKeyRequired": "Paste the key",
+    "providerKeyTooLong": "A key is at most {max} characters",
+    "providerKeyBadCharacter": "The key contains a space, a line break or a hidden character, which no key has"
+  },
+  "marketing": {
+    "home": {
+      "meta": {
+        "title": "Home",
+        "description": "Build production-ready applications faster with {brand}."
+      },
+      "hero": {
+        "badge": "Next.js 16 Ready",
+        "title": "Build Production Apps Faster",
+        "description": "Sunrise is a production-ready Next.js starter template designed for rapid application development. Authentication, database, email, Docker — all pre-configured and ready to go, plus a production AI agent orchestration layer for building agents, workflows, and knowledge bases.",
+        "primaryAction": "Get Started",
+        "secondaryAction": "View on GitHub"
+      },
+      "features": {
+        "title": "Everything You Need",
+        "description": "Sunrise comes with all the essential features pre-configured so you can focus on building your application.",
+        "items": {
+          "nextjs": {
+            "description": "Built with the latest App Router and React Server Components for optimal performance."
+          },
+          "typescript": {
+            "description": "Full type safety with strict mode enabled throughout the entire codebase."
+          },
+          "authentication": {
+            "title": "Authentication",
+            "description": "Secure authentication with better-auth, supporting email/password and OAuth providers."
+          },
+          "database": {
+            "description": "Production-ready database setup with Prisma ORM for type-safe data access."
+          },
+          "email": {
+            "title": "Email System",
+            "description": "Transactional email support with React Email templates and Resend integration."
+          },
+          "docker": {
+            "title": "Docker-Ready",
+            "description": "Multi-stage Docker builds for optimized production deployments anywhere."
+          },
+          "orchestration": {
+            "title": "Agent Orchestration",
+            "description": "Design, deploy, and monitor AI agents with capabilities, workflows, and provider fallback — all admin-configured."
+          },
+          "knowledge": {
+            "title": "Knowledge Base & RAG",
+            "description": "Upload documents, chunk, embed (pgvector), and let agents answer grounded questions via semantic search."
+          }
+        }
+      },
+      "howItWorks": {
+        "title": "Get Started in Minutes",
+        "description": "Three simple steps to go from zero to production-ready.",
+        "items": {
+          "fork": {
+            "title": "Fork & Clone",
+            "description": "Start by forking the repository and cloning it to your local machine."
+          },
+          "configure": {
+            "title": "Configure",
+            "description": "Set up your environment variables and customize to your needs."
+          },
+          "deploy": {
+            "title": "Deploy",
+            "description": "Deploy with Docker, Vercel, or your preferred platform."
+          }
+        }
+      },
+      "pricing": {
+        "title": "Simple, Transparent Pricing",
+        "description": "Start for free with open source. Upgrade for priority support and custom development.",
+        "tiers": {
+          "openSource": {
+            "name": "Open Source",
+            "description": "Free forever for everyone",
+            "priceDetail": "forever",
+            "cta": "Get Started",
+            "features": {
+              "sourceAccess": "Full source code access",
+              "coreFeatures": "All core features included",
+              "license": "MIT License",
+              "community": "Community support via GitHub",
+              "updates": "Regular updates"
+            }
+          },
+          "pro": {
+            "name": "Pro Support",
+            "description": "For teams that need extra help",
+            "priceDetail": "one-time",
+            "cta": "Contact Us",
+            "badge": "Popular",
+            "features": {
+              "everythingOpenSource": "Everything in Open Source",
+              "emailSupport": "3 months email support",
+              "priorityFixes": "Priority bug fixes",
+              "architectureReview": "Architecture review session",
+              "featureGuidance": "Custom feature guidance"
+            }
+          },
+          "enterprise": {
+            "name": "Enterprise",
+            "description": "For large-scale deployments",
+            "price": "Custom",
+            "cta": "Contact Sales",
+            "features": {
+              "everythingPro": "Everything in Pro Support",
+              "dedicatedChannel": "Dedicated support channel",
+              "customDevelopment": "Custom feature development",
+              "onboarding": "On-boarding assistance",
+              "sla": "SLA guarantee"
+            }
+          }
+        }
+      },
+      "faq": {
+        "title": "Frequently Asked Questions",
+        "description": "Got questions? We have answers.",
+        "items": {
+          "what": {
+            "question": "What is Sunrise?",
+            "answer": "Sunrise is a production-ready Next.js starter template designed for rapid application development. It includes authentication, database setup, email integration, Docker deployment, and follows best practices for AI-assisted development."
+          },
+          "free": {
+            "question": "Is Sunrise really free?",
+            "answer": "Yes! Sunrise is open source under the MIT License. You can use it for personal and commercial projects without any restrictions. We offer paid support packages for teams that want additional assistance."
+          },
+          "technologies": {
+            "question": "What technologies does Sunrise use?",
+            "answer": "Sunrise is built with Next.js 16, TypeScript, PostgreSQL with Prisma ORM, better-auth for authentication, Tailwind CSS with shadcn/ui components, React Email with Resend, and Docker for deployment."
+          },
+          "aiOptimized": {
+            "question": "How is Sunrise optimized for AI development?",
+            "answer": "Two ways. First, AI-assisted development: comprehensive documentation in CLAUDE.md and the .context/ substrate helps AI assistants understand the codebase and follow established patterns when generating code. Second, AI agent capabilities for the apps you build: a complete orchestration layer for designing, deploying, and monitoring AI agents."
+          },
+          "agents": {
+            "question": "Can I build AI agents with Sunrise?",
+            "answer": "Yes. Sunrise ships with a full agent orchestration layer at /admin/orchestration: configure LLM providers, define agents with system instructions and budgets, create custom capabilities (tools), build multi-step workflows as DAGs, ingest documents into pgvector-backed knowledge bases for RAG, expose agents via an MCP server or embed widget, and monitor everything with execution tracing, evaluations, and an audit log. Built on the 21 agentic design patterns from Antonio Gullí."
+          },
+          "commercial": {
+            "question": "Can I use Sunrise for commercial projects?",
+            "answer": "Absolutely! Sunrise is released under the MIT License, which allows commercial use, modification, and distribution. You just need to include the original license in any copies of the software."
+          },
+          "support": {
+            "question": "How do I get support?",
+            "answer": "For free support, you can open issues on GitHub or participate in community discussions. For priority support, architecture reviews, or custom development, check out our Pro Support and Enterprise packages."
+          }
+        }
+      },
+      "cta": {
+        "title": "Ready to Build Something Great?",
+        "description": "Join developers who are building production applications faster with Sunrise.",
+        "primaryAction": "Get Started Free",
+        "secondaryAction": "View Documentation"
+      }
+    },
+    "about": {
+      "meta": {
+        "title": "About",
+        "socialTitle": "About - {brand}",
+        "description": "Learn about {brand}."
+      },
+      "hero": {
+        "title": "About Sunrise",
+        "description": "A production-ready Next.js starter template built to help developers ship faster while maintaining high standards for code quality, security, and maintainability — including a complete AI agent orchestration layer."
+      },
+      "mission": {
+        "title": "Our Mission",
+        "problem": "Modern web development involves countless decisions — frameworks, authentication, databases, deployment, testing, and more. Each choice requires research, implementation, and debugging. This takes time away from building the features that matter most.",
+        "solution": "<strong>Sunrise solves this problem</strong> by providing a complete, production-ready foundation. We've made the hard decisions, implemented best practices, and documented everything thoroughly. You get a head start measured in weeks, not hours.",
+        "agents": "And because modern apps increasingly include AI agents, Sunrise ships with a complete orchestration layer too: providers, agents, capabilities, workflows, knowledge bases, and observability. The boring stuff done well — plus the modern agentic primitives so your app can include AI agents from day one."
+      },
+      "principles": {
+        "title": "Design Principles",
+        "description": "The guiding principles that shape every decision in Sunrise.",
+        "items": {
+          "productionReady": {
+            "title": "Production-Ready",
+            "description": "Every feature is battle-tested and ready for production deployment from day one."
+          },
+          "aiOptimized": {
+            "title": "AI-Optimized",
+            "description": "Comprehensive documentation and clear patterns enable AI assistants to generate high-quality code."
+          },
+          "agentReady": {
+            "title": "Agent-Ready",
+            "description": "Full agent orchestration built in: providers, agents, capabilities, workflows, knowledge bases."
+          },
+          "apiFirst": {
+            "title": "API-First",
+            "description": "Every action is accessible via versioned APIs, an MCP server, and agent capabilities — ready for integrations."
+          },
+          "dockerFirst": {
+            "title": "Docker-First",
+            "description": "Multi-stage Docker builds ensure consistent, portable deployments across any environment."
+          },
+          "wellDocumented": {
+            "title": "Well-Documented",
+            "description": "Detailed guides for every domain help developers and AI assistants understand the codebase."
+          }
+        }
+      },
+      "techStack": {
+        "title": "Technology Stack",
+        "description": "Built with modern, proven technologies that scale.",
+        "names": {
+          "agentOrchestration": "Agent Orchestration",
+          "mcpServer": "MCP Server"
+        },
+        "categories": {
+          "framework": "Framework",
+          "language": "Language",
+          "database": "Database",
+          "orm": "ORM",
+          "vectorSearch": "Vector Search",
+          "authentication": "Authentication",
+          "styling": "Styling",
+          "components": "Components",
+          "email": "Email",
+          "ai": "AI",
+          "deployment": "Deployment",
+          "monitoring": "Monitoring"
+        }
+      },
+      "why": {
+        "title": "Why Choose Sunrise?",
+        "description": "What makes Sunrise different.",
+        "items": {
+          "auth": "Complete authentication system with email/password and OAuth support",
+          "database": "Database schema and migrations ready for user management",
+          "email": "Transactional email with beautiful React templates",
+          "docker": "Docker configuration for development and production",
+          "security": "Comprehensive security: rate limiting, CORS, CSP, input sanitization",
+          "logging": "Structured logging with environment-aware output",
+          "monitoring": "Error monitoring with Sentry integration",
+          "aiDocs": "AI-friendly documentation in CLAUDE.md and .context/ substrate",
+          "orchestration": "AI agent orchestration: providers, agents, capabilities, workflows",
+          "knowledge": "Knowledge base with document ingestion and pgvector semantic search",
+          "mcp": "MCP server for Claude Code integration and AI-assisted development",
+          "license": "MIT licensed for commercial and personal use"
+        }
+      },
+      "cta": {
+        "title": "Ready to Get Started?",
+        "description": "Join developers building production applications faster with Sunrise.",
+        "primaryAction": "Start Building",
+        "secondaryAction": "View Source"
+      }
+    },
+    "contact": {
+      "meta": {
+        "title": "Contact",
+        "socialTitle": "Contact - {brand}",
+        "description": "Get in touch with the {brand} team. Questions, feedback, or just want to say hello? We would love to hear from you."
+      },
+      "title": "Get in Touch",
+      "intro": "Have a question about Sunrise? Want to discuss a custom implementation? Or just want to say hello? We'd love to hear from you.",
+      "formCard": {
+        "title": "Send a Message",
+        "description": "Fill out the form below and we'll get back to you as soon as possible."
+      },
+      "email": {
+        "title": "Email",
+        "description": "For general inquiries"
+      },
+      "responseTime": {
+        "title": "Response Time",
+        "description": "When to expect a reply",
+        "body": "We typically respond within 1-2 business days. For urgent matters, please mention \"URGENT\" in the subject line."
+      },
+      "github": {
+        "description": "Issues and discussions",
+        "body": "For bug reports and feature requests, open an issue on GitHub.",
+        "link": "Open an Issue",
+        "title": "GitHub"
+      },
+      "support": {
+        "title": "Need Priority Support?",
+        "body": "Our Pro Support package includes dedicated email support, priority bug fixes, and architecture review sessions.",
+        "link": "View Support Options"
+      },
+      "form": {
+        "honeypotLabel": "Website (leave blank)",
+        "name": "Name",
+        "namePlaceholder": "Your name",
+        "email": "Email",
+        "subject": "Subject",
+        "subjectPlaceholder": "What is this about?",
+        "message": "Message",
+        "messagePlaceholder": "Your message...",
+        "submit": "Send Message",
+        "submitting": "Sending...",
+        "saveFailed": "An unexpected error occurred. Please try again.",
+        "successTitle": "Message Sent!",
+        "successBody": "Thank you for reaching out. We'll get back to you as soon as possible."
+      }
+    }
+  },
+  "legal": {
+    "lastUpdated": "Last updated: {date}",
+    "privacy": {
+      "meta": {
+        "title": "Privacy Policy",
+        "socialTitle": "Privacy Policy - {brand}",
+        "description": "Privacy Policy for {brand}. Learn how we collect, use, and protect your data."
+      },
+      "title": "Privacy Policy",
+      "sections": {
+        "introduction": {
+          "title": "Introduction",
+          "body": "This is a placeholder privacy policy. Replace this content with your actual privacy policy that complies with applicable laws and regulations (GDPR, CCPA, etc.)."
+        },
+        "informationWeCollect": {
+          "title": "Information We Collect",
+          "body": "Describe what personal information you collect, such as:",
+          "items": {
+            "account": "Account information (name, email address)",
+            "usage": "Usage data and analytics",
+            "cookies": "Cookies and tracking technologies",
+            "thirdParty": "Information from third-party services"
+          }
+        },
+        "howWeUse": {
+          "title": "How We Use Your Information",
+          "body": "Explain how you use the collected information:",
+          "items": {
+            "services": "Providing and improving our services",
+            "communicating": "Communicating with you",
+            "security": "Security and fraud prevention",
+            "legal": "Legal compliance"
+          }
+        },
+        "sharing": {
+          "title": "Data Sharing and Disclosure",
+          "body": "Describe when and with whom you share user data, including third-party service providers, legal requirements, and business transfers."
+        },
+        "rights": {
+          "title": "Your Rights",
+          "body": "Outline the rights users have regarding their data:",
+          "items": {
+            "access": "Access and portability",
+            "correction": "Correction and deletion",
+            "marketing": "Opt-out of marketing",
+            "consent": "Withdraw consent"
+          }
+        },
+        "contact": {
+          "title": "Contact Us",
+          "body": "If you have questions about this Privacy Policy, please contact us at <link>{email}</link>."
+        }
+      }
+    },
+    "terms": {
+      "meta": {
+        "title": "Terms of Service",
+        "socialTitle": "Terms of Service - {brand}",
+        "description": "Terms of Service for {brand}. Read our terms and conditions for using the service."
+      },
+      "title": "Terms of Service",
+      "sections": {
+        "agreement": {
+          "title": "Agreement to Terms",
+          "body": "This is a placeholder terms of service. Replace this content with your actual terms that define the legal agreement between you and your users."
+        },
+        "useOfService": {
+          "title": "Use of Service",
+          "body": "Define acceptable use of your service:",
+          "items": {
+            "eligibility": "Eligibility requirements (age, jurisdiction)",
+            "registration": "Account registration and security",
+            "prohibited": "Prohibited activities",
+            "userContent": "User-generated content policies"
+          }
+        },
+        "intellectualProperty": {
+          "title": "Intellectual Property",
+          "body": "Describe ownership of content, trademarks, and intellectual property rights. Include information about the MIT license if applicable to your open-source components."
+        },
+        "payment": {
+          "title": "Payment Terms",
+          "body": "If applicable, outline:",
+          "items": {
+            "billing": "Pricing and billing",
+            "refunds": "Refund policy",
+            "subscriptions": "Subscription terms",
+            "priceChanges": "Price changes"
+          }
+        },
+        "liability": {
+          "title": "Limitation of Liability",
+          "body": "Include standard limitation of liability clauses appropriate for your jurisdiction and service type. Consult with a legal professional for proper wording."
+        },
+        "termination": {
+          "title": "Termination",
+          "body": "Explain the conditions under which accounts may be terminated and what happens to user data upon termination."
+        },
+        "changes": {
+          "title": "Changes to Terms",
+          "body": "Describe how users will be notified of changes to these terms and when changes become effective."
+        },
+        "contact": {
+          "title": "Contact Us",
+          "body": "If you have questions about these Terms of Service, please contact us at <link>{email}</link>."
+        }
+      }
+    }
+  },
+  "auth": {
+    "layout": {
+      "meta": {
+        "defaultTitle": "Authentication - {brand}",
+        "description": "Sign in or create an account"
+      }
+    },
+    "shared": {
+      "loading": "Loading...",
+      "backToLogin": "Back to login",
+      "signInPrompt": "<muted>Already have an account?</muted> <link>Sign in</link>",
+      "sending": "Sending...",
+      "sendVerificationEmail": "Send verification email",
+      "unexpectedError": "An unexpected error occurred. Please try again.",
+      "oauthFailed": "OAuth authentication failed. Please try again.",
+      "sendVerificationFailed": "Failed to send verification email. Please try again.",
+      "resendVerificationFailed": "Failed to resend verification email. Please try again.",
+      "acceptFailed": "Failed to accept invitation. Please try again.",
+      "signingOut": "Signing out...",
+      "signOut": "Sign out"
+    },
+    "fields": {
+      "name": "Name",
+      "fullName": "Full Name",
+      "namePlaceholder": "John Doe",
+      "email": "Email",
+      "emailAddress": "Email Address",
+      "password": "Password",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm Password",
+      "passwordHint": "Must be at least 8 characters with uppercase, lowercase, number, and special character"
+    },
+    "login": {
+      "meta": {
+        "title": "Sign In",
+        "description": "Sign in to your {brand} account"
+      },
+      "title": "Welcome back",
+      "description": "Enter your email and password to sign in to your account",
+      "signUpPrompt": "<muted>Don't have an account?</muted> <link>Sign up</link>",
+      "forgotPassword": "Forgot your password?",
+      "form": {
+        "sendVerificationFailed": "Failed to send verification email",
+        "tooManyAttempts": "Too many sign-in attempts. Please wait a few minutes before trying again.",
+        "invalidCredentials": "Invalid email or password",
+        "verificationSent": "Verification email sent! Check your inbox.",
+        "signingIn": "Signing in...",
+        "submit": "Sign In"
+      }
+    },
+    "signup": {
+      "meta": {
+        "title": "Create Account",
+        "description": "Create a new {brand} account"
+      },
+      "title": "Create an account",
+      "description": "Enter your information to create your account",
+      "form": {
+        "failed": "Failed to create account. Please try again.",
+        "creating": "Creating account...",
+        "submit": "Create Account"
+      }
+    },
+    "resetPassword": {
+      "meta": {
+        "title": "Reset Password",
+        "description": "Reset your {brand} account password"
+      },
+      "title": "Reset your password",
+      "description": "Enter your email address and we'll send you a password reset link",
+      "request": {
+        "urlErrors": {
+          "invalidToken": "Your password reset link has expired or is invalid. Please request a new one below.",
+          "expired": "Your password reset link has expired. Please request a new one below.",
+          "used": "This password reset link has already been used. Please request a new one if needed.",
+          "other": "There was an issue with your reset link. Please request a new one below."
+        },
+        "sendFailed": "Failed to send reset email. Please try again.",
+        "checkEmail": "Check your email",
+        "sentIfExists": "If an account exists with <strong>{email}</strong>, we've sent password reset instructions.",
+        "notReceived": "Didn't receive the email?",
+        "tips": {
+          "spam": "Check your spam folder",
+          "correctEmail": "Make sure you entered the correct email",
+          "wait": "Wait a few minutes and try again",
+          "socialLogin": "If you signed up using a social login, try signing in with that instead"
+        },
+        "tryAnother": "Try another email",
+        "linkExpired": "Reset link expired",
+        "submit": "Send reset link"
+      },
+      "complete": {
+        "invalidLink": "This reset link is invalid or has expired. Please request a new one.",
+        "failed": "Failed to reset password",
+        "success": "Password reset successfully!",
+        "redirecting": "Redirecting to login...",
+        "requestNew": "Request new reset link",
+        "resetting": "Resetting password...",
+        "submit": "Reset password"
+      }
+    },
+    "verifyEmail": {
+      "meta": {
+        "title": "Verify Email",
+        "description": "Verify your email address to complete registration"
+      },
+      "emailRequired": "Email address is required to resend verification",
+      "title": "Check your email",
+      "sentTo": "We've sent a verification link to <strong>{email}</strong>",
+      "sentToYou": "We've sent a verification link to your email address",
+      "clickLink": "Click the link in the email to verify your account and get started.",
+      "expiry": "The verification link will expire in 24 hours.",
+      "resent": "Email sent!",
+      "resend": "Resend verification email",
+      "resentSuccess": "Verification email sent successfully. Check your inbox.",
+      "alreadyVerified": "<muted>Already verified?</muted> <link>Sign in</link>",
+      "callback": {
+        "meta": {
+          "title": "Email Verification",
+          "description": "Complete your email verification"
+        },
+        "emailChangedTitle": "Email address changed",
+        "emailChangedDescription": "If you're asked to sign in, use your new address.",
+        "continueTo": "Continue to {destination}",
+        "verifiedTitle": "Email Verified!",
+        "redirectingTo": "Redirecting to {destination}...",
+        "enterEmail": "Please enter your email address",
+        "expiredTitle": "Verification Link Expired",
+        "expiredDescription": "This verification link has expired or is invalid. Please request a new one.",
+        "resend": "Resend Verification Email",
+        "sentTitle": "Verification email sent!",
+        "sentBody": "Check your inbox for a new verification link. The link will expire in 24 hours.",
+        "verifying": "Verifying..."
+      }
+    },
+    "acceptInvite": {
+      "meta": {
+        "title": "Accept Invitation",
+        "description": "Accept your invitation to join {brand}"
+      },
+      "title": "Accept Invitation",
+      "description": "Accept your invitation, or decline it",
+      "form": {
+        "oauthWrongEmail": "This invitation was sent to {email}. Please use an account with that email address, or set a password instead.",
+        "oauthWrongEmailUnknown": "This invitation was sent to a different email. Please use an account with that email address, or set a password instead.",
+        "oauthFailed": "Unable to sign in. Please try again or set a password instead.",
+        "invalidLink": "Invalid invitation link",
+        "accountExists": "You already have an account with this address, so this invitation cannot be used. Sign in to your account, or ask the person who invited you to send an invitation to your existing account.",
+        "expired": "This invitation has expired. Please contact your administrator for a new invitation.",
+        "notFound": "Invitation not found. Please check your email for the correct link.",
+        "loadFailed": "Failed to load invitation details",
+        "loading": "Loading invitation...",
+        "expiredTitle": "Invitation Expired",
+        "expiredBody": "This invitation link has expired. Please contact your administrator to request a new invitation.",
+        "invalidTitle": "Invalid Invitation",
+        "invalidBody": "This invitation link is invalid. Please check your email for the correct invitation link.",
+        "activated": "Account activated successfully!",
+        "redirecting": "Redirecting to dashboard...",
+        "activating": "Activating account...",
+        "submit": "Activate Account"
+      },
+      "existing": {
+        "checking": "Checking your sign-in...",
+        "joined": "You have joined {named, select, yes {{org}} other {the organisation}}.",
+        "redirecting": "Redirecting to your dashboard...",
+        "invited": "You have been invited to join <strong>{named, select, yes {{org}} other {the organisation}}</strong>. You already have an account with <strong>{email}</strong>, so there is no password to set.",
+        "signInToAccept": "Sign in as {email}, and you will come back here to accept.",
+        "signInUnverified": "Your account's email address has not been verified yet. When you sign in as {email}, you will be offered a verification email. Verify your address, then open this invitation link again to accept.",
+        "signInButton": "Sign in to accept",
+        "wrongAccount": "You are signed in as <strong>{current}</strong>. This invitation was sent to <strong>{email}</strong>. Sign out, then sign in as {email} to accept it.",
+        "unverified": "Your account's email address has not been verified yet, and accepting needs a verified address. Send yourself a verification email, follow its link, then open this invitation link again.",
+        "verificationSent": "Verification email sent to {email}. Check your inbox.",
+        "accepting": "Accepting...",
+        "join": "Join {named, select, yes {{org}} other {the organisation}}"
+      },
+      "decline": {
+        "failed": "Failed to decline invitation. Please try again.",
+        "button": "Decline invitation",
+        "confirm": "Decline this invitation? The link stops working, and you would need a new invitation.",
+        "declining": "Declining...",
+        "decline": "Decline",
+        "keep": "Keep it",
+        "declined": "Invitation declined. This link no longer works."
+      }
+    },
+    "logoutButton": {
+      "signingOut": "Signing out...",
+      "signOut": "Sign Out"
+    },
+    "userButton": {
+      "menu": "User menu",
+      "logIn": "Log in",
+      "createAccount": "Create account",
+      "avatarFallback": "User",
+      "viewProfile": "View profile",
+      "settings": "Settings",
+      "adminDashboard": "Admin Dashboard"
+    }
+  },
+  "forms": {
+    "oauth": {
+      "redirecting": "Redirecting...",
+      "acceptWithGoogle": "Accept with Google",
+      "continueWithGoogle": "Continue with Google",
+      "orSetPassword": "Or set a password",
+      "orContinueWithEmail": "Or continue with email"
+    },
+    "passwordStrength": {
+      "label": "Password strength: <value>{level}</value>",
+      "levels": {
+        "weak": "Weak",
+        "fair": "Fair",
+        "good": "Good",
+        "strong": "Strong",
+        "veryStrong": "Very Strong"
+      }
+    },
+    "noScript": {
+      "message": "This form needs JavaScript. Turn it on in your browser, then reload this page."
+    },
+    "saveError": {
+      "fieldsNeedFixing": "{count, plural, one {# field needs fixing.} other {# fields need fixing.}}",
+      "checkForm": "Check the form and try again.",
+      "checkField": "Check this field.",
+      "enterNumber": "Enter a number.",
+      "fieldsNeedNumber": "{count, plural, one {# field needs a number.} other {# fields need a number.}}",
+      "tryAgain": "Try again."
+    },
+    "staleSave": {
+      "changed": "{what} changed since you opened it. Nothing was saved.",
+      "explainWithCopy": "Someone else saved it, or a person on it had their data erased. Your changes are still here, and reloading discards them: copy them first to keep a record, then reload to see the current version and make them again.",
+      "explain": "Someone else saved it, or a person on it had their data erased. Your changes are still here: note anything you want to keep, then reload to see the current version and make them again.",
+      "copied": "Copied",
+      "copyFailed": "Copy failed: try again",
+      "copy": "Copy my changes",
+      "reload": "Reload"
+    }
+  },
+  "account": {
+    "layout": {
+      "meta": {
+        "titleDefault": "Dashboard - {brand}",
+        "description": "Your dashboard"
+      }
+    },
+    "error": {
+      "title": "Something went wrong",
+      "description": "An error occurred while loading this page. This has been logged."
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "hello": "Hello, {name}!",
+      "profileCompletion": "Profile Completion",
+      "fieldsCompleted": "{completed} of {total} fields completed",
+      "accountStatus": "Account Status",
+      "accountRole": "Your account role",
+      "quickActions": "Quick Actions",
+      "quickActionsDescription": "Manage your account",
+      "viewProfile": "View Profile",
+      "accountSettings": "Account Settings"
+    },
+    "emailStatus": {
+      "title": "Email Status",
+      "verified": "Verified",
+      "verifiedHint": "Your email is verified",
+      "unverified": "Unverified",
+      "pendingHint": "Check your inbox to verify your email",
+      "notSentHint": "Verify your email for added security",
+      "sending": "Sending...",
+      "resend": "Resend Email",
+      "verify": "Verify Email",
+      "sent": "Verification email sent! Check your inbox.",
+      "failed": "An error occurred. Please try again.",
+      "tooManyRequests": "Too many requests. Please try again later.",
+      "sendFailed": "Failed to send verification email. Please try again."
+    },
+    "profile": {
+      "meta": {
+        "title": "Profile",
+        "description": "View your profile"
+      },
+      "verified": "Verified",
+      "editProfile": "Edit Profile",
+      "about": "About",
+      "details": "Profile Details",
+      "email": "Email",
+      "location": "Location",
+      "notSet": "Not set",
+      "timezone": "Timezone",
+      "memberSince": "Member Since"
+    },
+    "settings": {
+      "meta": {
+        "title": "Settings",
+        "description": "Manage your account settings and preferences"
+      },
+      "title": "Settings",
+      "description": "Manage your account settings and preferences",
+      "tabTitle": "{tab} - Settings - {brand}",
+      "loading": "Loading...",
+      "tabs": {
+        "profile": "Profile",
+        "security": "Security",
+        "notifications": "Notifications",
+        "account": "Account"
+      },
+      "profileTab": {
+        "title": "Profile",
+        "description": "Manage your public profile information"
+      },
+      "securityTab": {
+        "title": "Security",
+        "description": "Manage your password and security settings",
+        "signedInWith": "You signed in with <provider>{providers}</provider>.",
+        "externalProvider": "an external provider",
+        "noPassword": "Password settings are not available for accounts using external authentication."
+      },
+      "notificationsTab": {
+        "title": "Email Notifications",
+        "description": "Choose what emails you want to receive"
+      },
+      "accountTab": {
+        "title": "Account",
+        "description": "View account information and manage your account",
+        "info": "Account Information",
+        "email": "Email",
+        "emailVerified": "Email Verified",
+        "yes": "Yes",
+        "no": "No",
+        "role": "Role",
+        "memberSince": "Member Since",
+        "dangerZone": "Danger Zone",
+        "language": "Language"
+      }
+    },
+    "profileForm": {
+      "name": "Name",
+      "namePlaceholder": "Your name",
+      "email": "Email",
+      "emailNote": "Email changes require verification and are not yet supported.",
+      "bio": "Bio",
+      "bioHelpTitle": "Public bio",
+      "bioHelp": "A short description visible on your profile. Max 500 characters.",
+      "bioPlaceholder": "Tell us about yourself...",
+      "phone": "Phone",
+      "phoneHelpTitle": "Phone number",
+      "phoneHelp": "Optional contact number. Only visible to administrators. Accepts international formats with +, digits, spaces, dashes, and parentheses.",
+      "timezone": "Timezone",
+      "timezoneHelpTitle": "Your timezone",
+      "timezoneHelp": "Used for displaying dates and scheduling notifications in your local time.",
+      "timezonePlaceholder": "Select timezone",
+      "location": "Location",
+      "locationHelpTitle": "Location",
+      "locationHelp": "Free-form location (e.g. “London, UK”). Visible on your profile.",
+      "locationPlaceholder": "City, Country",
+      "saveFailed": "Could not update your profile. Try again in a moment.",
+      "success": "Profile updated successfully",
+      "saving": "Saving...",
+      "save": "Save Changes"
+    },
+    "password": {
+      "saveFailed": "Could not change your password. Try again in a moment.",
+      "wrongPassword": "Current password is incorrect",
+      "success": "Password changed successfully",
+      "successHint": "Other sessions have been logged out for security.",
+      "current": "Current Password",
+      "currentPlaceholder": "Enter your current password",
+      "new": "New Password",
+      "helpTitle": "Password requirements",
+      "help": "Must be at least 8 characters with a mix of uppercase, lowercase, numbers, and special characters. All other sessions will be logged out when you change your password.",
+      "newPlaceholder": "Enter a new password",
+      "confirm": "Confirm New Password",
+      "confirmPlaceholder": "Confirm your new password",
+      "changing": "Changing Password...",
+      "submit": "Change Password"
+    },
+    "preferences": {
+      "saveFailed": "Could not save your preferences. Try again in a moment.",
+      "marketing": "Marketing Emails",
+      "marketingHelpTitle": "Marketing emails",
+      "marketingHelp": "Newsletters, promotions, and product announcements. Typically 1–2 per month.",
+      "marketingHint": "Receive newsletters, promotions, and product news.",
+      "productUpdates": "Product Updates",
+      "productUpdatesHelpTitle": "Product update emails",
+      "productUpdatesHelp": "Notifications about new features, improvements, and changes that may affect your workflow.",
+      "productUpdatesHint": "Get notified about new features and improvements.",
+      "securityAlerts": "Security Alerts",
+      "securityAlertsHelpTitle": "Security alerts",
+      "securityAlertsHelp": "Critical notifications about login attempts, password changes, and account security events. Cannot be disabled.",
+      "securityAlertsHint": "Important security notifications about your account.",
+      "securityAlertsAria": "Security alerts are always enabled",
+      "securityNote": "Security alerts cannot be disabled for your protection.",
+      "success": "Preferences saved successfully",
+      "saving": "Saving...",
+      "save": "Save Preferences"
+    },
+    "avatar": {
+      "saveFailed": "Could not update your avatar. Try again in a moment.",
+      "invalidType": "Invalid file type. Supported: JPEG, PNG, WebP, GIF",
+      "tooLarge": "File too large. Maximum size: {max} MB",
+      "uploadAria": "Upload avatar",
+      "uploading": "Uploading...",
+      "upload": "Upload",
+      "hint": "JPEG, PNG, WebP or GIF. Max {max}MB.",
+      "crop": {
+        "title": "Crop Avatar",
+        "description": "Drag to reposition and use the slider to zoom in or out.",
+        "zoomOut": "Zoom out",
+        "zoom": "Zoom",
+        "zoomIn": "Zoom in",
+        "cancel": "Cancel",
+        "processing": "Processing...",
+        "apply": "Apply"
+      }
+    },
+    "deleteAccount": {
+      "saveFailed": "Could not delete your account. Try again in a moment.",
+      "title": "Delete Account",
+      "description": "Permanently delete your account and all associated data. This action cannot be undone.",
+      "open": "Delete Account",
+      "pendingTitle": "Deletion in progress",
+      "pendingDescription": "Your account is closed and you have been signed out. We are still removing your data, which usually finishes within a few minutes. You do not need to do anything else.",
+      "continue": "Continue",
+      "confirmTitle": "Are you absolutely sure?",
+      "confirmDescription": "This action cannot be undone. This will permanently delete your account and remove all of your data from our servers.",
+      "typeToConfirm": "Type <mono>{word}</mono> to confirm",
+      "cancel": "Cancel",
+      "deleting": "Deleting...",
+      "confirm": "Delete Account"
+    },
+    "language": {
+      "title": "Language",
+      "label": "Screen language",
+      "useOrg": "Use my organisation's language",
+      "helpTitle": "Language",
+      "help": "The language this app's screens are shown in, for you only.",
+      "helpOrg": "“Use my organisation's language” shows the language your organisation has set as its default. If it has not set one, your browser's language is used.",
+      "saveFailed": "Could not save your language. Try again in a moment.",
+      "success": "Language saved",
+      "saving": "Saving...",
+      "save": "Save Language"
+    }
+  },
+  "layout": {
+    "nav": {
+      "openMenu": "Open navigation menu",
+      "home": "Home",
+      "about": "About",
+      "contact": "Contact",
+      "privacyPolicy": "Privacy Policy",
+      "termsOfService": "Terms of Service",
+      "dashboard": "Dashboard",
+      "profile": "Profile",
+      "settings": "Settings",
+      "admin": "Admin"
+    },
+    "footer": {
+      "cookiePreferences": "Cookie Preferences",
+      "helpSupport": "Help & Support"
+    },
+    "languageSwitch": {
+      "label": "Language",
+      "failed": "Couldn’t change the language. Please try again."
+    },
+    "memberPlatformAdmin": {
+      "message": "You are working in <strong>{org}</strong> as {role, select, OWNER {an owner} ADMIN {an admin} MEMBER {a member} other {{role}}}, so you can do only what that role allows here. Platform administration is in {installOrg}.",
+      "switch": "Switch to {installOrg}",
+      "switching": "Switching…",
+      "viaResolver": "To work as a platform admin, open {installOrg} at its own address.",
+      "failed": "Could not switch organisation. Try again.",
+      "thisOrg": "this organisation",
+      "installOrg": "the platform organisation"
+    }
+  },
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "errors": {
+    "generic": {
+      "title": "Something went wrong",
+      "description": "An unexpected error occurred. This has been logged and we'll look into it.",
+      "tryAgain": "Try again",
+      "goHome": "Go home"
+    },
+    "public": {
+      "title": "Oops! Something went wrong",
+      "description": "We encountered an unexpected error. Please try again or return to the home page."
+    },
+    "root": {
+      "contactSupport": "If this problem persists, please <link>contact support</link>."
+    },
+    "sessionExpired": {
+      "title": "Session Expired",
+      "description": "Your session has expired. Please sign in again to continue.",
+      "signIn": "Sign in"
+    },
+    "notFound": {
+      "title": "404 - Page Not Found",
+      "description": "Could not find requested resource",
+      "returnHome": "Return Home"
+    }
+  },
+  "cookies": {
+    "banner": {
+      "label": "Cookie consent",
+      "description": "We use cookies to improve your experience. Essential cookies are always active for security and functionality. Optional cookies help us analyze usage and improve our services. <link>Privacy Policy</link>",
+      "managePreferences": "Manage Preferences",
+      "essentialOnly": "Essential Only",
+      "acceptAll": "Accept All"
+    },
+    "preferences": {
+      "title": "Cookie Preferences",
+      "description": "Manage your cookie preferences. Essential cookies cannot be disabled as they are required for the website to function.",
+      "required": "Required",
+      "switchRequired": "{name} cookies (required)",
+      "switchOptional": "{name} cookies",
+      "save": "Save Preferences"
+    },
+    "categories": {
+      "essential": {
+        "name": "Essential",
+        "description": "These cookies are necessary for the website to function. They include authentication, security, and user preferences like theme settings."
+      },
+      "optional": {
+        "name": "Analytics & Marketing",
+        "description": "These cookies help us understand how visitors interact with our website and allow us to show relevant advertisements. They may be set by third-party services."
+      }
+    }
+  },
+  "waitlist": {
+    "form": {
+      "emailLabel": "Email",
+      "nameLabel": "Name (optional)",
+      "nameFieldName": "Name",
+      "optionalMarker": "(optional)",
+      "selectPlaceholder": "Choose one",
+      "selectNoAnswerLabel": "No answer",
+      "failureMessage": "Something went wrong. Please try again in a moment.",
+      "submitLabel": "Join the waitlist",
+      "submittingLabel": "Joining…",
+      "successTitle": "Thanks for joining",
+      "successMessage": "We’ll be in touch when there’s a place for you.",
+      "closedMessage": "This waitlist isn’t taking new sign-ups right now.",
+      "honeypotLabel": "Website (leave blank)"
+    },
+    "loginNotice": "Accounts are by invitation for now. <link>Join the waitlist</link> to hear when we open.",
+    "confirm": {
+      "metaTitle": "Confirm your email",
+      "title": "Confirm your email",
+      "description": "Confirm that this address is yours to keep your place on the {brand} waitlist.",
+      "button": "Confirm my address",
+      "done": "Thanks — your address is confirmed. We'll be in touch.",
+      "failure": "This link has expired or has already been used."
+    },
+    "leave": {
+      "metaTitle": "Leave the waitlist",
+      "title": "Leave the waitlist",
+      "description": "This removes your address and your answers from the {brand} waitlist. It can't be undone, but you can join again later.",
+      "button": "Remove me from the list",
+      "done": "You're off the list. We've deleted your entry.",
+      "failure": "We couldn't remove you. Try the link again later."
+    }
+  },
+  "status": {
+    "indicator": {
+      "ariaLabel": "Status: {label}",
+      "operational": {
+        "label": "Operational",
+        "description": "All systems working normally"
+      },
+      "degraded": {
+        "label": "Degraded",
+        "description": "System experiencing issues"
+      },
+      "outage": {
+        "label": "Outage",
+        "description": "System unavailable"
+      },
+      "unknown": {
+        "label": "Unknown",
+        "description": "Status unknown"
+      }
+    },
+    "page": {
+      "title": "System Status",
+      "description": "Current status of all services",
+      "lastUpdated": "Last updated: {time}",
+      "never": "Never",
+      "refresh": "Refresh",
+      "fetchFailed": "Failed to fetch status: {message}",
+      "overallStatus": "Overall Status",
+      "version": "Version",
+      "uptime": "Uptime",
+      "lastCheck": "Last Check",
+      "services": "Services",
+      "database": "Database",
+      "databaseDescription": "PostgreSQL primary database",
+      "memoryUsage": "Memory Usage",
+      "heapUsed": "Heap Used",
+      "heapTotal": "Heap Total",
+      "rss": "RSS",
+      "usage": "Usage",
+      "autoRefreshing": "Auto-refreshing every {seconds}s",
+      "autoRefreshPaused": "Auto-refresh paused",
+      "resume": "Resume"
+    }
+  },
+  "maintenance": {
+    "title": "Under Maintenance",
+    "defaultMessage": "We are currently performing scheduled maintenance. Please check back soon.",
+    "estimatedDowntime": "Estimated downtime: {downtime}",
+    "adminBypass": "You are an admin and can bypass this page.",
+    "goToAdmin": "Go to Admin Dashboard",
+    "adminNotice": "Maintenance mode is active. You can access the site because you are an admin."
+  },
+  "ui": {
+    "fieldHelp": {
+      "moreInformation": "More information"
+    },
+    "passwordInput": {
+      "show": "Show password",
+      "hide": "Hide password"
+    },
+    "dialog": {
+      "close": "Close"
+    },
+    "datePicker": {
+      "placeholder": "dd/mm/yyyy",
+      "clear": "Clear date"
+    },
+    "errorCard": {
+      "error": "Error:",
+      "digest": "Error Digest:"
+    },
+    "multiSelect": {
+      "placeholder": "Select…",
+      "empty": "No options",
+      "createFailed": "Failed to create",
+      "remove": "Remove {label}",
+      "more": "+{count} more",
+      "search": "Search…",
+      "filter": "Filter…",
+      "searchOptions": "Search options",
+      "creating": "Creating…",
+      "createQuery": "Create \"{query}\"",
+      "descriptionOptional": "Description (optional)",
+      "descriptionPlaceholder": "What is this option for?",
+      "create": "Create",
+      "selectedCount": "{count} selected",
+      "noneSelected": "None selected",
+      "clearAll": "Clear all",
+      "done": "Done"
+    }
+  },
+  "admin": {
+    "shell": {
+      "admin": "Admin",
+      "metaTitle": "Admin - {brand}",
+      "metaDescription": "Admin dashboard for {brand}",
+      "expandSidebar": "Expand sidebar",
+      "collapseSidebar": "Collapse sidebar",
+      "backTo": "Back to {destination}",
+      "actingIn": "Acting in <strong>{org}</strong>",
+      "lockedItem": "{label} (locked)",
+      "notAvailable": "{label} is not available",
+      "howToGet": "How to get {label}",
+      "errorTitle": "Admin Error",
+      "errorDescription": "An error occurred in the admin panel. This has been logged.",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "loading": "Loading…",
+      "nothingToShow": "Nothing to show.",
+      "deletedAccount": "Deleted account",
+      "unnamed": "Unnamed",
+      "actions": "Actions",
+      "cancel": "Cancel",
+      "close": "Close"
+    },
+    "nav": {
+      "management": "Management",
+      "members": "Members",
+      "membersDescription": "People in this organisation",
+      "orgOptions": "Options",
+      "orgOptionsDescription": "Language, and parts of the app this organisation turns on or off",
+      "providerKeys": "AI keys",
+      "providerKeysDescription": "Run this organisation on its own AI provider accounts",
+      "supportAccess": "Support access",
+      "supportAccessDescription": "Let platform support into this organisation",
+      "waitlist": "Waitlist",
+      "waitlistDescription": "People waiting to be let in",
+      "access": "Roles and access",
+      "accessDescription": "The roles, and what each one can do"
+    },
+    "members": {
+      "metaTitle": "Members",
+      "metaDescription": "The people in this organisation, and their roles.",
+      "title": "Members",
+      "titleOf": "Members of {org}",
+      "intro": "Who is in this organisation, and what each person may do in it.",
+      "noOrg": "You are not acting in an organisation, so there are no members to show.",
+      "installOrgNote": "Roles in the install organisation follow each person's platform role. Invite people and change their roles from <link>Users</link>.",
+      "loadFailed": "The members of this organisation could not be loaded.",
+      "roles": {
+        "OWNER": "Owner",
+        "ADMIN": "Admin",
+        "MEMBER": "Member"
+      },
+      "roleHelp": {
+        "title": "Organisation roles",
+        "member": "<strong>Member</strong>: uses the organisation's agents. Cannot open the admin console.",
+        "admin": "<strong>Admin</strong>: manages this organisation's agents, knowledge and members.",
+        "owner": "<strong>Owner</strong>: everything an admin can do, and can make or remove owners.",
+        "rules": "Only an owner can give someone the owner role or change an owner's role. The last owner cannot be demoted or removed."
+      },
+      "invite": {
+        "title": "Invite a member",
+        "description": "They get an email with a link to create their account. They appear in the list once they accept.",
+        "name": "Name",
+        "email": "Email",
+        "emailHelpTitle": "Who can be invited",
+        "emailHelp": "Anyone without an account here. The invitation link works for 7 days, and only for this email address.",
+        "emailHelpExisting": "If the person already has an account, ask a platform admin to add them to this organisation.",
+        "role": "Role",
+        "send": "Send invitation",
+        "sending": "Sending…",
+        "failed": "An unexpected error occurred",
+        "pending": "An invitation to {email} is already pending. Sending it again keeps its role.",
+        "pendingAs": "An invitation to {email} is already pending as {role}. Sending it again keeps that role.",
+        "sendAgain": "Send it again",
+        "sent": "Invitation sent to {email}.",
+        "saved": "Invitation saved for {email}.",
+        "emailNotSent": "The invitation is saved, but the email did not go out. Ask a platform admin to re-send it from Users."
+      },
+      "table": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "joined": "Joined",
+        "empty": "No members yet.",
+        "you": "(you)",
+        "roleFor": "Role for {who}",
+        "remove": "Remove {who}",
+        "roleChangeFailed": "Could not change the role. Try again.",
+        "roleChangeFailedFor": "Couldn't change the role of \"{who}\"",
+        "removeFailed": "Could not remove the member. Try again.",
+        "removeTitle": "Remove member",
+        "removeSelf": "You will lose access to this organisation, including this page, and be signed out of it. Your account and your access to other organisations are not affected.",
+        "removeOther": "{who} will lose access to this organisation and be signed out of it. Their account and their access to other organisations are not affected.",
+        "removeConfirm": "Remove"
+      }
+    },
+    "orgOptions": {
+      "metaTitle": "Options",
+      "metaDescription": "This organisation’s language, and the parts of the app it turns on or off.",
+      "title": "Options",
+      "titleFor": "Options for {org}",
+      "intro": "The language this organisation’s screens are shown in, and the parts of the app that are on or off for everyone in it.",
+      "noOrg": "You are not acting in an organisation, so there are no options to show.",
+      "loadFailed": "This organisation's options could not be loaded.",
+      "registrationFailed": "The app's options could not be loaded, so none of them is on. Ask whoever manages your organisation's account to look at it.",
+      "none": "There are no parts of the app your organisation can turn on or off on this install.",
+      "unreadable": "This organisation's options could not be read, so they are all off and cannot be changed here. Ask whoever manages your organisation's account to look at them.",
+      "supportReadOnly": "Support staff can see these options but cannot change them.",
+      "legend": "Options for this organisation",
+      "helpTitle": "Organisation options",
+      "help": "Each option turns a part of the app on or off for everyone in this organisation. Your organisation's admins can change these; what your organisation pays for is set by whoever manages its account and is not listed here.",
+      "helpDefault": "An option nobody has changed follows its default, marked <em>on by default</em> when that is on.",
+      "onByDefault": "on by default",
+      "atDefault": "Not changed here yet, so it follows its default.",
+      "save": "Save options",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveFailed": "Could not save the options",
+      "language": {
+        "title": "Language",
+        "description": "The language members see when they have not chosen one of their own.",
+        "label": "Organisation language",
+        "helpTitle": "Organisation language",
+        "help": "Members who have not picked a language in their own settings see the screens in this one. A member’s own choice always wins.",
+        "helpBrowser": "With no organisation language, each member sees the language their browser asks for, or English when there is none to match.",
+        "useBrowser": "Each member’s browser language",
+        "save": "Save language",
+        "saving": "Saving…",
+        "saved": "Saved",
+        "saveFailed": "Could not save the language",
+        "loadFailed": "This organisation’s language could not be loaded.",
+        "supportReadOnly": "Support staff cannot see or change this organisation’s language."
+      }
+    },
+    "providerKeys": {
+      "metaTitle": "AI keys",
+      "metaDescription": "Run this organisation’s AI calls on its own provider accounts.",
+      "title": "AI keys",
+      "titleFor": "AI keys for {org}",
+      "intro": "Run this organisation's AI calls on its own account with a provider, so the provider bills you directly and works under your agreement with them.",
+      "singleTenant": "Organisations' own AI keys are for installs with more than one organisation. This install has one, and its keys are set where providers are configured.",
+      "noOrg": "You are not acting in an organisation, so there are no keys to show.",
+      "installOrg": "The install organisation runs on the platform's own keys, which are set where providers are configured. Switch to a customer organisation to see its keys.",
+      "loadFailed": "This organisation's AI keys could not be loaded.",
+      "readOnly": "Your support access to this organisation is read-only: you can see its keys, but not test, replace or remove them.",
+      "saveBlocked": {
+        "switched_off": "Organisations’ own AI keys are switched off on this platform, so a key cannot be saved here until platform staff switch them on.",
+        "master_key_missing": "The platform has nowhere to keep keys safely yet, so a key cannot be saved here. Platform staff need to configure it.",
+        "support_session": "You are working in this organisation as platform support. Support can see and test its keys, and remove one, but cannot save or replace a key."
+      },
+      "badge": {
+        "platform": "Platform key",
+        "in_use": "Your key, in use",
+        "provider_off": "Not in use: provider switched off",
+        "switched_off": "Not in use: switched off",
+        "not_approved": "Not in use: provider not approved",
+        "will_not_open": "Not in use: key unreadable"
+      },
+      "state": {
+        "noKey": "No key saved. This organisation’s calls to {name} use the platform’s key.",
+        "in_use": "This organisation’s calls to {name} go out on your key, and are billed to your {name} account.",
+        "provider_off": "Platform staff have switched {name} off on this platform, so this organisation’s calls to it are refused and the key is not used. Remove the key if you no longer need it.",
+        "switched_off": "Organisations’ own keys are switched off on this platform, so this organisation’s calls to {name} are refused. They work again when platform staff switch own keys back on, or when you remove this key and go back to the platform’s key.",
+        "not_approved": "This organisation is not approved to use {name}, so its calls to {name} are refused and the key is not used. Platform staff approve providers.",
+        "will_not_open": "The saved key can no longer be read, so this organisation’s calls to {name} are refused. Save the key again to fix this.",
+        "will_not_open_no_master": "The saved key cannot be read, because the platform has nowhere to keep keys safely, so this organisation’s calls to {name} are refused. Platform staff need to configure it."
+      },
+      "test": {
+        "accepted": "{name} accepted the key.",
+        "test_failed": "{name} did not accept the key, or could not be reached.",
+        "will_not_open": "The saved key can no longer be read. Save it again.",
+        "failed": "The key could not be tested. Try again."
+      },
+      "list": {
+        "none": "This organisation is not approved for any provider that takes a key. Platform staff approve providers.",
+        "keyEnding": "Key ending <hint>…{hintValue}</hint>, saved {when}.",
+        "saved": "Saved {when}.",
+        "savedBy": "Key ending <hint>…{hintValue}</hint>, saved {when} by {who}.",
+        "savedByNoHint": "Saved {when} by {who}.",
+        "replace": "Replace key",
+        "add": "Add your own key",
+        "testKey": "Test key",
+        "testing": "Testing…",
+        "removeKey": "Remove key",
+        "removeTitle": "Remove the {name} key",
+        "removeFailed": "The key could not be removed. Try again.",
+        "removeDeleted": "The key is deleted: to use it again, save it again.",
+        "removeNotTaken": "{name} is not available to this organisation's calls with any key, so they stay refused.",
+        "removeNotApproved": "This organisation is not approved for {name}, so its calls to it stay refused.",
+        "removeBackToPlatform": "Within a minute, this organisation's calls to {name} go back to the platform's key."
+      },
+      "form": {
+        "label": "{name} key",
+        "labelReplace": "New {name} key",
+        "helpTitle": "Your organisation’s own key",
+        "help": "Paste an API key from your organisation's own {name} account. Your organisation's calls to {name} then go out on it, and {name} bills that account.",
+        "helpTest": "Before it is saved, the key is tried with one small request to {name}. A key that fails is not saved. Once saved, it is never shown again: only its last four characters are.",
+        "helpReplace": "Saving replaces the current key: this organisation's calls use the new key within a minute. Use this when a key has leaked or you are moving to a new one.",
+        "save": "Test and save",
+        "replace": "Test and replace",
+        "saving": "Testing and saving…",
+        "cancel": "Cancel",
+        "failed": "The key could not be saved. Try again."
+      }
+    },
+    "supportAccess": {
+      "metaTitle": "Support access",
+      "metaDescription": "Let the platform’s support staff into this organisation, for a limited time.",
+      "title": "Support access",
+      "titleFor": "Support access for {org}",
+      "intro": "Whether the platform's support staff may work inside this organisation, and for how long.",
+      "singleTenant": "Support access is for installs with more than one organisation. This install has one.",
+      "noOrg": "You are not acting in an organisation, so there is nothing to grant.",
+      "installOrg": "The install organisation belongs to the platform, so its staff need no grant to work in it. Switch to a customer organisation to see its grants.",
+      "ownerOnly": "Only an owner of this organisation can grant support access.",
+      "loadFailed": "The support grants for this organisation could not be loaded.",
+      "loadFailedOwner": "The support grants for this organisation could not be loaded, so support access cannot be granted until they can.",
+      "levels": {
+        "ADMIN": "Admin",
+        "READ_ONLY": "Read-only"
+      },
+      "levelHelp": {
+        "title": "Access levels",
+        "admin": "<strong>Admin</strong>: support can do what an admin of this organisation can, such as fixing an agent or a workflow.",
+        "readOnly": "<strong>Read-only</strong>: support can look at the same things, but cannot change anything.",
+        "privacy": "Either way, support cannot see members' private conversations, and everything they do is recorded in their own name."
+      },
+      "duration": "{hours, plural, one {# hour} other {# hours}}",
+      "durationDays": "{days, plural, one {# day} other {# days}}",
+      "form": {
+        "title": "Grant support access",
+        "description": "Let the platform's support staff into this organisation for a limited time, to help with a problem. Any of them can enter until the grant ends or you revoke it.",
+        "level": "Access level",
+        "for": "For",
+        "durationHelpTitle": "How long access lasts",
+        "durationHelp": "Support can enter until this time runs out. Nothing needs doing when it ends: access stops on its own.",
+        "durationHelpMax": "The longest grant is {max}. If support needs longer, grant again with a new reason.",
+        "reason": "Reason",
+        "reasonHelpTitle": "Why support needs access",
+        "reasonHelp": "Say what support is helping with, for example a ticket number or the agent that is not working. Support sees this when they enter, and it stays on the record of this grant.",
+        "replaces": "Support already has access. Granting again ends the current grant and starts this one.",
+        "grant": "Grant access",
+        "replace": "Replace grant",
+        "granting": "Granting…",
+        "failed": "An unexpected error occurred"
+      },
+      "grants": {
+        "status": "Status",
+        "level": "Level",
+        "reason": "Reason",
+        "grantedBy": "Granted by",
+        "granted": "Granted",
+        "ends": "Ends",
+        "empty": "Support has never been given access to this organisation.",
+        "open": "Open",
+        "revoked": "Revoked",
+        "expired": "Expired",
+        "revokedBy": "by {who}",
+        "revoke": "Revoke",
+        "revokeTitle": "Revoke support access",
+        "revokeDescription": "Support loses access to this organisation now, including anyone from support who is working in it. You can grant access again at any time.",
+        "revokeFailed": "Could not revoke support access. Try again."
+      },
+      "activity": {
+        "title": "What support did",
+        "description": "When support entered this organisation and what they did while in it, newest first.",
+        "grant": "Grant",
+        "allGrants": "All grants",
+        "earlierGrant": "An earlier grant",
+        "grantLabel": "{when}: {reason}",
+        "when": "When",
+        "who": "Who",
+        "action": "Action",
+        "what": "What",
+        "entered": "Entered the organisation",
+        "empty": "Support has not worked in this organisation.",
+        "loadFailed": "What support did could not be loaded. Please try again.",
+        "pageOf": "{page} / {total}"
+      }
+    },
+    "waitlist": {
+      "metaTitle": "Waitlist",
+      "metaDescription": "The people waiting to be let in, and whether each list is taking joins.",
+      "title": "Waitlist",
+      "intro": "The people waiting to be let in. Only confirmed entries are shown and counted unless you ask for the others.",
+      "countsStale": "The counts could not be refreshed and may be out of date.",
+      "listsLoadFailed": "The waitlist's lists could not be loaded.",
+      "lists": {
+        "title": "Lists",
+        "countsHelpTitle": "What the counts mean",
+        "countsHelp": "Confirmed people have clicked the link in their confirmation email and are the ones an invite draws from. Unconfirmed and flagged entries are counted on their own and never inside Confirmed. Flagged entries were marked by the app's screening check.",
+        "takingJoins": "Taking joins",
+        "closed": "Closed",
+        "toggleHelpTitle": "Opening and closing a list",
+        "toggleHelp": "Closing a list stops new joins and nothing else: people can still confirm, leave and be invited, and you can still export and erase. Each change records who made it. A list starts open unless the app declares it closed.",
+        "markClosed": "Mark closed",
+        "closeList": "Close list",
+        "openList": "Open list",
+        "closeFailed": "Could not close the list. Try again.",
+        "openFailed": "Could not open the list. Try again.",
+        "recordFailed": "Could not record the close. Try again.",
+        "unrecorded": "Closed by the app's settings, with no close date recorded, so its entries are kept until one is. Mark closed records today: confirmed entries are then deleted the app's retention window after it.",
+        "confirmed": "Confirmed",
+        "unconfirmed": "Unconfirmed",
+        "flagged": "Flagged",
+        "invited": "Invited",
+        "joined": "Signed up",
+        "removed": "Removed",
+        "bySource": "Confirmed by source: {sources}",
+        "sourceCount": "{source} {count, number}"
+      },
+      "refusals": {
+        "not_found": "This entry is no longer on the waitlist.",
+        "removed": "This person was taken off the list. Restore them before inviting them.",
+        "joined": "This person has already signed up.",
+        "unconfirmed": "This person has not confirmed their address yet, so they cannot be invited.",
+        "flagged": "This entry is flagged for review. Look at it before inviting them.",
+        "account_exists": "This address already has an account.",
+        "invitation_pending": "Someone else has already invited this address, and that invitation has not been used yet.",
+        "changed": "This entry changed while you were inviting them. Reload and try again."
+      },
+      "wave": {
+        "noneMatched": "No one matched: everyone who can be invited there has been.",
+        "invitedOf": "Invited {invited, number} of {selected, number}.",
+        "emailNotSent": "{count, plural, one {# invitation email did not go; use Resend on that row.} other {# invitation emails did not go; use Resend on those rows.}}",
+        "failed": "{count, number} could not be invited because of an error; try them again.",
+        "notInvited": "{count, number} not invited: {reason}",
+        "title": "Invite a wave",
+        "description": "Send invitations to people on the list who have confirmed their address and have not been invited yet. Flagged entries are left out. Each person gets an email with a link to create an account.",
+        "who": "Who",
+        "whoHelp": "<strong>Earliest first</strong> invites the people who joined first. <strong>At random</strong> picks people at random, so where someone is on the list makes no difference.",
+        "earliest": "Earliest first",
+        "random": "At random",
+        "howMany": "How many",
+        "howManyHelp": "Up to {max, number} in one wave. If fewer people can be invited, all of them are.",
+        "countInvalid": "Enter a whole number from 1 to {max, number}.",
+        "list": "List",
+        "listHelp": "Invite from one list, or from all of them.",
+        "allLists": "All lists",
+        "answered": "Only people who answered",
+        "answeredHelp": "Invite only people who gave one answer to one of the form's questions. The answer must match exactly.",
+        "anyone": "Anyone",
+        "answerTo": "Answer to {question}",
+        "chooseAnswer": "Choose an answer",
+        "exactAnswer": "The answer, exactly as given",
+        "send": "Send invitations",
+        "sending": "Sending…",
+        "sendFailed": "The invitations could not be sent. Try again."
+      },
+      "entries": {
+        "title": "People",
+        "loadFailed": "The waitlist could not be loaded. Please try again.",
+        "search": "Search",
+        "searchHelp": "Matches the address, the name, or any of the form's answers. The address is matched as you type it; answers are matched exactly as written.",
+        "searchPlaceholder": "Address, name or answer",
+        "list": "List",
+        "listHelp": "Show one list, or every list the app declares.",
+        "allLists": "All lists",
+        "showUnconfirmed": "Show unconfirmed",
+        "showUnconfirmedHelp": "People who have not clicked the link in their confirmation email. Anyone can type any address into the form, so these are hidden by default and never invited.",
+        "showRemoved": "Show removed",
+        "showRemovedHelp": "People taken off the list. Their row is kept so a re-join stays removed; erase them to delete it.",
+        "showJoined": "Show signed up",
+        "showJoinedHelp": "People who have created an account from their invitation.",
+        "flaggedOnly": "Flagged only",
+        "flaggedOnlyHelp": "Only entries the app’s screening check flagged for review — a throwaway domain, say. A flag is a reason to look, not proof of abuse.",
+        "inviteSelected": "Invite selected ({count, number})",
+        "inviting": "Inviting…",
+        "inviteWave": "Invite a wave…",
+        "invitingHelpTitle": "Inviting",
+        "invitingHelp": "An invitation emails a link to create an account. Only people who have confirmed their address, are still on the list and are not flagged can be invited, up to {max, number} at a time. When they sign up, their entry shows Signed up.",
+        "exportLimit": "Up to {max, number} rows, with these filters",
+        "exportCsv": "Export CSV",
+        "exportRateLimited": "Too many exports just now. Try again in a minute.",
+        "exportFailed": "The export failed. Please try again.",
+        "selectPage": "Select everyone on this page who can be invited",
+        "selectOne": "Select {email}",
+        "address": "Address",
+        "name": "Name",
+        "answers": "Answers",
+        "source": "Source",
+        "joined": "Joined",
+        "confirmed": "Confirmed",
+        "state": "State",
+        "empty": "No one matches.",
+        "answer": "{question}: {answer}",
+        "invite": "Invite",
+        "resend": "Resend",
+        "restore": "Restore",
+        "remove": "Remove",
+        "erase": "Erase",
+        "people": "{count, plural, one {# person} other {# people}}",
+        "pageOf": "Page {page, number} of {total, number}",
+        "rowFailed": "Could not update the entry. Try again.",
+        "inviteSelectedFailed": "Could not send the invitations",
+        "badges": {
+          "unconfirmed": "Unconfirmed",
+          "flagged": "Flagged: {reason}",
+          "removed": "Removed",
+          "resubmitted": "Re-submitted ×{count, number}",
+          "invited": "Invited",
+          "joined": "Signed up"
+        },
+        "notice": {
+          "sent": "Invitation sent.",
+          "resent": "Invitation resent.",
+          "createdNoEmail": "Invitation created, but the email did not go. Use Resend to try again.",
+          "createdEmailOff": "Invitation created, but the email did not go (email is not set up). Use Resend to try again.",
+          "renewedNoEmail": "Invitation renewed, but the email did not go. Use Resend to try again.",
+          "renewedEmailOff": "Invitation renewed, but the email did not go (email is not set up). Use Resend to try again."
+        },
+        "restoreTitle": "Restore this person?",
+        "restoreDescription": "They were taken off the list. Restoring puts them back on it, where they can be invited.",
+        "restoreDescriptionRejoined": "{count, plural, one {They were taken off the list, and have tried to join again # time since. Restoring puts them back on it, where they can be invited.} other {They were taken off the list, and have tried to join again # times since. Restoring puts them back on it, where they can be invited.}}",
+        "restoring": "Restoring…",
+        "restoreFailed": "Could not restore the entry. Try again.",
+        "eraseTitle": "Erase this person?",
+        "eraseDescription": "This deletes their entry and answers for good, and any invitation this organisation has sent them that they have not used. A receipt records that they were erased, without their address. Use it to honour an erasure request; to take someone off the list but keep the record, use Remove.",
+        "erasing": "Erasing…",
+        "eraseFailed": "Could not erase the entry. Try again."
+      }
+    },
+    "access": {
+      "roles": {
+        "user": {
+          "label": "User",
+          "description": "Everyone with an account. Has no platform powers: what they can do inside an organisation comes from their organisation role."
+        },
+        "platformAdmin": {
+          "label": "Platform admin",
+          "description": "Runs this install for every organisation, from the install org. There it opens every admin page, including the ones kept for the platform, and is not limited by an organisation's switches. Inside a customer's organisation it has only the role that organisation gave it."
+        },
+        "support": {
+          "label": "Support access",
+          "description": "A platform admin let into one organisation for a limited time, because its owner agreed. Only an owner can grant it, at full admin or read-only level; an owner or admin can end it at any time."
+        },
+        "owner": {
+          "label": "Owner",
+          "description": "Runs the organisation. Opens every admin page the organisation can use, manages its members and settings, and can grant support access."
+        },
+        "admin": {
+          "label": "Admin",
+          "description": "Helps run the organisation. Opens the same admin pages as an owner, but cannot make anyone an owner, change or remove an owner, or grant support access."
+        },
+        "member": {
+          "label": "Member",
+          "description": "Uses the product. Does not open the admin console."
+        },
+        "namedTier": {
+          "description": "A role this app adds. Opens only the pages listed for it, in the organisation where it is held."
+        }
+      },
+      "permissions": {
+        "useProduct": "Use the product",
+        "openConsole": "Open the admin console",
+        "manageMembers": "Invite people, and change or remove members and admins",
+        "manageOwners": "Make someone an owner, or change or remove an owner",
+        "orgSettings": "Change the organisation's language, AI keys and the switches it sets",
+        "grantSupport": "Grant support access",
+        "endSupport": "End support access",
+        "switchesOff": "Open pages the organisation's switches have turned off",
+        "platformPages": "Open the pages kept for the platform team",
+        "manageOrgs": "Create, suspend or erase organisations"
+      },
+      "areas": {
+        "members": {
+          "label": "Members",
+          "description": "Invite people to the organisation and change their roles."
+        },
+        "orgOptions": {
+          "label": "Options",
+          "description": "The organisation's own settings."
+        },
+        "providerKeys": {
+          "label": "AI keys",
+          "description": "The organisation's own accounts with AI providers."
+        },
+        "supportAccess": {
+          "label": "Support access",
+          "description": "Let support staff into the organisation, and see who has been in."
+        },
+        "waitlist": {
+          "label": "Waitlist",
+          "description": "People waiting to join, and inviting them."
+        },
+        "orchestration": {
+          "label": "AI dashboard",
+          "description": "An overview of the organisation's AI agents and workflows."
+        },
+        "orchestrationBuild": {
+          "label": "Build",
+          "description": "Agents, workflows and the MCP server."
+        },
+        "orchestrationOperate": {
+          "label": "Operate",
+          "description": "Knowledge, conversations, runs, approvals, triggers, testing, analytics and costs."
+        }
+      },
+      "closedSections": {
+        "orchestration": {
+          "label": "AI orchestration",
+          "reason": "This install keeps AI agents, workflows and their settings for the platform team."
+        }
+      },
+      "page": {
+        "metaTitle": "Roles and access",
+        "metaDescription": "The roles in this install and what each one can do.",
+        "title": "Roles and access",
+        "intro": "How this install decides who can do what: each person holds a role, and the role decides what they can open and change.",
+        "loadFailed": "Couldn't load roles and access. Reload the page to try again.",
+        "tierOrg": "Owners and admins",
+        "linkText": "What can each role do?",
+        "linkAction": "See roles and access",
+        "you": {
+          "title": "Your access",
+          "titleIn": "Your access in {org}",
+          "platform": "You are a platform admin. Every page in this console opens to you, and an organisation's switches do not limit you.",
+          "role": "Your role here: {role}",
+          "supportEntry": "You are here under support access, not as a member of this organisation.",
+          "tiers": "You can open the pages for:",
+          "switchesOn": "Switches this organisation has on:",
+          "noSwitchesOn": "This organisation has no switches on.",
+          "noNeededSwitchesOn": "None of the switches your pages need are on.",
+          "switchesUnreadable": "Couldn't read this organisation's switches, so the reasons pages are locked can't be shown.",
+          "closedTitle": "Pages you can't open",
+          "noneClosed": "You can open every page listed for you."
+        },
+        "roles": {
+          "held": "You",
+          "colRole": "Role",
+          "colMeans": "What it means",
+          "colPermission": "Permission",
+          "yes": "Yes",
+          "no": "No",
+          "platformTitle": "Platform roles",
+          "platformIntro": "Held on the install itself, across every organisation.",
+          "orgTitle": "Organisation roles",
+          "orgIntro": "Held in one organisation, and used when the install runs multi-tenant.",
+          "appTitle": "App roles",
+          "appIntro": "Roles this app adds. Each opens only the pages listed for it, in the organisation where it is held.",
+          "matrixTitle": "What each role can do",
+          "matrixIntro": "For one organisation, when the install runs multi-tenant. A platform admin does these for customer organisations from the install org; inside a customer's organisation they have only the role it gave them. Roles in the install org itself follow the platform role.",
+          "singleTenant": "This install runs single-tenant: only platform admins open the admin console, and there is no support access. These roles take effect when it runs multi-tenant.",
+          "matrixAppRoles": "A member who also holds an app role opens that role's pages.",
+          "matrixUnavailable": "Couldn't load this app's access settings, so the table of what each role can do isn't shown. The roles above still apply."
+        },
+        "areas": {
+          "title": "Pages by area",
+          "intro": "Each area lists its pages, who can open them, and the switch a page needs, if any.",
+          "page": "Page",
+          "openTo": "Open to",
+          "needs": "Needs",
+          "you": "You",
+          "noSwitch": "No switch",
+          "opens": "Can open",
+          "closed": "Can't open",
+          "needsTier": "Needs {tier}.",
+          "needsSwitch": "Needs {switch}, which this organisation does not have.",
+          "needsSwitchUnread": "Needs {switch}. Couldn't check whether this organisation has it.",
+          "closedByPolicy": "Closed to you by this app's own access rules.",
+          "empty": "No pages are listed for you here."
+        },
+        "switches": {
+          "title": "Switches",
+          "intro": "Parts of the app that are turned on or off for each organisation.",
+          "setByPlatform": "Set by the platform team",
+          "setByOrg": "Set by the organisation's owners and admins",
+          "whenLackingHide": "Hidden when off",
+          "whenLackingLock": "Shown locked when off",
+          "on": "On",
+          "off": "Off",
+          "getIt": "How to get it",
+          "colSwitch": "Switch",
+          "colSetBy": "Set by",
+          "colWhenOff": "When off",
+          "colHere": "Here"
+        },
+        "platformOnly": {
+          "title": "Kept for the platform team",
+          "intro": "Parts of this install that only platform admins can open.",
+          "colArea": "Area",
+          "colWhy": "Why"
+        }
+      }
+    }
+  },
+  "emails": {
+    "common": {
+      "greeting": "Hi {name},",
+      "hello": "Hello,",
+      "fallbackName": "User",
+      "buttonFallback": "If the button doesn't work, copy and paste this link into your browser:"
+    },
+    "welcome": {
+      "subject": "Welcome to {brand}",
+      "preview": "Welcome to {brand} - Let's get started",
+      "heading": "Welcome to {brand}!",
+      "intro": "We're excited to have you on board! {brand} is your production-ready Next.js starter template designed for rapid application development.",
+      "ready": "You're all set up and ready to go. Click the button below to access your dashboard and start exploring.",
+      "button": "Get Started",
+      "help": "If you have any questions, feel free to reach out. We're here to help!",
+      "reason": "You're receiving this email because you signed up at {email}"
+    },
+    "verifyEmail": {
+      "subject": "Verify your email address",
+      "preview": "Verify your email address",
+      "heading": "Verify Your Email Address",
+      "body": "Thanks for signing up! To complete your registration and start using {brand}, please verify your email address by clicking the button below.",
+      "button": "Verify Email",
+      "expiry": "This verification link will expire on {time}",
+      "securityHeading": "Security Note",
+      "securityOnce": "For your security, this link can only be used once and will expire after the time shown above.",
+      "securityIgnore": "If you didn't request this verification email, you can safely ignore it. Your account will not be created without clicking the verification link."
+    },
+    "resetPassword": {
+      "subject": "Reset your password",
+      "preview": "Reset your password",
+      "heading": "Reset Your Password",
+      "body": "We received a request to reset the password for your account. Click the button below to create a new password:",
+      "button": "Reset Password",
+      "expiry": "This link will expire on {time}. If you didn't request a password reset, you can safely ignore this email.",
+      "security": "<strong>Security Notice:</strong> Never share this link with anyone. If you didn't request this reset, your account may be at risk. Please contact support immediately."
+    },
+    "invitation": {
+      "subject": "You've been invited to join {org}",
+      "preview": "You've been invited to join {org}",
+      "heading": "You've Been Invited!",
+      "invitedToOrg": "<strong>{inviter}</strong> has invited you to join <strong>{org}</strong> on <strong>{brand}</strong>. We're excited to have you on board!",
+      "invitedToApp": "<strong>{inviter}</strong> has invited you to join <strong>{brand}</strong>. We're excited to have you on board!",
+      "accountLabel": "Your Account:",
+      "hasAccount": "You already have a {brand} account with this address. Click the button below, sign in as {email}, and accept the invitation:",
+      "newAccount": "Click the button below to accept your invitation and set up your password:",
+      "button": "Accept Invitation",
+      "expiry": "This invitation will expire on {time}. After accepting, you'll be able to:",
+      "switchTo": "Switch to {org} from your account",
+      "setPassword": "Set your own secure password",
+      "dashboard": "Access your personalized dashboard",
+      "collaborate": "Start collaborating with your team",
+      "notExpecting": "If you weren't expecting this invitation or don't want to join, you can safely ignore this email.",
+      "questions": "Questions? Contact {inviter} or our support team for assistance.",
+      "fallbackInviter": "Administrator"
+    },
+    "changeEmailApproval": {
+      "subject": "Approve the email change on your account",
+      "preview": "Approve the email change on your {brand} account",
+      "heading": "Approve Your Email Change",
+      "request": "Someone asked to change the email address on your {brand} account from <strong>{current}</strong> to <strong>{next}</strong>.",
+      "notYet": "Your address has not changed yet. Click the button below to approve it. We will then send a verification email to {next} to finish the change.",
+      "button": "Approve Email Change",
+      "expiry": "This approval link will expire on {time}",
+      "warningHeading": "If you didn't request this",
+      "warningDontClick": "Do not click the button. Someone else may have access to your account.",
+      "warningSignIn": "Sign in and change your password now. That signs out every other device. If you cannot sign in, contact support."
+    },
+    "waitlistConfirm": {
+      "subject": "Confirm your place on the {brand} waitlist",
+      "preview": "Confirm your place on the {brand} waitlist",
+      "heading": "Confirm your email address",
+      "body": "Someone added this address to the {brand} waitlist. If it was you, confirm it below and we'll keep your place.",
+      "button": "Confirm my address",
+      "expiry": "This link works once and expires on {date} (UTC). If you don't confirm, we delete the entry.",
+      "leave": "If you didn't join, ignore this email, or <link>remove this address from the list</link> now.",
+      "buttonFallback": "If the button doesn't work, paste this link into your browser:"
+    },
+    "waitlistAlreadyOnList": {
+      "subject": "You're already on the {brand} waitlist",
+      "preview": "You're already on the {brand} waitlist",
+      "heading": "You're already on the list",
+      "body": "This address was just submitted to the {brand} waitlist again. It's already confirmed, so there's nothing you need to do. We'll be in touch when there's a place for you.",
+      "leave": "If you want to come off the list, <link>remove this address</link>."
+    },
+    "contactNotification": {
+      "subject": "[{brand} Contact] {subject}",
+      "preview": "New contact form submission from {name}",
+      "heading": "New Contact Form Submission",
+      "intro": "You have received a new message from your website contact form.",
+      "from": "From",
+      "fromValue": "{name} ({email})",
+      "subjectLabel": "Subject",
+      "message": "Message",
+      "submitted": "Submitted on {date}"
+    },
+    "cleanupReady": {
+      "subject": "Document cleanup ready: {name}",
+      "preview": "Document Clean Up session ready: {name}",
+      "heading": "Document Clean Up",
+      "body": "You opened a Document Clean Up session. The cleanup chat is ready whenever you are — your session is saved, so you can come back to it at any time.",
+      "tooLarge": "This document is too large for whole-document LLM rewrites — deterministic strips and per-section rewrites still work.",
+      "size": "Size class: {sizeClass, select, small {small} medium {medium} large {large} other {{sizeClass}}} (~{tokens, number} tokens).",
+      "button": "Open cleanup chat",
+      "fineprint": "Until you click <strong>Mark cleaned</strong> or <strong>Use original</strong>, the document stays in the <em>Cleaning</em> tab of your knowledge base and won't be searchable by your agents."
+    },
+    "escalationNotification": {
+      "subject": "Escalation ({priority}): {reason}",
+      "preview": "Escalation ({priority}): {reason}",
+      "priority": "{priority, select, low {Low} medium {Medium} high {High} other {{priority}}}",
+      "heading": "Human Escalation Required",
+      "meta": "Agent: <strong>{agent}</strong> · Priority: <strong>{priority}</strong>",
+      "view": "View conversation",
+      "unknownAgent": "Unknown Agent"
+    },
+    "workflowNotification": {
+      "preview": "Notification from workflow: {workflow}",
+      "heading": "Workflow Notification",
+      "from": "From: {workflow}"
+    },
+    "eventNotification": {
+      "subject": "[{brand}] {title}",
+      "subjectNamed": "[{brand}] {title} · {name}",
+      "testSubject": "[{brand}] Test event",
+      "titles": {
+        "budget_exceeded": "Budget exceeded",
+        "workflow_failed": "Workflow failed",
+        "approval_required": "Approval required",
+        "circuit_breaker_opened": "Provider circuit breaker opened",
+        "agent_updated": "Agent updated",
+        "execution_crashed": "Workflow execution crashed",
+        "other": "{brand} event: {event}"
+      },
+      "summary": {
+        "budgetExceeded": "An agent reached its monthly budget.",
+        "budgetExceededNamed": "Agent “{agent}” reached its monthly budget.",
+        "workflowFailed": "A workflow failed.",
+        "workflowFailedError": "A workflow failed: {error}",
+        "workflowFailedNamed": "Workflow “{workflow}” failed.",
+        "workflowFailedNamedError": "Workflow “{workflow}” failed: {error}",
+        "approvalRequired": "A workflow is paused and needs approval.",
+        "approvalRequiredNamed": "Workflow “{workflow}” is paused and needs approval.",
+        "circuitBreakerOpened": "A provider circuit breaker has tripped open.",
+        "circuitBreakerOpenedNamed": "The circuit breaker for provider “{provider}” has tripped open. Requests to that provider are blocked until the cooldown elapses.",
+        "agentUpdated": "An agent was updated.",
+        "agentUpdatedBy": "An agent was updated by {actor}.",
+        "agentUpdatedNamed": "Agent “{agent}” was updated.",
+        "agentUpdatedNamedBy": "Agent “{agent}” was updated by {actor}.",
+        "executionCrashed": "A workflow execution crashed.",
+        "executionCrashedError": "A workflow execution crashed: {error}",
+        "executionCrashedNamed": "Workflow “{workflow}” crashed mid-execution.",
+        "executionCrashedNamedError": "Workflow “{workflow}” crashed mid-execution: {error}",
+        "other": "Event “{event}” fired."
+      },
+      "stamp": "{brand} · {when}",
+      "approve": "Approve",
+      "reject": "Reject",
+      "details": "Details",
+      "changes": "Changes",
+      "footer": "You're receiving this because you subscribed to <code>{event}</code> via <link>{brand} event subscriptions</link>."
+    }
+  }
+}

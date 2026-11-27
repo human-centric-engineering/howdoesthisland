@@ -161,6 +161,16 @@ The edit page checks `model.isDefault`. When `true`, an amber banner warns:
 
 Any PATCH flips `isDefault` to `false` server-side so re-seeds leave the row alone afterwards.
 
+### Retirement and uses (edit page)
+
+Above the form, **Retirement and uses** shows a dated model's state (Retiring on / Retired on, and its replacement, linked) and everything that uses it, from the model route's `uses`: agents (linked; one whose model the platform picks says **follows the platform**, as it moves on its own), workflows (linked), other organisations' counted, and the install settings that name it (a default marked as the system's suggestion when nobody saved it; the embedding settings say they are not moved with the rest). The matrix shows a Retiring or Retired badge beside the name. See [Model lifecycle](../orchestration/llm-providers.md#model-lifecycle).
+
+When something uses the model, **Move uses…** beside the heading opens the move (§136 t-1066): choose a replacement among the same provider's models (the saved one first), read the preview (each organisation's agents and workflows that move, counted; anything left and why; the settings; an organisation on its own key, which is sent one short test message first), then **Move uses**. The result lists each organisation as moved, skipped (its own key failed the test) or failed (its changes rolled back), with the reason. When the app reports uses of its own (§136 t-1067), the panel lists them under **In the app** (other organisations' counted) and the preview counts them per organisation; the app moves those itself. If the app's check refuses the move, the preview shows its reason and **Move uses** stays off. Hidden where shared settings are read-only. See [Moving every use to the replacement](../orchestration/llm-providers.md#moving-every-use-to-the-replacement-136-t-1066).
+
+### Retirement (edit only)
+
+A **Retirement** section records the provider's announced retirement (§136 t-1064): **Retires on** (the day) and **Replacement** (a model on the same provider that is active and not itself retiring; the page loads them from the list endpoint with `?providerSlug=`, and keeps the saved replacement listed even if it has stopped qualifying). A replacement needs a day; the form says so beside the field. The server's `checkReplacement` decides, including the capability rule. See [Model lifecycle](../orchestration/llm-providers.md#model-lifecycle).
+
 ### Fields
 
 | Field           | Rule                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -281,7 +291,7 @@ The matrix toolbar includes an **Audit Models** button that triggers the Provide
 3. The dialog stays open and shows the run's status, current step, wall-clock, tokens and cost, plus a Gantt timeline strip — the admin stays on the providers page while the audit progresses
 4. The workflow analyses each model's tier classification, capability ratings, and metadata using LLM evaluation
 5. A `human_approval` step pauses execution. The execution surfaces in `/admin/orchestration/approvals` and expands into the **structured viewer** — three sections (existing-model changes, new model proposals, deactivations) with per-change Accept / Reject / Modify controls. Modify swaps the proposed value for an enum-aware `<Select>` (or text input for free-text fields) so the admin can edit the audit's suggestion before accepting. See [`orchestration-approvals.md`](./orchestration-approvals.md#structured-approval-views) for the schema and dispatch details.
-6. On approval, the admin's filtered selection flows through as the `approvalPayload`. The `apply_audit_changes` capability writes accepted changes, `add_provider_models` adds approved new models, and `deactivate_provider_models` soft-deletes confirmed deprecations — all invalidate the model cache. Rejected items are silently dropped from the payload.
+6. On approval, the admin's filtered selection flows through as the `approvalPayload`. The `apply_audit_changes` capability writes accepted changes, `add_provider_models` adds approved new models, and `deactivate_provider_models` soft-deletes confirmed deprecations, or records a vendor retirement day and same-provider successor when the proposal carries them ([Model lifecycle](../orchestration/llm-providers.md#model-lifecycle)) — all invalidate the model cache, and every change they write is in the admin audit log (entity type `provider_model`) with its old and new values. Rejected items are silently dropped from the payload.
 
 ### Backgrounding a long run
 

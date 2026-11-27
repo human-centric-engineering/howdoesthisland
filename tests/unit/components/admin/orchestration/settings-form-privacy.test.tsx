@@ -77,10 +77,10 @@ describe('the LLM privacy card', () => {
     expect(within(card()).getByText(/it is not anonymisation/i)).toBeInTheDocument();
   });
 
-  it('gives each of its four fields a help popover', () => {
+  it('gives each of its seven fields a help popover', () => {
     render(<SettingsForm initialSettings={settings()} />);
     const help = within(card()).getAllByRole('button', { name: 'More information' });
-    expect(help).toHaveLength(4);
+    expect(help).toHaveLength(7);
     // One beside each field: the mode, the types, local providers, embeddings.
     expect(within(card()).getByText('Privacy mode').contains(help[0])).toBe(true);
     expect(within(card()).getByText('What to look for').contains(help[1])).toBe(true);
@@ -90,6 +90,13 @@ describe('the LLM privacy card', () => {
         .contains(help[2])
     ).toBe(true);
     expect(within(card()).getByText('Embeddings').contains(help[3])).toBe(true);
+    // And one beside each confidential-content group (§130).
+    expect(within(card()).getByText('Personal').contains(help[4])).toBe(true);
+    expect(within(card()).getByText('Commercial').contains(help[5])).toBe(true);
+    // And the model a conversation moves to (t-1038).
+    expect(within(card()).getByText('Model for confidential messages').contains(help[6])).toBe(
+      true
+    );
   });
 
   it('offers only the modes this version can apply', async () => {
@@ -260,5 +267,198 @@ describe('the embeddings policy', () => {
       />
     );
     expect(screen.queryByTestId('privacy-embeddings-refused')).toBeNull();
+  });
+});
+
+describe('confidential content (§130 t-1037)', () => {
+  it('shows each group’s stored policy and saves both', async () => {
+    render(
+      <SettingsForm
+        initialSettings={settings({
+          privacyConfidentialPersonal: 'warn',
+          privacyConfidentialCommercial: 'approved_only',
+        })}
+      />
+    );
+    expect(screen.getByRole('combobox', { name: /^personal/i })).toHaveTextContent(
+      'Warn (send, then tell the user)'
+    );
+    expect(screen.getByRole('combobox', { name: /^commercial/i })).toHaveTextContent(
+      'Trusted or local providers only'
+    );
+    expect(await save()).toMatchObject({
+      privacyConfidentialPersonal: 'warn',
+      privacyConfidentialCommercial: 'approved_only',
+    });
+  });
+
+  it('offers every policy, allow included, and saves the one chosen', async () => {
+    const user = userEvent.setup();
+    render(<SettingsForm initialSettings={settings()} />);
+    await user.click(screen.getByRole('combobox', { name: /^personal/i }));
+    expect(
+      within(screen.getByRole('listbox'))
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual([
+      'Allow (record only)',
+      'Warn (send, then tell the user)',
+      'Trusted or local providers only',
+      'Local providers only',
+      'Block (never send)',
+    ]);
+    await user.click(
+      within(screen.getByRole('listbox')).getByRole('option', { name: 'Local providers only' })
+    );
+    expect(await save()).toMatchObject({ privacyConfidentialPersonal: 'local_only' });
+  });
+
+  it('reads a policy it does not know as block, never as something looser', () => {
+    render(
+      <SettingsForm initialSettings={settings({ privacyConfidentialCommercial: 'ask_first' })} />
+    );
+    expect(screen.getByRole('combobox', { name: /^commercial/i })).toHaveTextContent(
+      'Block (never send)'
+    );
+  });
+
+  it('says plainly what a phrase list misses', () => {
+    render(<SettingsForm initialSettings={settings()} />);
+    expect(screen.getByTestId('privacy-confidential-section')).toHaveTextContent(
+      'misses what is only implied'
+    );
+  });
+});
+
+describe('the model for confidential messages (§130 t-1038)', () => {
+  const OPTIONS = [
+    {
+      providerSlug: 'ollama-local',
+      model: 'llama3.1:8b',
+      label: 'Llama 3.1 8B on Ollama',
+      where: 'local' as const,
+    },
+    {
+      providerSlug: 'anthropic',
+      model: 'claude-x',
+      label: 'Claude X on Anthropic',
+      where: 'trusted' as const,
+    },
+  ];
+  const select = () => screen.getByRole('combobox', { name: /model for confidential messages/i });
+
+  it('offers none, then the models on local or trusted providers, saying which', async () => {
+    const user = userEvent.setup();
+    render(<SettingsForm initialSettings={settings()} confidentialModelOptions={OPTIONS} />);
+    expect(select()).toHaveTextContent('None: refuse instead');
+    await user.click(select());
+    expect(
+      within(screen.getByRole('listbox'))
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual([
+      'None: refuse instead',
+      'Llama 3.1 8B on Ollama (local)',
+      'Claude X on Anthropic (trusted)',
+    ]);
+  });
+
+  it('saves the one chosen as a provider and a model', async () => {
+    const user = userEvent.setup();
+    render(<SettingsForm initialSettings={settings()} confidentialModelOptions={OPTIONS} />);
+    await user.click(select());
+    await user.click(
+      within(screen.getByRole('listbox')).getByRole('option', { name: /Llama 3.1 8B/ })
+    );
+    expect(await save()).toMatchObject({
+      confidentialModel: { providerSlug: 'ollama-local', model: 'llama3.1:8b' },
+    });
+  });
+
+  it('saves none as null, clearing it', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsForm
+        initialSettings={settings({ confidentialModel: OPTIONS[1] })}
+        confidentialModelOptions={OPTIONS}
+      />
+    );
+    expect(select()).toHaveTextContent('Claude X on Anthropic (trusted)');
+    await user.click(select());
+    await user.click(
+      within(screen.getByRole('listbox')).getByRole('option', { name: 'None: refuse instead' })
+    );
+    expect(await save()).toMatchObject({ confidentialModel: null });
+  });
+
+  it('does not send it when unchanged, so a model no longer usable cannot stop another save', async () => {
+    const stale = { providerSlug: 'gone', model: 'old-model' };
+    render(
+      <SettingsForm
+        initialSettings={settings({ confidentialModel: stale })}
+        confidentialModelOptions={OPTIONS}
+      />
+    );
+    // Shown as saved, and said to be no longer usable, rather than as none.
+    expect(select()).toHaveTextContent('old-model (gone, no longer usable)');
+    expect(await save()).not.toHaveProperty('confidentialModel');
+  });
+
+  it('sends a model chosen back after a save, judged against what that save stored', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsForm
+        initialSettings={settings({ confidentialModel: OPTIONS[0] })}
+        confidentialModelOptions={OPTIONS}
+      />
+    );
+    const pick = async (name: RegExp) => {
+      await user.click(select());
+      await user.click(within(screen.getByRole('listbox')).getByRole('option', { name }));
+    };
+
+    await pick(/Claude X/);
+    expect(await save()).toMatchObject({
+      confidentialModel: { providerSlug: 'anthropic', model: 'claude-x' },
+    });
+
+    // Back to the model the page loaded with: the server now holds Claude X,
+    // so this is a change, and is sent.
+    vi.mocked(apiClient.patch).mockClear();
+    await pick(/Llama 3.1 8B/);
+    expect(await save()).toMatchObject({
+      confidentialModel: { providerSlug: 'ollama-local', model: 'llama3.1:8b' },
+    });
+  });
+
+  it('does not call a saved model unusable when the options could not be read', () => {
+    render(
+      <SettingsForm
+        initialSettings={settings({ confidentialModel: OPTIONS[0] })}
+        confidentialModelOptions={null}
+      />
+    );
+    expect(select()).toHaveTextContent('llama3.1:8b (ollama-local)');
+    expect(select()).not.toHaveTextContent('no longer usable');
+  });
+
+  it('says a policy that moves conversations, with no model, refuses instead', async () => {
+    const user = userEvent.setup();
+    render(<SettingsForm initialSettings={settings()} confidentialModelOptions={OPTIONS} />);
+    expect(screen.queryByTestId('privacy-confidential-no-model')).toBeNull();
+
+    await user.click(screen.getByRole('combobox', { name: /^personal/i }));
+    await user.click(
+      within(screen.getByRole('listbox')).getByRole('option', { name: 'Local providers only' })
+    );
+    expect(screen.getByTestId('privacy-confidential-no-model')).toHaveTextContent(
+      'refused rather than moved'
+    );
+
+    await user.click(select());
+    await user.click(
+      within(screen.getByRole('listbox')).getByRole('option', { name: /Llama 3.1 8B/ })
+    );
+    expect(screen.queryByTestId('privacy-confidential-no-model')).toBeNull();
   });
 });

@@ -12,6 +12,10 @@
  * And named tiers (t-999): what `registerAdminTier()` refuses, so no named
  * tier can widen `'org'`; which tier a page is in, by the pattern Next.js
  * serves it by; and who reaches which page, swept over core's whole roster.
+ *
+ * And switch requirements (§135 t-1034): what the registrar takes and
+ * refuses, which switch a page needs by the pattern Next.js serves it by, and
+ * that a reach opens a requiring surface only where the policy admitted it.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 
@@ -20,6 +24,8 @@ import {
   adminPageTier,
   adminPageTierOf,
   mostSpecificAdminPagePattern,
+  lockedAdminPageOf,
+  lockedSwitchFor,
   reachesAdminPage,
   registerAdminTier,
   registeredAppNamedTierAdminPages,
@@ -36,12 +42,19 @@ import {
   withoutClosedSections,
   type ClosableCoreOrgTierSection,
   CORE_ADMIN_SECTIONS,
+  EVERY_VIEWER_ADMIN_PAGES,
+  isEveryViewerAdminPage,
   matchesAdminPagePattern,
   ORG_TIER_ADMIN_PAGES,
   registeredAppOrgTierAdminPages,
   registerOrgTierAdminPage,
   restoreAppOrgTierAdminPages,
+  ADMIN_REQUIRES_KEY_PATTERN,
+  adminPageRequirementOf,
+  reachesTier,
+  registeredAppAdminPageRequirements,
 } from '@/lib/auth/admin-tier';
+import { ENTITLEMENT_KEY_PATTERN } from '@/lib/validations/tenancy';
 
 afterEach(() => {
   restoreAppOrgTierAdminPages([]);
@@ -493,5 +506,193 @@ describe('reachesAdminPage (t-999)', () => {
     for (const path of ['/admin', '/admin/members', '/admin/designs/d1', '/admin/users']) {
       expect(reaches(none, path)).toBe(false);
     }
+  });
+});
+
+describe('pages open to every admin viewer (t-1091)', () => {
+  const reaches = (reach: AdminReach, path: string) =>
+    reachesAdminPage(reach, path, adminPageTierOf(path, ORG_TIER_ADMIN_PAGES, []));
+
+  it('opens the access explainer to a platform admin, an org admin and a named-tier holder', () => {
+    for (const reach of [
+      'platform',
+      { tiers: ['org'], landing: null },
+      { tiers: ['page_designs'], landing: '/admin/designs' },
+      { tiers: ['page_designs'], landing: null },
+    ] satisfies AdminReach[]) {
+      expect(reaches(reach, '/admin/access')).toBe(true);
+      expect(reaches(reach, '/admin/access/')).toBe(true);
+    }
+  });
+
+  it('refuses it to a viewer the policy admitted to no tier, an org MEMBER among them', () => {
+    expect(reaches({ tiers: [], landing: null }, '/admin/access')).toBe(false);
+  });
+
+  it('opens only the page listed, not one below it or beside it', () => {
+    const holder: AdminReach = { tiers: ['page_designs'], landing: null };
+    for (const path of ['/admin/access/x', '/admin/accessx', '/admin/users']) {
+      expect([path, reaches(holder, path)]).toEqual([path, false]);
+    }
+    expect(isEveryViewerAdminPage(null)).toBe(false);
+    expect(isEveryViewerAdminPage('/admin/access')).toBe(true);
+  });
+
+  it('is on no org-tier list, and in a section a fork may not list pages in', () => {
+    for (const pattern of EVERY_VIEWER_ADMIN_PAGES) {
+      expect(ORG_TIER_ADMIN_PAGES).not.toContain(pattern);
+      expect(CORE_ADMIN_SECTIONS).toContain(adminSectionOf(pattern));
+      expect(() => registerOrgTierAdminPage(pattern)).toThrow(/core's/);
+      expect(() => registerOrgTierAdminPage(`${pattern}/agency`)).toThrow(/core's/);
+    }
+    expect(Object.isFrozen(EVERY_VIEWER_ADMIN_PAGES)).toBe(true);
+  });
+});
+
+describe('switch requirements (t-1034)', () => {
+  it('checks a switch key as the switch registry does', () => {
+    // Repeated because admin-tier.ts imports nothing at runtime; held equal here.
+    expect(ADMIN_REQUIRES_KEY_PATTERN.source).toBe(ENTITLEMENT_KEY_PATTERN.source);
+    expect(ADMIN_REQUIRES_KEY_PATTERN.flags).toBe(ENTITLEMENT_KEY_PATTERN.flags);
+  });
+
+  it('records the switch a page requires, and none for one that declares none', () => {
+    registerOrgTierAdminPage('/admin/leads', { requires: 'lead_gen' });
+    registerOrgTierAdminPage('/admin/leads/[id]', { requires: 'lead_gen' });
+    registerOrgTierAdminPage('/admin/reports');
+    expect(registeredAppAdminPageRequirements()).toEqual([
+      { pattern: '/admin/leads', requires: 'lead_gen' },
+      { pattern: '/admin/leads/[id]', requires: 'lead_gen' },
+    ]);
+    expect(registeredAppOrgTierAdminPages()).toEqual([
+      '/admin/leads',
+      '/admin/leads/[id]',
+      '/admin/reports',
+    ]);
+  });
+
+  it.each([['Lead-Gen'], [''], ['1st'], [42]])(
+    'refuses a requires that is not a switch key (%j), registering nothing',
+    (requires) => {
+      expect(() =>
+        registerOrgTierAdminPage('/admin/leads', { requires: requires as string })
+      ).toThrow(/is not a switch key/);
+      expect(registeredAppOrgTierAdminPages()).toEqual([]);
+    }
+  );
+
+  it('is idempotent for the same requirement, and refuses a second one for the same page', () => {
+    registerOrgTierAdminPage('/admin/leads', { requires: 'lead_gen' });
+    registerOrgTierAdminPage('/admin/leads', { requires: 'lead_gen' });
+    expect(registeredAppAdminPageRequirements()).toHaveLength(1);
+    expect(() => registerOrgTierAdminPage('/admin/leads', { requires: 'authoring' })).toThrow(
+      /already listed requiring "lead_gen"/
+    );
+    expect(() => registerOrgTierAdminPage('/admin/leads')).toThrow(/already listed requiring/);
+    registerOrgTierAdminPage('/admin/reports');
+    expect(() => registerOrgTierAdminPage('/admin/reports', { requires: 'lead_gen' })).toThrow(
+      /already listed requiring no switch/
+    );
+  });
+
+  it('rolls a page’s requirement back with the page', () => {
+    registerOrgTierAdminPage('/admin/leads', { requires: 'lead_gen' });
+    const pages = registeredAppOrgTierAdminPages();
+    const requirements = registeredAppAdminPageRequirements();
+    registerOrgTierAdminPage('/admin/briefs', { requires: 'lead_gen' });
+    restoreAppOrgTierAdminPages(pages, [], requirements);
+    expect(registeredAppAdminPageRequirements()).toEqual([
+      { pattern: '/admin/leads', requires: 'lead_gen' },
+    ]);
+  });
+
+  describe('adminPageRequirementOf', () => {
+    const PAGES = ['/admin/leads', '/admin/leads/[id]', '/admin/leads/settings'];
+    const REQUIRED = [{ pattern: '/admin/leads/[id]', requires: 'lead_gen' }];
+
+    it('names the switch of the pattern Next.js serves the page by', () => {
+      expect(adminPageRequirementOf('/admin/leads/l1', PAGES, REQUIRED)).toBe('lead_gen');
+      // The literal page beside the [id] one is served by its own pattern.
+      expect(adminPageRequirementOf('/admin/leads/settings', PAGES, REQUIRED)).toBeNull();
+      expect(adminPageRequirementOf('/admin/leads', PAGES, REQUIRED)).toBeNull();
+    });
+
+    it('is null with no pathname, an unlisted page, or nothing required', () => {
+      expect(adminPageRequirementOf(null, PAGES, REQUIRED)).toBeNull();
+      expect(adminPageRequirementOf('/admin/users', PAGES, REQUIRED)).toBeNull();
+      expect(adminPageRequirementOf('/admin/leads/l1', PAGES, [])).toBeNull();
+    });
+  });
+
+  describe('reachesTier and reachesAdminPage with a requirement', () => {
+    const met: AdminReach = {
+      tiers: ['org', 'page_designs'],
+      landing: null,
+      switchesMet: [{ tier: 'org', requires: 'lead_gen' }],
+    };
+    const unmet: AdminReach = { tiers: ['org', 'page_designs'], landing: null, switchesMet: [] };
+
+    it('opens a requiring surface only where the policy admitted that tier with that switch', () => {
+      expect(reachesTier(met, 'org', 'lead_gen')).toBe(true);
+      expect(reachesTier(unmet, 'org', 'lead_gen')).toBe(false);
+      // Met for 'org' is not met for another tier.
+      expect(reachesTier(met, 'page_designs', 'lead_gen')).toBe(false);
+      expect(reachesTier(met, 'org', 'authoring')).toBe(false);
+    });
+
+    it('reads a reach built without switchesMet as meeting none', () => {
+      const old: AdminReach = { tiers: ['org'], landing: null };
+      expect(reachesTier(old, 'org', 'lead_gen')).toBe(false);
+      expect(reachesTier(old, 'org')).toBe(true);
+    });
+
+    it('answers a surface that requires nothing as before, and a platform reach as everything', () => {
+      expect(reachesTier(unmet, 'org')).toBe(true);
+      expect(reachesTier(unmet, 'org', null)).toBe(true);
+      expect(reachesTier('platform', 'org', 'lead_gen')).toBe(true);
+      expect(reachesTier('platform', null, 'lead_gen')).toBe(true);
+    });
+
+    it('refuses the page itself the same way', () => {
+      expect(reachesAdminPage(met, '/admin/leads', 'org', 'lead_gen')).toBe(true);
+      expect(reachesAdminPage(unmet, '/admin/leads', 'org', 'lead_gen')).toBe(false);
+      expect(reachesAdminPage(unmet, '/admin/leads', 'org')).toBe(true);
+      expect(reachesAdminPage('platform', '/admin/leads', 'org', 'lead_gen')).toBe(true);
+    });
+  });
+});
+
+describe('lockedSwitchFor / lockedAdminPageOf (§135 t-1053)', () => {
+  const LOCK = {
+    requires: 'lead_gen',
+    label: 'Lead generation',
+    message: 'Lead generation comes with the Growth plan.',
+    upgradeUrl: null,
+  };
+  const lacks = { tiers: ['org'], landing: null, switchesMet: [] } as const;
+  const has = {
+    tiers: ['org'],
+    landing: null,
+    switchesMet: [{ tier: 'org', requires: 'lead_gen' }],
+  } as const;
+
+  it('locks a surface whose only missing piece is a locked switch', () => {
+    expect(lockedSwitchFor(lacks, 'org', 'lead_gen', [LOCK])).toBe(LOCK);
+    expect(lockedAdminPageOf(lacks, '/admin/leads', 'org', 'lead_gen', [LOCK])).toBe(LOCK);
+  });
+
+  it('locks nothing by default: no locked switch is handed down', () => {
+    expect(lockedAdminPageOf(lacks, '/admin/leads', 'org', 'lead_gen', [])).toBeNull();
+  });
+
+  it('locks nothing that opens, nor for a platform reach', () => {
+    expect(lockedAdminPageOf(has, '/admin/leads', 'org', 'lead_gen', [LOCK])).toBeNull();
+    expect(lockedAdminPageOf('platform', '/admin/leads', 'org', 'lead_gen', [LOCK])).toBeNull();
+  });
+
+  it('locks nothing closed for another reason: a tier not held, a platform page, no requirement', () => {
+    expect(lockedSwitchFor({ tiers: [], landing: null }, 'org', 'lead_gen', [LOCK])).toBeNull();
+    expect(lockedAdminPageOf(lacks, '/admin/users', null, null, [LOCK])).toBeNull();
+    expect(lockedSwitchFor(lacks, 'org', 'other', [LOCK])).toBeNull();
   });
 });

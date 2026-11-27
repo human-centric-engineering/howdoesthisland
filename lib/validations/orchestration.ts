@@ -24,7 +24,7 @@ import { logger } from '@/lib/logging';
 import { providerToolsSchema } from '@/lib/orchestration/llm/model-params';
 import { BINDING_OWNERS } from '@/lib/orchestration/agents/binding-owner';
 import { checkSafeProviderUrl, isSafeProviderUrl } from '@/lib/security/safe-url';
-import { KNOWN_STEP_TYPES, TASK_TYPES } from '@/types/orchestration';
+import { KNOWN_STEP_TYPES, MODEL_CAPABILITIES, TASK_TYPES } from '@/types/orchestration';
 import { validateTaskDefaults } from '@/lib/orchestration/llm/model-registry';
 import {
   MAX_STOP_SEQUENCES,
@@ -36,8 +36,14 @@ import { reviewSchemaSchema } from '@/lib/orchestration/review-schema/types';
 import { provenanceItemArraySchema } from '@/lib/orchestration/provenance/types';
 import { validateScopes, listValidApiKeyScopes } from '@/lib/auth/api-key-scopes';
 import { jurisdictionSchema, orgIdSchema } from '@/lib/validations/tenancy';
-import { ENTITY_TYPE_PATTERN, PRIVACY_MODES_BY_STRICTNESS } from '@/lib/privacy/adapters/types';
+import { parseRetirementDate } from '@/lib/orchestration/model-lifecycle/state';
 import {
+  CONFIDENTIAL_POLICIES_BY_STRICTNESS,
+  ENTITY_TYPE_PATTERN,
+  PRIVACY_MODES_BY_STRICTNESS,
+} from '@/lib/privacy/adapters/types';
+import {
+  CONFIDENTIAL_TIGHTENING_POLICIES,
   EMBEDDINGS_POLICIES,
   PRIVACY_MODES_AVAILABLE,
   PRIVACY_TIGHTENING_MODES,
@@ -46,6 +52,17 @@ import {
 // ============================================================================
 // Shared Schemas
 // ============================================================================
+
+/**
+ * A capability's approval timeout, in ms: a whole number up to one hour. The
+ * create and update schemas use it, and so does the capability form, which
+ * checks it only while approval is on (t-1031).
+ */
+export const approvalTimeoutMsSchema = z
+  .number()
+  .int('Approval timeout must be an integer')
+  .positive('Approval timeout must be positive')
+  .max(3_600_000, 'Approval timeout must be at most 1 hour');
 
 /** Valid agent visibility values */
 export const agentVisibilitySchema = z.enum(['internal', 'public', 'invite_only']);
@@ -221,6 +238,8 @@ export const createAgentObjectSchema = z.object({
   outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
+  privacyConfidentialPersonal: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
+  privacyConfidentialCommercial: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
   maxHistoryTokens: z
     .number()
     .int('Max history tokens must be an integer')
@@ -423,6 +442,8 @@ export const updateAgentObjectSchema = z.object({
   outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
+  privacyConfidentialPersonal: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
+  privacyConfidentialCommercial: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
   maxHistoryTokens: z
     .number()
     .int('Max history tokens must be an integer')
@@ -689,13 +710,7 @@ export const createCapabilitySchema = z
 
     requiresApproval: z.boolean().default(false),
 
-    approvalTimeoutMs: z
-      .number()
-      .int('Approval timeout must be an integer')
-      .positive('Approval timeout must be positive')
-      .max(3_600_000, 'Approval timeout must be at most 1 hour')
-      .nullable()
-      .optional(),
+    approvalTimeoutMs: approvalTimeoutMsSchema.nullable().optional(),
 
     rateLimit: z
       .number()
@@ -792,13 +807,7 @@ export const updateCapabilitySchema = z
 
     requiresApproval: z.boolean().optional(),
 
-    approvalTimeoutMs: z
-      .number()
-      .int('Approval timeout must be an integer')
-      .positive('Approval timeout must be positive')
-      .max(3_600_000, 'Approval timeout must be at most 1 hour')
-      .nullable()
-      .optional(),
+    approvalTimeoutMs: approvalTimeoutMsSchema.nullable().optional(),
 
     rateLimit: z
       .number()
@@ -1359,6 +1368,8 @@ export const bundledAgentSchema = z.object({
   outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
   privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
+  privacyConfidentialPersonal: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
+  privacyConfidentialCommercial: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
   maxHistoryTokens: z.number().int().min(1000).max(2000000).nullable().optional(),
   maxHistoryMessages: z.number().int().min(0).max(500).nullable().optional(),
   retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
@@ -1879,6 +1890,8 @@ export const providerConfigSchema = z
       .optional(),
 
     isLocal: z.boolean().default(false),
+    // "Trusted with confidential content" (§130): what `approved_only` sends to.
+    trustedForConfidential: z.boolean().default(false),
 
     isActive: z.boolean().default(true),
 
@@ -1937,6 +1950,7 @@ export const updateProviderConfigSchema = z
       .optional(),
 
     isLocal: z.boolean().optional(),
+    trustedForConfidential: z.boolean().optional(),
 
     isActive: z.boolean().optional(),
 
@@ -2096,11 +2110,13 @@ const toolUseLevelSchema = z.enum(['strong', 'moderate', 'none']);
 // `ai_provider_model.paramProfile`; null means "let the runtime derive
 // it via deriveParamProfile()".
 const paramProfileSchema = z.enum(['openai-legacy', 'openai-reasoning', 'anthropic', 'gemini']);
-// Matrix capability set — must mirror MODEL_CAPABILITIES in
-// types/orchestration.ts. Intentionally excludes `unknown` (catalogue
-// only; see app/api/v1/admin/orchestration/providers/[id]/test-model/route.ts
+// Matrix capability set: MODEL_CAPABILITIES in types/orchestration.ts,
+// read rather than copied. The copy this replaced missed `vision` and
+// `documents` when they were added, so no model with either could be saved
+// from the edit form (found in §136 t-1064). Intentionally excludes `unknown`
+// (catalogue only; see app/api/v1/admin/orchestration/providers/[id]/test-model/route.ts
 // for the wider enum used by the catalogue's test button).
-const capabilitySchema = z.enum(['chat', 'reasoning', 'embedding', 'audio', 'image', 'moderation']);
+const capabilitySchema = z.enum(MODEL_CAPABILITIES);
 const embeddingQualitySchema = z.enum(['high', 'medium', 'budget']);
 
 function requirePricePair(
@@ -2181,6 +2197,22 @@ export const createProviderModelSchema = z
   })
   .superRefine(requirePricePair);
 
+/**
+ * The day a vendor retires a model (§136 t-1064), as `YYYY-MM-DD`, read as the
+ * UTC midnight that begins it. A day, not a timestamp: vendors announce days.
+ */
+export const retirementDaySchema = z
+  .string()
+  .trim()
+  .transform((day, ctx) => {
+    const date = parseRetirementDate(day);
+    if (date === null) {
+      ctx.addIssue({ code: 'custom', message: 'Retirement date must be a day, as YYYY-MM-DD' });
+      return z.NEVER;
+    }
+    return date;
+  });
+
 /** PATCH body for updating a provider model. All fields optional. */
 export const updateProviderModelSchema = z.object({
   name: z
@@ -2243,7 +2275,22 @@ export const updateProviderModelSchema = z.object({
 
   isActive: z.boolean().optional(),
 
+  // Vendor retirement (§136 t-1064). `null` clears. The replacement's
+  // same-provider and capability rules span two rows, so the route checks them
+  // (`checkReplacement`), not this schema.
+  retiresAt: retirementDaySchema.nullable().optional(),
+  replacementId: cuidSchema.nullable().optional(),
+
   metadata: metadataSchema,
+});
+
+/**
+ * POST body for previewing or running the model move (§136 t-1066): the
+ * catalogue row every use moves to. Whether it qualifies spans two rows, so
+ * the route checks it (`checkReplacement`), not this schema.
+ */
+export const moveModelUsesSchema = z.object({
+  replacementId: cuidSchema,
 });
 
 /**
@@ -3129,6 +3176,23 @@ export const updateOrchestrationSettingsSchema = z
       .optional(),
     privacyProtectLocalProviders: z.boolean().optional(),
     privacyEmbeddingsPolicy: z.enum(EMBEDDINGS_POLICIES).optional(),
+    // What a call holding confidential content may do, per group (§130).
+    privacyConfidentialPersonal: z.enum(CONFIDENTIAL_POLICIES_BY_STRICTNESS).optional(),
+    privacyConfidentialCommercial: z.enum(CONFIDENTIAL_POLICIES_BY_STRICTNESS).optional(),
+    // The model for confidential messages (§130 t-1038), or null to clear it.
+    // The route checks it is an active chat model on a local or trusted
+    // provider: that needs the database.
+    confidentialModel: z
+      .object({
+        providerSlug: z.string().trim().min(1).max(100),
+        model: z.string().trim().min(1).max(200),
+      })
+      .strict()
+      .nullable()
+      .optional(),
+    // Organisations' own AI keys (§137 t-1044). The route refuses turning it
+    // on while no sealed-secret master key is configured.
+    orgProviderKeysEnabled: z.boolean().optional(),
     // Write path: the refined variant, so an unsafe target is rejected at the
     // API boundary rather than only when the stored value is next used (#553).
     escalationConfig: escalationConfigWriteSchema.nullable().optional(),
@@ -3218,7 +3282,11 @@ export const updateOrchestrationSettingsSchema = z
       v.privacyMode !== undefined ||
       v.privacyIgnoredEntityTypes !== undefined ||
       v.privacyProtectLocalProviders !== undefined ||
-      v.privacyEmbeddingsPolicy !== undefined,
+      v.privacyEmbeddingsPolicy !== undefined ||
+      v.privacyConfidentialPersonal !== undefined ||
+      v.privacyConfidentialCommercial !== undefined ||
+      v.confidentialModel !== undefined ||
+      v.orgProviderKeysEnabled !== undefined,
     {
       message: 'At least one field must be provided',
     }
@@ -3477,6 +3545,12 @@ export const privacySummarySchema = z.object({
   failedAdapters: z.array(z.string()).optional(),
   refused: z.array(z.string()).optional(),
   unresolved: z.number().int().nonnegative().optional(),
+  // Any group name: a summary written with a group this build does not know
+  // must not fail the parse, which would hide the whole privacy line. The
+  // trace shows the groups in SENSITIVITY_GROUPS.
+  sensitivity: z.record(z.string(), z.array(z.string())).optional(),
+  // Lenient for the same reason: an unknown group or decision must not hide the line.
+  confidential: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 export const executionTraceEntrySchema = z

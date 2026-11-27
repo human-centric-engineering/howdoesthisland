@@ -123,6 +123,9 @@ const providerRowSchema = z
     // cast below needs the schema to as well. Optional so a response without
     // it (an older instance mid-deploy) still parses.
     jurisdiction: z.string().nullable().optional(),
+    // Read for the Trusted badge (§130). Defaulted, so a response without it
+    // (an older instance mid-deploy) reads as untrusted.
+    trustedForConfidential: z.boolean().optional().default(false),
     createdBy: z.string(),
     createdAt: z.union([z.string(), z.date()]),
     updatedAt: z.union([z.string(), z.date()]),
@@ -291,10 +294,12 @@ export function ProvidersList({ initialProviders, hasAnyEnvKey = true }: Provide
   // cached result. The manual `Test connection` button hits the exact
   // same `/test` route, which delegates to `provider.testConnection()` —
   // for OpenAI-compatible providers that's a real `listModels` round-trip,
-  // for Anthropic it's a `messages.create` ping with `max_tokens: 1`.
-  // Both are valid connectivity probes for their respective vendors,
-  // so firing this once on landing gives every card an honest dot
-  // without the operator having to click through.
+  // for Anthropic it's a `messages.create` ping with `max_tokens: 1`, and
+  // for Voyage, which has no model list, one embedding of one word (§137
+  // t-1056): Anthropic's and Voyage's are billed, a token or two, with no
+  // cost-log row. Each is a valid connectivity probe for its vendor, so
+  // firing this once on landing gives every card an honest dot without the
+  // operator having to click through.
   //
   // Skip rules:
   //   - Inactive — `getProvider` rejects with `provider_disabled`, so a
@@ -664,6 +669,15 @@ export function ProvidersList({ initialProviders, hasAnyEnvKey = true }: Provide
                           title="Runs locally (e.g. Ollama) — no API key needed, zero cost"
                         >
                           Local
+                        </Badge>
+                      )}
+                      {p.trustedForConfidential && !p.isLocal && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px]"
+                          title="Trusted with confidential content: an agent whose confidential-content policy is “trusted or local providers only” may send it here"
+                        >
+                          Trusted
                         </Badge>
                       )}
                       {!p.isActive && (

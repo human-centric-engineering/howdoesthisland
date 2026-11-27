@@ -25,12 +25,10 @@
 import { cache } from 'react';
 import { headers } from 'next/headers';
 
-import { canAdminister } from '@/lib/auth/authorization';
 import { sessionPrincipal } from '@/lib/auth/session-principal';
 import { getServerSession } from '@/lib/auth/utils';
-import type { AdminReach, AdminViewerTier, DeclaredAdminTier } from '@/lib/auth/admin-tier';
-import { namedAdminTiers } from '@/lib/auth/org-tier-admin-pages';
-import { heldTierLanding } from '@/lib/auth/admin-landing';
+import type { AdminReach, AdminViewerTier, LockedAdminSwitch } from '@/lib/auth/admin-tier';
+import { administersPlatformIn, lockedSwitchesOf, orgAdminReachOf } from '@/lib/auth/admin-reach';
 import { TENANT_HEADER_NAME } from '@/lib/tenancy/resolver';
 import { prisma } from '@/lib/db/client';
 import { isPlatformAdmin } from '@/lib/auth/roles';
@@ -59,7 +57,7 @@ export const requestPrincipal = cache(async () => {
 export const requestAdministersPlatform = cache(async (): Promise<boolean> => {
   const entry = await requestPrincipal();
   if (!entry) return false;
-  return canAdminister(entry.principal, null, entry.scope);
+  return administersPlatformIn(entry.principal, entry.scope);
 });
 
 /**
@@ -84,19 +82,45 @@ export async function adminPageViewerTier(): Promise<AdminViewerTier> {
  *
  * The policy is asked once per tier, with the same principal and scope the
  * guards build, so the layout's answer for a page is the policy's answer for
- * that page's own tier. Asked once per request, however many readers ask.
- * No session reaches nothing.
+ * that page's own tier. Then, for each tier it admitted, once per switch a
+ * page requires, with that switch as `scope.requires` (§135 t-1034), so the
+ * gate and the sidebar can refuse a page or hide an item whose switch the org
+ * lacks, by the policy's answer rather than one worked out in the browser.
+ * Only the switches pages require, not every registered one: an app may
+ * register a hundred, and each question is a policy call and a read. A nav
+ * item's `requires` is its page's (the roster test holds them equal), so
+ * that covers the sidebar too. With no page requiring a switch there is no
+ * further question, so vanilla Sunrise asks exactly what it asked before.
+ * Asked once per request, however many readers ask. No session reaches
+ * nothing.
  */
 export const requestAdminReach = cache(async (): Promise<AdminReach> => {
   if (await requestAdministersPlatform()) return 'platform';
   const entry = await requestPrincipal();
   if (!entry) return { tiers: [], landing: null };
-  const candidates: DeclaredAdminTier[] = ['org', ...namedAdminTiers()];
-  const admitted = await Promise.all(
-    candidates.map((tier) => canAdminister(entry.principal, null, { ...entry.scope, tier }))
-  );
-  const tiers = candidates.filter((_, i) => admitted[i]);
-  return { tiers, landing: tiers.includes('org') ? null : heldTierLanding(tiers) };
+  return orgAdminReachOf(entry.principal, entry.scope);
+});
+
+/**
+ * The switches this request's viewer's org lacks that the app shows locked
+ * rather than hidden (§135 t-1053), for the sidebar to show their items
+ * locked and the layout and gate to show their pages locked. Empty for a
+ * platform viewer, whom switches do not limit, and on an install where no
+ * page requires a switch registered `whenLacking: 'lock'`, so nothing more is
+ * read there.
+ *
+ * Only a switch the org's switches were read for and found off is here. One
+ * the org has (the policy refused for another reason), or whose read failed,
+ * is left out, so its surfaces stay hidden as before rather than tell an
+ * admin to buy something their org may have. A policy that would also refuse
+ * once the org has it cannot be told apart from here; its refusal applies
+ * then. One read of the org's switches,
+ * once per request, whatever number are locked.
+ */
+export const requestLockedSwitches = cache(async (): Promise<readonly LockedAdminSwitch[]> => {
+  const reach = await requestAdminReach();
+  if (reach === 'platform' || reach.tiers.length === 0) return [];
+  return lockedSwitchesOf(reach, (await requestPrincipal())?.principal.orgId);
 });
 
 /**
@@ -201,3 +225,56 @@ export const requestSupportSession = cache(async (): Promise<SupportSessionView 
   if (!entered) return null;
   return { state: 'ended', orgId, orgName: org.name };
 });
+
+/**
+ * A platform admin acting in a customer org as a member there (t-1032), for
+ * the banner that offers the way back: `null` for everyone else, a support
+ * session included (it has its own banner).
+ *
+ * Outside the install org the guards present a member platform admin as
+ * their org role alone (`lib/auth/support-principal.ts`), so every
+ * platform-only page and route refuses them there, and an org MEMBER is not
+ * admitted to the console at all. That refusal is correct; this is its
+ * remedy (`HB10`): say where they are, as what, and switch them back to the
+ * install org, where the platform role is theirs again. Read for both
+ * shells, the console's and the account area's.
+ */
+export interface MemberPlatformAdminView {
+  /** `null` only if the row went between entry and this read; the banner words it. */
+  orgName: string | null;
+  /** Their role in the org they are acting in. */
+  orgRole: string;
+  /** The install org's name: where platform administration is done. */
+  installOrgName: string | null;
+  /**
+   * Entered through a fork's resolver header (the org of this address). A
+   * switch cannot leave it, because the header wins over `activeOrgId`.
+   */
+  viaResolver: boolean;
+}
+
+export const requestMemberPlatformAdmin = cache(
+  async (): Promise<MemberPlatformAdminView | null> => {
+    if (!isMultiTenant()) return null;
+    const entry = await requestPrincipal();
+    if (!entry?.platformRoleWithheld || entry.support) return null;
+    const { orgId, orgRole } = entry.principal;
+    if (!orgId || !orgRole) return null;
+    // The principal's role is the presented one; whether they are staff is
+    // the session's own.
+    const session = await getServerSession();
+    if (!isPlatformAdmin(session?.user)) return null;
+
+    const [org, installOrg, requestHeaders] = await Promise.all([
+      prisma.org.findUnique({ where: { id: orgId }, select: { name: true } }),
+      prisma.org.findUnique({ where: { id: INSTALL_ORG_ID }, select: { name: true } }),
+      headers(),
+    ]);
+    return {
+      orgName: org?.name ?? null,
+      orgRole,
+      installOrgName: installOrg?.name ?? null,
+      viaResolver: Boolean(requestHeaders.get(TENANT_HEADER_NAME)),
+    };
+  }
+);

@@ -32,16 +32,25 @@ vi.mock('@/lib/db/client', () => ({
 }));
 
 import {
+  ORG_ENTITLEMENTS_KEY,
   ORG_PLATFORM_AGENTS_KEY,
   ORG_QUOTAS_KEY,
   ORG_RETENTION_KEY,
   applyOrgSettingsPatch,
+  loadOrgEntitlements,
+  loadOrgMeterLimits,
   loadOrgQuotas,
+  readOrgEntitlements,
+  readOrgMeterLimits,
+  writeOrgMeterLimits,
+  writeOrgEntitlements,
   loadOrgRetention,
   loadPlatformAgentsMarker,
   readOrgRetention,
   isSettingsWriteConflict,
+  readOrgLocale,
   readOrgPrivacy,
+  writeOrgLocale,
   salvageOrgPrivacy,
   readOrgProviderPolicy,
   readOrgQuotas,
@@ -422,6 +431,82 @@ describe('the LLM privacy settings (§127 t-1010)', () => {
   });
 });
 
+describe('the org default locale (§138 t-1071)', () => {
+  it('reads a stored language tag', () => {
+    expect(readOrgLocale({ locale: 'en-XA', retention: {} })).toBe('en-XA');
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('reads an org with no default as null, without a warning', () => {
+    expect(readOrgLocale(null)).toBeNull();
+    expect(readOrgLocale({ retention: {} })).toBeNull();
+    expect(readOrgLocale({ locale: null })).toBeNull();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a number', 42],
+    ['not a tag', 'English'],
+    ['an object', { tag: 'en' }],
+  ])('degrades %s to null, with a warning', (_label, value) => {
+    expect(readOrgLocale({ locale: value }, { orgId: ORG_A })).toBeNull();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Org default locale is malformed; treating the org as having no default',
+      { orgId: ORG_A }
+    );
+  });
+
+  it('keeps a tag that has no catalogue: whether it is served is the resolution’s question', () => {
+    expect(readOrgLocale({ locale: 'fr' })).toBe('fr');
+  });
+
+  it('writes the slice, keeping every other key, and says what it replaced', async () => {
+    const tx = {
+      org: {
+        findUnique: vi.fn().mockResolvedValue({ settings: { quotas: { requestsPerMinute: 5 } } }),
+        update: vi.fn(),
+      },
+    };
+    const db = { $transaction: vi.fn((fn: (t: typeof tx) => unknown) => fn(tx)) };
+
+    const result = await writeOrgLocale(ORG_A, 'en-XA', db as never);
+
+    expect(tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: { quotas: { requestsPerMinute: 5 }, locale: 'en-XA' } },
+    });
+    expect(result).toEqual({ previous: null, stored: 'en-XA', written: true });
+  });
+
+  it('removes the key on null', async () => {
+    const tx = {
+      org: {
+        findUnique: vi.fn().mockResolvedValue({ settings: { locale: 'en', quotas: {} } }),
+        update: vi.fn(),
+      },
+    };
+    const db = { $transaction: vi.fn((fn: (t: typeof tx) => unknown) => fn(tx)) };
+
+    expect(await writeOrgLocale(ORG_A, null, db as never)).toEqual({
+      previous: 'en',
+      stored: null,
+      written: true,
+    });
+    expect(tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: { quotas: {} } },
+    });
+  });
+
+  it('returns null for an org that does not exist', async () => {
+    const tx = { org: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn() } };
+    const db = { $transaction: vi.fn((fn: (t: typeof tx) => unknown) => fn(tx)) };
+
+    expect(await writeOrgLocale(ORG_A, 'en', db as never)).toBeNull();
+    expect(tx.org.update).not.toHaveBeenCalled();
+  });
+});
+
 describe('the provider policy (§120 t-742)', () => {
   it('reads a stored policy', () => {
     expect(
@@ -628,6 +713,16 @@ describe('the org caps (§110 t-788)', () => {
     });
   });
 
+  it('writes nothing for caps equal to what is stored, as for every slice', async () => {
+    const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: 10 } });
+
+    expect(await writeOrgQuotas(ORG_A, { monthlyBudgetUsd: 10 }, db)).toEqual({
+      previous: { monthlyBudgetUsd: 10 },
+      stored: { monthlyBudgetUsd: 10 },
+    });
+    expect(tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — nothing changed, nothing written
+  });
+
   it('treats a cap forwarded as undefined as no cap, removing the slice', async () => {
     // What a plan with no cap produces: `{ monthlyBudgetUsd: plan.cap }`. Zod
     // keeps the key, so counting keys would store `quotas: {}` for ever.
@@ -701,5 +796,611 @@ describe('the org caps (§110 t-788)', () => {
     expect(
       applyOrgSettingsPatch({ quotas: { monthlyBudgetUsd: 10 } }, { quotas: {}, retention: null })
     ).toBe(Prisma.DbNull);
+  });
+});
+
+describe('the entitlement switches (§135 t-1033)', () => {
+  /** A `$transaction` over one org row holding `settings`, recording the write. */
+  function txOver(settings: unknown) {
+    const tx = {
+      org: {
+        findUnique: vi.fn().mockResolvedValue(settings === undefined ? null : { settings }),
+        update: vi.fn(),
+      },
+    };
+    const $transaction = vi.fn(async (fn: (t: typeof tx) => Promise<unknown>, _opts?: unknown) =>
+      fn(tx)
+    );
+    return { tx, db: { $transaction } as never, $transaction };
+  }
+
+  const NONE = { on: [], off: [], unreadable: false };
+
+  it('reads every way of never having been set as nothing set on or off', () => {
+    expect(ORG_ENTITLEMENTS_KEY).toBe('entitlements');
+    expect(readOrgEntitlements(null)).toEqual(NONE);
+    expect(readOrgEntitlements(undefined)).toEqual(NONE);
+    expect(readOrgEntitlements({ quotas: { monthlyBudgetUsd: 5 } })).toEqual(NONE);
+    expect(readOrgEntitlements({ entitlements: null })).toEqual(NONE);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('reads the keys set on and set off apart, each sorted', () => {
+    expect(
+      readOrgEntitlements({ entitlements: { on: ['reports', 'leads'], off: ['beta'] } })
+    ).toEqual({ on: ['leads', 'reports'], off: ['beta'], unreadable: false });
+    // Set to none: every switch set off, which is not the same as not set.
+    expect(readOrgEntitlements({ entitlements: { on: [], off: ['leads', 'reports'] } })).toEqual({
+      on: [],
+      off: ['leads', 'reports'],
+      unreadable: false,
+    });
+  });
+
+  it('fails closed on a slice it cannot read: nothing on and flagged, so no default applies', () => {
+    for (const settings of [
+      { entitlements: ['reports'] },
+      { entitlements: { on: 'reports', off: [] } },
+      { entitlements: { switches: ['reports'] } },
+      { entitlements: 'reports' },
+      'not an object',
+    ]) {
+      mockLogger.warn.mockClear();
+      expect(readOrgEntitlements(settings, { orgId: ORG_A })).toEqual({
+        on: [],
+        off: [],
+        unreadable: true,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('keeps what parses in a slice with one list missing, flagged unreadable, so a save can keep it', () => {
+    expect(
+      readOrgEntitlements({ entitlements: { on: ['old_pkg', 'reports'] } }, { orgId: ORG_A })
+    ).toEqual({ on: ['old_pkg', 'reports'], off: [], unreadable: true });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Org entitlements slice is unreadable; the org has no switch on',
+      { orgId: ORG_A }
+    );
+  });
+
+  it('hands every caller a nothing-set answer it cannot change for the next', () => {
+    const first = readOrgEntitlements(null);
+
+    expect(() => (first.on as string[]).push('leads')).toThrow();
+    expect(readOrgEntitlements(null).on).toEqual([]);
+  });
+
+  it('drops a stored key that is not a key, keeping the rest, and warns', () => {
+    expect(
+      readOrgEntitlements(
+        { entitlements: { on: ['reports', 'Bad Key', 7, 'reports'], off: [null] } },
+        { orgId: ORG_A }
+      )
+    ).toEqual({ on: ['reports'], off: [], unreadable: false });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Dropped malformed entitlement switches; the org does not have them',
+      { orgId: ORG_A, dropped: 3 }
+    );
+  });
+
+  it('reads a key stored both on and off as off, and warns', () => {
+    expect(
+      readOrgEntitlements(
+        { entitlements: { on: ['leads', 'reports'], off: ['leads'] } },
+        { orgId: ORG_A }
+      )
+    ).toEqual({ on: ['reports'], off: ['leads'], unreadable: false });
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Entitlement switches stored both on and off; the org does not have them',
+      { orgId: ORG_A, switches: ['leads'] }
+    );
+  });
+
+  it('loads one org, and null for an org that does not exist', async () => {
+    mockFindUnique.mockResolvedValueOnce({
+      settings: { entitlements: { on: ['leads'], off: [] } },
+    });
+    expect(await loadOrgEntitlements(ORG_A)).toEqual({
+      on: ['leads'],
+      off: [],
+      unreadable: false,
+    });
+
+    mockFindUnique.mockResolvedValueOnce(null);
+    expect(await loadOrgEntitlements('gone')).toBeNull();
+  });
+
+  it('writes in a serializable transaction, handing the updater what is stored, keeping every other key', async () => {
+    const { tx, db, $transaction } = txOver({
+      quotas: { monthlyBudgetUsd: 10 },
+      entitlements: { on: ['retired'], off: [] },
+    });
+    const next = vi.fn(() => ({ on: ['reports', 'leads', 'reports'], off: ['beta'] }));
+
+    const written = await writeOrgEntitlements(ORG_A, next, db);
+
+    expect($transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+    expect(next).toHaveBeenCalledWith({ on: ['retired'], off: [], unreadable: false });
+    expect(written).toEqual({
+      previous: { on: ['retired'], off: [], unreadable: false },
+      previousStored: { on: ['retired'], off: [] },
+      stored: { on: ['leads', 'reports'], off: ['beta'], unreadable: false },
+      changed: true,
+    });
+    expect(tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: {
+        settings: {
+          quotas: { monthlyBudgetUsd: 10 },
+          entitlements: { on: ['leads', 'reports'], off: ['beta'] },
+        },
+      },
+    });
+  });
+
+  it('stores every switch set off, so the org does not read as having its defaults afterwards', async () => {
+    const { tx, db } = txOver(null);
+
+    const written = await writeOrgEntitlements(ORG_A, () => ({ on: [], off: ['leads'] }), db);
+
+    expect(written?.stored).toEqual({ on: [], off: ['leads'], unreadable: false });
+    expect(tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: { entitlements: { on: [], off: ['leads'] } } },
+    });
+  });
+
+  it('removes the slice for null or two empty lists, and NULLs a column left empty', async () => {
+    const kept = txOver({ branding: { logo: 'x' }, entitlements: { on: ['leads'], off: [] } });
+    expect(await writeOrgEntitlements(ORG_A, () => null, kept.db)).toEqual({
+      previous: { on: ['leads'], off: [], unreadable: false },
+      previousStored: { on: ['leads'], off: [] },
+      stored: NONE,
+      changed: true,
+    });
+    expect(kept.tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: { branding: { logo: 'x' } } },
+    });
+
+    const emptied = txOver({ entitlements: { on: ['leads'], off: [] } });
+    await writeOrgEntitlements(ORG_A, () => ({ on: [], off: [] }), emptied.db);
+    expect(emptied.tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: Prisma.DbNull },
+    });
+  });
+
+  it('writes nothing when the updater names a key that is not a key, or one both on and off', async () => {
+    const malformed = txOver(null);
+    await expect(
+      writeOrgEntitlements(ORG_A, () => ({ on: ['Not A Key'], off: [] }), malformed.db)
+    ).rejects.toThrow();
+    expect(malformed.tx.org.update).not.toHaveBeenCalled();
+
+    const both = txOver(null);
+    await expect(
+      writeOrgEntitlements(ORG_A, () => ({ on: ['leads'], off: ['leads'] }), both.db)
+    ).rejects.toThrow();
+    expect(both.tx.org.update).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing, and says so, when it would store exactly what is stored', async () => {
+    const same = txOver({ entitlements: { on: ['leads'], off: ['reports'] } });
+    const written = await writeOrgEntitlements(
+      ORG_A,
+      () => ({ on: ['leads'], off: ['reports'] }),
+      same.db
+    );
+    expect(written?.changed).toBe(false);
+    expect(same.tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — nothing to write
+
+    const absent = txOver({ branding: { logo: 'x' } });
+    expect((await writeOrgEntitlements(ORG_A, () => null, absent.db))?.changed).toBe(false);
+    expect(absent.tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — nothing to remove
+
+    const left = txOver({ entitlements: { on: ['leads'], off: [] } });
+    expect(await writeOrgEntitlements(ORG_A, () => undefined, left.db)).toEqual({
+      previous: { on: ['leads'], off: [], unreadable: false },
+      previousStored: { on: ['leads'], off: [] },
+      stored: { on: ['leads'], off: [], unreadable: false },
+      changed: false,
+    });
+    expect(left.tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — asked to leave it
+  });
+
+  it('replaces a settings column that is not an object, recording it whole, even to clear', async () => {
+    const garbage = txOver('not-json');
+
+    const written = await writeOrgEntitlements(ORG_A, () => null, garbage.db);
+
+    // Not "equal" to nothing: the column is reset, as it was before the skip.
+    expect(written?.changed).toBe(true);
+    expect(written?.previousStored).toEqual({ settingsColumn: 'not-json' });
+    expect(garbage.tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: Prisma.DbNull },
+    });
+  });
+
+  it('writes a slice the read had to tidy, though the tidied value is the same', async () => {
+    // A duplicate, a key both on and off, and a stray property: read as on [], off [leads].
+    const untidy = txOver({
+      entitlements: { on: ['leads'], off: ['leads', 'leads'], note: 'x' },
+    });
+
+    const written = await writeOrgEntitlements(
+      ORG_A,
+      () => ({ on: [], off: ['leads'] }),
+      untidy.db
+    );
+
+    expect(written?.changed).toBe(true);
+    expect(untidy.tx.org.update).toHaveBeenCalledWith({
+      where: { id: ORG_A },
+      data: { settings: { entitlements: { on: [], off: ['leads'] } } },
+    });
+  });
+
+  it('is null, writing nothing, for an org that does not exist', async () => {
+    const { tx, db } = txOver(undefined);
+    const next = vi.fn(() => ({ on: ['leads'], off: [] }));
+
+    expect(await writeOrgEntitlements(ORG_A, next, db)).toBeNull();
+    expect(next).not.toHaveBeenCalled();
+    expect(tx.org.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('the org meter limits (§135 t-1035)', () => {
+  /** A `$transaction` over one org row holding `settings` (`undefined` = no such org). */
+  function txOver(settings: unknown) {
+    const tx = {
+      org: {
+        findUnique: vi.fn().mockResolvedValue(settings === undefined ? null : { settings }),
+        update: vi.fn(),
+      },
+    };
+    const db = { $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)) };
+    return { tx, db: db as never };
+  }
+
+  describe('readOrgMeterLimits', () => {
+    it('reads the limits stored under quotas.meters, including 0', () => {
+      expect(
+        readOrgMeterLimits({ quotas: { meters: { seats: 5, convos: 0 } } }, { orgId: ORG_A })
+      ).toEqual({ seats: 5, convos: 0 });
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an unset column', null],
+      ['a non-object column', 'nonsense'],
+      ['no quotas slice', { retention: {} }],
+      ['a non-object quotas slice', { quotas: [1] }],
+      ['no meters key', { quotas: { monthlyBudgetUsd: 5 } }],
+      ['a null meters key', { quotas: { meters: null } }],
+    ])('returns {} without a warning for %s', (_what, settings) => {
+      expect(readOrgMeterLimits(settings)).toEqual({});
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an array', [1, 2]],
+      ['a number', 5],
+      ['a string', 'seats'],
+    ])('returns {} with a warning when meters is %s', (_what, meters) => {
+      expect(readOrgMeterLimits({ quotas: { meters } }, { orgId: ORG_A })).toEqual({});
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Org meter limits are not an object; no meter limits the org',
+        { orgId: ORG_A }
+      );
+    });
+
+    it('drops a malformed key or value per key, keeping the readable ones, with one warning', () => {
+      const limits = readOrgMeterLimits(
+        {
+          quotas: {
+            meters: {
+              seats: 5,
+              'Bad-Key': 3,
+              negative: -1,
+              fractional: 1.5,
+              text: '4',
+              huge: 2_000_000_000,
+              ok: 0,
+            },
+          },
+        },
+        { orgId: ORG_A }
+      );
+
+      expect(limits).toEqual({ seats: 5, ok: 0 });
+      expect(mockLogger.warn).toHaveBeenCalledOnce();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Dropped malformed meter limits; those meters do not limit the org',
+        { orgId: ORG_A, keys: ['Bad-Key', 'negative', 'fractional', 'text', 'huge'] }
+      );
+    });
+
+    it('writes to an injected logger rather than the default', () => {
+      const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() };
+
+      readOrgMeterLimits({ quotas: { meters: { bad: -1 } } }, {}, log as never);
+
+      expect(log.warn).toHaveBeenCalledOnce();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadOrgMeterLimits', () => {
+    it('reads the limits for one org by id', async () => {
+      mockFindUnique.mockResolvedValueOnce({ settings: { quotas: { meters: { seats: 3 } } } });
+
+      expect(await loadOrgMeterLimits(ORG_A)).toEqual({ seats: 3 });
+      expect(mockFindUnique).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        select: { settings: true },
+      });
+    });
+
+    it('is null, not {}, for an org that does not exist', async () => {
+      mockFindUnique.mockResolvedValueOnce(null);
+
+      expect(await loadOrgMeterLimits('gone')).toBeNull();
+    });
+  });
+
+  describe('writeOrgMeterLimits', () => {
+    it('sets a limit in a serializable transaction, keeping other limits, the caps and other slices', async () => {
+      const { tx, db } = txOver({
+        providers: { approved: ['a'] },
+        quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } },
+      });
+
+      const written = await writeOrgMeterLimits(ORG_A, { convos: 20 }, db);
+
+      expect(written).toEqual({
+        previous: { seats: 3 },
+        previousStored: { seats: 3 },
+        stored: { seats: 3, convos: 20 },
+        changed: true,
+      });
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: {
+          settings: {
+            providers: { approved: ['a'] },
+            quotas: { monthlyBudgetUsd: 10, meters: { seats: 3, convos: 20 } },
+          },
+        },
+      });
+    });
+
+    it('changes an existing limit and leaves those it does not name', async () => {
+      const { tx, db } = txOver({ quotas: { meters: { seats: 3, convos: 20 } } });
+
+      const written = await writeOrgMeterLimits(ORG_A, { seats: 9 }, db);
+
+      expect(written).toMatchObject({ stored: { seats: 9, convos: 20 }, changed: true });
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { meters: { seats: 9, convos: 20 } } } },
+      });
+    });
+
+    it('sets a limit of 0, which is a limit and not a clear', async () => {
+      const { tx, db } = txOver(null);
+
+      await writeOrgMeterLimits(ORG_A, { seats: 0 }, db);
+
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { meters: { seats: 0 } } } },
+      });
+    });
+
+    it('clears one limit with null, leaving the others', async () => {
+      const { tx, db } = txOver({ quotas: { meters: { seats: 3, convos: 20 } } });
+
+      const written = await writeOrgMeterLimits(ORG_A, { seats: null }, db);
+
+      expect(written).toEqual({
+        previous: { seats: 3, convos: 20 },
+        previousStored: { seats: 3, convos: 20 },
+        stored: { convos: 20 },
+        changed: true,
+      });
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { meters: { convos: 20 } } } },
+      });
+    });
+
+    it('removes the meters key when the last limit is cleared, keeping the caps', async () => {
+      const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } } });
+
+      await writeOrgMeterLimits(ORG_A, { seats: null }, db);
+
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { monthlyBudgetUsd: 10 } } },
+      });
+    });
+
+    it('removes the quotas slice when the last limit is cleared and there are no caps', async () => {
+      const { tx, db } = txOver({ branding: { logo: 'x' }, quotas: { meters: { seats: 3 } } });
+
+      await writeOrgMeterLimits(ORG_A, { seats: null }, db);
+
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { branding: { logo: 'x' } } },
+      });
+    });
+
+    it('NULLs the column when clearing the last limit leaves nothing in it', async () => {
+      const { tx, db } = txOver({ quotas: { meters: { seats: 3 } } });
+
+      await writeOrgMeterLimits(ORG_A, { seats: null }, db);
+
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: Prisma.DbNull },
+      });
+    });
+
+    it('carries caps as stored, even one this read could not make sense of', async () => {
+      const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: -1, meters: { seats: 3 } } });
+
+      await writeOrgMeterLimits(ORG_A, { convos: 1 }, db);
+
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: {
+          settings: { quotas: { monthlyBudgetUsd: -1, meters: { seats: 3, convos: 1 } } },
+        },
+      });
+    });
+
+    it('says changed: false and writes nothing when the limits are as they were', async () => {
+      const { tx, db } = txOver({ quotas: { meters: { seats: 3 } } });
+
+      expect(await writeOrgMeterLimits(ORG_A, { seats: 3 }, db)).toEqual({
+        previous: { seats: 3 },
+        previousStored: { seats: 3 },
+        stored: { seats: 3 },
+        changed: false,
+      });
+      expect(tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — nothing changed, nothing written
+    });
+
+    it('says changed: false when clearing a limit that was never set', async () => {
+      const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: 10 } });
+
+      expect(await writeOrgMeterLimits(ORG_A, { seats: null }, db)).toEqual({
+        previous: {},
+        previousStored: null,
+        stored: {},
+        changed: false,
+      });
+      expect(tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — nothing changed, nothing written
+    });
+
+    it('hands back the stored JSON as it was when a write drops an entry the read could not use', async () => {
+      const { tx, db } = txOver({ quotas: { meters: { seats: 3, broken: -1 } } });
+
+      const written = await writeOrgMeterLimits(ORG_A, { seats: 3 }, db);
+
+      expect(written).toEqual({
+        previous: { seats: 3 },
+        previousStored: { seats: 3, broken: -1 },
+        stored: { seats: 3 },
+        changed: true,
+      });
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { meters: { seats: 3 } } } },
+      });
+    });
+
+    it.each([
+      ['a bad key', { 'Bad-Key': 1 }],
+      ['a negative limit', { seats: -1 }],
+      ['a fractional limit', { seats: 1.5 }],
+      ['a limit over the sanity bound', { seats: 2_000_000_000 }],
+      ['a string limit', { seats: '3' }],
+    ])('throws a ZodError and writes nothing for %s', async (_what, change) => {
+      const { tx, db } = txOver({});
+
+      await expect(writeOrgMeterLimits(ORG_A, change as never, db)).rejects.toMatchObject({
+        name: 'ZodError',
+      });
+      expect(tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — refused before any write
+    });
+
+    it('is null for an org that does not exist, writing nothing', async () => {
+      const { tx, db } = txOver(undefined);
+
+      expect(await writeOrgMeterLimits('gone', { seats: 1 }, db)).toBeNull();
+      expect(tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — no row, so no write at all
+    });
+  });
+
+  describe('the caps writers keep quotas.meters', () => {
+    it('writeOrgQuotas replaces the caps and keeps the meter limits', async () => {
+      const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } } });
+
+      const written = await writeOrgQuotas(ORG_A, { monthlyBudgetUsd: 25 }, db);
+
+      expect(written).toEqual({
+        previous: { monthlyBudgetUsd: 10 },
+        stored: { monthlyBudgetUsd: 25 },
+      });
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { monthlyBudgetUsd: 25, meters: { seats: 3 } } } },
+      });
+    });
+
+    it('writeOrgQuotas(null) removes the caps but leaves the meter limits', async () => {
+      const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } } });
+
+      await writeOrgQuotas(ORG_A, null, db);
+
+      expect(tx.org.update).toHaveBeenCalledWith({
+        where: { id: ORG_A },
+        data: { settings: { quotas: { meters: { seats: 3 } } } },
+      });
+    });
+
+    it('writeOrgQuotas writes nothing when the caps are unchanged and the limits are there', async () => {
+      const { tx, db } = txOver({ quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } } });
+
+      await writeOrgQuotas(ORG_A, { monthlyBudgetUsd: 10 }, db);
+
+      expect(tx.org.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — nothing changed, nothing written
+    });
+
+    it('applyOrgSettingsPatch with a quotas slice replaces the caps and keeps the meter limits', () => {
+      const current = {
+        quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } },
+        branding: { a: 1 },
+      };
+
+      expect(applyOrgSettingsPatch(current, { quotas: { monthlyBudgetUsd: 20 } })).toEqual({
+        quotas: { monthlyBudgetUsd: 20, meters: { seats: 3 } },
+        branding: { a: 1 },
+      });
+    });
+
+    it('applyOrgSettingsPatch clearing the quotas slice keeps only the meter limits', () => {
+      const current = { quotas: { monthlyBudgetUsd: 10, meters: { seats: 3 } } };
+
+      expect(applyOrgSettingsPatch(current, { quotas: null })).toEqual({
+        quotas: { meters: { seats: 3 } },
+      });
+      expect(applyOrgSettingsPatch(current, { quotas: { monthlyBudgetUsd: undefined } })).toEqual({
+        quotas: { meters: { seats: 3 } },
+      });
+    });
+
+    it('applyOrgSettingsPatch still removes the quotas slice when there are no meter limits', () => {
+      expect(applyOrgSettingsPatch({ quotas: { monthlyBudgetUsd: 10 } }, { quotas: null })).toBe(
+        Prisma.DbNull
+      );
+    });
+
+    it('applyOrgSettingsPatch leaves quotas.meters alone on a patch that does not name quotas', () => {
+      const current = { quotas: { meters: { seats: 3 } }, retention: { webhookRetentionDays: 7 } };
+
+      expect(applyOrgSettingsPatch(current, { retention: null })).toEqual({
+        quotas: { meters: { seats: 3 } },
+      });
+    });
   });
 });

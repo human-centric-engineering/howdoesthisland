@@ -16,6 +16,7 @@ import { computeDefaultModelMap } from '@/lib/orchestration/llm/model-registry';
 import {
   DEFAULT_PRIVACY_IGNORED_ENTITY_TYPES,
   parseIgnoredEntityTypes,
+  parseConfidentialPolicy,
   parseEmbeddingsPolicy,
   parsePrivacyMode,
 } from '@/lib/orchestration/privacy/settings-policy';
@@ -27,6 +28,7 @@ import {
 import {
   TASK_TYPES,
   type ApprovalDefaultAction,
+  type ConfidentialModelBinding,
   type EscalationConfig,
   type InputGuardMode,
   type OutputGuardMode,
@@ -77,6 +79,17 @@ export function parseEscalationConfig(
 }
 
 /**
+ * The model for confidential messages from its two columns (§130 t-1038):
+ * both halves or none, since half a binding names no model.
+ */
+export function confidentialModelBinding(
+  providerSlug: string | null | undefined,
+  model: string | null | undefined
+): ConfidentialModelBinding | null {
+  return providerSlug && model ? { providerSlug, model } : null;
+}
+
+/**
  * Hydrate a raw Prisma row into the `OrchestrationSettings` response shape,
  * filling in any task keys the stored JSON is missing from the registry defaults.
  */
@@ -121,6 +134,11 @@ export function hydrateSettings(row: {
   privacyIgnoredEntityTypes?: Prisma.JsonValue | null;
   privacyProtectLocalProviders?: boolean | null;
   privacyEmbeddingsPolicy?: string | null;
+  privacyConfidentialPersonal?: string | null;
+  privacyConfidentialCommercial?: string | null;
+  confidentialModelProvider?: string | null;
+  confidentialModel?: string | null;
+  orgProviderKeysEnabled?: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }): OrchestrationSettings {
@@ -209,6 +227,20 @@ export function hydrateSettings(row: {
         : parseIgnoredEntityTypes(row.privacyIgnoredEntityTypes),
     privacyProtectLocalProviders: row.privacyProtectLocalProviders === true,
     privacyEmbeddingsPolicy: parseEmbeddingsPolicy(row.privacyEmbeddingsPolicy ?? undefined),
+    // As the embeddings policy: absent reads as the upgrade default (`allow`),
+    // a stored value that is not a policy as the strictest (`block`).
+    privacyConfidentialPersonal: parseConfidentialPolicy(
+      row.privacyConfidentialPersonal ?? undefined
+    ),
+    privacyConfidentialCommercial: parseConfidentialPolicy(
+      row.privacyConfidentialCommercial ?? undefined
+    ),
+    confidentialModel: confidentialModelBinding(
+      row.confidentialModelProvider,
+      row.confidentialModel
+    ),
+    // Absent on a row shape from before the column: off, its default.
+    orgProviderKeysEnabled: row.orgProviderKeysEnabled === true,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

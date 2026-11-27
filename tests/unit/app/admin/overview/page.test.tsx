@@ -187,6 +187,17 @@ describe('AdminOverviewPage', () => {
     expect(screen.getByTestId('system-info')).toBeInTheDocument();
   });
 
+  it('links to roles and access, from the dashboard a platform admin lands on (t-1091)', async () => {
+    vi.mocked(serverFetch).mockResolvedValue(apiSuccess(STATS));
+
+    render(await AdminOverviewPage());
+
+    expect(screen.getByRole('link', { name: 'See roles and access' })).toHaveAttribute(
+      'href',
+      '/admin/access'
+    );
+  });
+
   // ── Config health (#865) ─────────────────────────────────────────────────
 
   describe('config-health card', () => {

@@ -44,6 +44,7 @@ import { getCostSummary } from '@/lib/orchestration/llm/cost-reports';
 function makeCostSummary() {
   return {
     totals: { today: 0.5, week: 3.2, month: 12.8 },
+    ownKey: { today: 0, week: 0, month: 0 },
     byAgent: [
       {
         agentId: 'cmjbv4i3x00003wsloputgwu1',
@@ -54,8 +55,10 @@ function makeCostSummary() {
         utilisation: 0.128,
       },
     ],
-    byModel: [{ model: 'claude-sonnet-4-6', provider: 'anthropic', monthSpend: 12.8 }],
-    trend: [{ date: '2025-01-01', totalCostUsd: 0.4 }],
+    byModel: [
+      { model: 'claude-sonnet-4-6', provider: 'anthropic', monthSpend: 12.8, ownKeyMonthSpend: 0 },
+    ],
+    trend: [{ date: '2025-01-01', totalCostUsd: 0.4, ownKeyCostUsd: 0 }],
     localSavings: null,
   };
 }

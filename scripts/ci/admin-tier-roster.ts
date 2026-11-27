@@ -29,7 +29,12 @@
  *   matcher, which cannot see the tree, would call it org-tier;
  * - a core section (`CORE_ADMIN_SECTIONS`) with no page under it, or a core
  *   page or nav item in a section the list does not name — the list is what
- *   keeps a fork's pages out of core's.
+ *   keeps a fork's pages out of core's;
+ * - a page open to every admin viewer (`EVERY_VIEWER_ADMIN_PAGES`, t-1091)
+ *   with no `page.tsx` behind it, one that is also on an org-tier list (a
+ *   page is in one class), and a fork's page in the class's section — the
+ *   registrar already refuses one, so this catches a fork that edited core's
+ *   list or section list instead.
  *
  * Named tiers (t-999) are held to the same checks, and to three of their own:
  * a route, page or nav item may declare a tier only if the fork registered it
@@ -38,6 +43,13 @@
  * a tier's `landing` must be a page registered for it, word for word. A nav
  * item marked `'org'` over a named-tier page is reported too: its holders
  * would never see it.
+ *
+ * Switch requirements (§135 t-1034) are checked too: a `requires` on a route,
+ * page or nav item must name a switch the app registers
+ * (`registerEntitlementSwitch()`), since one it does not is a switch no org
+ * has, and it must sit beside a `tier`, since on a platform-tier route or
+ * item it would mean nothing. A route's `requires` must be a string literal,
+ * like its tier.
  *
  * With core sections closed (`closeCoreOrgTierSection()`, t-929), a fork's nav
  * item is judged against the narrowed list: one marked `tier: 'org'` over a
@@ -48,11 +60,13 @@
  */
 import ts from 'typescript';
 import {
+  adminPageRequirementOf,
   adminPageTier,
   adminPageTierOf,
   adminSectionOf,
   matchesAdminPagePattern,
   withoutClosedSections,
+  type AdminPageRequirement,
   type NamedTierAdminPage,
 } from '@/lib/auth/admin-tier';
 import { namedTierLandingProblem } from '@/lib/auth/admin-landing';
@@ -63,6 +77,15 @@ export interface SourceFile {
 }
 
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
+
+/**
+ * Text that mentions `requires` anywhere, camelCase included
+ * (`leadGenRequires`, `[requiresKey]`). Broad on purpose: a constant that only
+ * contains the letters costs a rename, while one that hides a switch would let
+ * a typo'd key shut a route to every org admin unseen. A spread whose name
+ * says nothing of a switch still slips past: write it inline.
+ */
+const MENTIONS_REQUIRES = /requires/i;
 
 /** One `withAdminAuth(…)` call that passes a `tier` option, or might. */
 export interface TierDeclaration {
@@ -77,6 +100,20 @@ export interface TierDeclaration {
   tier: string | null;
   /** The same options object declares `ownership`. */
   declaresOwnership: boolean;
+  /**
+   * The `requires` option (t-1034): the switch key when it is a string
+   * literal, `null` when it is anything else, absent when there is none.
+   */
+  requires?: string | null;
+}
+
+/**
+ * One `withAdminAuth(…)` call that passes a `tier` or a `requires`, or might.
+ * A {@link TierDeclaration} whose `tier` may also be absent: a `requires`
+ * with no tier beside it, which the roster reports.
+ */
+export interface AdminAuthDeclaration extends Omit<TierDeclaration, 'tier'> {
+  tier?: string | null;
 }
 
 /** A property's key as written — `tier`, `'tier'`, `"tier"` — or `null` for a computed one. */
@@ -170,10 +207,18 @@ function guardNames(sf: ts.SourceFile): Set<string> {
  * uses of a listed wrapper.
  */
 export function tierDeclarations(file: SourceFile): TierDeclaration[] {
+  return adminAuthDeclarations(file).filter((d): d is TierDeclaration => d.tier !== undefined);
+}
+
+/**
+ * {@link tierDeclarations}, and the calls that pass a `requires` with no
+ * `tier` (t-1034), for which `tier` is absent.
+ */
+export function adminAuthDeclarations(file: SourceFile): AdminAuthDeclaration[] {
   const sf = ts.createSourceFile(file.path, file.source, ts.ScriptTarget.Latest, true);
   const aliases = exportedAs(sf);
   const guards = guardNames(sf);
-  const found: TierDeclaration[] = [];
+  const found: AdminAuthDeclaration[] = [];
 
   const visit = (node: ts.Node): void => {
     if (
@@ -196,8 +241,19 @@ export function tierDeclarations(file: SourceFile): TierDeclaration[] {
         : (aliases.get(name) ?? []).filter((m) => HTTP_METHODS.has(m))
       : [];
     const ats = (methods.length ? methods : [name ?? '(unbound)']).map((m) => `${file.path}#${m}`);
-    const record = (tier: string | null, declaresOwnership: boolean): void => {
-      for (const at of ats) found.push({ at, tier, declaresOwnership });
+    const record = (
+      tier: string | null | undefined,
+      declaresOwnership: boolean,
+      requires?: string | null
+    ): void => {
+      for (const at of ats) {
+        found.push({
+          at,
+          ...(tier === undefined ? {} : { tier }),
+          declaresOwnership,
+          ...(requires === undefined ? {} : { requires }),
+        });
+      }
     };
     const unreadable = (): void => record(null, false);
 
@@ -207,6 +263,9 @@ export function tierDeclarations(file: SourceFile): TierDeclaration[] {
       // shared option constants stay quiet. A constant whose name says
       // nothing of a tier slips past: write the option inline.
       if (/tier/i.test(options.getText())) unreadable();
+      // Likewise a switch (t-1034): a typo'd key in a shared constant would
+      // otherwise shut the route to every org admin without a word.
+      else if (MENTIONS_REQUIRES.test(options.getText())) record(undefined, false, null);
       return;
     }
     const tier = options.properties.find((p) => keyText(p) === 'tier');
@@ -214,15 +273,34 @@ export function tierDeclarations(file: SourceFile): TierDeclaration[] {
       (p) =>
         (ts.isSpreadAssignment(p) || (p.name && keyText(p) === null)) && /tier/i.test(p.getText())
     );
+    const requiresProp = options.properties.find((p) => keyText(p) === 'requires');
+    // A switch arriving in a spread or under a computed key is one the scanner
+    // cannot read, reported as such rather than passed over.
+    const hiddenRequires = options.properties.some(
+      (p) =>
+        (ts.isSpreadAssignment(p) || (p.name && keyText(p) === null)) &&
+        MENTIONS_REQUIRES.test(p.getText())
+    );
+    const requires =
+      requiresProp === undefined
+        ? hiddenRequires
+          ? null
+          : undefined
+        : ts.isPropertyAssignment(requiresProp) && ts.isStringLiteralLike(requiresProp.initializer)
+          ? requiresProp.initializer.text
+          : null;
+    const declaresOwnership = options.properties.some((p) => keyText(p) === 'ownership');
     if (!tier) {
       if (hidden) unreadable();
+      else if (requires !== undefined) record(undefined, declaresOwnership, requires);
       return;
     }
     record(
       !hidden && ts.isPropertyAssignment(tier) && ts.isStringLiteralLike(tier.initializer)
         ? tier.initializer.text
         : null,
-      options.properties.some((p) => keyText(p) === 'ownership')
+      declaresOwnership,
+      requires
     );
   };
 
@@ -234,6 +312,8 @@ export function tierDeclarations(file: SourceFile): TierDeclaration[] {
 export interface NavItemFacts {
   href: string;
   tier?: string;
+  /** The switch the item requires (t-1034). */
+  requires?: string;
 }
 
 export interface RosterInput {
@@ -257,6 +337,11 @@ export interface RosterInput {
   pageFiles: readonly string[];
   /** Every sidebar item: core's, and the sections the fork registered. */
   navItems: readonly NavItemFacts[];
+  /**
+   * `EVERY_VIEWER_ADMIN_PAGES` (t-1091): core's pages open to every viewer the
+   * console admits. Unchecked when left out.
+   */
+  everyViewerPages?: readonly string[];
   /** `CORE_ADMIN_SECTIONS`. Unchecked when left out. */
   coreSections?: readonly string[];
   /** Core's sidebar hrefs alone, for the section check. */
@@ -274,6 +359,14 @@ export interface RosterInput {
    * Each is also in {@link appListedPages}, as the registry keeps them.
    */
   appNamedTierPages?: readonly NamedTierAdminPage[];
+  /**
+   * The keys of the entitlement switches the app registers
+   * (`registeredEntitlementSwitches()`, t-1034). Empty when left out, so a
+   * `requires` anywhere is reported as naming no registered switch.
+   */
+  switches?: readonly string[];
+  /** The fork's pages registered with `requires` (`adminPageRequirements()`). */
+  appPageRequirements?: readonly AdminPageRequirement[];
 }
 
 /** The URL pattern a page file serves: `app/admin/(g)/x/[id]/page.tsx` → `/admin/x/[id]`. */
@@ -291,7 +384,8 @@ export function findAdminTierRosterProblems(input: RosterInput): string[] {
   const problems: string[] = [];
   const namedTiers = input.namedTiers ?? [];
   const tierNames = new Set(['org', ...namedTiers.map((t) => t.name)]);
-  const declarations = input.routes.flatMap(tierDeclarations);
+  const allDeclarations = input.routes.flatMap(adminAuthDeclarations);
+  const declarations = allDeclarations.filter((d): d is TierDeclaration => d.tier !== undefined);
   // A route counts as declared when its tier is one that opens something:
   // `'org'`, or a named tier the fork registered. One naming no registered
   // tier is reported below and opens nothing, as the policy answers it.
@@ -412,7 +506,11 @@ export function findAdminTierRosterProblems(input: RosterInput): string[] {
         );
       }
     }
-    for (const path of [...input.listedPages, ...(input.coreNavHrefs ?? [])]) {
+    for (const path of [
+      ...input.listedPages,
+      ...(input.everyViewerPages ?? []),
+      ...(input.coreNavHrefs ?? []),
+    ]) {
       const section = adminSectionOf(path);
       if (section !== null && !sections.has(section)) {
         problems.push(
@@ -421,6 +519,8 @@ export function findAdminTierRosterProblems(input: RosterInput): string[] {
       }
     }
   }
+
+  problems.push(...everyViewerProblems(input, appPages));
 
   const closed = input.closedSections ?? [];
   for (const at of appListed) {
@@ -469,12 +569,111 @@ export function findAdminTierRosterProblems(input: RosterInput): string[] {
       );
     }
   }
+  problems.push(...requirementProblems(input, allDeclarations, allPages));
   for (const { name, landing } of namedTiers) {
     if (landing === undefined) continue;
     const problem = namedTierLandingProblem(name, landing, namedPages);
     if (problem !== null) {
       problems.push(
         `named tier '${name}': its landing ${landing} ${problem} /admin would ignore it and log why.`
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * The pages open to every admin viewer that would not do what they say
+ * (t-1091): one with no page behind it, one also on an org-tier list, where
+ * the two classes would disagree about who opens it, and a fork's page in the
+ * section such a page is in, which would sit beside it as if it were core's.
+ */
+function everyViewerProblems(input: RosterInput, appPages: readonly string[]): string[] {
+  const problems: string[] = [];
+  const everyViewer = input.everyViewerPages ?? [];
+  const pageFiles = new Set(input.pageFiles);
+  const orgTier = new Set([...input.listedPages, ...appPages]);
+  for (const pattern of everyViewer) {
+    const file = `app${pattern}/page.tsx`;
+    if (!pageFiles.has(file)) {
+      problems.push(`${pattern}: listed in EVERY_VIEWER_ADMIN_PAGES but ${file} does not exist.`);
+    }
+    if (orgTier.has(pattern)) {
+      problems.push(
+        `${pattern}: listed in EVERY_VIEWER_ADMIN_PAGES and on an org-tier list. A page is in one class: take it off the org-tier list.`
+      );
+    }
+  }
+  const sections = new Set(everyViewer.map(adminSectionOf).filter((s): s is string => s !== null));
+  for (const pattern of appPages) {
+    const section = adminSectionOf(pattern);
+    if (section !== null && sections.has(section)) {
+      problems.push(
+        `${pattern}: listed in lib/app/admin-tier.ts inside /admin/${section}, the section of a page core opens to every admin viewer. The class is core's: put the fork's page in a section of its own.`
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * The switch requirements that would not do what they say (t-1034): one
+ * naming no registered switch, which no org has, so the surface is shut to
+ * every org admin; one on a platform-tier route or nav item, where it means
+ * nothing, since switches do not limit a platform admin; and a route's
+ * `requires` that is not a string literal (or arrives in a spread), which
+ * review cannot read; and a nav item requiring a switch its page does not,
+ * which hides the item from orgs that can open the page. A route's switch is
+ * not matched to its page's: nothing ties an API path to the page that calls
+ * it, so that agreement is the author's, as the docs say.
+ */
+function requirementProblems(
+  input: RosterInput,
+  declarations: readonly AdminAuthDeclaration[],
+  allPages: readonly string[]
+): string[] {
+  const problems: string[] = [];
+  const switches = new Set(input.switches ?? []);
+  const unregistered = (key: string): string =>
+    `requires '${key}', which no app registers with registerEntitlementSwitch() in lib/app/entitlements.ts, so no org has it and the surface is shut to every org admin. Register the switch, or fix the key.`;
+  const platform =
+    'is the platform’s (no `tier`), and switches do not limit a platform admin, so it means nothing there. Give it a tier, or drop the `requires`.';
+  for (const d of declarations) {
+    if (d.requires === undefined) continue;
+    if (d.requires === null) {
+      problems.push(
+        `${d.at}: its \`requires\` is not a string literal, so review cannot see which switch it needs. Write the switch key in the options object.`
+      );
+    } else if (d.tier === undefined) {
+      problems.push(`${d.at}: requires '${d.requires}' but ${platform}`);
+    } else if (!switches.has(d.requires)) {
+      problems.push(`${d.at}: ${unregistered(d.requires)}`);
+    }
+  }
+  for (const { pattern, requires } of input.appPageRequirements ?? []) {
+    if (!switches.has(requires)) problems.push(`${pattern}: ${unregistered(requires)}`);
+  }
+  for (const item of input.navItems) {
+    if (item.requires === undefined) continue;
+    if (item.tier === undefined) {
+      problems.push(`nav item ${item.href}: requires '${item.requires}' but ${platform}`);
+      continue;
+    }
+    if (!switches.has(item.requires)) {
+      problems.push(`nav item ${item.href}: ${unregistered(item.requires)}`);
+    }
+    // The sidebar already hides an item whose page requires a switch, so the
+    // item's own `requires` only has to agree with it. One that differs hides
+    // the item from orgs the page admits, or names a switch the admin layout
+    // never asks about, which hides it from everyone.
+    const pageRequires = adminPageRequirementOf(
+      item.href.split(/[?#]/)[0],
+      allPages,
+      input.appPageRequirements ?? []
+    );
+    if (pageRequires !== item.requires) {
+      problems.push(
+        `nav item ${item.href}: requires '${item.requires}' but its page requires ${pageRequires === null ? 'no switch' : `'${pageRequires}'`}. Register the page with the same { requires }, or drop it from the item.`
       );
     }
   }
