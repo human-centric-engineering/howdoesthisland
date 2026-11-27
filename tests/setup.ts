@@ -425,7 +425,7 @@ vi.mock('@/lib/app/erasure', async (importOriginal) => ({
 // which a workspace OWNER administers: a test of who may use an admin surface
 // belongs in `tests/unit/lib/app/authorization.<aspect>.test.ts`, the one
 // place the escape guard lets the real seam be read. Ledger:
-// .context/app/platform-divergences.md.
+// .context/app/platform-divergences.md row 35; upstream: sunrise#1361.
 vi.mock('@/lib/app/authorization', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   initAppAuthorizationPolicy: () => {
