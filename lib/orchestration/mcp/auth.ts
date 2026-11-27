@@ -11,8 +11,9 @@ import { createHash, randomBytes } from 'node:crypto';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { mcpKeyScopeSchema } from '@/lib/validations/mcp';
-import { resolveCredentialOrg } from '@/lib/tenancy/entry';
-import { runAsCredentialLookup } from '@/lib/tenancy/context';
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
+import { resolveCredentialOrg, verifiedMembership } from '@/lib/tenancy/entry';
+import { isMultiTenant, runAsCredentialLookup } from '@/lib/tenancy/context';
 import type { McpAuthContext } from '@/types/mcp';
 
 /** Prefix every MCP API key carries; the rate-limit credential lookup reads it too. */
@@ -115,6 +116,24 @@ export async function authenticateMcpRequest(
       refused: entry.refused,
     });
     return null;
+  }
+
+  // A key acts as its creator (`createdBy` is every tool call's `userId`), so
+  // it needs one who is still a member of the key's org, read per request as
+  // `enterApiKeyOrg` reads an `sk_` key's owner, and skipped where that skips
+  // it: the install org at `single`. HowDoesThisLand carries this (t-96,
+  // platform-divergences row 34) until upstream answers it.
+  if (entry.orgId !== INSTALL_ORG_ID || isMultiTenant()) {
+    const creator: Awaited<ReturnType<typeof verifiedMembership>> = key.createdBy
+      ? await verifiedMembership(key.createdBy, entry.orgId, prisma)
+      : { refused: 'not-a-member' };
+    if ('refused' in creator) {
+      logger.warn('MCP auth: key creator is not a member of its org', {
+        keyPrefix: key.keyPrefix,
+        refused: creator.refused,
+      });
+      return null;
+    }
   }
 
   // Fire-and-forget lastUsedAt update — under the lookup scope, since the

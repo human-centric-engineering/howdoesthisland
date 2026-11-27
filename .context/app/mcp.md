@@ -200,7 +200,7 @@ routes do (`lib/app/workspaces/mcp-keys-access.ts`): someone acting in another
 workspace is refused, and so is an API key. A platform admin under a support
 grant can list and revoke but not make one (`orgForMint` refuses a support
 session): the key would outlive the session and act as someone who is not a
-member, which every tool here refuses (`KEY_HAS_NO_OWNER`). Making and
+member, which MCP authentication refuses (row 34). Making and
 revoking write `mcp_api_key.create` and `mcp_api_key.update` to the admin
 audit log, as core's routes do.
 
@@ -210,32 +210,39 @@ t-64 closes the admin area to platform admins.
 ### When a key's creator leaves
 
 A key acts as its creator, and removing them from the workspace does not revoke
-it: only erasure touches the key, by nulling `createdBy`. So **every tool here
-checks, on each call, that the key's creator is still a member of the key's
-workspace**, and refuses with `KEY_HAS_NO_OWNER` when they are not, or when
-they have gone. The key stops working for this fork's tools the moment its
-creator is removed, keys made before t-96 included, and works again if they
-are added back. A member whose role changes keeps a working key: any member
-may read the workspace's reviews and spend its credits, as over the API.
+it: only erasure touches the key, by nulling `createdBy`. Two checks, at two
+layers, make it stop working:
 
-The check is in each tool rather than at the key, which is core's transport
-(`lib/orchestration/mcp/auth.ts`, `sunrise.golden-rule`), and rather than as a
-revocation when a member leaves, which would need a hook in core's member
-removal and would leave the keys of anyone already gone. What that leaves out:
-**the key still authenticates**, so a core tool or resource the workspace
-exposes over MCP still answers it. Revoke a departed member's keys on settings;
-the list shows each key's creator.
+- **At authentication, for every MCP call.** `authenticateMcpRequest`
+  (`lib/orchestration/mcp/auth.ts`) refuses a key whose creator is not a member
+  of the key's workspace, or who has gone, with the transport's `401`. That
+  covers core's tools and resources too, and a workflow the key starts with
+  `run_workflow`, which no tool can tell apart from a member's. It is read per
+  request, as an `sk_` key's owner is (`enterApiKeyOrg`), so it covers keys made
+  before t-96, and the key works again if its creator is added back. Skipped for
+  the install org at `single`, exactly where `enterApiKeyOrg` skips it. This is
+  an edit to core that we carry (divergence row 34, sunrise#1358) until
+  Sunrise answers it.
+- **In each of our tools, with a code an assistant can read.** The spending
+  tools check every caller (`run/spender.ts`). The four that do not spend check
+  an MCP call's creator (`run/caller.ts`) and answer `KEY_HAS_NO_OWNER`. While
+  row 34 stands, authentication refuses such a key first. The tool check is ours
+  and stays when row 34 is retired, whatever shape Sunrise's own fix takes.
 
-**The four that do not spend check only over MCP** (`callerOf` in
+A member whose role changes keeps a working key: any member may read the
+workspace's reviews and spend its credits, as over the API. Revoking a departed
+member's keys on settings (where the list shows each key's creator) is still
+worth doing, so they stop showing as live.
+
+**The four that do not spend check only MCP calls** (`callerOf` in
 `tool-support.ts`). A chat turn's person entered through a session, which may
 be a support grant or an embed visitor rather than a membership, and a workflow
 may run with nobody behind it; those calls are left as they were. Core's
 `CapabilityContext` does not say where a call came from, so `callerOf` reads it
 off what each dispatcher sets: a chat turn sets `conversationId`, both workflow
 executors set `workflowExecutionId`, and the MCP transport sets neither. A
-dispatcher core adds later reads as MCP until `callerOf` learns it, which
-refuses rather than admits. The spending tools check every caller, since they
-charge a person.
+dispatcher core adds later reads as MCP until `callerOf` learns it, so a
+non-member gets refused rather than let through.
 
 ## After a merge that changes a tool
 
