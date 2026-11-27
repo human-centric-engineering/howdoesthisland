@@ -118,7 +118,6 @@ import {
   getRegisteredAccountSections,
   __resetAccountSectionRegistryForTests,
 } from '@/lib/account-sections/registry';
-import { initAppAuthorizationPolicy } from '@/lib/app/authorization';
 import { ORG_TIER_ADMIN_PAGES, adminPageTier } from '@/lib/auth/admin-tier';
 import { APP_ORG_TIER_ADMIN_ROUTES } from '@/lib/app/admin-tier-routes';
 import { appOrgAdminLandingRoute } from '@/lib/app/admin-landing';
@@ -157,6 +156,9 @@ import {
 vi.mock('@/lib/app/admin-tier', (importOriginal) => importOriginal());
 vi.mock('@/lib/app/user-created', (importOriginal) => importOriginal());
 vi.mock('@/lib/app/erasure', (importOriginal) => importOriginal());
+// FORK (HowDoesThisLand): our tests/setup.ts also pins the authorization seam
+// (t-64), so its row reads the real one back. Ledger: row 2.
+vi.mock('@/lib/app/authorization', (importOriginal) => importOriginal());
 
 // FORK (HowDoesThisLand): the capabilities row below reads what our seam
 // registers (t-92). `lib/app/capabilities.ts` is the only importer of this
@@ -203,13 +205,19 @@ const SEAM_DEFAULTS: SeamDefault[] = [
   {
     seam: 'lib/app/authorization.ts',
     risk: 'a stray policy would replace the authorization decision at every guarded request and every admin page — the one seam whose default registration would change who can reach what, on every install',
+    // FORK (HowDoesThisLand): pinned to our policy (t-64), Sunrise's default with
+    // `canAdminister` narrowed to platform admins; the read faces stay the
+    // default's by identity. Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
-      initAppAuthorizationPolicy();
-      expect(hasAppAuthorizationPolicy()).toBe(false);
-      // BY IDENTITY: what runs must be Sunrise's own object, not something
-      // equivalent-looking. `getAuthorizationPolicy()` also runs the fork gate,
-      // so this covers the wiring as well as the value.
-      expect(getAuthorizationPolicy()).toBe(DEFAULT_AUTHORIZATION_POLICY);
+      // `getAuthorizationPolicy()` runs the fork gate, so this covers the
+      // wiring as well as the value.
+      const policy = getAuthorizationPolicy();
+      expect(hasAppAuthorizationPolicy()).toBe(true);
+      expect(policy).not.toBe(DEFAULT_AUTHORIZATION_POLICY);
+      expect(policy.canAdminister).not.toBe(DEFAULT_AUTHORIZATION_POLICY.canAdminister);
+      expect(policy.canRead).toBe(DEFAULT_AUTHORIZATION_POLICY.canRead);
+      expect(policy.subjectScope).toBe(DEFAULT_AUTHORIZATION_POLICY.subjectScope);
+      expect(Object.keys(policy).sort()).toEqual(Object.keys(DEFAULT_AUTHORIZATION_POLICY).sort());
     },
   },
   {
@@ -1019,6 +1027,8 @@ describe('lib/app/ seams ship empty', () => {
     ['admin-tier', 'org-tier admin', [ROSTER]],
     ['user-created', 'user-created', []],
     ['erasure', 'erasure', [STALE]],
+    // FORK (HowDoesThisLand): the authorization pin our setup adds (t-64). Ledger: row 2.
+    ['authorization', 'authorization', []],
   ])('nothing but its readers escapes the suite-wide %s-seam pin', (seam, label, readers) => {
     // tests/setup.ts mocks `@/lib/app/brand` to null for EVERY test file, so
     // that no core test can read a fork's brand and fail for a reason the fork

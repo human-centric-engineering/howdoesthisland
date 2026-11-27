@@ -192,8 +192,8 @@ The code is `lib/app/workspaces/mcp-keys.ts`, on core's `generateApiKey` and
   spending tool charges the workspace's credits: that is the bound on what a
   key can spend.
 - **Revoked, not deleted**, so `McpAuditLog` still names it, and the list still
-  shows what was turned off. Core's `/admin/orchestration/mcp/keys` can still
-  delete a key outright until t-64 closes it to workspace owners.
+  shows what was turned off. Only a platform admin can delete a key outright,
+  from core's `/admin/orchestration/mcp/keys` (t-64).
 
 The routes serve only the workspace the caller has entered, as the judges
 routes do (`lib/app/workspaces/mcp-keys-access.ts`): someone acting in another
@@ -204,8 +204,13 @@ member, which MCP authentication refuses (row 34). Making and
 revoking write `mcp_api_key.create` and `mcp_api_key.update` to the admin
 audit log, as core's routes do.
 
-Core's `/admin/orchestration/mcp/keys` still works for a workspace owner until
-t-64 closes the admin area to platform admins.
+Core's `/admin/orchestration/mcp/keys` is for platform admins only (t-64): a
+workspace owner makes and revokes keys from settings, here.
+
+**Expose only the app's tools.** Which tools the MCP server offers
+(`McpExposedTool`) is install-wide, not per workspace. A core tool exposed
+there, such as `search_knowledge_base` or `run_workflow`, would reach every
+workspace key and spend outside CopyCredits ([`credits.md`](./credits.md#paths-that-spend-ai-money-besides-reviews)).
 
 ### When a key's creator leaves
 

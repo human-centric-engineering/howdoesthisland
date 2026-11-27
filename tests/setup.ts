@@ -416,6 +416,18 @@ vi.mock('@/lib/app/erasure', async (importOriginal) => ({
     // Registers no hook and declares no writer: Sunrise's shipped default.
   },
 }));
+// FORK (HowDoesThisLand): the authorization seam pinned the same way (t-64).
+// Our policy narrows `canAdminister` to platform admins, and live inside the
+// CORE suite it failed 158 cases in 36 files that judge Sunrise's default (an
+// org OWNER/ADMIN administering their own org) or register a policy of their
+// own. `tests/unit/lib/app/authorization.test.ts` and `defaults.test.ts` read
+// the real seam. Ledger: .context/app/platform-divergences.md.
+vi.mock('@/lib/app/authorization', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  initAppAuthorizationPolicy: () => {
+    // Registers no policy: Sunrise's shipped default.
+  },
+}));
 
 /**
  * Mock Analytics
