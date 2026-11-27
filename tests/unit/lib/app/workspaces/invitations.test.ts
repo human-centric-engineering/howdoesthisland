@@ -106,6 +106,7 @@ function pendingRow(overrides: Record<string, unknown> = {}) {
     orgId: ORG,
     userId: INVITEE_ID,
     role: 'MEMBER',
+    invitedByUserId: INVITER.id,
     status: 'PENDING',
     expiresAt: future(),
     ...overrides,
@@ -556,19 +557,114 @@ describe('acceptInvitation', () => {
     });
   });
 
-  it('gives addMember OWNER standing only for an OWNER invitation', async () => {
-    vi.mocked(prisma.workspaceInvitation.findUnique).mockResolvedValue(
-      pendingRow({ role: 'OWNER' }) as never
-    );
-    mockAddMember.mockResolvedValue({ orgId: ORG, role: 'OWNER' });
+  describe("an OWNER invitation, judged on its sender's standing at acceptance (t-27)", () => {
+    // Core's real `hasOwnerStandingIn` runs: it reads the sender through
+    // `prisma.user.findUnique`, mocked here with their role and their
+    // membership of the invited workspace.
+    const sender = (role: string, orgRole: string | null) =>
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        role,
+        orgMemberships: orgRole ? [{ role: orgRole }] : [],
+      } as never);
 
-    await acceptInvitation(INVITATION_ID, INVITEE_ID);
+    beforeEach(() => {
+      vi.mocked(prisma.workspaceInvitation.findUnique).mockResolvedValue(
+        pendingRow({ role: 'OWNER', invitedByUserId: INVITER.id }) as never
+      );
+      mockAddMember.mockImplementation((orgId: string, _userId: string, role: string) =>
+        Promise.resolve({ orgId, role })
+      );
+    });
 
-    expect(mockAddMember).toHaveBeenCalledWith(ORG, INVITEE_ID, 'OWNER', {
-      platformAdmin: false,
-      orgRole: 'OWNER',
+    it('confers OWNER, with OWNER standing, while the sender is still an owner of the workspace', async () => {
+      sender('USER', 'OWNER');
+
+      expect(await acceptInvitation(INVITATION_ID, INVITEE_ID)).toEqual({
+        orgId: ORG,
+        role: 'OWNER',
+      });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: INVITER.id },
+          select: expect.objectContaining({
+            orgMemberships: { where: { orgId: ORG }, select: { role: true } },
+          }),
+        })
+      );
+      expect(mockAddMember).toHaveBeenCalledWith(ORG, INVITEE_ID, 'OWNER', {
+        platformAdmin: false,
+        orgRole: 'OWNER',
+      });
+    });
+
+    it('confers OWNER when the sender is a platform admin, whatever their workspace role', async () => {
+      sender('ADMIN', null);
+
+      expect(await acceptInvitation(INVITATION_ID, INVITEE_ID)).toEqual({
+        orgId: ORG,
+        role: 'OWNER',
+      });
+    });
+
+    it.each([
+      ['demoted to ADMIN', () => sender('USER', 'ADMIN')],
+      ['removed from the workspace', () => sender('USER', null)],
+      [
+        'erased (the account is gone)',
+        () => vi.mocked(prisma.user.findUnique).mockResolvedValue(null),
+      ],
+    ])('confers MEMBER, with no standing, once the sender is %s', async (_case, arrange) => {
+      arrange();
+
+      expect(await acceptInvitation(INVITATION_ID, INVITEE_ID)).toEqual({
+        orgId: ORG,
+        role: 'MEMBER',
+      });
+      expect(mockAddMember).toHaveBeenCalledWith(ORG, INVITEE_ID, 'MEMBER', {
+        platformAdmin: false,
+        orgRole: null,
+      });
+    });
+
+    it('confers MEMBER without a lookup when the sender was erased and the row lost them (null invitedByUserId)', async () => {
+      vi.mocked(prisma.workspaceInvitation.findUnique).mockResolvedValue(
+        pendingRow({ role: 'OWNER', invitedByUserId: null }) as never
+      );
+
+      expect(await acceptInvitation(INVITATION_ID, INVITEE_ID)).toEqual({
+        orgId: ORG,
+        role: 'MEMBER',
+      });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('still uses the invitation once: the claim is not undone when it narrows to MEMBER', async () => {
+      sender('USER', 'ADMIN');
+
+      await acceptInvitation(INVITATION_ID, INVITEE_ID);
+
+      expect(prisma.workspaceInvitation.updateMany).toHaveBeenCalledTimes(1);
     });
   });
+
+  it.each(['MEMBER', 'ADMIN'])(
+    'confers a %s invitation as named, without asking the sender’s standing',
+    async (role) => {
+      vi.mocked(prisma.workspaceInvitation.findUnique).mockResolvedValue(
+        pendingRow({ role, invitedByUserId: null }) as never
+      );
+      mockAddMember.mockResolvedValue({ orgId: ORG, role });
+
+      expect(await acceptInvitation(INVITATION_ID, INVITEE_ID)).toEqual({ orgId: ORG, role });
+
+      expect(mockAddMember).toHaveBeenCalledWith(ORG, INVITEE_ID, role, {
+        platformAdmin: false,
+        orgRole: null,
+      });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    }
+  );
 
   it('never grants platform-admin standing to addMember', async () => {
     await acceptInvitation(INVITATION_ID, INVITEE_ID);

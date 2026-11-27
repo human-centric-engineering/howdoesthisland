@@ -49,6 +49,7 @@ import {
   OrgLifecycleError,
   type MembershipActor,
 } from '@/lib/tenancy/lifecycle';
+import { hasOwnerStandingIn } from '@/lib/tenancy/membership';
 import { DEFAULT_ORG_ROLE, ORG_OWNER_ROLE, type OrgRole } from '@/lib/tenancy/roles';
 import { getValidInvitation, INVITATION_IDENTIFIER_PREFIX } from '@/lib/utils/invitation-token';
 import { WORKSPACE_INVITATION_TTL_DAYS } from '@/lib/app/workspaces/validations';
@@ -317,7 +318,15 @@ export async function listInvitationsFor(userId: string): Promise<InvitationForI
 async function requireOpenInvitation(invitationId: string, userId: string, now: Date) {
   const invitation = await prisma.workspaceInvitation.findUnique({
     where: { id: invitationId },
-    select: { id: true, orgId: true, userId: true, role: true, status: true, expiresAt: true },
+    select: {
+      id: true,
+      orgId: true,
+      userId: true,
+      role: true,
+      invitedByUserId: true,
+      status: true,
+      expiresAt: true,
+    },
   });
   if (!invitation || invitation.userId !== userId || !invitation.orgId) {
     throw new WorkspaceInvitationError('INVITATION_NOT_FOUND', 'Invitation not found');
@@ -362,10 +371,38 @@ function alreadyAnswered(): WorkspaceInvitationError {
 }
 
 /**
- * The standing an accepted invitation carries into `addMember()`. Core asks
- * the inviter's standing when an invitation is issued, not when it is
- * accepted, since by then it is not known: an OWNER invitation exists only
- * because someone with owner standing issued it, and no other role needs any.
+ * The role an accepted invitation confers, asked at acceptance (t-27): the one
+ * it names, except that an `OWNER` invitation whose sender no longer holds
+ * owner standing in the workspace confers `MEMBER`. Standing is lost when the
+ * sender is demoted, removed, or erased (`invitedByUserId` is then null).
+ *
+ * The sender's standing was checked when the invitation was issued, but an
+ * invitation outlives that check. Without this, an owner could invite a second
+ * account of theirs as `OWNER`, be demoted, and still make that account owner
+ * on standing nobody holds. Core asks the same question of its own
+ * invitations since Sunrise 0.19.0 (#1235, `invitedOrgRole` in
+ * `lib/tenancy/membership.ts`), and narrows the same way rather than refusing:
+ * the invitee still joins, and an owner can promote them.
+ */
+async function roleAtAcceptance(invitation: {
+  orgId: string;
+  role: OrgRole;
+  invitedByUserId: string | null;
+}): Promise<OrgRole> {
+  if (invitation.role !== ORG_OWNER_ROLE) return invitation.role;
+  return (await hasOwnerStandingIn(invitation.orgId, invitation.invitedByUserId))
+    ? ORG_OWNER_ROLE
+    : DEFAULT_ORG_ROLE;
+}
+
+/**
+ * The standing an accepted invitation carries into `addMember()`, given the
+ * role {@link roleAtAcceptance} settled on. `addMember()` asks its actor for
+ * owner standing before it confers `OWNER`, and the invitee holds none of
+ * their own. So the standing is the sender's, and it is passed only once
+ * {@link roleAtAcceptance} has confirmed the sender still holds it **at
+ * acceptance**: issuing an invitation is not enough (t-27). No other role
+ * needs any.
  */
 function issuedInvitationActor(role: OrgRole): MembershipActor {
   return { platformAdmin: false, orgRole: role === ORG_OWNER_ROLE ? ORG_OWNER_ROLE : null };
@@ -387,11 +424,12 @@ export async function acceptInvitation(
     if (!(await claim(invitation.id, 'ACCEPTED', now))) throw alreadyAnswered();
 
     try {
+      const role = await roleAtAcceptance(invitation);
       const membership = await addMember(
         invitation.orgId,
         userId,
-        invitation.role,
-        issuedInvitationActor(invitation.role)
+        role,
+        issuedInvitationActor(role)
       );
       return { orgId: membership.orgId, role: membership.role };
     } catch (error) {
