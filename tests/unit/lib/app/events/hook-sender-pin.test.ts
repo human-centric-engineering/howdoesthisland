@@ -16,6 +16,7 @@
  * (`tests/unit/lib/security/safe-dispatcher.test.ts`); this pins the wiring.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 const mockEnv = vi.hoisted(() => ({
   TENANCY_MODE: 'multi',
@@ -82,10 +83,12 @@ async function lastError(): Promise<string> {
       expect.objectContaining({ data: expect.objectContaining({ lastError: expect.any(String) }) })
     )
   );
-  const call = mocks.update.mock.calls.find(
-    (c: [{ data: { lastError?: string } }]) => typeof c[0].data.lastError === 'string'
-  );
-  return String(call?.[0].data.lastError);
+  const written = z.object({ data: z.object({ lastError: z.string() }) });
+  for (const [args] of mocks.update.mock.calls) {
+    const parsed = written.safeParse(args);
+    if (parsed.success) return parsed.data.data.lastError;
+  }
+  throw new Error('no lastError was written');
 }
 
 const refused = () =>
