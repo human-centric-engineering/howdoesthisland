@@ -683,9 +683,22 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     risk: 'a stray flat-config block would apply lint rules to every fork',
     // The root eslint.config.mjs spreads this array last; that spread itself is
     // exercised by every `npm run lint` run.
-    // FORK (HowDoesThisLand): pinned to our one block, the prototype ignore.
+    // FORK (HowDoesThisLand): pinned to our two blocks, the prototype ignore
+    // and (t-91) Sunrise's JSX-literals rule turned off for our own routes.
     // Ledger: .context/app/platform-divergences.md row 2.
-    assert: () => expect(appEslintConfig).toEqual([{ ignores: ['prototype/**'] }]),
+    assert: () =>
+      expect(appEslintConfig).toEqual([
+        { ignores: ['prototype/**'] },
+        {
+          files: [
+            'app/(protected)/{assess,assessments,compare,home,projects,usage}/**/*.tsx',
+            'app/(protected)/settings/{api-keys,workspace}/**/*.tsx',
+            'app/(public)/{developers,example-review,model,quick-scan,r,redeem}/**/*.tsx',
+            'app/(public)/{opengraph-image,twitter-image}.tsx',
+          ],
+          rules: { 'react/jsx-no-literals': 'off' },
+        },
+      ]),
   },
   {
     seam: 'lib/app/jobs.ts',
