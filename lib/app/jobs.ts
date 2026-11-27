@@ -36,13 +36,9 @@
  */
 import { registerAppJob } from '@/lib/orchestration/maintenance/app-jobs';
 import { recoverAssessments } from '@/lib/app/assessments/recover';
-import { sweepSignupWorkspaces } from '@/lib/app/workspaces/sweep';
 import { purgeExpiredContent } from '@/lib/app/retention/purge';
 import { recoverRewrites } from '@/lib/app/rewrites/recover';
 import { recoverVerdicts } from '@/lib/app/comparisons/verdict';
-
-/** The signup-workspace sweep's name, as the tick logs it. */
-export const SIGNUP_WORKSPACE_SWEEP_JOB = 'app:signup-workspace-sweep';
 
 /** The assessment recovery job's name, as the tick logs it. */
 export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
@@ -57,24 +53,15 @@ export const VERDICT_RECOVERY_JOB = 'app:comparison-verdict-recovery';
 export const RETENTION_PURGE_JOB = 'app:retention-purge';
 
 export function initAppJobs(): void {
-  // Erase signup workspaces nobody joined (t-7). Org is a system model and the
-  // pass spans every org, so it runs once under the system scope.
-  registerAppJob({
-    name: SIGNUP_WORKSPACE_SWEEP_JOB,
-    intervalMs: 15 * 60 * 1000,
-    scope: { system: 'signup workspaces span orgs; Org is a system model' },
-    run: () => sweepSignupWorkspaces(),
-  });
-
   // Re-drive assessments whose run died or never started, and give up on
   // those out of attempts (t-22). Per workspace: each pass sees and claims
   // only its own rows, and counts its own running limit.
   registerAppJob({
     name: ASSESSMENT_RECOVERY_JOB,
     // The backstop, not the queue's driver: a run that ends starts the
-    // workspace's next queued assessment itself (`runAssessment`). At the
-    // signup sweep's 15 minutes it keeps the idle gate (#442) where that job
-    // already holds it, so a scale-to-zero database can still suspend.
+    // workspace's next queued assessment itself (`runAssessment`). At 15
+    // minutes, where the signup sweep held the idle gate (#442) until t-91,
+    // so a scale-to-zero database can still suspend.
     intervalMs: 15 * 60 * 1000,
     scope: 'per-org',
     run: () => recoverAssessments(),

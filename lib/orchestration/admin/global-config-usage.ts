@@ -29,9 +29,16 @@
  * Platform-agnostic: no Next.js imports.
  */
 
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
+import {
+  formatModelPin,
+  MODEL_OVERRIDE_STEP_TYPES,
+  pinNames,
+} from '@/lib/orchestration/llm/model-pin';
 import type { CapabilityAgentRef } from '@/types/orchestration';
 import { getTenantContext, isMultiTenant, runAsCrossOrgCount } from '@/lib/tenancy/context';
+import { bindingFollowsPlatform } from '@/lib/orchestration/agents/platform-agent-guard';
 
 const REASON = 'in-use check on global config (counted across orgs)';
 
@@ -122,80 +129,130 @@ export function providerUsage(slug: string): Promise<ProviderUsage> {
 // ── Provider models ─────────────────────────────────────────────────────────
 
 /**
- * Step types whose `config.modelOverride` pins a model: the semantic
- * validator's PROVIDER_CHOOSING_STEP_TYPES (its LLM_STEP_TYPES plus
- * `supervisor`, which passes its override to the LLM call), in
- * lib/orchestration/workflows/semantic-validator.ts. Kept in sync by hand
- * because exporting from the validator would pull its runtime deps (the
- * model registry) in for no benefit. Moved here from the provider-models
- * route with the check it serves, which left `supervisor` out until t-731's
- * review.
+ * How a workflow definition pins `model` in a step's `modelOverride`, a model
+ * pin (§136 t-1068): `'pair'` when some step names its provider and id,
+ * `'id'` when steps name it by id alone (it may run on another provider's
+ * model with the id), `null` when none does.
  */
-const LLM_STEP_TYPES = new Set([
-  'llm_call',
-  'route',
-  'reflect',
-  'guard',
-  'evaluate',
-  'plan',
-  'orchestrator',
-  'supervisor',
-]);
-
-function definitionPinsModel(definition: unknown, modelId: string): boolean {
-  if (!definition || typeof definition !== 'object') return false;
+function definitionPinsModel(
+  definition: unknown,
+  model: { providerSlug: string; modelId: string }
+): 'pair' | 'id' | null {
+  if (!definition || typeof definition !== 'object') return null;
   const steps = (definition as { steps?: unknown }).steps;
-  if (!Array.isArray(steps)) return false;
+  if (!Array.isArray(steps)) return null;
+  let found: 'id' | null = null;
   for (const step of steps) {
     if (!step || typeof step !== 'object') continue;
     const type = (step as { type?: unknown }).type;
-    if (typeof type !== 'string' || !LLM_STEP_TYPES.has(type)) continue;
+    if (typeof type !== 'string') continue;
+    // A `chat_turn` override pins a model too (§136 t-1068): a pair runs on
+    // the provider it names, a bare id on its agent's provider, which this
+    // definition does not say, so it counts by id alone like any bare pin.
+    if (!MODEL_OVERRIDE_STEP_TYPES.has(type) && type !== 'chat_turn') continue;
     const config = (step as { config?: unknown }).config;
     if (!config || typeof config !== 'object') continue;
     const override = (config as { modelOverride?: unknown }).modelOverride;
-    if (typeof override === 'string' && override === modelId) return true;
+    if (typeof override !== 'string') continue;
+    const how = pinNames(override, model);
+    if (how === 'pair') return 'pair';
+    if (how === 'id') found = 'id';
   }
-  return false;
+  return found;
+}
+
+/**
+ * A prefilter, not the check, for workflows whose draft or published
+ * definition may pin `(providerSlug, modelId)` in a step's `modelOverride`:
+ * JSON containment (`@>`) narrows the read to definitions with SOME step
+ * naming the pair or the bare id, so every org's workflow JSON does not cross
+ * the wire (§107 t-752). The caller still decides by step type, as
+ * `definitionPinsModel` does. Shared with the model move (§136 t-1066), so
+ * the two read the same workflows.
+ */
+export function workflowsMayPinWhere(
+  providerSlug: string,
+  modelId: string
+): Prisma.AiWorkflowWhereInput {
+  const stepPinning = (modelOverride: string) => ({
+    path: ['steps'],
+    array_contains: [{ config: { modelOverride } }],
+  });
+  const pinned = [stepPinning(modelId), stepPinning(formatModelPin(providerSlug, modelId))];
+  return {
+    OR: pinned.flatMap((pins) => [
+      { draftDefinition: pins },
+      { publishedVersion: { is: { snapshot: pins } } },
+    ]),
+  };
+}
+
+/** A workflow pinning a model, as {@link providerModelUsage} names it. */
+export interface ModelWorkflowRef extends NamedRef {
+  /**
+   * Every step pinning the model names its id alone, with no provider (a
+   * pin saved before §136 t-1068): when another provider offers the id, the
+   * step may run on that one instead.
+   */
+  byIdOnly: boolean;
+}
+
+/** An agent bound to a model, as {@link providerModelUsage} names it. */
+export interface ModelAgentRef extends NamedRef {
+  /**
+   * Whether the agent's provider and model follow the platform's pick
+   * (`bindingFollowsPlatform`, the reconcile's own rule, §116 t-798): the
+   * reconcile re-picks it off a turned-off or retired model and ranks a
+   * retiring one last, so it moves on its own (§136 t-1065). Any other agent
+   * stays where it is until someone moves it.
+   */
+  followsPlatform: boolean;
 }
 
 export interface ProviderModelUsage {
   /** The caller's active agents bound to the model, by name. */
-  agents: NamedRef[];
+  agents: ModelAgentRef[];
   /** The caller's active workflows pinning it (draft or published), by name. */
-  workflows: NamedRef[];
+  workflows: ModelWorkflowRef[];
   /** Active agents in other orgs bound to it. */
   otherOrgAgents: number;
+  /** How many of {@link otherOrgAgents} follow the platform's pick. */
+  otherOrgAgentsFollowingPlatform: number;
   /** Active workflows in other orgs pinning it. */
   otherOrgWorkflows: number;
+  /** How many of {@link otherOrgWorkflows} pin it by id alone (`ModelWorkflowRef.byIdOnly`). */
+  otherOrgWorkflowsByIdOnly: number;
 }
 
 /**
  * Active agents bound to `(providerSlug, modelId)` and active workflows
- * pinning `modelId` in a step's `modelOverride`, in every org. The caller's
- * are named, other orgs' are counted.
+ * pinning the model in a step's `modelOverride` — by provider and id, or by
+ * the id alone (§136 t-1068) — in every org by default. The
+ * caller's are named, other orgs' are counted. `acrossOrgs: false` counts in
+ * the caller's org only, for a customer org's admin (§111 t-811).
  */
 export function providerModelUsage(
   providerSlug: string,
-  modelId: string
+  modelId: string,
+  options: CountScope = {}
 ): Promise<ProviderModelUsage> {
   const isCallers = callersRows();
-  // A prefilter, not the check: JSON containment (`@>`) narrows the read to
-  // definitions with SOME step pinning `modelId`, so every org's workflow
-  // JSON no longer crosses the wire; `definitionPinsModel` below still
-  // decides, by step type (§107 t-752).
-  const pins = { path: ['steps'], array_contains: [{ config: { modelOverride: modelId } }] };
-  return acrossOrgs(async () => {
+  return scoped(options, async () => {
     const [agentRows, workflowRows] = await Promise.all([
       prisma.aiAgent.findMany({
         where: { isActive: true, provider: providerSlug, model: modelId },
-        select: { id: true, name: true, slug: true, orgId: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          orgId: true,
+          isSystem: true,
+          bindingOwner: true,
+        },
         orderBy: { name: 'asc' },
       }),
       prisma.aiWorkflow.findMany({
-        where: {
-          isActive: true,
-          OR: [{ draftDefinition: pins }, { publishedVersion: { is: { snapshot: pins } } }],
-        },
+        where: { isActive: true, ...workflowsMayPinWhere(providerSlug, modelId) },
         select: {
           id: true,
           name: true,
@@ -207,18 +264,33 @@ export function providerModelUsage(
         orderBy: { name: 'asc' },
       }),
     ]);
-    const pinning = workflowRows.filter(
-      (w) =>
-        definitionPinsModel(w.draftDefinition, modelId) ||
-        definitionPinsModel(w.publishedVersion?.snapshot, modelId)
-    );
+    const model = { providerSlug, modelId };
+    const pinning = workflowRows.flatMap((w) => {
+      const how = [
+        definitionPinsModel(w.draftDefinition, model),
+        definitionPinsModel(w.publishedVersion?.snapshot, model),
+      ];
+      if (how.every((h) => h === null)) return [];
+      return [{ ...w, byIdOnly: !how.includes('pair') }];
+    });
     const agents = named(agentRows, isCallers);
-    const workflows = named(pinning, isCallers);
+    const ownWorkflows = pinning.filter((w) => isCallers(w.orgId));
+    const otherWorkflows = pinning.filter((w) => !isCallers(w.orgId));
+    const ownAgents = agentRows.filter((r) => isCallers(r.orgId));
     return {
-      agents: agents.own,
-      workflows: workflows.own,
+      agents: ownAgents.map((r) => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        followsPlatform: bindingFollowsPlatform(r),
+      })),
+      workflows: ownWorkflows.map(({ id, name, slug, byIdOnly }) => ({ id, name, slug, byIdOnly })),
       otherOrgAgents: agents.elsewhere,
-      otherOrgWorkflows: workflows.elsewhere,
+      otherOrgAgentsFollowingPlatform: agentRows.filter(
+        (r) => !isCallers(r.orgId) && bindingFollowsPlatform(r)
+      ).length,
+      otherOrgWorkflows: otherWorkflows.length,
+      otherOrgWorkflowsByIdOnly: otherWorkflows.filter((w) => w.byIdOnly).length,
     };
   });
 }
@@ -484,7 +556,8 @@ export function agentProfileUsage(
 
 /**
  * Total `AiCostLog` spend since `since`, in every org — the figure the global
- * monthly budget cap is checked against (§110 t-788).
+ * monthly budget cap is checked against (§110 t-788). Rows for calls on an
+ * org's own key are left out: the vendor bills the org for them (§137).
  *
  * Read in the acting org's scope, the `org_isolation` policy would hide every
  * other org's rows and turn the install-wide ceiling into a per-org one.
@@ -492,7 +565,7 @@ export function agentProfileUsage(
 export function globalSpendSince(since: Date): Promise<number> {
   return acrossOrgs(async () => {
     const aggregate = await prisma.aiCostLog.aggregate({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, ownKey: false },
       _sum: { totalCostUsd: true },
     });
     return aggregate._sum.totalCostUsd ?? 0;

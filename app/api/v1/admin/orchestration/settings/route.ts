@@ -19,22 +19,26 @@ import { Prisma } from '@prisma/client';
 import { withAdminAuth } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db/client';
 import { successResponse, errorResponse } from '@/lib/api/responses';
+import { confidentialModelProblem } from '@/lib/orchestration/llm/confidential-route';
 import { validateRequestBody } from '@/lib/api/validation';
 import { getRouteLogger } from '@/lib/api/context';
 import { getClientIP } from '@/lib/security/ip';
 import { computeETag, checkConditional } from '@/lib/api/etag';
-import { computeDefaultModelMap } from '@/lib/orchestration/llm/model-registry';
+import { computeDefaultModelMap, getModel } from '@/lib/orchestration/llm/model-registry';
 import { hydrateFromDb as hydrateModelRegistryFromDb } from '@/lib/orchestration/llm/model-registry-db-hydrate';
 import { invalidateSettingsCache } from '@/lib/orchestration/llm/settings-resolver';
 import { invalidateOrchestrationSettingsCache } from '@/lib/orchestration/settings';
 import { getEmbeddingModels } from '@/lib/orchestration/llm/embedding-models';
 import { parseAudioDefault } from '@/lib/orchestration/llm/audio-default';
+import { parseModelPin } from '@/lib/orchestration/llm/model-pin';
 import {
   costLogsOutliveExecutions,
   updateOrchestrationSettingsSchema,
 } from '@/lib/validations/orchestration';
 import { WRITER_TRANSACTION_OPTIONS } from '@/lib/privacy/erased-subjects';
 import { requireIfMatch } from '@/lib/api/record-version';
+import { isSealedSecretKeyConfigured } from '@/lib/security/sealed-secrets';
+import { countOrgsWithProviderKeys } from '@/lib/orchestration/llm/org-provider-keys';
 import { assertUnchangedSince, escalationVersion } from '@/lib/orchestration/config-versions';
 import { logAdminAction, computeChanges } from '@/lib/orchestration/audit/admin-audit-logger';
 import {
@@ -52,17 +56,29 @@ export const GET = withAdminAuth(async (request) => {
   // cache `getOrchestrationSettings` serves the rest from: the cache is per process, so on another instance it can still hold
   // a list an erasure has since scrubbed, and a stale list beside a current
   // version would pass the save's check and write the person back.
-  const [settings, stored] = await Promise.all([
+  const [settings, stored, orgsWithProviderKeys] = await Promise.all([
     getOrchestrationSettings(),
     prisma.aiOrchestrationSettings.findUnique({
       where: { slug: 'global' },
       select: { escalationConfig: true },
+    }),
+    // What turning organisations' own keys off would refuse (§137 t-1044).
+    // Only a warning line reads it, so a failed count shows as unknown rather
+    // than failing the whole page.
+    countOrgsWithProviderKeys().catch((err: unknown) => {
+      log.warn('Could not count the orgs holding their own AI keys', {
+        errorName: err instanceof Error ? err.name : typeof err,
+      });
+      return null;
     }),
   ]);
   const body = {
     ...settings,
     escalationConfig: parseEscalationConfig(stored?.escalationConfig),
     escalationVersion: escalationVersion(stored?.escalationConfig),
+    orgsWithProviderKeys,
+    // Whether the switch can be turned on. Presence only, as Config Health reports it.
+    sealedSecretKeyConfigured: isSealedSecretKeyConfigured(),
   };
 
   const etag = computeETag(body);
@@ -99,6 +115,22 @@ export const PATCH = withAdminAuth(
     // A save of the escalation list says which version it loaded (§122
     // t-899); a save of anything else on the row does not need to.
     const loadedAt = body.escalationConfig !== undefined ? requireIfMatch(request) : undefined;
+
+    // The model for confidential messages (§130 t-1038): refused unless it
+    // could answer a confidential turn, so it is never saved broken.
+    if (body.confidentialModel) {
+      const problem = await confidentialModelProblem(body.confidentialModel);
+      if (problem) {
+        return errorResponse(
+          `That model can't be the model for confidential messages. ${problem}`,
+          {
+            code: 'VALIDATION_ERROR',
+            status: 400,
+            details: { field: 'confidentialModel' },
+          }
+        );
+      }
+    }
 
     // Validate the active-embedding-model FK against the model matrix. The
     // Zod schema only enforces "non-empty string", since the foreign key
@@ -153,6 +185,44 @@ export const PATCH = withAdminAuth(
       }
     }
 
+    // A chat, routing or reasoning default that names its provider (§136
+    // t-1068) must name a model that provider offers. The schema's check
+    // asks the registry, which holds one entry per model id and so cannot
+    // say whether Azure offers `gpt-4o` while OpenAI's entry holds the id;
+    // the catalogue can. A bare id is left to that check, as before.
+    for (const task of ['routing', 'chat', 'reasoning'] as const) {
+      const pin = parseModelPin(body.defaultModels?.[task]);
+      if (pin === null || pin.providerSlug === null) continue;
+      const [row, providerRow] = await Promise.all([
+        prisma.aiProviderModel.findFirst({
+          where: { providerSlug: pin.providerSlug, modelId: pin.modelId, isActive: true },
+          select: { id: true },
+        }),
+        prisma.aiProviderConfig.findFirst({
+          where: { slug: pin.providerSlug, isActive: true },
+          select: { id: true },
+        }),
+      ]);
+      // A provider that is not set up cannot serve it, whatever it offers.
+      if (!providerRow) {
+        return errorResponse(`Unknown provider — "${pin.providerSlug}" is not an active provider`, {
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          details: { task, value: body.defaultModels?.[task] },
+        });
+      }
+      if (!row && getModel(pin.modelId)?.provider !== pin.providerSlug) {
+        return errorResponse(
+          `Unknown model — provider "${pin.providerSlug}" has no active model "${pin.modelId}" in the model matrix`,
+          {
+            code: 'VALIDATION_ERROR',
+            status: 400,
+            details: { task, value: body.defaultModels?.[task] },
+          }
+        );
+      }
+    }
+
     // Audio is matrix-driven: the slot must point at an active
     // AiProviderModel row whose capabilities include 'audio'. The
     // hardcoded model-registry can't validate this (audio support is
@@ -204,6 +274,27 @@ export const PATCH = withAdminAuth(
     // defaults (so missing keys always resolve), overlay the current row, then
     // overlay the patch.
     const existing = await prisma.aiOrchestrationSettings.findUnique({ where: { slug: 'global' } });
+
+    // Organisations' own AI keys (§137 t-1044) are held sealed, so they can be
+    // switched ON only while there is a master key to seal them with. Only a
+    // change from off is refused: a client resending the `true` it read must
+    // still be able to save everything else after the master key has gone.
+    // Turning them off is always allowed: it refuses the orgs that hold keys
+    // rather than moving them to the install's key.
+    if (
+      body.orgProviderKeysEnabled === true &&
+      existing?.orgProviderKeysEnabled !== true &&
+      !isSealedSecretKeyConfigured()
+    ) {
+      return errorResponse(
+        "Organisations' own AI keys can't be turned on: no master key for sealing them is configured. Set SEALED_SECRET_KEYS and SEALED_SECRET_ACTIVE_KEY, then try again.",
+        {
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          details: { field: 'orgProviderKeysEnabled' },
+        }
+      );
+    }
 
     // Retention coupling: cost logs must outlive the executions that reference
     // them, or the cost breakdown empties out under executions still on file
@@ -343,6 +434,19 @@ export const PATCH = withAdminAuth(
     if (body.privacyEmbeddingsPolicy !== undefined) {
       updateData.privacyEmbeddingsPolicy = body.privacyEmbeddingsPolicy;
     }
+    if (body.privacyConfidentialPersonal !== undefined) {
+      updateData.privacyConfidentialPersonal = body.privacyConfidentialPersonal;
+    }
+    if (body.privacyConfidentialCommercial !== undefined) {
+      updateData.privacyConfidentialCommercial = body.privacyConfidentialCommercial;
+    }
+    if (body.confidentialModel !== undefined) {
+      updateData.confidentialModelProvider = body.confidentialModel?.providerSlug ?? null;
+      updateData.confidentialModel = body.confidentialModel?.model ?? null;
+    }
+    if (body.orgProviderKeysEnabled !== undefined) {
+      updateData.orgProviderKeysEnabled = body.orgProviderKeysEnabled;
+    }
     if (body.escalationConfig !== undefined) {
       updateData.escalationConfig =
         body.escalationConfig === null ? Prisma.JsonNull : body.escalationConfig;
@@ -389,6 +493,21 @@ export const PATCH = withAdminAuth(
             : {}),
           ...(body.privacyEmbeddingsPolicy !== undefined
             ? { privacyEmbeddingsPolicy: body.privacyEmbeddingsPolicy }
+            : {}),
+          ...(body.privacyConfidentialPersonal !== undefined
+            ? { privacyConfidentialPersonal: body.privacyConfidentialPersonal }
+            : {}),
+          ...(body.privacyConfidentialCommercial !== undefined
+            ? { privacyConfidentialCommercial: body.privacyConfidentialCommercial }
+            : {}),
+          ...(body.confidentialModel
+            ? {
+                confidentialModelProvider: body.confidentialModel.providerSlug,
+                confidentialModel: body.confidentialModel.model,
+              }
+            : {}),
+          ...(body.orgProviderKeysEnabled !== undefined
+            ? { orgProviderKeysEnabled: body.orgProviderKeysEnabled }
             : {}),
         },
         update: updateData,

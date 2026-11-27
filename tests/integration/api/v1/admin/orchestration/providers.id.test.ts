@@ -45,6 +45,10 @@ vi.mock('@/lib/db/client', () => ({
     aiCostLog: {
       count: vi.fn(),
     },
+    // Orgs' own keys for the row (§137 t-1044), counted before a permanent delete.
+    aiOrgProviderKey: {
+      count: vi.fn(),
+    },
   },
 }));
 
@@ -99,6 +103,7 @@ function makeProvider(overrides: Record<string, unknown> = {}) {
     timeoutMs: null,
     maxRetries: null,
     jurisdiction: null,
+    trustedForConfidential: false,
     createdBy: ADMIN_ID,
     createdAt: new Date('2025-01-01'),
     updatedAt: new Date('2025-01-01'),
@@ -297,6 +302,26 @@ describe('PATCH /api/v1/admin/orchestration/providers/:id', () => {
       expect(data[0]).toMatchObject({ jurisdiction: 'US' });
       expect(data[1]).toMatchObject({ jurisdiction: null });
       expect(data[2]).not.toHaveProperty('jurisdiction');
+    });
+
+    it('sets and clears "Trusted with confidential content", and leaves it when absent (§130)', async () => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
+      vi.mocked(prisma.aiProviderConfig.update).mockResolvedValue(makeProvider());
+
+      await PATCH(makeRequest('PATCH', { trustedForConfidential: true }), makeParams(PROVIDER_ID));
+      await PATCH(makeRequest('PATCH', { trustedForConfidential: false }), makeParams(PROVIDER_ID));
+      await PATCH(makeRequest('PATCH', { name: 'Renamed' }), makeParams(PROVIDER_ID));
+      const refused = await PATCH(
+        makeRequest('PATCH', { trustedForConfidential: 'yes' }),
+        makeParams(PROVIDER_ID)
+      );
+
+      const data = vi.mocked(prisma.aiProviderConfig.update).mock.calls.map(([args]) => args.data);
+      expect(data[0]).toMatchObject({ trustedForConfidential: true });
+      expect(data[1]).toMatchObject({ trustedForConfidential: false });
+      expect(data[2]).not.toHaveProperty('trustedForConfidential');
+      expect(refused.status).toBe(400);
     });
 
     it('refuses a jurisdiction that is not a short code', async () => {
@@ -544,6 +569,27 @@ describe('DELETE /api/v1/admin/orchestration/providers/:id?permanent=true', () =
     // Default to "no references found" — individual tests override.
     vi.mocked(prisma.aiAgent.count).mockResolvedValue(0);
     vi.mocked(prisma.aiCostLog.count).mockResolvedValue(0);
+    vi.mocked(prisma.aiOrgProviderKey.count).mockResolvedValue(0);
+  });
+
+  it('refuses while orgs hold their own key for it, which the delete would silently take (§137 t-1044)', async () => {
+    vi.mocked(prisma.aiProviderConfig.findUnique).mockResolvedValue(makeProvider());
+    vi.mocked(prisma.aiOrgProviderKey.count).mockResolvedValue(2);
+
+    const response = await DELETE(
+      makeRequest('DELETE', undefined, { permanent: 'true' }),
+      makeParams(PROVIDER_ID)
+    );
+
+    expect(response.status).toBe(409);
+    const data = await parseJson<{ error: { message: string; details: unknown } }>(response);
+    expect(data.error.message).toMatch(/2 organisations have saved their own key for it/);
+    expect(data.error.details).toMatchObject({ orgKeyCount: 2 });
+    // Counted by the row's id, across every org.
+    expect(prisma.aiOrgProviderKey.count).toHaveBeenCalledWith({
+      where: { providerConfigId: PROVIDER_ID },
+    });
+    expect(prisma.aiProviderConfig.delete).not.toHaveBeenCalled();
   });
 
   it('hard-deletes when no agents or cost logs reference the slug', async () => {

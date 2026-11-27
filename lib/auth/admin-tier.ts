@@ -32,6 +32,10 @@
  *   A core item marked `'org'` must point at a page listed here; the roster
  *   test holds that.
  *
+ * A few core pages are open to every viewer the console admits, whatever
+ * their tier ({@link EVERY_VIEWER_ADMIN_PAGES}, t-1091): the access explainer,
+ * whose route answers each viewer for themselves. A fork cannot add to them.
+ *
  * A fork can also take core's orchestration off all three for its install
  * ({@link closeCoreOrgTierSection}, t-929): the pages leave the list the
  * layout and the sidebar read, and the guard treats the section's routes as
@@ -47,6 +51,16 @@
  * owner's ruling on t-999), so moving a page from `'org'` to a named tier
  * only adds people. A holder opens the surfaces of the tiers they hold and
  * nothing else: no `'org'` surface, no platform one.
+ *
+ * **Switches (§135 t-1034).** A surface of the org's or a named tier may also
+ * say which entitlement switch it needs (`lib/tenancy/entitlements.ts`): the
+ * page with `registerOrgTierAdminPage(pattern, { tier, requires })`, the route
+ * with `withAdminAuth(handler, { tier, requires })` and the nav item with
+ * `requires`. The guard and the layout hand it to the policy as
+ * `scope.requires`, and the default policy refuses whoever the tier admitted
+ * when their org lacks the switch, so the menu, the page and the route agree.
+ * A platform admin is not limited by switches. One switch per surface, and
+ * none on a platform-tier one, where it would mean nothing.
  *
  * **Where the refusal actually happens.** The API is the authority: a page is
  * a shell over `serverFetch` calls, and every one of those reaches a guard that
@@ -72,6 +86,7 @@
  */
 
 import type { AuthorizationPrincipal } from '@/lib/auth/authorization';
+import { APP_MESSAGE_NAMESPACES } from '@/lib/i18n/registry';
 
 /**
  * The tier core's admin surfaces declare. Only one value: the absence of a
@@ -111,7 +126,40 @@ export type AdminViewerTier = 'platform' | 'org';
  * sidebar as a prop.
  */
 export type AdminReach =
-  'platform' | { readonly tiers: readonly DeclaredAdminTier[]; readonly landing: string | null };
+  | 'platform'
+  | {
+      readonly tiers: readonly DeclaredAdminTier[];
+      readonly landing: string | null;
+      /**
+       * The switch requirements the policy admitted this viewer to, each with
+       * the tier it was asked for (§135 t-1034). A surface declaring
+       * `requires` opens only when its tier and switch are here. Absent or
+       * empty, every surface that requires a switch is refused, which is the
+       * safe reading of a reach built before switches existed.
+       *
+       * Only switches some registered page requires are asked about, so a
+       * switch no page requires is never here, and {@link reachesTier} says
+       * no to it for every org. A nav item's `requires` is its page's (the
+       * roster test holds them equal); anything else that asks about a
+       * switch should ask one a page requires, or read the org's switches.
+       */
+      readonly switchesMet?: readonly AdminSwitchGrant[];
+    };
+
+/**
+ * One switch requirement the policy admitted a viewer to: a surface of this
+ * tier requiring this switch. Plain data, like {@link AdminReach}.
+ */
+export interface AdminSwitchGrant {
+  readonly tier: DeclaredAdminTier;
+  readonly requires: string;
+}
+
+/** A page the fork registered with `requires`: its pattern, and the switch. */
+export interface AdminPageRequirement {
+  readonly pattern: string;
+  readonly requires: string;
+}
 
 /** A page a fork registered for a named tier: its pattern, and the tier. */
 export interface NamedTierAdminPage {
@@ -149,6 +197,76 @@ export interface NamedAdminTierDefinition {
    * test fails on it.
    */
   landing?: string;
+  /**
+   * What the tier is called where the console explains access (§143): a few
+   * plain words, such as "Agency designers". Optional; with none, the access
+   * explainer shows the tier's name with its first letter capitalised and `_`
+   * and `-` as spaces. Plain text, or `{ message }` naming a key in your
+   * catalogue (`lib/app/messages.ts`) so it is translated. Nothing is
+   * decided by it.
+   */
+  label?: AdminText;
+  /**
+   * One or two sentences on who holds the tier and what it is for, shown
+   * beside {@link label} on the access explainer (§143). Optional.
+   */
+  description?: AdminText;
+}
+
+/**
+ * Words an app gives the console for a reader, not a decision: plain text, or
+ * `{ message }` naming a key in the app's catalogue (`lib/app/messages.ts`,
+ * such as `'app.access.designers'`), which is then shown in the viewer's
+ * language. Used by named tiers' labels and by the access explainer's seam
+ * (`lib/app/access-explainer.ts`, §143).
+ */
+export type AdminText = string | { readonly message: string };
+
+/** The longest plain {@link AdminText} a label may be. */
+export const MAX_ADMIN_TEXT_LABEL = 80;
+/** The longest plain {@link AdminText} a description may be. */
+export const MAX_ADMIN_TEXT_DESCRIPTION = 600;
+/** What a catalogue key in {@link AdminText} may look like: dotted segments. */
+const ADMIN_TEXT_MESSAGE_KEY = /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)+$/;
+
+/** Is `key` a dotted key in a downstream tier's own namespace (`app.…`, `framework.…`)? */
+function isAppMessageKey(key: string): boolean {
+  return ADMIN_TEXT_MESSAGE_KEY.test(key) && APP_MESSAGE_NAMESPACES.includes(key.split('.')[0]);
+}
+
+/**
+ * Check one {@link AdminText} an app passed, and return it trimmed and frozen.
+ * Throws a `TypeError` naming `what` on a value that is neither a non-empty
+ * string of at most `max` characters nor `{ message }` with a dotted key in
+ * the app's own namespace (`app.…` or `framework.…`), so a mistake registers
+ * nothing. A platform key is reworded with `overridePlatformMessages()`, not
+ * named here.
+ */
+export function adminTextOrThrow(value: unknown, what: string, max: number): AdminText {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (text.length === 0) throw new TypeError(`${what} is empty`);
+    if (text.length > max) throw new TypeError(`${what} is longer than ${max} characters`);
+    return text;
+  }
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { message?: unknown }).message === 'string' &&
+    isAppMessageKey((value as { message: string }).message)
+  ) {
+    return Object.freeze({ message: (value as { message: string }).message });
+  }
+  throw new TypeError(
+    `${what} is neither plain text nor { message } naming a key in the app's catalogue such as 'app.access.title'`
+  );
+}
+
+/** Are two {@link AdminText} values the same words? */
+function sameAdminText(a: AdminText | undefined, b: AdminText | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  if (typeof a === 'string' || typeof b === 'string') return a === b;
+  return a.message === b.message;
 }
 
 /**
@@ -221,9 +339,40 @@ export const ORG_TIER_ADMIN_PAGES: readonly string[] = Object.freeze([
   // page a pattern names on the list by name.
   '/admin/orchestration/executions/live',
   '/admin/members',
+  '/admin/org-options',
+  '/admin/provider-keys',
   '/admin/support-access',
   '/admin/waitlist',
 ]);
+
+/** Where the access explainer lives (§143 t-1091): the sidebar and every link name it from here. */
+export const ACCESS_EXPLAINER_PAGE = '/admin/access';
+
+/**
+ * Admin pages every viewer the console admits may open (§143 t-1091): a
+ * platform admin, an org OWNER/ADMIN, and a holder of any of the app's named
+ * tiers. Someone the console admits to nothing, an org MEMBER included, is
+ * still turned away. Each viewer sees their own slice of such a page, because
+ * the page is a shell over a route that narrows its answer to the caller.
+ *
+ * A class of its own because no tier fits: an `'org'` page is closed to a
+ * named-tier holder, and a named-tier page belongs to one tier. Exact
+ * patterns, matched as {@link ORG_TIER_ADMIN_PAGES} is, so a page added below
+ * one is not in the class until it is listed.
+ *
+ * **Core only.** Frozen, with no registrar, and its section is in
+ * {@link CORE_ADMIN_SECTIONS}, so a fork cannot list a page here or under it.
+ * The roster test pins it. Widening it opens a page to every tier holder of
+ * every fork, so it holds pages whose route answers each viewer for
+ * themselves, and nothing else.
+ */
+export const EVERY_VIEWER_ADMIN_PAGES: readonly string[] = Object.freeze([ACCESS_EXPLAINER_PAGE]);
+
+/** Is the page at this pathname one {@link EVERY_VIEWER_ADMIN_PAGES} lists? */
+export function isEveryViewerAdminPage(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return EVERY_VIEWER_ADMIN_PAGES.some((pattern) => matchesAdminPagePattern(pattern, pathname));
+}
 
 /**
  * The top-level admin sections core owns: the first segment under `/admin` of
@@ -235,12 +384,15 @@ export const ORG_TIER_ADMIN_PAGES: readonly string[] = Object.freeze([
  * one of these, and each is a directory under `app/admin`.
  */
 export const CORE_ADMIN_SECTIONS: readonly string[] = Object.freeze([
+  'access',
   'features',
   'logs',
   'members',
   'orchestration',
+  'org-options',
   'orgs',
   'overview',
+  'provider-keys',
   'support-access',
   'users',
   'waitlist',
@@ -259,6 +411,10 @@ let appPagesView: readonly string[] | null = null;
 const appPageTiers = new Map<string, NamedAdminTier>();
 /** {@link appPageTiers} as a frozen array, rebuilt only after it changes. */
 let appPageTiersView: readonly NamedTierAdminPage[] | null = null;
+/** The switch each of the fork's pages requires (t-1034), by pattern. */
+const appPageRequires = new Map<string, string>();
+/** {@link appPageRequires} as a frozen array, rebuilt only after it changes. */
+let appPageRequiresView: readonly AdminPageRequirement[] | null = null;
 /** The fork's named tiers (t-999), in registration order. */
 const namedTiers = new Map<NamedAdminTier, Readonly<NamedAdminTierDefinition>>();
 /** {@link namedTiers} as a frozen array, rebuilt only after it changes. */
@@ -290,7 +446,8 @@ const RESERVED_TIER_NAMES: readonly string[] = Object.freeze(['org', 'platform']
  * Throws, so a mistake opens nothing, on a name that is not lower case
  * letters, digits, `_` and `-` (a letter first, at most 48), on `'org'` or
  * `'platform'`, on a `holds` that is not a function, on a `landing` that is
- * not a plain `/admin/…` path.
+ * not a plain `/admin/…` path, and on a `label` or `description` that is not
+ * {@link AdminText} (§143).
  *
  * Registering a name again replaces its definition, as `registerNavSection()`
  * replaces a section: under `next dev` a hot reload of the scaffold runs the
@@ -336,9 +493,40 @@ export function registerAdminTier(
       `has a landing (${JSON.stringify(landing)}) that is not a plain /admin/ path: literal segments only, with no trailing slash, query, fragment or [x].`
     );
   }
+  const label =
+    definition.label === undefined
+      ? undefined
+      : adminTextOrThrow(
+          definition.label,
+          `registerAdminTier: ${JSON.stringify(name)}'s label`,
+          MAX_ADMIN_TEXT_LABEL
+        );
+  const description =
+    definition.description === undefined
+      ? undefined
+      : adminTextOrThrow(
+          definition.description,
+          `registerAdminTier: ${JSON.stringify(name)}'s description`,
+          MAX_ADMIN_TEXT_DESCRIPTION
+        );
   const existing = namedTiers.get(name);
-  if (existing?.holds === definition.holds && existing.landing === landing) return;
-  namedTiers.set(name, Object.freeze({ holds: definition.holds, landing }));
+  if (
+    existing?.holds === definition.holds &&
+    existing.landing === landing &&
+    sameAdminText(existing.label, label) &&
+    sameAdminText(existing.description, description)
+  ) {
+    return;
+  }
+  namedTiers.set(
+    name,
+    Object.freeze({
+      holds: definition.holds,
+      landing,
+      ...(label === undefined ? {} : { label }),
+      ...(description === undefined ? {} : { description }),
+    })
+  );
   namedTiersView = null;
 }
 
@@ -365,7 +553,25 @@ export interface OrgTierAdminPageOptions {
    * registered with {@link registerAdminTier} before this call (t-999).
    */
   tier?: DeclaredAdminTier;
+  /**
+   * The entitlement switch the page needs (§135 t-1034), by its key: an org
+   * admin or tier holder whose org lacks it is refused the page, and the
+   * sidebar hides an item over it. A platform admin is not limited by it.
+   * Name a switch the app registers (`registerEntitlementSwitch()`); one it
+   * does not register is a switch no org has, and the roster test fails on
+   * it. Mark the page's API routes and nav item with the same `requires`:
+   * the page's refusal is the reader's, and the routes are the boundary.
+   */
+  requires?: string;
 }
+
+/**
+ * What a switch key may look like: `ENTITLEMENT_KEY_PATTERN` in
+ * `lib/validations/tenancy.ts`, repeated here because this module imports
+ * nothing at runtime. `tests/unit/lib/auth/admin-tier.test.ts` holds the two
+ * equal.
+ */
+export const ADMIN_REQUIRES_KEY_PATTERN = /^[a-z][a-z0-9_]{0,47}$/;
 
 /**
  * List one of the fork's admin pages as org-tier. Call it from
@@ -388,12 +594,16 @@ export interface OrgTierAdminPageOptions {
  *   could list the rest would open a platform page (`/admin/users`) without
  *   editing a core file;
  * - a `tier` that is neither `'org'` nor a named tier already registered, and
- *   a page already listed for another tier: a page is in one tier.
+ *   a page already listed for another tier: a page is in one tier;
+ * - a `requires` that is not a switch key, and a page already listed with
+ *   another requirement: a page needs one switch at most (t-1034).
  *
  * With `{ tier }` naming a named tier (t-999), the page opens to that tier's
- * holders as well as to the org's OWNER/ADMIN.
+ * holders as well as to the org's OWNER/ADMIN. With `{ requires }` (t-1034),
+ * only to those of them whose org has that switch.
  *
- * Idempotent: listing a pattern twice for the same tier lists it once.
+ * Idempotent: listing a pattern twice for the same tier and requirement lists
+ * it once.
  */
 export function registerOrgTierAdminPage(
   pattern: string,
@@ -425,11 +635,26 @@ export function registerOrgTierAdminPage(
       `declares tier ${JSON.stringify(tier)}, which is neither 'org' nor a tier registered with registerAdminTier() — register the tier before its pages.`
     );
   }
+  const requires: unknown = options.requires;
+  if (
+    requires !== undefined &&
+    (typeof requires !== 'string' || !ADMIN_REQUIRES_KEY_PATTERN.test(requires))
+  ) {
+    refuse(
+      `requires ${JSON.stringify(requires)}, which is not a switch key — lower-case letters, digits and underscores, starting with a letter, as registerEntitlementSwitch() takes it.`
+    );
+  }
   if (appPages.has(pattern)) {
     const listed = appPageTiers.get(pattern) ?? 'org';
-    if (listed === tier) return;
+    if (listed !== tier) {
+      refuse(
+        `is already listed for tier ${JSON.stringify(listed)}. A page is in one tier: declare it once.`
+      );
+    }
+    const listedRequires = appPageRequires.get(pattern);
+    if (listedRequires === requires) return;
     refuse(
-      `is already listed for tier ${JSON.stringify(listed)}. A page is in one tier: declare it once.`
+      `is already listed ${listedRequires === undefined ? 'requiring no switch' : `requiring ${JSON.stringify(listedRequires)}`}. A page needs one switch at most: declare it once.`
     );
   }
   appPages.add(pattern);
@@ -437,6 +662,10 @@ export function registerOrgTierAdminPage(
   if (tier !== 'org') {
     appPageTiers.set(pattern, tier);
     appPageTiersView = null;
+  }
+  if (typeof requires === 'string') {
+    appPageRequires.set(pattern, requires);
+    appPageRequiresView = null;
   }
 }
 
@@ -467,16 +696,32 @@ export function registeredAppNamedTierAdminPages(): readonly NamedTierAdminPage[
 }
 
 /**
- * Put the fork's registrations back to what {@link registeredAppOrgTierAdminPages}
- * and {@link registeredAppNamedTierAdminPages} returned — the init gate's
+ * The switch each of the fork's pages requires (t-1034), without running its
+ * init. Read them through `adminPageRequirements()` in
+ * `lib/auth/org-tier-admin-pages.ts`.
+ *
+ * @internal
+ */
+export function registeredAppAdminPageRequirements(): readonly AdminPageRequirement[] {
+  appPageRequiresView ??= Object.freeze(
+    [...appPageRequires].map(([pattern, requires]) => Object.freeze({ pattern, requires }))
+  );
+  return appPageRequiresView;
+}
+
+/**
+ * Put the fork's registrations back to what {@link registeredAppOrgTierAdminPages},
+ * {@link registeredAppNamedTierAdminPages} and
+ * {@link registeredAppAdminPageRequirements} returned — the init gate's
  * rollback, and the tests' reset. A page whose tier is not in `tiers` is
- * listed as `'org'`.
+ * listed as `'org'`, and one not in `requirements` requires no switch.
  *
  * @internal
  */
 export function restoreAppOrgTierAdminPages(
   pages: readonly string[],
-  tiers: readonly NamedTierAdminPage[] = []
+  tiers: readonly NamedTierAdminPage[] = [],
+  requirements: readonly AdminPageRequirement[] = []
 ): void {
   appPages.clear();
   for (const pattern of pages) appPages.add(pattern);
@@ -486,6 +731,11 @@ export function restoreAppOrgTierAdminPages(
     if (appPages.has(pattern)) appPageTiers.set(pattern, tier);
   }
   appPageTiersView = null;
+  appPageRequires.clear();
+  for (const { pattern, requires } of requirements) {
+    if (appPages.has(pattern)) appPageRequires.set(pattern, requires);
+  }
+  appPageRequiresView = null;
 }
 
 /**
@@ -538,9 +788,9 @@ export function restoreNamedAdminTiers(
  * viewer's sidebar, and the tier from every route under `/api/v1/admin/<section>/`,
  * so the pages, the nav and the routes stay in step.
  *
- * Orchestration only. Members and Support access are not here: an org admin
- * needs Members to invite their own people, and Support access is the org's
- * consent to the vendor. Their routes (`/api/v1/orgs/[id]/…`) are admitted by
+ * Orchestration only. Members, AI keys and Support access are not here: an org
+ * admin needs Members to invite their own people, AI keys are the org's own
+ * accounts with a vendor, and Support access is the org's consent to the vendor. Their routes (`/api/v1/orgs/[id]/…`) are admitted by
  * the policy's org arm, not by a declared tier, so closing their pages would
  * leave the API open anyway. `/admin` itself is in no section and stays open,
  * so it can send an org admin to their landing.
@@ -961,14 +1211,95 @@ export function adminPageTierOf(
   return named.find((p) => p.pattern === pattern)?.tier ?? 'org';
 }
 
-/** Does this reach take in a surface of that tier? A surface with no tier is the platform's. */
+/**
+ * The switch the page at this pathname requires (t-1034), or `null` when it
+ * requires none. Resolved to the one pattern Next.js serves the pathname by,
+ * as {@link adminPageTierOf} resolves its tier, so a requirement on
+ * `/admin/leads/[id]` does not reach a literal page beside it. Judges against
+ * the lists it is handed: every org-tier pattern, and the requirements among
+ * them (`adminPageRequirements()` in `lib/auth/org-tier-admin-pages.ts`).
+ */
+export function adminPageRequirementOf(
+  pathname: string | null | undefined,
+  pages: readonly string[],
+  requirements: readonly AdminPageRequirement[]
+): string | null {
+  if (!pathname || requirements.length === 0) return null;
+  const pattern = mostSpecificAdminPagePattern(pathname, pages);
+  if (pattern === null) return null;
+  return requirements.find((r) => r.pattern === pattern)?.requires ?? null;
+}
+
+/**
+ * Does this reach take in a surface of that tier, needing that switch? A
+ * surface with no tier is the platform's. A platform reach takes in every
+ * surface, switches or not; any other takes in one that requires a switch
+ * only when the policy admitted it to that tier and switch
+ * ({@link AdminReach}'s `switchesMet`).
+ */
 export function reachesTier(
   reach: AdminReach,
-  surface: DeclaredAdminTier | null | undefined
+  surface: DeclaredAdminTier | null | undefined,
+  requires?: string | null
 ): boolean {
   if (reach === 'platform') return true;
   if (surface === null || surface === undefined) return false;
-  return reach.tiers.includes(surface);
+  if (!reach.tiers.includes(surface)) return false;
+  if (requires === null || requires === undefined) return true;
+  return (reach.switchesMet ?? []).some(
+    (grant) => grant.tier === surface && grant.requires === requires
+  );
+}
+
+/**
+ * A switch the viewer's org lacks whose app asked for surfaces requiring it
+ * to be shown locked rather than hidden (`whenLacking: 'lock'`, §135
+ * t-1053), as the layout read it and handed it down. Plain data, like
+ * {@link AdminReach}.
+ */
+export interface LockedAdminSwitch {
+  readonly requires: string;
+  /** The switch's label, to name what is closed. */
+  readonly label: string;
+  /** What the refusal says: the app's `refusalMessage`, or the platform's sentence. */
+  readonly message: string;
+  /** Where the org can get it, or `null` when the app gave none. */
+  readonly upgradeUrl: string | null;
+}
+
+/**
+ * The locked switch that closes a surface of this tier, requiring this switch,
+ * to this reach (t-1053): set only when the reach takes in the tier and the
+ * switch is the one thing missing, and the switch is in `locked`. `null` when
+ * the surface opens, when it is closed for another reason (it is then hidden
+ * as before), and when the switch is one the app hides.
+ */
+export function lockedSwitchFor(
+  reach: AdminReach,
+  surface: DeclaredAdminTier | null | undefined,
+  requires: string | null | undefined,
+  locked: readonly LockedAdminSwitch[]
+): LockedAdminSwitch | null {
+  if (requires === null || requires === undefined || locked.length === 0) return null;
+  if (reachesTier(reach, surface, requires) || !reachesTier(reach, surface)) return null;
+  return locked.find((l) => l.requires === requires) ?? null;
+}
+
+/**
+ * The locked switch that closes the page at this pathname to this reach, or
+ * `null`: the layout and the gate show such a page locked, with what the app
+ * said, rather than send the viewer to their landing. Judged with
+ * {@link reachesAdminPage}'s inputs, so a page that opens is never locked.
+ */
+export function lockedAdminPageOf(
+  reach: AdminReach,
+  pathname: string | null | undefined,
+  pageTier: DeclaredAdminTier | null,
+  pageRequires: string | null,
+  locked: readonly LockedAdminSwitch[]
+): LockedAdminSwitch | null {
+  if (reachesAdminPage(reach, pathname, pageTier, pageRequires)) return null;
+  return lockedSwitchFor(reach, pageTier, pageRequires, locked);
 }
 
 /** The console's index, which sends each viewer to their landing and shows nothing itself. */
@@ -976,20 +1307,27 @@ export const ADMIN_INDEX_PATH = '/admin';
 
 /**
  * May a viewer with this reach open the page at this pathname, whose tier is
- * `pageTier` ({@link adminPageTierOf})? The layout's answer on a full load and
- * the gate's on every in-app navigation, so the two agree.
+ * `pageTier` ({@link adminPageTierOf}) and which requires `pageRequires`
+ * ({@link adminPageRequirementOf}, t-1034)? The layout's answer on a full
+ * load and the gate's on every in-app navigation, so the two agree.
  *
- * One page is answered apart: `/admin` itself, for a holder of named tiers
- * with a landing. It is an `'org'` page so that it can send an org admin on,
- * and it renders nothing — it redirects — so letting a holder in sends them to
- * their landing rather than turning them away.
+ * Two pages are answered apart. A page {@link EVERY_VIEWER_ADMIN_PAGES} lists
+ * opens to any reach that holds a tier (t-1091), and to a platform one; a
+ * reach of nothing is refused it like any other. And `/admin` itself, for a
+ * holder of named tiers with a landing: it is an `'org'` page so that it can
+ * send an org admin on, and it renders nothing — it redirects — so letting a
+ * holder in sends them to their landing rather than turning them away.
  */
 export function reachesAdminPage(
   reach: AdminReach,
   pathname: string | null | undefined,
-  pageTier: DeclaredAdminTier | null
+  pageTier: DeclaredAdminTier | null,
+  pageRequires: string | null = null
 ): boolean {
-  if (reachesTier(reach, pageTier)) return true;
+  if (reachesTier(reach, pageTier, pageRequires)) return true;
+  if (reach !== 'platform' && reach.tiers.length > 0 && isEveryViewerAdminPage(pathname)) {
+    return true;
+  }
   return (
     reach !== 'platform' &&
     reach.landing !== null &&

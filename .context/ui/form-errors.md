@@ -19,6 +19,7 @@ was also amber, which doesn't read as a failure.
 | `invalidSave()`          | `lib/errors/save-error.ts`                             | A save react-hook-form's validation blocked, as a failure: the field count, each field named           |
 | `unreadableNumbers()`    | `lib/errors/save-error.ts`                             | The number fields the browser couldn't read, as a failure; `save.submit` checks it on every press      |
 | `useSaveFailure()`       | `lib/hooks/use-save-failure.ts`                        | Owns a page's failure: reports what a save threw, and clears it on every press of Save                 |
+| `SaveErrorText`          | `lib/errors/save-error.ts`                             | The summary's words (`forms.saveError`); `useSaveFailure` passes them in the viewer's language         |
 | `apiErrorFromResponse()` | `lib/api/client.ts`                                    | The `APIClientError` a failed raw `fetch` would have raised through `apiClient`                        |
 | `useCommittedDialog()`   | `lib/hooks/use-committed-dialog.ts`                    | Locks a dialog while its save runs, and clears its failure as it opens and closes                      |
 | `<SaveError>`            | `components/forms/form-error.tsx`                      | Shows the failure by Save: red, `role="alert"`, brought into view and focused when it appears          |
@@ -32,6 +33,14 @@ sign-in fails).
 **A hand-drawn save-error box fails the build**, and so does a `<form>`
 without `noValidate` or `method="post"`: `npm run check:save-errors` (in `npm run validate`, and
 its own CI step). See [The check](#the-check).
+
+The words these use ("2 fields need fixing.", "Enter a number.") are the
+catalogue's `forms.saveError`. `useSaveFailure()` reads them in the viewer's
+language. Called on their own, `invalidSave()`, `unreadableNumbers()` and
+`fieldCount()` take an optional `SaveErrorText` and default to
+`englishSaveErrorText`, which a test holds equal to the catalogue. A form
+that shows a count itself uses
+`useTranslations('forms.saveError')('fieldsNeedFixing', { count })`.
 
 ## The rules
 
@@ -176,8 +185,7 @@ unreadable number (`"1 field needs a number."`) stay until the next Save,
 because react-hook-form's errors don't say when they were fixed. A server
 message `report()` put on a field is still cleared from that field when it
 re-validates; only the summary by Save stays. Since `useSaveFailure` now reads
-`errors`, call it after `useForm`. The agent and capability forms build their
-own tab-aware summary through `show()`, so they don't follow fields yet (t-1029).
+`errors`, call it after `useForm`.
 
 Once the count reaches zero the failure is cleared, not hidden: a field broken
 again afterwards shows its own message, and the summary comes back only on the
@@ -193,14 +201,31 @@ failure, so a caller can branch on `stale`.
 
 A check the form makes itself when Save is pressed (invalid JSON in an editor,
 a name that must match the slug) is a failed save too: `save.show(message)`
-puts it in the same place. Client validation that blocks fields on a **tabbed**
-form goes there as well, with the fields, so their tab comes forward:
+puts it in the same place.
+
+A form whose blocked save needs its own wording passes `summarise`, a
+function of the errors that builds the failure in place of `invalidSave`. The
+agent and capability forms do: they are **tabbed**, so their summary names
+only the fields `<SaveError>` can bring forward (their `SERVER_FIELDS`
+entries), and the agent form lists the blocked fields under their tabs. The
+hook runs it on the press and again as the fields change, so it follows them
+like the default count (t-1029). Don't build that summary in `onInvalid` and
+pass it to `show()`: a shown failure stays until the next Save.
 
 ```tsx
-const onInvalid = (formErrors: FieldErrors<FormData>) =>
-  save.show('2 fields need fixing.', namedFields(formErrors)); // only SERVER_FIELDS entries
-<form method="post" onSubmit={save.submit(handleSubmit(onSubmit, onInvalid))}>
+const summarise = useCallback(
+  (errors: FieldErrors<FormData>): SaveFailure<string> => {
+    const fields = namedFields(errors); // only SERVER_FIELDS entries
+    return { message: fieldCount(fields.length), stale: false, fields };
+  },
+  [serverFields]
+);
+const save = useSaveFailure({ fallback, fields: serverFields, setError, errors, summarise });
+<form method="post" noValidate onSubmit={save.submit(handleSubmit(onSubmit, save.invalid))}>
 ```
+
+The summary goes once no field is blocked, whatever `summarise` returns for
+no fields.
 
 A load error is not a save error. When a form shared one state between them,
 split it: the load error keeps its own display.
@@ -248,7 +273,9 @@ const { error } = await authClient.changePassword({ currentPassword, newPassword
 if (error) {
   if (error.code === 'INVALID_PASSWORD') {
     setError('currentPassword', { type: 'server', message: WRONG });
-    save.show(fieldCount(1), [{ field: 'currentPassword', message: WRONG }]); // focuses it
+    save.show(tSave('fieldsNeedFixing', { count: 1 }), [
+      { field: 'currentPassword', message: WRONG },
+    ]); // focuses it
   } else save.show(error.message);
   return;
 }

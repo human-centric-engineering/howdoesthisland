@@ -40,8 +40,17 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { CostOperation, type StepResult, type WorkflowStep } from '@/types/orchestration';
 import type { LlmMessage, ReasoningEffort } from '@/lib/orchestration/llm/types';
-import { getProviderWithFallbacks } from '@/lib/orchestration/llm/provider-manager';
-import { resolveAgentProviderAndModel } from '@/lib/orchestration/llm/agent-resolver';
+import { getProviderWithFallbacks, usesOrgOwnKey } from '@/lib/orchestration/llm/provider-manager';
+import { parseModelPin } from '@/lib/orchestration/llm/model-pin';
+import {
+  resolveAgentProviderAndModel,
+  type ResolvedAgentBinding,
+} from '@/lib/orchestration/llm/agent-resolver';
+import {
+  keepFlaggedGroups,
+  readFlaggedGroups,
+  routeConfidentialTurn,
+} from '@/lib/orchestration/llm/confidential-route';
 import { calculateCost, logCost } from '@/lib/orchestration/llm/cost-tracker';
 import { chatTurnConfigSchema } from '@/lib/validations/orchestration';
 import { agentPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
@@ -107,6 +116,8 @@ export async function executeChatTurn(
       select: {
         id: true,
         agentId: true,
+        // The confidential groups found in it before (§130 t-1038).
+        metadata: true,
         messages: {
           where: { role: { in: [...ROLES_TO_LOAD] } },
           orderBy: { createdAt: 'desc' },
@@ -145,7 +156,7 @@ export async function executeChatTurn(
 
   // 3. Resolve provider + model (handles empty defaults via system settings,
   //    same path the streaming chat handler uses).
-  let resolvedBinding;
+  let resolvedBinding: ResolvedAgentBinding;
   try {
     resolvedBinding = await resolveAgentProviderAndModel(agent, 'chat');
   } catch (err) {
@@ -188,13 +199,6 @@ export async function executeChatTurn(
       err
     );
   }
-  const model = config.modelOverride ?? resolvedBinding.model;
-  const { provider, usedSlug: providerSlug } = await getProviderWithFallbacks(
-    resolvedBinding.providerSlug,
-    resolvedBinding.fallbacks,
-    resolvedBinding.provenance
-  );
-
   // 4. Compose system prompt (persona / voice / guardrails inheritance).
   const resolvedPrompt = resolveEffectivePrompt(
     {
@@ -230,6 +234,46 @@ export async function executeChatTurn(
     messages.push({ role: m.role as 'user' | 'assistant', content: m.content });
   }
   messages.push({ role: 'user', content: userMessage });
+
+  // A conversation holding confidential content its agent's provider may not
+  // be sent is answered on the model for confidential messages (§130
+  // t-1038), decided in the agent's privacy scope, as the call is. A step's
+  // `modelOverride` is the operator's recorded choice: left to the privacy
+  // stage, which refuses it, rather than rerouted.
+  // An empty override is no override (`parseModelPin` reads it as none).
+  if (parseModelPin(config.modelOverride) === null) {
+    const route = await runInPrivacyScope(agentPrivacyScope(agent.id), () =>
+      routeConfidentialTurn({
+        binding: resolvedBinding,
+        messages,
+        sticky: readFlaggedGroups(conversation.metadata),
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      })
+    );
+    await keepFlaggedGroups({ id: conversation.id }, route.found);
+    resolvedBinding = route.binding;
+  }
+  // The override is a model pin (§136 t-1068). A bare id replaces the model on
+  // the agent's own binding, as it always has. A pin naming its provider is
+  // called there and nowhere else: the binding's fallbacks were chosen for
+  // the agent's model, not for this one.
+  const overridePin = parseModelPin(config.modelOverride);
+  const model = overridePin?.modelId ?? resolvedBinding.model;
+  // Even the agent's own provider: its fallbacks would send this model id to
+  // another provider's model of the same id, which the pin rules out.
+  const pinnedProvider = overridePin?.providerSlug ?? null;
+  const { provider, usedSlug: providerSlug } =
+    pinnedProvider === null
+      ? await getProviderWithFallbacks(
+          resolvedBinding.providerSlug,
+          resolvedBinding.fallbacks,
+          resolvedBinding.provenance
+        )
+      : await getProviderWithFallbacks(pinnedProvider, [], {
+          task: 'chat',
+          primary: 'explicit',
+          fallbacks: 'explicit',
+        });
 
   // 7. Resolve reasoning effort (step config beats agent default).
   const stepEffort = narrowReasoningEffort(config.reasoningEffort ?? undefined);
@@ -303,6 +347,7 @@ export async function executeChatTurn(
     userId: ctx.userId,
     operation: CostOperation.CHAT,
     provider: providerSlug,
+    ownKey: usesOrgOwnKey(provider),
     model,
     inputTokens: response.usage?.inputTokens ?? 0,
     outputTokens: response.usage?.outputTokens ?? 0,

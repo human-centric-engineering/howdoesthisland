@@ -15,6 +15,7 @@ import { successResponse, errorResponse } from '@/lib/api/responses';
 import { UnauthorizedError, ErrorCodes } from '@/lib/api/errors';
 import { validateRequestBody } from '@/lib/api/validation';
 import { updateUserSchema, deleteAccountSchema } from '@/lib/validations/user';
+import { localeChoiceSchema } from '@/lib/validations/locale';
 import { auth } from '@/lib/auth/config';
 import { withAuth } from '@/lib/auth/guards';
 import { humanAdminWhere } from '@/lib/auth/account';
@@ -25,6 +26,9 @@ import { serverTrack } from '@/lib/analytics/server';
 import { EVENTS } from '@/lib/analytics/events';
 import { isPlatformAdmin } from '@/lib/auth/roles';
 import { getTenantContext } from '@/lib/tenancy/context';
+
+/** `updateUserSchema` with the server-side locale check. */
+const updateUserBodySchema = updateUserSchema.extend({ locale: localeChoiceSchema.optional() });
 
 /**
  * GET /api/v1/users/me
@@ -57,6 +61,7 @@ export const GET = withAuth(
         bio: true,
         phone: true,
         timezone: true,
+        locale: true,
         location: true,
         preferences: true,
         // Explicitly exclude password
@@ -82,10 +87,12 @@ export const GET = withAuth(
  * PATCH /api/v1/users/me
  *
  * Updates the current user's profile.
- * Supports updating name, email, and extended profile fields (bio, phone, timezone, location).
+ * Supports updating name, email, and extended profile fields (bio, phone, timezone, location),
+ * and the interface language (`locale`, §138 t-1071; `null` follows the org default).
  *
  * Validates:
- * - Request body matches updateUserSchema
+ * - Request body matches updateUserBodySchema (`updateUserSchema` plus a
+ *   supported, canonicalised `locale`)
  * - Email is unique (if being changed)
  *
  * Changing the email address does NOT take effect in this request (#489). It
@@ -95,7 +102,7 @@ export const GET = withAuth(
  * flow began. Changing it also requires `currentPassword` on accounts that have
  * one, and revokes the user's sessions when it finally lands.
  *
- * @param request - Request with JSON body { name?, email?, currentPassword?, bio?, phone?, timezone?, location? }
+ * @param request - Request with JSON body { name?, email?, currentPassword?, bio?, phone?, timezone?, location?, locale? }
  * @returns Updated user profile, plus `emailChangeRequested`
  * @throws UnauthorizedError if not authenticated
  * @throws ValidationError if invalid data
@@ -105,8 +112,9 @@ export const PATCH = withAuth(
     const log = await getRouteLogger(request);
     log.info('Updating current user profile');
 
-    // Validate request body
-    const body = await validateRequestBody(request, updateUserSchema);
+    // Validate request body. The shared schema only checks the locale's shape
+    // (client forms import it); here it must also be supported, canonicalised.
+    const body = await validateRequestBody(request, updateUserBodySchema);
 
     // Changing the address that owns the account is an identity mutation, and must
     // come from a real browser session.
@@ -229,6 +237,7 @@ export const PATCH = withAuth(
         bio: true,
         phone: true,
         timezone: true,
+        locale: true,
         location: true,
         preferences: true,
       },
@@ -298,10 +307,8 @@ export const DELETE = withAuth(
     const log = await getRouteLogger(request);
 
     try {
-      // Inside a support session the guard presents a platform admin as a
-      // plain user (§121 t-824), so the last-admin check below would not see
-      // them. Deleting a vendor account from inside a customer's org is not a
-      // support act anyway: end the session first.
+      // Deleting a vendor account from inside a customer's org is not a
+      // support act (§121 t-824): end the session first.
       if (getTenantContext()?.source === 'support') {
         return errorResponse('End your support session before deleting your account.', {
           status: 403,
@@ -329,7 +336,16 @@ export const DELETE = withAuth(
       // caller always is, so a caller whose own deletion is already pending
       // (a cached session repeating the request) is not told they are the
       // last admin when another remains.
-      if (isPlatformAdmin(session.user)) {
+      //
+      // Asked of the stored role, not the session's: outside the install org
+      // the guard presents a platform admin who is a member there as their
+      // org role (t-1032), and whether this account is the last operator is
+      // a fact about the account, not about what it may do in that org.
+      const stored = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true },
+      });
+      if (isPlatformAdmin(stored)) {
         const adminCount = await prisma.user.count({
           where: {
             ...humanAdminWhere,

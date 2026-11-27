@@ -4,8 +4,7 @@
  * Core owns the other keys (`retention`, `quotas`, `providers`,
  * `platformAgents`, `privacy`) and writes each with its own slice writer. This
  * is the one writer for `app`, used by everything that keeps workspace config
- * there: the signup-workspace marker (`./provision.ts`) and the retention
- * window (`lib/app/retention/settings.ts`). It never touches another key.
+ * there: the retention window (`lib/app/retention/settings.ts`). It never touches another key.
  *
  * The write is a serializable read-modify-write, as core's own (unexported)
  * `writeSettingsSlice` in `lib/tenancy/org-settings.ts` is: two writes to the

@@ -8,7 +8,10 @@
  * so subsequent queries reflect the new data.
  *
  * Audit metadata (timestamp, source, confidence) is stored in the
- * model's `metadata` JSON field for provenance tracking.
+ * model's `metadata` JSON field for provenance tracking, and every model
+ * with an applied change gets one admin audit log row naming each field's
+ * old and new value (§136 t-1064). That row is how a price change is
+ * noticed after the fact: there is no separate "repriced" state.
  */
 
 import { z } from 'zod';
@@ -25,6 +28,8 @@ import {
 } from '@/lib/validations/model-pricing';
 import { BaseCapability } from '@/lib/orchestration/capabilities/base-capability';
 import { unwrapApprovalPayload } from '@/lib/orchestration/capabilities/approval-payload-unwrap';
+import { logAdminAction } from '@/lib/orchestration/audit/admin-audit-logger';
+import { isEmbedUserId } from '@/lib/embed/auth';
 import type {
   CapabilityContext,
   CapabilityFunctionDefinition,
@@ -85,6 +90,16 @@ function valuesEqual(a: unknown, b: unknown): boolean {
     return sortedA.every((v, i) => v === sortedB[i]);
   }
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Whether two values of an auditable field are the same value, as this
+ * capability reads them: numeric fields by the number they spell, arrays as
+ * sets. The `audit-proposals` schema uses it to refuse a change that changes
+ * nothing (t-1076), so that check and the apply step cannot disagree.
+ */
+export function sameAuditValue(field: string, a: unknown, b: unknown): boolean {
+  return valuesEqual(coerceNumeric(field, a), coerceNumeric(field, b));
 }
 
 /** A single field change the LLM proposed and the admin accepted */
@@ -368,6 +383,27 @@ export class ApplyAuditChangesCapability extends BaseCapability<Args, Data> {
       });
 
       invalidateModelCache();
+
+      logAdminAction({
+        // An embed visitor is not a User row; its id would fail the audit
+        // row's foreign key and the row would be lost.
+        userId: isEmbedUserId(context.userId) ? null : context.userId,
+        action: 'provider_model.update',
+        entityType: 'provider_model',
+        entityId: modelId,
+        entityName: modelName,
+        changes: Object.fromEntries(
+          results
+            .filter((r) => r.status === 'applied')
+            .map((r) => [r.field, { from: r.previousValue, to: r.newValue }])
+        ),
+        metadata: {
+          source: 'model_audit',
+          ...(context.workflowExecutionId
+            ? { workflowExecutionId: context.workflowExecutionId }
+            : {}),
+        },
+      });
     }
 
     if (capturedName === undefined) {
@@ -491,7 +527,12 @@ export class ApplyAuditChangesCapability extends BaseCapability<Args, Data> {
         case 'applied':
           return {
             field: change.field,
-            previousValue: change.currentValue,
+            // Read the way the drift check read it: a model may write a
+            // numeric currentValue as "3", and the check only passed because
+            // it equals the row's number. Logged raw, a string under a
+            // key/token name is redacted, which hid the very price change the
+            // audit row records (§136 t-1064).
+            previousValue: coerceNumeric(change.field, change.currentValue),
             newValue: value,
             status: 'applied',
           };

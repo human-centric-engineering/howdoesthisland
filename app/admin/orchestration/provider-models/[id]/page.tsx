@@ -4,10 +4,24 @@ import Link from 'next/link';
 import {
   ProviderModelForm,
   type ProviderModelData,
+  type ReplacementOption,
 } from '@/components/admin/orchestration/provider-model-form';
 import { API } from '@/lib/api/endpoints';
-import { requireServerData } from '@/lib/api/server-load';
+import { requireAllServerData, requireServerData } from '@/lib/api/server-load';
 import { SharedSettingsReadOnlyNotice } from '@/components/admin/shared-settings-access';
+import { MoveModelUsesDialog } from '@/components/admin/orchestration/move-model-uses-dialog';
+import {
+  modelHasMovableUses,
+  ProviderModelUses,
+  type ProviderModelLifecycleData,
+  type ProviderModelUsesData,
+} from '@/components/admin/orchestration/provider-model-uses';
+
+/** The model route's answer: the row, plus its lifecycle and uses (§136 t-1065). */
+type EditModelData = ProviderModelData & {
+  lifecycle: ProviderModelLifecycleData;
+  uses: ProviderModelUsesData;
+};
 
 export const metadata: Metadata = {
   title: 'Edit Provider Model · AI Orchestration',
@@ -24,10 +38,11 @@ export default async function EditProviderModelPage({ params, searchParams }: Pr
   const query = await searchParams;
   const justCreated = query.created === '1';
   // A 404 is a missing model; any other failure reaches the error boundary.
-  const { data: model } = await requireServerData<ProviderModelData>(
+  const { data: model } = await requireServerData<EditModelData>(
     API.ADMIN.ORCHESTRATION.providerModelById(id),
     { notFound: true }
   );
+  const replacementOptions = await loadReplacementOptions(model);
 
   return (
     <div className="space-y-6">
@@ -63,7 +78,47 @@ export default async function EditProviderModelPage({ params, searchParams }: Pr
 
       <SharedSettingsReadOnlyNotice />
 
-      <ProviderModelForm model={model} />
+      <ProviderModelUses
+        retiresAt={model.retiresAt ?? null}
+        lifecycle={model.lifecycle}
+        uses={model.uses}
+        action={
+          <MoveModelUsesDialog
+            modelId={model.id}
+            modelName={model.name}
+            replacementOptions={replacementOptions.filter((o) => o.id !== model.id)}
+            replacementId={model.replacementId ?? null}
+            hasUses={modelHasMovableUses(model.uses) || model.lifecycle.state !== 'current'}
+          />
+        }
+      />
+
+      <ProviderModelForm model={model} replacementOptions={replacementOptions} />
     </div>
   );
+}
+
+interface CatalogueRow extends ReplacementOption {
+  isActive: boolean;
+  retiresAt: string | null;
+}
+
+/**
+ * The models on this one's provider it may name as its replacement (§136
+ * t-1064): active, not themselves retiring, not itself. Capabilities are left
+ * to the server's check, which says which one is missing. The stored
+ * replacement stays listed even if it has stopped qualifying, so the form
+ * shows what is saved rather than silently showing "none".
+ */
+async function loadReplacementOptions(model: ProviderModelData): Promise<ReplacementOption[]> {
+  const rows = await requireAllServerData<CatalogueRow>(
+    `${API.ADMIN.ORCHESTRATION.PROVIDER_MODELS}?providerSlug=${encodeURIComponent(model.providerSlug)}`
+  );
+  return rows
+    .filter(
+      (row) =>
+        row.id === model.replacementId ||
+        (row.id !== model.id && row.isActive && row.retiresAt === null)
+    )
+    .map(({ id, name, modelId }) => ({ id, name, modelId }));
 }

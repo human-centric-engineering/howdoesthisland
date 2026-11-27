@@ -35,10 +35,12 @@ import {
 } from '@/scripts/ci/admin-tier-roster';
 import {
   CORE_ADMIN_SECTIONS,
+  EVERY_VIEWER_ADMIN_PAGES,
   ORG_TIER_ADMIN_PAGES,
   ORG_TIER_ADMIN_ROUTES,
 } from '@/lib/auth/admin-tier';
 import {
+  adminPageRequirements,
   appOrgTierAdminPagesInitState,
   closedCoreOrgTierSections,
   getAppOrgTierAdminPages,
@@ -52,10 +54,18 @@ import { appOrgAdminLandingRoute } from '@/lib/app/admin-landing';
 import { defaultOrgAdminLanding, orgAdminLandingProblem } from '@/lib/auth/admin-landing';
 import { coreNavSections } from '@/components/admin/admin-sidebar';
 import { getRegisteredNavSections } from '@/lib/admin-nav/registry';
+import {
+  entitlementSwitchesFailed,
+  registeredEntitlementSwitches,
+} from '@/lib/tenancy/entitlements';
 
 // tests/setup.ts pins the org-tier admin seam to empty for every file (#1125);
 // this one judges the fork's real pages, as the FORK NOTE above promises.
 vi.mock('@/lib/app/admin-tier', (importOriginal) => importOriginal());
+// Pinned the same way (#1324). The roster checks every `requires` against the
+// fork's real switches, which the pin would hide: each key would then name no
+// switch, and the roster would fail in the fork for a reason it cannot fix.
+vi.mock('@/lib/app/entitlements', (importOriginal) => importOriginal());
 
 function tracked(dir: string): string[] {
   return execSync(`git ls-files --cached --others --exclude-standard -- ${dir}`, {
@@ -92,6 +102,7 @@ const TREE: RosterInput = {
   appListedPages: getAppOrgTierAdminPages(),
   pageFiles: PAGE_FILES,
   navItems: NAV_ITEMS,
+  everyViewerPages: EVERY_VIEWER_ADMIN_PAGES,
   coreSections: CORE_ADMIN_SECTIONS,
   coreNavHrefs: itemsOf(coreNavSections).map((item) => item.href),
   // The core sections the fork closed, from lib/app/admin-tier.ts: its nav
@@ -102,10 +113,22 @@ const TREE: RosterInput = {
   // these, and each landing must be one of its own tier's pages.
   namedTiers: namedAdminTiers().map((name) => ({ name, landing: namedAdminTier(name)?.landing })),
   appNamedTierPages: namedTierAdminPages(),
+  // The app's switches, from lib/app/entitlements.ts, and the fork's pages
+  // that require one (t-1034): a `requires` anywhere must name one of these.
+  switches: registeredEntitlementSwitches().map((s) => s.key),
+  appPageRequirements: adminPageRequirements(),
 };
 
 describe('the pins', () => {
-  it('opens exactly the customer’s sections, the mixed pages, Members and Support access to an org admin (t-811, t-812, t-813, t-823)', () => {
+  it('opens exactly the access explainer to every admin viewer, whatever their tier (t-1091)', () => {
+    // A page here opens to every org admin AND every holder of every named
+    // tier a fork registers. Core only: there is no registrar, and a fork
+    // that edits this list fails here. List a page only when its route
+    // answers each viewer for themselves.
+    expect(EVERY_VIEWER_ADMIN_PAGES).toEqual(['/admin/access']);
+  });
+
+  it('opens exactly the customer’s sections, the mixed pages, Members, AI keys and Support access to an org admin (t-811, t-812, t-813, t-823, t-1045)', () => {
     // A page added here is a page every org OWNER/ADMIN can open: add it to
     // ORG_TIER_ADMIN_PAGES and here, in the same diff, and say why in the PR.
     expect(ORG_TIER_ADMIN_PAGES).toEqual([
@@ -149,6 +172,10 @@ describe('the pins', () => {
       '/admin/orchestration/executions/[id]',
       '/admin/orchestration/executions/live',
       '/admin/members',
+      // §135 t-1054: the switches an org's own admins may set, over the org arm.
+      '/admin/org-options',
+      // §137 t-1045: the org's own AI keys, over the org arm.
+      '/admin/provider-keys',
       // §121 t-823: the org's consent to vendor support, over the org arm.
       '/admin/support-access',
       // §125 t-976: the org's waitlist — its list of people, not the platform's.
@@ -356,6 +383,13 @@ describe('the tree', () => {
     expect(appOrgTierAdminPagesInitState()).toBe('ok');
   });
 
+  it('judged each `requires` against the app’s switches as registered, not a rolled-back empty list (t-1034)', () => {
+    // A throwing initAppEntitlements() leaves no switch registered, and every
+    // `requires` would then be reported as naming none — true, but the cause
+    // is the throw, which this names first.
+    expect(entitlementSwitchesFailed()).toBe(false);
+  });
+
   it('lands an org admin on a page they may open (t-928)', () => {
     // A landing outside the org tier turns an org admin away the moment they
     // arrive; /admin falls back to the default at runtime, and this says so in CI.
@@ -380,12 +414,15 @@ describe('the core sections', () => {
     // adding it here and in CORE_ADMIN_SECTIONS in the same diff; the tree
     // check above fails for a core page or nav item in a section left out.
     expect(CORE_ADMIN_SECTIONS).toEqual([
+      'access',
       'features',
       'logs',
       'members',
       'orchestration',
+      'org-options',
       'orgs',
       'overview',
+      'provider-keys',
       'support-access',
       'users',
       'waitlist',
@@ -516,6 +553,132 @@ describe('what it catches', () => {
     });
   });
 
+  describe('switch requirements (t-1034)', () => {
+    const LEADS = 'app/api/v1/app/leads/route.ts';
+    const leadsRoute = (options: string): SourceFile => ({
+      path: LEADS,
+      source: `export const GET = withAdminAuth(async () => ok(), ${options});`,
+    });
+    const required = (over: Partial<RosterInput> = {}): RosterInput =>
+      input({
+        routes: [leadsRoute(`{ tier: 'org', requires: 'lead_gen', ${OWNED} }`)],
+        appListedRoutes: [`${LEADS}#GET`],
+        appListedPages: ['/admin/leads'],
+        appPageRequirements: [{ pattern: '/admin/leads', requires: 'lead_gen' }],
+        pageFiles: ['app/admin/leads/page.tsx'],
+        navItems: [{ href: '/admin/leads', tier: 'org', requires: 'lead_gen' }],
+        switches: ['lead_gen'],
+        ...over,
+      });
+
+    it('accepts a requirement on a registered switch beside a tier — the control', () => {
+      expect(findAdminTierRosterProblems(required())).toEqual([]);
+    });
+
+    it('reads a route’s requires as the literal it is, beside its tier', () => {
+      expect(
+        tierDeclarations(leadsRoute(`{ tier: 'org', requires: 'lead_gen', ${OWNED} }`))
+      ).toEqual([
+        { at: `${LEADS}#GET`, tier: 'org', declaresOwnership: true, requires: 'lead_gen' },
+      ]);
+    });
+
+    it('a route, page or nav item requiring a switch no app registers, which no org has', () => {
+      expect(findAdminTierRosterProblems(required({ switches: [] }))).toEqual([
+        `${LEADS}#GET: requires 'lead_gen', which no app registers with registerEntitlementSwitch() in lib/app/entitlements.ts, so no org has it and the surface is shut to every org admin. Register the switch, or fix the key.`,
+        expect.stringMatching(/^\/admin\/leads: requires 'lead_gen', which no app registers/),
+        expect.stringMatching(/^nav item \/admin\/leads: requires 'lead_gen', which no app/),
+      ]);
+    });
+
+    it('a requires on a platform-tier route or nav item, where it means nothing', () => {
+      expect(
+        findAdminTierRosterProblems(
+          required({
+            routes: [leadsRoute(`{ requires: 'lead_gen' }`)],
+            appListedRoutes: [],
+            navItems: [{ href: '/admin/leads', requires: 'lead_gen' }],
+          })
+        )
+      ).toEqual([
+        `${LEADS}#GET: requires 'lead_gen' but is the platform’s (no \`tier\`), and switches do not limit a platform admin, so it means nothing there. Give it a tier, or drop the \`requires\`.`,
+        `nav item /admin/leads: requires 'lead_gen' but is the platform’s (no \`tier\`), and switches do not limit a platform admin, so it means nothing there. Give it a tier, or drop the \`requires\`.`,
+      ]);
+    });
+
+    it('a requires review cannot read', () => {
+      expect(
+        findAdminTierRosterProblems(
+          required({ routes: [leadsRoute(`{ tier: 'org', requires: LEAD_GEN, ${OWNED} }`)] })
+        )
+      ).toEqual([expect.stringContaining('its `requires` is not a string literal')]);
+    });
+
+    it.each([
+      ['spread into the options', `{ tier: 'org', ...REQUIRES_LEAD_GEN, ${OWNED} }`, true],
+      ['under a computed key', `{ tier: 'org', [requiresKey]: 'lead_gen', ${OWNED} }`, true],
+      // No tier the scanner can see either, so it is not listed as org-tier.
+      ['in a shared options constant', 'LEADS_REQUIRES_OPTIONS', false],
+    ])('a requires review cannot read, %s', (_l, options, listed) => {
+      expect(
+        findAdminTierRosterProblems(
+          required({
+            routes: [leadsRoute(options)],
+            appListedRoutes: listed ? [`${LEADS}#GET`] : [],
+          })
+        )
+      ).toEqual([expect.stringContaining('its `requires` is not a string literal')]);
+    });
+
+    it.each([
+      ['a camelCase spread', `{ tier: 'org', ...leadGenRequires, ${OWNED} }`, true],
+      ['a camelCase options constant', 'leadsRequiresOptions', false],
+    ])('a requires review cannot read, in %s', (_l, options, listed) => {
+      expect(
+        findAdminTierRosterProblems(
+          required({
+            routes: [leadsRoute(options)],
+            appListedRoutes: listed ? [`${LEADS}#GET`] : [],
+          })
+        )
+      ).toEqual([expect.stringContaining('its `requires` is not a string literal')]);
+    });
+
+    it.each([
+      ['a switch its page does not require', 'authoring', ['lead_gen', 'authoring']],
+      ['a switch over a page that requires none', 'lead_gen', ['lead_gen']],
+    ])('a nav item requiring %s, which hides it from orgs the page admits', (_l, key, switches) => {
+      const pageRequirements =
+        key === 'lead_gen' ? [] : [{ pattern: '/admin/leads', requires: 'lead_gen' }];
+      const problems = findAdminTierRosterProblems(
+        required({
+          routes: [leadsRoute(`{ tier: 'org', ${OWNED} }`)],
+          appPageRequirements: pageRequirements,
+          navItems: [{ href: '/admin/leads', tier: 'org', requires: key }],
+          switches,
+        })
+      );
+      expect(problems).toEqual([
+        `nav item /admin/leads: requires '${key}' but its page requires ${
+          pageRequirements.length ? "'lead_gen'" : 'no switch'
+        }. Register the page with the same { requires }, or drop it from the item.`,
+      ]);
+    });
+
+    it('says nothing of a surface that requires no switch', () => {
+      expect(
+        findAdminTierRosterProblems(
+          required({
+            routes: [leadsRoute(`{ tier: 'org', ${OWNED} }`)],
+            appPageRequirements: [],
+            navItems: [{ href: '/admin/leads', tier: 'org' }],
+            switches: [],
+          })
+        )
+      ).toEqual([]);
+    });
+  });
+
   it('accepts a consistent roster — the control every case below differs from by one thing', () => {
     expect(
       findAdminTierRosterProblems(
@@ -616,6 +779,64 @@ describe('what it catches', () => {
       expect.stringContaining('CORE_ADMIN_SECTIONS lists gone'),
       expect.stringContaining('/admin/billing: core'),
     ]);
+  });
+
+  describe('pages open to every admin viewer (t-1091)', () => {
+    const EVERY = '/admin/access';
+    const FILE = 'app/admin/access/page.tsx';
+
+    it('accepts one with a page, on no org-tier list, in a core section — the control', () => {
+      expect(
+        findAdminTierRosterProblems(
+          input({
+            everyViewerPages: [EVERY],
+            pageFiles: [FILE],
+            coreSections: ['access'],
+          })
+        )
+      ).toEqual([]);
+    });
+
+    it('one with no page behind it', () => {
+      expect(findAdminTierRosterProblems(input({ everyViewerPages: [EVERY] }))).toEqual([
+        expect.stringContaining(`${EVERY}: listed in EVERY_VIEWER_ADMIN_PAGES but ${FILE}`),
+      ]);
+    });
+
+    it('one also on an org-tier list, core’s or the fork’s', () => {
+      const onBoth = expect.stringContaining(`${EVERY}: listed in EVERY_VIEWER_ADMIN_PAGES and on`);
+      expect(
+        findAdminTierRosterProblems(
+          input({ everyViewerPages: [EVERY], pageFiles: [FILE], listedPages: [EVERY] })
+        )
+      ).toEqual([onBoth]);
+      // The fork's copy is also a fork page in the class's section.
+      expect(
+        findAdminTierRosterProblems(
+          input({ everyViewerPages: [EVERY], pageFiles: [FILE], appListedPages: [EVERY] })
+        )
+      ).toEqual([onBoth, expect.stringContaining(`${EVERY}: listed in lib/app/admin-tier.ts`)]);
+    });
+
+    it('one in a section CORE_ADMIN_SECTIONS does not name, where a fork could list pages', () => {
+      expect(
+        findAdminTierRosterProblems(
+          input({ everyViewerPages: [EVERY], pageFiles: [FILE], coreSections: [] })
+        )
+      ).toEqual([expect.stringContaining(`${EVERY}: core's, in a section`)]);
+    });
+
+    it('a fork’s page in the class’s section, as if it were core’s', () => {
+      expect(
+        findAdminTierRosterProblems(
+          input({
+            everyViewerPages: [EVERY],
+            pageFiles: [FILE, 'app/admin/access/agency/page.tsx'],
+            appListedPages: ['/admin/access/agency'],
+          })
+        )
+      ).toEqual([expect.stringContaining('/admin/access/agency: listed in lib/app/admin-tier.ts')]);
+    });
   });
 
   it('a nav item marked org-tier over a page the roster does not list', () => {

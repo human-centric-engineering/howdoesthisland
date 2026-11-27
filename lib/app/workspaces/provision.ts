@@ -1,49 +1,57 @@
 /**
- * A workspace of one's own for every new account (t-7, D1).
+ * What every new workspace starts with (t-7, D1; on Sunrise's seams since t-91).
  *
  * Under D1 every person works in a workspace, and must be able to run an
- * assessment from their first minute. So an uninvited signup gets a new org,
- * named for them, which they join as its first member and so its `OWNER`
- * (the signup-org seam, `lib/app/signup-org.ts`, does the joining). Before it
- * is handed back the workspace is:
+ * assessment from their first minute. Sunrise makes the workspace: a
+ * self-serve signup gets an org of their own, as its `OWNER`
+ * (`lib/app/signup-org.ts`), and a team workspace is made by
+ * `createTeamWorkspace()` (`./create.ts`, t-8). This module equips it, from the
+ * org-created hook (`lib/app/org-created.ts`) that Sunrise runs for every new
+ * org, however it was made:
  *
  * - **granted its providers** (`WORKSPACE_PROVIDER_SLUGS`): Anthropic, which
  *   the judges and editor run on (D8, t-39), and OpenAI, which the embedder
  *   runs on. At `multi` every org but the install org starts approved for no
  *   provider, so without this the workspace could call no model at all;
  * - **given the default monthly AI budget**, $10 (D6, owner ruling on open
- *   question 2). There is no billing yet, and every assessment costs money;
- * - **re-reconciled for its platform agents.** `createOrg` gives the org its
- *   platform agents right after the commit, before the grant exists, so the
- *   agents whose provider the platform picks would choose from nothing. The
- *   reconcile runs again once the grant is written.
- * - **marked as a signup workspace** (`settings.app.signupWorkspace`), so the
- *   sweep in `./sweep.ts` can find one whose signup failed after it was made.
+ *   question 2), a safety ceiling while reviews are paid for in credits.
  *
- * The org must exist before the user row does (the seam's contract), so a
- * signup that fails after this ran (a double submit racing itself) leaves a
- * workspace nobody belongs to. That sweep erases those.
+ * **Idempotent**, as the hook must be: Sunrise retries a hook that throws, and
+ * a retry must not undo what a platform admin set since. So each value is
+ * written only while the org has none: a provider policy already stored, or a
+ * monthly budget already set, is left as it is.
  *
- * Failures after the org exists are logged at `error` and do not throw: the
- * workspace is still theirs, and a platform admin can grant the provider or
- * set the budget on `/admin`. Throwing would send the person to the install
- * org, the vendor's own, which is worse. A failure to create the org throws,
- * and the seam then falls back to the install org, logged.
+ * Sunrise runs the hooks before it places the new org's platform agents, so
+ * the agents pick their models from the grant. On a retry the agents are
+ * already placed, so the hook asks for them again (`reconcile`).
+ *
+ * A failure throws: the hook stays owed and Sunrise's `orgCreatedHooks`
+ * maintenance job runs it again. So does the judges' provider having no row
+ * (a fresh install not yet seeded): nothing is written, and a retry once the
+ * row exists grants it. The embedder's missing is logged at `error` and the
+ * rest granted, since the workspace can still assess without it.
  */
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { createOrg, OrgLifecycleError, type OrgRecord } from '@/lib/tenancy/lifecycle';
-import { writeOrgProviderPolicy, writeOrgQuotas } from '@/lib/tenancy/org-settings';
+import type { Prisma } from '@prisma/client';
+import {
+  ORG_PROVIDERS_KEY,
+  ORG_QUOTAS_KEY,
+  readOrgProviderPolicy,
+  readOrgQuotas,
+} from '@/lib/tenancy/org-settings';
+import { orgProviderPolicySchema } from '@/lib/validations/tenancy';
 import { forgetOrgProviderPolicy } from '@/lib/orchestration/llm/org-provider-policy';
 import { forgetOrgCap } from '@/lib/orchestration/llm/spend-caps';
 import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
-import type { UninvitedSignup } from '@/lib/tenancy/signup-org';
 import { JUDGE_PROVIDER_SLUG, WORKSPACE_PROVIDER_SLUGS } from '@/lib/app/workspaces/provider-slug';
 import {
   APP_SETTINGS_KEY,
+  readAppSettings,
   withSettingsConflictRetry as withConflictRetry,
-  writeAppSettings,
 } from '@/lib/app/workspaces/app-settings';
+import { isRecord } from '@/lib/utils';
 
 export { APP_SETTINGS_KEY, WORKSPACE_PROVIDER_SLUGS };
 
@@ -60,32 +68,11 @@ export { APP_SETTINGS_KEY, WORKSPACE_PROVIDER_SLUGS };
  */
 export const WORKSPACE_MONTHLY_BUDGET_USD = 10;
 
-/** The marker a signup workspace carries until someone has joined it. */
-export const SIGNUP_WORKSPACE_MARKER = 'signupWorkspace';
-
 /** Longest slug stem taken from a name; the suffix and the cap leave room. */
 const SLUG_STEM_MAX = 40;
 
 /** Attempts at a free slug before giving up. Each retry adds a random suffix. */
 const SLUG_ATTEMPTS = 4;
-
-/** Longest part of a person's name used in the workspace name. */
-const NAME_MAX = 150;
-
-/**
- * The display name a workspace is named for: the name they gave, or the local
- * part of their address when they gave none (an OAuth profile can lack one).
- */
-export function workspaceOwnerName(signup: Pick<UninvitedSignup, 'name' | 'email'>): string {
-  const name = signup.name.trim() || signup.email.split('@')[0]?.trim() || '';
-  return (name || 'My').slice(0, NAME_MAX).trim();
-}
-
-/** The workspace's name: "Ada Lovelace's workspace". */
-export function workspaceName(signup: Pick<UninvitedSignup, 'name' | 'email'>): string {
-  const owner = workspaceOwnerName(signup);
-  return owner === 'My' ? 'My workspace' : `${owner}\u2019s workspace`;
-}
 
 /**
  * A slug stem from a name: lowercase ASCII letters and digits joined by
@@ -113,8 +100,8 @@ function randomSuffix(): string {
  * Create the org under a slug derived from its name. `Org.slug` is unique
  * across every org, so a taken slug is retried with a random suffix. With an
  * `ownerUserId` the founding `OWNER` is written in the same transaction as
- * the org (a team workspace, t-8); without one the first member becomes it
- * (the signup workspace, joined by the seam).
+ * the org (a team workspace, t-8). `createOrg` runs the org-created hook, so
+ * the org comes back equipped unless that failed (and is then retried).
  */
 export async function createWorkspaceOrg(
   name: string,
@@ -134,100 +121,166 @@ export async function createWorkspaceOrg(
 }
 
 /**
- * Set or clear the signup-workspace marker, preserving every other key in
- * `settings` (the platform's slices and the rest of `app`), through the one
- * writer of the `app` key.
- */
-export async function writeSignupWorkspaceMarker(orgId: string, marked: boolean): Promise<void> {
-  await writeAppSettings(orgId, (app) => {
-    if (marked) app[SIGNUP_WORKSPACE_MARKER] = true;
-    else delete app[SIGNUP_WORKSPACE_MARKER];
-  });
-}
-
-/**
- * Approve the workspace for its providers (`WORKSPACE_PROVIDER_SLUGS`): those
- * of them that exist. Returns whether a grant was written.
+ * The workspace providers (`WORKSPACE_PROVIDER_SLUGS`) that exist, as the ids
+ * to approve, in the list's order so the stored policy reads the same in every
+ * org. Platform config, not the org's, so it is read outside the write.
  *
- * A provider with no row is left out and logged at `error`; the judges'
- * missing means the workspace's judges and editor have no model until a
- * platform admin creates it and grants it on `/admin`.
+ * A provider with no row is left out, and named in `missing`.
  */
-async function grantProvider(orgId: string): Promise<{ written: boolean; judges: boolean }> {
+async function findWorkspaceProviders(): Promise<{
+  approved: string[];
+  judges: boolean;
+  missing: string[];
+}> {
   const providers = await prisma.aiProviderConfig.findMany({
     where: { slug: { in: [...WORKSPACE_PROVIDER_SLUGS] } },
     select: { id: true, slug: true },
   });
-  const missing = WORKSPACE_PROVIDER_SLUGS.filter((s) => !providers.some((p) => p.slug === s));
-  if (missing.length > 0) {
-    logger.error(
-      missing.includes(JUDGE_PROVIDER_SLUG)
-        ? 'The judges’ provider does not exist; the new workspace’s judges have no model'
-        : 'A workspace provider does not exist; the new workspace is not granted it',
-      { orgId, missing }
-    );
-  }
-  if (providers.length === 0) return { written: false, judges: false };
-  // In the list's order, so the stored policy reads the same in every org.
-  const approved = WORKSPACE_PROVIDER_SLUGS.flatMap((s) =>
-    providers.filter((p) => p.slug === s).map((p) => p.id)
-  );
-  // No jurisdiction restriction: none is ruled for this app yet.
-  await withConflictRetry(() => writeOrgProviderPolicy(orgId, { approved }));
-  return { written: true, judges: providers.some((p) => p.slug === JUDGE_PROVIDER_SLUG) };
+  return {
+    approved: WORKSPACE_PROVIDER_SLUGS.flatMap((s) =>
+      providers.filter((p) => p.slug === s).map((p) => p.id)
+    ),
+    judges: providers.some((p) => p.slug === JUDGE_PROVIDER_SLUG),
+    missing: WORKSPACE_PROVIDER_SLUGS.filter((s) => !providers.some((p) => p.slug === s)),
+  };
 }
 
 /**
- * Give a newly created workspace what every workspace starts with: its
- * provider grant and the default budget, then its platform agents again now the
- * grant exists. Shared by the signup workspace and the team workspace (t-8),
- * so the two cannot drift.
+ * Set in the `app` slice by the write that equips a workspace. A retry that
+ * finds it writes nothing: an admin may since have removed the budget or
+ * narrowed the grant, which reads the same as never set.
+ */
+const EQUIPPED_MARK = 'workspaceEquipped';
+
+/**
+ * The judges' provider has no row, so a new workspace cannot be granted it.
+ * Thrown before anything is written, so the hook stays owed and a retry once
+ * the row exists grants it; until then the workspace's judges and editor have
+ * no model.
+ */
+export class JudgeProviderMissingError extends Error {
+  constructor(readonly orgId: string) {
+    super(
+      `The judges’ provider (${JUDGE_PROVIDER_SLUG}) does not exist; workspace ${orgId} stays owed its grant`
+    );
+    this.name = 'JudgeProviderMissingError';
+  }
+}
+
+/** What {@link equipWorkspace} did. */
+export interface EquipResult {
+  /** The judges' provider was granted by this run. */
+  granted: boolean;
+  /** The org already had a readable provider policy, so none was written. */
+  grantKept: boolean;
+  /** The org already had a monthly budget, so none was written. */
+  budgetKept: boolean;
+}
+
+/**
+ * Give a new workspace what every workspace starts with: its provider grant
+ * and the default budget, each only while the org has none (see the module
+ * header). The body of the `app:equip-workspace` org-created hook.
  *
- * `firstSteps` run before the grant (the signup workspace's marker). Each
- * step runs on its own and a failure is logged at `error`, never thrown: the
- * org already exists and is the caller's, and a platform admin can finish the
- * set-up on `/admin`.
+ * Both are one serializable read-modify-write: "only while unset" is decided
+ * on the row the write replaces, so a platform admin's grant or budget saved
+ * at the same moment either commits first and is kept, or clashes and is
+ * re-read on the retry. Never overwritten. And the two land together, so no
+ * attempt leaves the grant without the budget.
+ *
+ * The core slice writers are not used: each replaces its slice whole, so the
+ * check would sit in a different transaction from the write. The slices are
+ * written in the shapes those writers store, and read back through core's
+ * readers. A stored policy that core cannot read (and so reads as approved
+ * for nothing) is not kept: it is replaced by the grant.
+ *
+ * Throws on a failed read or write, so the hook stays owed and is retried.
  *
  * @param source the reconcile's trigger label, for its logs.
+ * @param options.reconcile give the org's platform agents out again. Only a
+ *   retry needs it: on the run straight after a create Sunrise places the
+ *   agents itself, after the hooks.
+ * @param options.signal the hook's: aborted once its time is up. The write
+ *   and the reconcile are each skipped once it has, and the hook stays owed.
  */
 export async function equipWorkspace(
   orgId: string,
   source: string,
-  firstSteps: Array<[string, () => Promise<unknown>]> = []
-): Promise<{ granted: boolean }> {
-  /** Runs one step; a failure is logged, never thrown (see above). */
-  const attempt = async <T>(step: string, run: () => Promise<T>): Promise<T | undefined> => {
-    try {
-      return await run();
-    } catch (error) {
-      logger.error('New workspace not fully set up', error, { orgId, step });
-      return undefined;
-    }
-  };
+  options: { reconcile?: boolean; signal?: AbortSignal } = {}
+): Promise<EquipResult> {
+  const { signal } = options;
+  const providers = await findWorkspaceProviders();
+  signal?.throwIfAborted();
 
-  for (const [step, run] of firstSteps) await attempt(step, run);
-  // Read off the grant's own call, not off a step label a caller could reuse.
-  const grant = await attempt('grant', () => grantProvider(orgId));
-  // `granted` means the judges can run: their provider was granted. Another
-  // provider alone is still a grant worth reconciling for.
-  const granted = grant?.judges === true;
-  await attempt('budget', () =>
-    withConflictRetry(() =>
-      writeOrgQuotas(orgId, { monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD })
+  const outcome = await withConflictRetry(() =>
+    prisma.$transaction(
+      async (tx) => {
+        const row = await tx.org.findUnique({ where: { id: orgId }, select: { settings: true } });
+        if (!row) throw new Error(`equipWorkspace: no org ${orgId}`);
+        const settings: Record<string, unknown> = isRecord(row.settings) ? { ...row.settings } : {};
+
+        // An earlier attempt committed its write: whatever the org holds now
+        // is what it wrote or what an admin set since (a budget removed, a
+        // grant narrowed), and neither is undone.
+        const app = readAppSettings(row.settings);
+        const equippedBefore = app[EQUIPPED_MARK] === true;
+
+        const grantKept =
+          equippedBefore || orgProviderPolicySchema.safeParse(settings[ORG_PROVIDERS_KEY]).success;
+        if (!grantKept && !providers.judges) throw new JudgeProviderMissingError(orgId);
+        const grantWritten = !grantKept;
+        // No jurisdiction restriction: none is ruled for this app yet.
+        if (grantWritten) settings[ORG_PROVIDERS_KEY] = { approved: providers.approved };
+
+        const budgetKept =
+          equippedBefore || readOrgQuotas(row.settings, { orgId }).monthlyBudgetUsd !== undefined;
+        if (!budgetKept) {
+          // Beside every other cap and the meter limits, as stored.
+          const quotas = settings[ORG_QUOTAS_KEY];
+          settings[ORG_QUOTAS_KEY] = {
+            ...(isRecord(quotas) ? quotas : {}),
+            monthlyBudgetUsd: WORKSPACE_MONTHLY_BUDGET_USD,
+          };
+        }
+
+        if (grantWritten || !budgetKept) {
+          settings[APP_SETTINGS_KEY] = { ...app, [EQUIPPED_MARK]: true };
+          await tx.org.update({
+            where: { id: orgId },
+            data: { settings: settings as Prisma.InputJsonObject },
+          });
+        }
+        return { grantKept, grantWritten, budgetKept };
+      },
+      { isolationLevel: 'Serializable' }
     )
   );
+  const { grantKept, grantWritten, budgetKept } = outcome;
+
+  // Only when a grant was written: a kept policy is the admin's, whatever
+  // exists. Only the embedder's can be missing here (the judges' throws).
+  if (grantWritten && providers.missing.length > 0) {
+    logger.error('A workspace provider does not exist; the new workspace is not granted it', {
+      orgId,
+      missing: providers.missing,
+    });
+  }
 
   // This process at once; other processes within each cache's TTL. A policy
-  // read before the grant (the reconcile in `createOrg` reads it) would
-  // otherwise answer "no provider" for up to a minute.
+  // read before the grant would otherwise answer "no provider" for up to a
+  // minute.
   forgetOrgProviderPolicy(orgId);
   forgetOrgCap(orgId);
   forgetOrgRequestCap(orgId);
 
-  // The agents were given out before the grant; give them out again now it
-  // exists. Never throws; the maintenance job catches up on a failure.
+  // Never throws; the platformAgents maintenance job catches up on a failure.
   // Imported on use, as `createOrg` does; an import failure is logged too.
-  if (grant?.written) {
+  // On a retry it runs whenever the org has a grant, not only when this run
+  // wrote it: an earlier attempt may have written the grant and then timed
+  // out before its reconcile, and that retry would otherwise skip it for
+  // good. The reconcile is idempotent.
+  if (options.reconcile && (grantWritten || grantKept)) {
+    signal?.throwIfAborted();
     await import('@/lib/orchestration/agents/reconcile-platform-agents')
       .then(({ tryReconcilePlatformAgents }) => tryReconcilePlatformAgents(orgId, source))
       .catch((error: unknown) => {
@@ -237,27 +290,24 @@ export async function equipWorkspace(
       });
   }
 
-  return { granted };
+  const granted = grantWritten && providers.judges;
+  logger.info('Workspace equipped', { orgId, granted, grantWritten, grantKept, budgetKept });
+  return { granted, grantKept, budgetKept };
 }
 
 /**
- * Create a workspace for a person signing up and return its id. See the
- * module header for what it is given and what a failure does.
+ * Whether the org's provider policy approves the judges' provider. For the
+ * smokes, which check that `createWorkspaceOrg` (through the equip hook) left
+ * the workspace able to run its judges.
  */
-export async function provisionSignupWorkspace(
-  signup: Pick<UninvitedSignup, 'name' | 'email'>
-): Promise<string> {
-  const name = workspaceName(signup);
-  const org = await createWorkspaceOrg(name, slugStem(workspaceOwnerName(signup)));
-  const orgId = org.id;
-
-  // The mark goes first: it is what lets the sweep reclaim the org if the
-  // signup fails.
-  const { granted } = await equipWorkspace(orgId, 'app.signup-workspace', [
-    // The writer retries a serializable clash itself.
-    ['mark', () => writeSignupWorkspaceMarker(orgId, true)],
+export async function workspaceHasJudgeProvider(orgId: string): Promise<boolean> {
+  const [org, provider] = await Promise.all([
+    prisma.org.findUnique({ where: { id: orgId }, select: { settings: true } }),
+    prisma.aiProviderConfig.findUnique({
+      where: { slug: JUDGE_PROVIDER_SLUG },
+      select: { id: true },
+    }),
   ]);
-
-  logger.info('Signup workspace created', { orgId, slug: org.slug, granted });
-  return orgId;
+  if (!org || !provider) return false;
+  return readOrgProviderPolicy(org.settings, { orgId }).approved.includes(provider.id);
 }

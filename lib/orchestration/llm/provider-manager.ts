@@ -27,11 +27,13 @@
 import type { AiProviderConfig } from '@/types/prisma';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
+import { buildsLocalClient } from '@/lib/orchestration/llm/provider-locality';
 import { checkSafeProviderUrl } from '@/lib/security/safe-url';
 import { AnthropicProvider } from '@/lib/orchestration/llm/anthropic';
 import { getBreaker, peekBreaker } from '@/lib/orchestration/llm/circuit-breaker';
 import { credentialKey } from '@/lib/orchestration/llm/credential-key';
 import {
+  credentialMayBeOrgSpecific,
   hasProviderCredentialResolver,
   hasProviderKey,
   readEnvKey,
@@ -58,6 +60,7 @@ import { OpenAiCompatibleProvider } from '@/lib/orchestration/llm/openai-compati
 import { forgetProviderRow } from '@/lib/orchestration/llm/org-provider-policy';
 import { hydrateFromDb as hydrateModelRegistryFromDb } from '@/lib/orchestration/llm/model-registry-db-hydrate';
 import {
+  keyTestSignal,
   ProviderError,
   type LlmProvider,
   type ProviderTestResult,
@@ -114,6 +117,12 @@ interface BuiltProvider {
    */
   identity: string;
   /**
+   * The credential is the org's own key from core's store (§137), so the
+   * vendor bills the org: its calls skip the org's and the global spend caps,
+   * and their cost rows are marked.
+   */
+  ownKey: boolean;
+  /**
    * One Proxy per call origin. The gate needs to know where the provider came
    * from and the instance is shared by every caller with this credential, so
    * the origin lives on the view each caller is handed rather than on the
@@ -146,12 +155,20 @@ const instanceCache = new Map<string, CachedRow>();
 /** Which credential key each view counts and breaks under. See {@link breakerKeyOf}. */
 const viewKeys = new WeakMap<LlmProvider, string>();
 
+/** The views whose calls go out on an org's own key. See {@link usesOrgOwnKey}. */
+const ownKeyViews = new WeakSet<LlmProvider>();
+
 function isFresh(row: CachedRow | undefined): row is CachedRow {
   return row !== undefined && Date.now() - row.cachedAt < CACHE_TTL_MS;
 }
 
-function newBuilt(instance: LlmProvider, slug: string, identity: string): BuiltProvider {
-  const built: BuiltProvider = { instance, slug, identity, views: new Map() };
+function newBuilt(
+  instance: LlmProvider,
+  slug: string,
+  identity: string,
+  ownKey = false
+): BuiltProvider {
+  const built: BuiltProvider = { instance, slug, identity, ownKey, views: new Map() };
   // Build the unprovenanced view now, so an unwrappable instance (an empty
   // slug) throws when it is built rather than on its first read.
   viewOf(built, undefined);
@@ -174,8 +191,9 @@ function viewOf(built: BuiltProvider, origin: CallOrigin): LlmProvider {
   let view = built.views.get(key);
   if (!view) {
     const stateKey = credentialKey(built.slug, built.identity);
-    view = withInFlightTracking(built.instance, built.slug, origin, stateKey);
+    view = withInFlightTracking(built.instance, built.slug, origin, stateKey, built.ownKey);
     viewKeys.set(view, stateKey);
+    if (built.ownKey) ownKeyViews.add(view);
     built.views.set(key, view);
   }
   return view;
@@ -190,6 +208,40 @@ function viewOf(built: BuiltProvider, origin: CallOrigin): LlmProvider {
  */
 export function breakerKeyOf(provider: LlmProvider): string | undefined {
   return viewKeys.get(provider);
+}
+
+/**
+ * Whether calls on a provider `getProvider` returned go out on the org's own
+ * key (§137), so the vendor bills the org rather than the platform. `false`
+ * for the shared key, an app resolver's key, and an object that did not come
+ * from the manager. Every `logCost` caller passes it for the provider its
+ * call was made on (`LogCostParams.ownKey`), and callers that pick a provider
+ * ask it so a spend cap that does not hold for own-key calls does not pass one
+ * over (`spendCapRefusal(..., { ownKey })`).
+ */
+export function usesOrgOwnKey(provider: LlmProvider): boolean {
+  return ownKeyViews.has(provider);
+}
+
+/**
+ * Whether calls to `slugOrName` in this context would go out on the org's own
+ * key: {@link usesOrgOwnKey} on what `getProvider` returns. `false` when the
+ * provider cannot be fetched, since a call to it then fails anyway. Makes no
+ * vendor call. For a check made before the provider is fetched for the call,
+ * such as chat's budget check at the start of a turn.
+ */
+export async function providerUsesOrgOwnKey(slugOrName: string): Promise<boolean> {
+  try {
+    return usesOrgOwnKey(await getProvider(slugOrName));
+  } catch (err) {
+    // Said, since it can decide a turn: answered "no", a turn with the org's
+    // or the global cap reached is refused, as its call would fail anyway.
+    logger.warn('Could not tell whether a provider goes out on the org’s own key', {
+      provider: slugOrName,
+      error: err instanceof ProviderError ? err.code : err instanceof Error ? err.name : 'unknown',
+    });
+    return false;
+  }
 }
 
 /**
@@ -252,11 +304,36 @@ export async function isLocalProvider(slugOrName: string): Promise<boolean> {
 }
 
 /**
- * Whether a provider row builds a local client. A Voyage row never does: its
- * `isLocal` decides only whether its `baseUrl` may be on loopback.
+ * Whether `slugOrName` is ticked "Trusted with confidential content" (§130),
+ * read off its row the way {@link isLocalProvider} reads `isLocal`: the
+ * cached row when fresh, else the database. `false` when it cannot be found
+ * or read, and for a provider a fork registered in code, which has no row:
+ * an `approved_only` policy then refuses rather than send confidential
+ * content somewhere nobody ticked.
  */
+export async function isTrustedProvider(slugOrName: string): Promise<boolean> {
+  try {
+    const cached = instanceCache.get(slugOrName);
+    if (isFresh(cached) && cached.config) return cached.config.trustedForConfidential === true;
+    const select = { trustedForConfidential: true } as const;
+    const config =
+      (await prisma.aiProviderConfig.findFirst({ where: { slug: slugOrName }, select })) ??
+      (await prisma.aiProviderConfig.findFirst({ where: { name: slugOrName }, select }));
+    return config?.trustedForConfidential === true;
+  } catch (err) {
+    // Said, so an `approved_only` refusal of a ticked provider is not
+    // debugged as a missing tick.
+    logger.warn('privacy: could not read whether a provider is trusted; treated as untrusted', {
+      provider: slugOrName,
+      errorName: err instanceof Error ? err.name : typeof err,
+    });
+    return false;
+  }
+}
+
+/** Whether a provider row builds a local client (`buildsLocalClient`). */
 function isLocalConfig(config: Pick<AiProviderConfig, 'isLocal' | 'providerType'>): boolean {
-  return config.isLocal && config.providerType !== 'voyage';
+  return buildsLocalClient(config);
 }
 
 /** `getProvider` for any call origin, including an unrecorded fallback. */
@@ -322,7 +399,8 @@ async function acquireProvider(slugOrName: string, context: CallOrigin): Promise
     built = newBuilt(
       buildProviderFromConfig(row.config, credential.apiKey),
       row.config.slug,
-      credential.identity
+      credential.identity,
+      credential.ownKey
     );
     row.byIdentity.set(credential.identity, built);
   }
@@ -385,6 +463,8 @@ const METHOD_DISPOSITION: Record<ProviderMethodName, MethodDisposition> = {
   transcribeStream: 'trackStream',
   listModels: 'passthrough',
   testConnection: 'passthrough',
+  // A key test sends no user content (§137 t-1056), like testConnection.
+  testKey: 'passthrough',
 };
 
 /**
@@ -404,6 +484,7 @@ const PRIVACY_COVERAGE: Record<ProviderMethodName, PrivacyCoverage> = {
   transcribeStream: 'none',
   listModels: 'none',
   testConnection: 'none',
+  testKey: 'none',
 };
 
 /**
@@ -419,7 +500,13 @@ async function privacyStage(
 ): Promise<{ sent: unknown[]; restorer?: CallRestorer }> {
   const coverage = PRIVACY_COVERAGE[prop];
   if (coverage === 'none') return { sent: args };
-  const result = await applyPrivacyStage({ providerSlug: slug, isLocal, coverage, args });
+  const result = await applyPrivacyStage({
+    providerSlug: slug,
+    isLocal,
+    isTrusted: () => isTrustedProvider(slug),
+    coverage,
+    args,
+  });
   return {
     sent: [...result.args],
     ...(result.restorer ? { restorer: result.restorer } : {}),
@@ -514,7 +601,10 @@ function dispositionOf(prop: string): MethodDisposition | undefined {
  * monthly spend caps** — the org's and the global one — by
  * `assertWithinSpendCaps` (§110 t-788), so a workflow, an evaluation or a job
  * cannot spend past a cap chat would have refused; a local provider is
- * exempt, since it costs nothing. Throws on an empty `slug`,
+ * exempt, since it costs nothing, and a call on the org's own key (`ownKey`,
+ * §137) is held by neither, since the vendor bills the org: only a chat
+ * turn's hold for its agent's cap refuses it, the one place the agent's cap is
+ * enforced. Its caller marks the call's cost row with `usesOrgOwnKey()`. Throws on an empty `slug`,
  * because the alternative — returning the instance unwrapped — is the one way
  * the cache's invariant could quietly fail.
  *
@@ -531,7 +621,8 @@ function withInFlightTracking(
   provider: LlmProvider,
   slug: string,
   context: CallOrigin,
-  stateKey: string = slug
+  stateKey: string = slug,
+  ownKey = false
 ): LlmProvider {
   // Refuse rather than return the bare instance. This used to be
   // `if (!slug) return provider;`, described as defensive — but the callers are
@@ -566,7 +657,7 @@ function withInFlightTracking(
           const task = taskOfMethod(method);
           return async (...args: unknown[]): Promise<unknown> => {
             await assertProviderCallPermitted(slug, context, task);
-            await assertWithinSpendCaps(slug, target.isLocal === true);
+            await assertWithinSpendCaps(slug, target.isLocal === true, { ownKey });
             // After both gates, so a refused call is never scanned (§127).
             const { sent, restorer } = await privacyStage(
               slug,
@@ -586,7 +677,7 @@ function withInFlightTracking(
           const method = prop as ProviderMethodName;
           const task = taskOfMethod(method);
           return (...args: unknown[]): AsyncIterable<unknown> =>
-            gatedStream(slug, context, task, target.isLocal === true, async () => {
+            gatedStream(slug, context, task, target.isLocal === true, ownKey, async () => {
               const { sent, restorer } = await privacyStage(
                 slug,
                 target.isLocal === true,
@@ -648,10 +739,11 @@ async function* gatedStream(
   context: CallOrigin,
   task: TaskType,
   isLocal: boolean,
+  ownKey: boolean,
   open: () => Promise<AsyncIterable<unknown>>
 ): AsyncGenerator<unknown> {
   await assertProviderCallPermitted(slug, context, task);
-  await assertWithinSpendCaps(slug, isLocal);
+  await assertWithinSpendCaps(slug, isLocal, { ownKey });
   yield* await open();
 }
 
@@ -754,6 +846,91 @@ export async function testProvider(slugOrName: string): Promise<ProviderTestResu
 }
 
 /**
+ * Test a key someone is about to save for a provider row (§137 t-1045), with
+ * a call the vendor authenticates (t-1056): the provider's `testKey()`.
+ *
+ * - Anthropic: its model list, which it authenticates and does not bill.
+ * - Voyage: one embedding of one word (billed, a token or two). Voyage has no
+ *   model list, so the connection check could never pass a Voyage key.
+ * - OpenAI-compatible: the model list, trusted only where the host refuses a
+ *   known-wrong key there too; otherwise a chat request no host runs, sent
+ *   with each key. A host that checks keys on neither fails the test.
+ *
+ * The client is built for this call alone and never cached, so a key that
+ * fails is never held by the manager, and a key that passes is not used for
+ * anything else until it is saved. No user content is sent, so neither the
+ * call-time gate nor the spend caps are asked; the caller decides whether the
+ * org may use the provider at all. A provider with no `testKey()` is tested
+ * with `testConnection()`.
+ *
+ * The result's `error` is the vendor's own message, which can repeat part of
+ * the key: never send it to the browser, and remove the key before logging it.
+ *
+ * @throws ProviderError when no client can be built for the row (an unsafe
+ *   base URL, an unknown provider type).
+ */
+export async function testProviderKey(
+  config: AiProviderConfig,
+  apiKey: string
+): Promise<ProviderTestResult> {
+  const provider = buildProviderFromConfig(config, apiKey);
+  return provider.testKey ? provider.testKey() : provider.testConnection();
+}
+
+/** What {@link testProviderKeyOnModel} answers. */
+export interface ModelKeyTestResult {
+  ok: boolean;
+  /** Which call failed: the key test, or the message to the model. */
+  failedAt?: 'key' | 'model';
+  /** The vendor's message. It can repeat the key, as {@link testProviderKey}'s can. */
+  error?: string;
+}
+
+/**
+ * Test an org's own key against one model (§136 t-1066), before the model
+ * move takes the org's uses to it: {@link testProviderKey}'s call the vendor
+ * authenticates, then, when `chat` is set, a short message to `model` sent
+ * with that key. The key test alone cannot say the key may use the model: a
+ * vendor can restrict a key to some models (an OpenAI project key can), and
+ * the key test names no model, or a fixed one.
+ *
+ * Neither call sends user content, so the call-time gate, the spend caps and
+ * the privacy stage are not asked, as for {@link testProviderKey}. The message
+ * is billed to the org's key: a few tokens.
+ *
+ * @throws ProviderError when no client can be built for the row.
+ */
+export async function testProviderKeyOnModel(
+  config: AiProviderConfig,
+  apiKey: string,
+  model: string,
+  { chat }: { chat: boolean }
+): Promise<ModelKeyTestResult> {
+  const provider = buildProviderFromConfig(config, apiKey);
+  const key = provider.testKey ? await provider.testKey() : await provider.testConnection();
+  if (!key.ok) return { ok: false, failedAt: 'key', ...(key.error ? { error: key.error } : {}) };
+  if (!chat) return { ok: true };
+  try {
+    await provider.chat([{ role: 'user', content: 'ping' }], {
+      model,
+      maxTokens: 16,
+      signal: keyTestSignal(),
+    });
+    return { ok: true };
+  } catch (err) {
+    // A reasoning model can spend the whole small budget thinking and answer
+    // with no visible text, which the adapter raises as a truncation. The
+    // vendor served the model on this key all the same, which is the question.
+    if (err instanceof ProviderError && err.code === 'truncated_no_output') return { ok: true };
+    return {
+      ok: false,
+      failedAt: 'model',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
  * Resolve a provider instance, falling back through a list of
  * alternatives if the primary's circuit breaker is open, or if it is paid and
  * a monthly spend cap has been reached (then only a local candidate serves).
@@ -807,7 +984,9 @@ export async function getProviderWithFallbacks(
       // pass over it to a candidate that can serve: a local one, which the caps
       // never refuse (§110 t-788). The refusal is cached state, so asking costs
       // no query while the caps' entries are warm.
-      const refusal = await spendCapRefusal(slug, provider.isLocal === true);
+      const refusal = await spendCapRefusal(slug, provider.isLocal === true, {
+        ownKey: usesOrgOwnKey(provider),
+      });
       if (refusal) {
         capRefusal = refusal;
         continue;
@@ -849,9 +1028,11 @@ export async function getProviderWithFallbacks(
  *
  * The breaker is the credential's, so in general it can only be checked once
  * the provider is fetched: that is what says which credential this org gets.
- * With no resolver registered every credential is the shared one and its key
- * is the slug, so the breaker is checked first and an open one skips the
- * fetch entirely, as it always did.
+ * When no credential can be org-specific (no resolver registered, and no org
+ * in scope at `multi`, where it may hold its own key) every credential is the
+ * shared one and its key is the slug, so the breaker is checked first and an
+ * open one skips the fetch entirely, as it always did. An org with its own key
+ * is not skipped for the install key's open breaker.
  *
  * `origin` is the call's provenance, as `getProvider`'s `context`, or
  * `{ unrecordedFallbackOf: primarySlug }` for a fallback with none recorded —
@@ -873,7 +1054,7 @@ async function acquireIfBreakerClosed(
 ): Promise<{ provider: LlmProvider; breakerKey: string } | null> {
   // Peek, never create: `slug` may be a row NAME, and getBreaker would leave a
   // breaker under a key that is no credential's.
-  if (!hasProviderCredentialResolver() && peekBreaker(slug)?.canAttempt() === false) return null;
+  if (!credentialMayBeOrgSpecific() && peekBreaker(slug)?.canAttempt() === false) return null;
   const provider = await acquireProvider(slug, origin);
   const breakerKey = breakerKeyOf(provider) ?? slug;
   if (!getBreaker(breakerKey).canAttempt()) return null;

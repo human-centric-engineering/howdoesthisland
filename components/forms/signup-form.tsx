@@ -3,9 +3,10 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { authClient } from '@/lib/auth/client';
-import { signUpSchema, type SignUpInput } from '@/lib/validations/auth';
+import { createSignUpSchema, type SignUpInput } from '@/lib/validations/auth';
 import { useAnalytics, EVENTS } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,9 @@ export function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { track, identify } = useAnalytics();
+  const t = useTranslations('auth');
+  const tv = useTranslations('validation');
+  const signUpSchema = useMemo(() => createSignUpSchema(tv), [tv]);
 
   // FORK (HowDoesThisLand, t-60): a `callbackUrl` is where the new account
   // goes, as the login form's does: after sign-up, after OAuth, and from the
@@ -71,7 +75,7 @@ export function SignupForm() {
   });
 
   const save = useSaveFailure({
-    fallback: 'An unexpected error occurred. Please try again.',
+    fallback: t('shared.unexpectedError'),
     errors,
   });
 
@@ -81,9 +85,7 @@ export function SignupForm() {
   // clears itself as fields are fixed (t-1013).
   const oauthError = searchParams.get('error');
   const oauthErrorDescription = searchParams.get('error_description');
-  const oauthMessage = oauthError
-    ? oauthErrorDescription || 'OAuth authentication failed. Please try again.'
-    : null;
+  const oauthMessage = oauthError ? oauthErrorDescription || t('shared.oauthFailed') : null;
 
   // Watch password field for strength meter
   const password = watch('password');
@@ -124,7 +126,7 @@ export function SignupForm() {
             router.refresh();
           },
           onError: (ctx) => {
-            save.show(ctx.error.message || 'Failed to create account. Please try again.');
+            save.show(ctx.error.message || t('signup.form.failed'));
             setIsLoading(false);
           },
         }
@@ -152,11 +154,11 @@ export function SignupForm() {
       >
         {/* Name Field */}
         <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
+          <Label htmlFor="name">{t('fields.fullName')}</Label>
           <Input
             id="name"
             type="text"
-            placeholder="John Doe"
+            placeholder={t('fields.namePlaceholder')}
             autoComplete="name"
             disabled={isLoading}
             {...register('name')}
@@ -166,7 +168,7 @@ export function SignupForm() {
 
         {/* Email Field */}
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t('fields.email')}</Label>
           <Input
             id="email"
             type="email"
@@ -180,7 +182,7 @@ export function SignupForm() {
 
         {/* Password Field */}
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t('fields.password')}</Label>
           <PasswordInput
             id="password"
             placeholder="••••••••"
@@ -190,14 +192,12 @@ export function SignupForm() {
           />
           <FormError message={errors.password?.message} />
           <PasswordStrength password={password} />
-          <p className="text-muted-foreground text-xs">
-            Must be at least 8 characters with uppercase, lowercase, number, and special character
-          </p>
+          <p className="text-muted-foreground text-xs">{t('fields.passwordHint')}</p>
         </div>
 
         {/* Confirm Password Field */}
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Label htmlFor="confirmPassword">{t('fields.confirmPassword')}</Label>
           <PasswordInput
             id="confirmPassword"
             placeholder="••••••••"
@@ -214,7 +214,7 @@ export function SignupForm() {
 
         {/* Submit Button */}
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? 'Creating account...' : 'Create Account'}
+          {isLoading ? t('signup.form.creating') : t('signup.form.submit')}
         </Button>
       </form>
     </div>

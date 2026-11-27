@@ -129,6 +129,8 @@ const CORE_ROUTE_DIRS = [
   'embed',
   'inbound',
   'invitations',
+  // A visitor's interface language (Sunrise 0.20.0, §138).
+  'locale',
   'mcp',
   'orchestration',
   'orgs',

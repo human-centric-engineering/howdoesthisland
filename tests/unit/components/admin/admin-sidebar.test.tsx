@@ -15,6 +15,7 @@ import type { ComponentType } from 'react';
 
 import {
   AdminSidebar,
+  lockedNavItemSwitch,
   sectionsForViewer,
   sectionsForMode,
   sectionsForCapabilities,
@@ -28,7 +29,7 @@ const ORG_REACH: AdminReach = { tiers: ['org'], landing: null };
 const pathnameMock = vi.fn(() => '/admin/overview');
 
 /** The nav items shown at `multi` only: Members (t-813) and Support access (§121 t-823). */
-const MULTI_ONLY = ['/admin/members', '/admin/support-access'];
+const MULTI_ONLY = ['/admin/members', '/admin/provider-keys', '/admin/support-access'];
 
 vi.mock('next/navigation', () => ({
   usePathname: () => pathnameMock(),
@@ -451,6 +452,8 @@ describe('AdminSidebar — what an org viewer sees', () => {
     expect(screen.getByText('Fork Console')).toBeInTheDocument();
   });
 
+  // Options is shown whether or not the app registers an org-set switch: it
+  // carries the org's language (§138 t-1074).
   it('shows an org viewer exactly the customer’s core sections and the mixed pages (t-811, t-812)', () => {
     render(<AdminSidebar reach={ORG_REACH} orgTierPages={ORG_TIER_ADMIN_PAGES} />);
 
@@ -459,6 +462,9 @@ describe('AdminSidebar — what an org viewer sees', () => {
       .map((link) => link.getAttribute('href'))
       .filter((href): href is string => href?.startsWith('/admin/') ?? false);
     expect(hrefs).toEqual([
+      '/admin/org-options',
+      // Open to every admin viewer (t-1091).
+      '/admin/access',
       '/admin/orchestration',
       '/admin/orchestration/agents',
       '/admin/orchestration/workflows',
@@ -475,7 +481,7 @@ describe('AdminSidebar — what an org viewer sees', () => {
     ]);
   });
 
-  it('shows an org viewer Members and Support access alone when orchestration is closed (t-929)', () => {
+  it('shows an org viewer the org-settings items alone when orchestration is closed (t-929)', () => {
     const open = ORG_TIER_ADMIN_PAGES.filter((p) => !p.startsWith('/admin/orchestration'));
     render(<AdminSidebar reach={ORG_REACH} multiTenant orgTierPages={open} />);
 
@@ -483,7 +489,13 @@ describe('AdminSidebar — what an org viewer sees', () => {
       .getAllByRole('link')
       .map((link) => link.getAttribute('href'))
       .filter((href): href is string => href?.startsWith('/admin/') ?? false);
-    expect(hrefs).toEqual(['/admin/members', '/admin/support-access']);
+    expect(hrefs).toEqual([
+      '/admin/members',
+      '/admin/org-options',
+      '/admin/provider-keys',
+      '/admin/support-access',
+      '/admin/access',
+    ]);
     expect(screen.queryByText('AI Orchestration')).not.toBeInTheDocument();
   });
 
@@ -608,6 +620,33 @@ describe('sectionsForViewer', () => {
   });
 });
 
+describe('sectionsForViewer — a page open to every admin viewer (t-1091)', () => {
+  const Icon: ComponentType<{ className?: string }> = () => null;
+  const item = (href: string) => ({ href, label: href, icon: Icon, description: '' });
+  const sections = [{ title: 'Management', items: [item('/admin/access'), item('/admin/users')] }];
+  const hrefs = (reach: AdminReach) =>
+    sectionsForViewer(sections, reach, ORG_TIER_ADMIN_PAGES).flatMap((s) =>
+      (s.items ?? []).map((i) => i.href)
+    );
+
+  it('shows the access explainer to an org admin and a named-tier holder, with no tier on the item', () => {
+    expect(hrefs(ORG_REACH)).toEqual(['/admin/access']);
+    expect(hrefs({ tiers: ['page_designs'], landing: null })).toEqual(['/admin/access']);
+  });
+
+  it('shows it to nobody the policy admitted to no tier', () => {
+    expect(hrefs({ tiers: [], landing: null })).toEqual([]);
+  });
+
+  it('is in core’s sidebar, so every viewer finds it', () => {
+    render(<AdminSidebar reach={{ tiers: ['page_designs'], landing: null }} orgTierPages={[]} />);
+    expect(screen.getByRole('link', { name: /Roles and access/ })).toHaveAttribute(
+      'href',
+      '/admin/access'
+    );
+  });
+});
+
 // Members (§111 t-813) is shown at `multi` only; at `single` the console is
 // what it was before it.
 describe('AdminSidebar — Members at multi (t-813)', () => {
@@ -650,6 +689,11 @@ describe('AdminSidebar — Members at multi (t-813)', () => {
       '/admin/support-access'
     );
     expect(single).not.toContain('/admin/support-access');
+    expect(screen.getByRole('link', { name: /AI keys/ })).toHaveAttribute(
+      'href',
+      '/admin/provider-keys'
+    );
+    expect(single).not.toContain('/admin/provider-keys');
     expect(multi.filter((h) => !MULTI_ONLY.includes(h))).toEqual(single);
   });
 
@@ -728,6 +772,14 @@ describe('sectionsForCapabilities', () => {
     expect(sectionsForCapabilities(sections, { waitlistEnabled: true })).toBe(sections);
   });
 
+  // Options carries the org's language (§138 t-1074), so it is shown whether
+  // or not the app registers an org-set switch (t-1054 hid it when none was).
+  it('keeps /admin/org-options with or without a waitlist', () => {
+    const withOptions = [{ title: 'M', items: [item('/admin/org-options'), item('/o')] }];
+    expect(sectionsForCapabilities(withOptions, { waitlistEnabled: true })).toBe(withOptions);
+    expect(sectionsForCapabilities(withOptions, { waitlistEnabled: false })).toEqual(withOptions);
+  });
+
   it('removes /admin/waitlist, from items and subgroups, and leaves everything else', () => {
     const result = sectionsForCapabilities(sections, { waitlistEnabled: false });
 
@@ -778,5 +830,170 @@ describe('AdminSidebar — Waitlist (§125)', () => {
     render(<AdminSidebar reach="platform" orgTierPages={ORG_TIER_ADMIN_PAGES} />);
 
     expect(screen.queryByRole('link', { name: /Waitlist/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('sectionsForViewer with switch requirements (t-1034)', () => {
+  const Icon: ComponentType<{ className?: string }> = () => null;
+  const item = (href: string, requires?: string) => ({
+    href,
+    label: href,
+    icon: Icon,
+    description: '',
+    tier: 'org',
+    ...(requires ? { requires } : {}),
+  });
+  const PAGES = ['/admin/leads', '/admin/briefs', '/admin/reports'];
+  const sections = [
+    {
+      title: 'Leads',
+      items: [
+        // Required on the item itself, on its page alone, and not at all.
+        item('/admin/leads', 'lead_gen'),
+        item('/admin/briefs'),
+        item('/admin/reports'),
+      ],
+    },
+  ];
+  const REQUIRED = [{ pattern: '/admin/briefs', requires: 'lead_gen' }];
+  const has: AdminReach = {
+    tiers: ['org'],
+    landing: null,
+    switchesMet: [{ tier: 'org', requires: 'lead_gen' }],
+  };
+  const lacks: AdminReach = { tiers: ['org'], landing: null, switchesMet: [] };
+  const shown = (reach: AdminReach) =>
+    sectionsForViewer(sections, reach, PAGES, [], REQUIRED).flatMap((s) =>
+      (s.items ?? []).map((i) => i.href)
+    );
+
+  it('shows an org admin whose org has the switch every item', () => {
+    expect(shown(has)).toEqual(['/admin/leads', '/admin/briefs', '/admin/reports']);
+  });
+
+  it('hides an item that requires it, or whose page does, from one whose org lacks it', () => {
+    expect(shown(lacks)).toEqual(['/admin/reports']);
+  });
+
+  it('hides nothing from a platform viewer', () => {
+    expect(sectionsForViewer(sections, 'platform', PAGES, [], REQUIRED)).toBe(sections);
+  });
+});
+
+describe('locked items: a switch the app shows locked rather than hides (t-1053)', () => {
+  const Icon: ComponentType<{ className?: string }> = () => null;
+  const item = (href: string, requires?: string, tier = 'org') => ({
+    href,
+    label: href.replace('/admin/', ''),
+    icon: Icon,
+    description: '',
+    tier,
+    ...(requires ? { requires } : {}),
+  });
+  const PAGES = ['/admin/leads', '/admin/briefs', '/admin/reports'];
+  const REQUIRED = [
+    { pattern: '/admin/leads', requires: 'lead_gen' },
+    { pattern: '/admin/briefs', requires: 'briefs' },
+  ];
+  const LOCKED = [
+    {
+      requires: 'lead_gen',
+      label: 'Lead generation',
+      message: 'Lead generation comes with the Growth plan.',
+      upgradeUrl: '/pricing',
+    },
+  ];
+  const sections = [
+    {
+      title: 'Leads',
+      items: [
+        item('/admin/leads', 'lead_gen'),
+        item('/admin/briefs', 'briefs'),
+        item('/admin/reports'),
+      ],
+    },
+  ];
+  const lacks: AdminReach = { tiers: ['org'], landing: null, switchesMet: [] };
+  const shown = (reach: AdminReach, locked = LOCKED) =>
+    sectionsForViewer(sections, reach, PAGES, [], REQUIRED, locked).flatMap((s) =>
+      (s.items ?? []).map((i) => i.href)
+    );
+
+  it('keeps an item whose locked switch the org lacks, and still hides one whose switch the app hides', () => {
+    expect(shown(lacks)).toEqual(['/admin/leads', '/admin/reports']);
+    expect(
+      lockedNavItemSwitch(item('/admin/leads', 'lead_gen'), lacks, PAGES, [], REQUIRED, LOCKED)
+    ).toBe(LOCKED[0]);
+    expect(
+      lockedNavItemSwitch(item('/admin/briefs', 'briefs'), lacks, PAGES, [], REQUIRED, LOCKED)
+    ).toBeNull();
+  });
+
+  it('hides it as before when nothing is locked: the default', () => {
+    expect(shown(lacks, [])).toEqual(['/admin/reports']);
+  });
+
+  it('does not lock an item closed for a reason other than the switch', () => {
+    // A viewer who holds no tier at all is not shown a locked item to buy.
+    const none: AdminReach = { tiers: [], landing: null };
+    expect(shown(none)).toEqual([]);
+    expect(
+      lockedNavItemSwitch(item('/admin/leads', 'lead_gen'), none, PAGES, [], REQUIRED, LOCKED)
+    ).toBeNull();
+  });
+
+  it('locks nothing for an org whose switch is met, nor for a platform viewer', () => {
+    const has: AdminReach = {
+      tiers: ['org'],
+      landing: null,
+      switchesMet: [
+        { tier: 'org', requires: 'lead_gen' },
+        { tier: 'org', requires: 'briefs' },
+      ],
+    };
+    expect(
+      lockedNavItemSwitch(item('/admin/leads', 'lead_gen'), has, PAGES, [], REQUIRED, LOCKED)
+    ).toBeNull();
+    expect(
+      lockedNavItemSwitch(item('/admin/leads', 'lead_gen'), 'platform', PAGES, [], REQUIRED, LOCKED)
+    ).toBeNull();
+  });
+
+  describe('rendered', () => {
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>());
+      registerNavSection({ title: 'Leads', items: [item('/admin/leads', 'lead_gen')] });
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      __resetNavRegistryForTests();
+    });
+
+    it("shows it as a locked button, not a link, opening the app's message and upgrade link", async () => {
+      const user = userEvent.setup();
+      render(
+        <AdminSidebar
+          reach={lacks}
+          orgTierPages={PAGES}
+          pageRequirements={REQUIRED}
+          lockedSwitches={LOCKED}
+        />
+      );
+      expect(screen.queryByRole('link', { name: /^leads$/i })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'leads (locked)' }));
+      expect(
+        await screen.findByText('Lead generation comes with the Growth plan.')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'How to get Lead generation' })).toHaveAttribute(
+        'href',
+        '/pricing'
+      );
+    });
+
+    it('hides it, rendering nothing, when the app hides that switch', () => {
+      render(<AdminSidebar reach={lacks} orgTierPages={PAGES} pageRequirements={REQUIRED} />);
+      expect(screen.queryByRole('button', { name: /locked/ })).not.toBeInTheDocument();
+      expect(screen.queryByText('leads')).not.toBeInTheDocument();
+    });
   });
 });

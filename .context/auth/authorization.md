@@ -131,6 +131,15 @@ arms answer as for the org's own ADMIN, and a handler's
 `isPlatformAdmin(session.user)` is false too. `tests/unit/lib/auth/guards-support.test.ts`
 pins the fork-policy case. The stored `User.role` is never changed.
 
+**A member platform admin presents the same way (t-1032).** At `multi`, a
+platform admin who is a member of any org but the install org is presented
+with the default user role there too, and their membership's role as
+`orgRole`. `withholdsPlatformRole(entry)` is the one statement of when the
+platform role is replaced: a support entry, or at `multi` an entry to an org
+that is not the install org. So inside a customer's org vendor staff are the
+role the customer gave them, for every policy; platform work is done from the
+install org. See [support-access.md](../tenancy/support-access.md#a-platform-admin-who-is-a-member-t-1032).
+
 A policy that wants to know it is talking to support reads
 `getTenantContext()?.source === 'support'` (and `.support` for the grant) —
 the principal does not carry it, deliberately.
@@ -143,6 +152,14 @@ else; a platform admin uses everything, as before. Undeclared means platform,
 fork surfaces included, so an upgrade opens nothing a fork did not opt into,
 and opening a surface is a one-line diff a reviewer sees. The roster lives in
 [`lib/auth/admin-tier.ts`](../../lib/auth/admin-tier.ts) (§111 t-810).
+
+What the tiers below open, for whoever is asking, is said back in plain words
+by the access explainer ([access-explainer.md](./access-explainer.md), §143),
+which reads these declarations and decides nothing. Its page, `/admin/access`,
+is the one core page outside every tier: `EVERY_VIEWER_ADMIN_PAGES` opens it to
+any viewer the policy admits to some tier (or to the platform), because its
+route answers each of them for themselves. The list is core's and a fork
+cannot add to it (t-1091).
 
 **How a surface declares it:**
 
@@ -444,6 +461,99 @@ same as `'org'`. Delegate to `DEFAULT_AUTHORIZATION_POLICY.canAdminister`
 for tiers you do not answer yourself, or the named tier admits nobody. That is
 the safe failure.
 
+**Switches: a surface only some orgs have** (§135 t-1034). Once an org has
+entitlement switches ([`../tenancy/entitlements.md`](../tenancy/entitlements.md)),
+a surface of the org's or a named tier can say which one it needs, with
+`requires` beside `tier` in the three places it already declares its tier:
+
+| Surface  | Declaration                                                                   |
+| -------- | ----------------------------------------------------------------------------- |
+| API      | `withAdminAuth(handler, { tier: 'org', requires: 'lead_gen', ownership: … })` |
+| Page     | `registerOrgTierAdminPage('/admin/leads', { requires: 'lead_gen' })`          |
+| Nav item | `{ href: '/admin/leads', tier: 'org', requires: 'lead_gen', … }`              |
+
+The guard hands it to the policy as `scope.requires`, beside `scope.tier`. The
+admin layout's reach (`requestAdminReach()`) asks the policy once more for each
+tier it admitted the viewer to and each registered switch, and records what it
+admitted as `switchesMet`. The layout, the gate and the sidebar judge a page
+or item that requires a switch against that, so menus, pages and routes answer
+from one policy. With no switch registered the reach asks nothing more and
+carries no `switchesMet`, so vanilla Sunrise answers as before.
+
+The default policy refuses whoever the org or tier arm admitted when the org
+they entered lacks the switch (`orgHasSwitch()`), and does not limit a platform
+admin, whatever org they act in (a planning ruling: a requirement narrows the
+org tiers only). A switch no app registers is one no org has, so it admits no
+org admin. A read of the org's switches that fails refuses, and is logged.
+
+A route refused only because of the switch answers 403 with the switch named
+by its label and who can change it: `Your organisation does not have Lead
+generation. Ask whoever manages your organisation's account to switch it on.`,
+with `details: { reason: 'entitlement_required', requires: 'lead_gen' }`. The
+guard knows the switch is the reason by asking the policy again without it, on
+the refusal path only, and then reads the switch itself (`orgSwitchState()`)
+so it names it only when the org's switches were read and it is off. When they
+could not be read (the query failed, the stored slice is malformed, or the
+app's `initAppEntitlements()` threw) the route still refuses, but says `We
+could not check whether your organisation has Lead generation, so this was
+refused. Try again in a moment.`, with `details.reason:
+'entitlement_unverified'`, rather than telling an admin whose org may have the
+switch to go and get it. A caller the tier refuses anyway gets the ordinary
+`Admin access required`, which says nothing about the org's switches; so does
+one whose switch reads on, which only a fork's own policy refuses.
+
+**Hidden or locked, and the app's own words** (t-1053). By default an item
+whose switch the org lacks is hidden, its page sends the viewer to their
+landing, and the refusal is the sentence above. A switch registered with
+`whenLacking: 'lock'` instead shows the item with a lock, which opens the
+app's message and upgrade link rather than the page, and shows the page as
+locked in its place, saying the same; the page's content is not shown and its
+routes still refuse. Like the gate, that is the reader's lock: the page still
+renders on the server, so it reads its rows through its routes. `refusalMessage` replaces the sentence on the 403 and on
+the locked item and page, and `upgradeUrl` (a path on this site or an
+`https://` address, checked at registration) rides on the 403 as
+`details.upgradeUrl` and is the locked item's and page's link. Neither is used
+when the org's switches could not be read: the route says it could not check,
+and the item and page stay hidden, so nobody is told to buy what their org may
+have. A surface is locked only when the tier admits the viewer and the org's
+switches show the switch off; closed for any other reason it is hidden as
+before.
+The layout reads which switches to lock once per request
+(`requestLockedSwitches()`, `lib/auth/admin-page-viewer.ts`): one read of the
+org's switches, and none unless a page requires a switch the app locks. See
+[`../tenancy/entitlements.md`](../tenancy/entitlements.md#hidden-or-locked).
+
+One switch per surface. A surface that needs two is two surfaces, or a policy
+of your own. Mark the page, its routes and its nav item alike: the item and
+the page are the reader's refusal, and the routes are the boundary.
+
+**The roster test covers switches.** It fails on a `requires` naming a switch
+no app registers (on a route, a page or a nav item), on one beside no `tier`
+(a platform-tier route or item, where switches limit nobody), on a route's
+`requires` that is not a string literal (a spread or a shared options constant
+whose text names `requires` as a word counts), and on a nav item whose
+`requires` is not its page's. It cannot
+match a route's `requires` to its page's, since nothing ties an API path to
+the page that calls it: keeping those alike is yours.
+
+**A landing that requires a switch is used only where the org has it.**
+`/admin` chooses by the viewer's reach: a fork's org-admin landing that
+requires a switch the org lacks gives way to the platform default, and a
+named tier's `landing` (or default page) to the tier's next plain page they
+can open, then the next tier they hold. Neither is logged, since a landing
+some orgs cannot open is not a mistake.
+
+**The admin layout asks only about switches a page requires.** Its reach asks
+the policy once per admitted tier and per switch some page requires, not per
+registered switch, so an app that registers many pays for the ones its pages
+use. A nav item's `requires` must be its page's (above), which is what lets
+the sidebar rely on those answers.
+
+**If you replace `canAdminister`,** read `scope.requires` too. A policy that
+ignores it opens every requiring surface to every org the tier admits, which
+is the unsafe direction; delegating to `DEFAULT_AUTHORIZATION_POLICY` answers
+it.
+
 `lib/auth/admin-tier.ts` imports nothing at runtime (one type compiles away),
 so the scaffold can import the registrar from it and `proxy.ts` its header name
 without either pulling the fork's scaffold in.
@@ -458,12 +568,12 @@ Sunrise consults the policy in exactly four places, and they are the reason a
 fork edits nothing else. **Which face each one asks matters more than the
 count** — three ask `canAdminister`, one asks `canRead`:
 
-| Chokepoint                             | Face            | What it gates                                                                                                                                                                                |
-| -------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `withAdminAuth` (`lib/auth/guards.ts`) | `canAdminister` | 262 handler wrappings across 190 files, 257 of them under `/api/v1/admin`                                                                                                                    |
-| `app/admin/layout.tsx`                 | `canAdminister` | The whole `/admin` page tree, asked once per tier (`'org'` and each named tier, t-999) and judged by the page's own tier ([Admin tiers](#admin-tiers))                                       |
-| `components/maintenance-wrapper.tsx`   | `canAdminister` | The maintenance-mode bypass — an access decision, not chrome, because getting past that page reaches the whole site                                                                          |
-| `withAuth` (`lib/auth/guards.ts`)      | `canRead`       | 23 handler wrappings. Asked on **every** one of them; all but one declare no `resource` resolver, so it is asked about `{ kind: 'nothing' }`. The exception is `app/api/v1/users/[id]` (GET) |
+| Chokepoint                             | Face            | What it gates                                                                                                                                                                                                                  |
+| -------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `withAdminAuth` (`lib/auth/guards.ts`) | `canAdminister` | 262 handler wrappings across 190 files, 257 of them under `/api/v1/admin`                                                                                                                                                      |
+| `app/admin/layout.tsx`                 | `canAdminister` | The whole `/admin` page tree, asked once per tier (`'org'` and each named tier, t-999), then once per admitted tier and registered switch (t-1034), and judged by the page's own tier and switch ([Admin tiers](#admin-tiers)) |
+| `components/maintenance-wrapper.tsx`   | `canAdminister` | The maintenance-mode bypass — an access decision, not chrome, because getting past that page reaches the whole site                                                                                                            |
+| `withAuth` (`lib/auth/guards.ts`)      | `canRead`       | 23 handler wrappings. Asked on **every** one of them; all but one declare no `resource` resolver, so it is asked about `{ kind: 'nothing' }`. The exception is `app/api/v1/users/[id]` (GET)                                   |
 
 Read that table before assuming an override is doing what you meant.
 **Replacing `canAdminister` alone changes nothing about a `withAuth` route.**
@@ -1732,6 +1842,7 @@ through `enterApiKeyOrg`) — so a fork's policy cannot widen it. See
 - [`lib/auth/authorization.ts`](../../lib/auth/authorization.ts) — the contract, with the reasoning for each shape decision
 - [`lib/app/authorization.ts`](../../lib/app/authorization.ts) — the fork's scaffold, with two worked policies
 - [`integration.md`](./integration.md) — `withAuth` / `withAdminAuth` usage
+- [`access-explainer.md`](./access-explainer.md) — the admin tiers, switches and roles said back to each viewer (§143)
 - [`../architecture/multi-tenancy.md`](../architecture/multi-tenancy.md) — enabling the capability, and the control-plane split
 - [`../architecture/multi-tenancy-design.md`](../architecture/multi-tenancy-design.md) — the org axis; design principles and the Q6 ruling
 - [`../architecture/fork-init-seams.md`](../architecture/fork-init-seams.md) — the init-gate contract every `lib/app/*` seam shares

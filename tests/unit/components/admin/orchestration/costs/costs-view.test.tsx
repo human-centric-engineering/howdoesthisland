@@ -114,6 +114,7 @@ import type { ModelInfo } from '@/lib/orchestration/llm/types';
 
 const MOCK_SUMMARY: CostSummary = {
   totals: { today: 1.5, week: 7.25, month: 42.0 },
+  ownKey: { today: 0, week: 0, month: 0 },
   byAgent: [
     {
       agentId: 'agent-1',
@@ -124,8 +125,10 @@ const MOCK_SUMMARY: CostSummary = {
       utilisation: null,
     },
   ],
-  byModel: [{ model: 'claude-haiku-4-5', provider: 'anthropic', monthSpend: 8.0 }],
-  trend: [{ date: '2026-04-14', totalCostUsd: 1.2 }],
+  byModel: [
+    { model: 'claude-haiku-4-5', provider: 'anthropic', monthSpend: 8.0, ownKeyMonthSpend: 0 },
+  ],
+  trend: [{ date: '2026-04-14', totalCostUsd: 1.2, ownKeyCostUsd: 0 }],
   localSavings: null,
 };
 
@@ -143,7 +146,7 @@ const MOCK_MODELS: ModelInfo[] = [
   },
 ];
 
-const PER_MODEL = [{ key: 'claude-haiku-4-5', totalCostUsd: 8.0 }];
+const PER_MODEL = [{ key: 'claude-haiku-4-5', totalCostUsd: 8.0, ownKeyCostUsd: 0 }];
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -349,6 +352,7 @@ describe('CostsView', () => {
       slug: orgId,
       status: 'ACTIVE',
       totalCostUsd: 1,
+      ownKeyCostUsd: 0,
       inputTokens: 10,
       outputTokens: 1,
       count: 1,
@@ -361,7 +365,13 @@ describe('CostsView', () => {
       periodEnd: '2026-11-01T00:00:00.000Z',
       orgs: orgIds.map(orgRow),
       detached: null,
-      totals: { totalCostUsd: orgIds.length, inputTokens: 0, outputTokens: 0, count: 0 },
+      totals: {
+        totalCostUsd: orgIds.length,
+        ownKeyCostUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        count: 0,
+      },
     });
     const renderWith = (orgUsage: OrgUsageReport | null) =>
       render(
@@ -388,7 +398,7 @@ describe('CostsView', () => {
     it("shows it with one org when an erased org's spend is detached", () => {
       renderWith({
         ...report(['install']),
-        detached: { totalCostUsd: 2, inputTokens: 20, outputTokens: 2, count: 1 },
+        detached: { totalCostUsd: 2, ownKeyCostUsd: 0, inputTokens: 20, outputTokens: 2, count: 1 },
       });
       expect(screen.getByTestId('per-org-usage-table')).toHaveAttribute('data-org-count', '1');
     });
@@ -418,6 +428,7 @@ describe('CostsView', () => {
               slug: orgId,
               status: 'ACTIVE',
               totalCostUsd: 1,
+              ownKeyCostUsd: 0,
               inputTokens: 10,
               outputTokens: 1,
               count: 1,
@@ -425,7 +436,13 @@ describe('CostsView', () => {
               utilisation: null,
             })),
             detached: null,
-            totals: { totalCostUsd: 2, inputTokens: 0, outputTokens: 0, count: 0 },
+            totals: {
+              totalCostUsd: 2,
+              ownKeyCostUsd: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              count: 0,
+            },
           }}
           viewerTier="org"
         />

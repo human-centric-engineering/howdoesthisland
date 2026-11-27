@@ -9,7 +9,8 @@
  * What the unit tests cannot show, because they fake the store and the judges:
  *
  *   • a freshly provisioned workspace can run judges with no admin step
- *     (`equipWorkspace` grants Anthropic and OpenAI and creates its agents);
+ *     (the equip hook, run inside `createWorkspaceOrg`, grants Anthropic and
+ *     OpenAI, and the create places its agents);
  *   • the claim's serializable transaction, the lease writes and the JudgeRun
  *     upserts work as the restricted app role, under the `org_isolation`
  *     policy;
@@ -34,7 +35,7 @@ import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { cancelAssessment, runAssessment } from '@/lib/app/assessments/run';
 import { howDoesThisLand } from '@/lib/app/frameworks/howdoesthisland/definition';
 import { prismaFrameworkRepo as repo } from '@/lib/app/frameworks/repo';
-import { createWorkspaceOrg, equipWorkspace } from '@/lib/app/workspaces/provision';
+import { createWorkspaceOrg, workspaceHasJudgeProvider } from '@/lib/app/workspaces/provision';
 import { prisma } from '@/lib/db/client';
 import { eraseOrg } from '@/lib/privacy/erase-org';
 import { isMultiTenant, runAsOrg, runAsSystem } from '@/lib/tenancy/context';
@@ -85,7 +86,8 @@ async function main(): Promise<number> {
     createWorkspaceOrg('Smoke assessment B', `smoke-assess-b-${stamp}`)
   );
   try {
-    const { granted } = await system(() => equipWorkspace(orgA.id, 'smoke:assessment'));
+    // The equip hook ran inside `createWorkspaceOrg`; read what it left.
+    const granted = await system(() => workspaceHasJudgeProvider(orgA.id));
     check(granted, 'the fresh workspace is approved for the judges’ provider, with no admin step');
     if (!granted) return 1;
 

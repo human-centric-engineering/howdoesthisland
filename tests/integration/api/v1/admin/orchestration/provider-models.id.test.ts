@@ -8,6 +8,9 @@
  * Key assertions:
  *   - GET returns enriched model with configured flag
  *   - PATCH updates fields and sets isDefault=false on seed rows
+ *   - PATCH sets and clears a vendor retirement and its same-provider
+ *     replacement (§136 t-1064), refusing a replacement that breaks the
+ *     rule, and writes an admin audit row naming each changed field
  *   - DELETE hard-deletes (removes the row), refused with 409 when any
  *     active agent or active workflow still references the model
  *   - 404 for unknown id
@@ -39,6 +42,7 @@ vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiProviderModel: {
       findUnique: vi.fn(),
+      findMany: vi.fn(() => Promise.resolve([])),
       update: vi.fn(),
       delete: vi.fn(),
     },
@@ -51,11 +55,27 @@ vi.mock('@/lib/db/client', () => ({
     aiWorkflow: {
       findMany: vi.fn(() => Promise.resolve([])),
     },
+    aiAdminAuditLog: {
+      create: vi.fn(() => Promise.resolve({})),
+    },
   },
 }));
 
 vi.mock('@/lib/orchestration/llm/provider-selector', () => ({
   invalidateModelCache: vi.fn(),
+}));
+
+// The install settings the model's uses read (§136 t-1065): nothing pinned
+// unless a test says so.
+vi.mock('@/lib/orchestration/settings', () => ({
+  getOrchestrationSettings: vi.fn(() =>
+    Promise.resolve({
+      defaultModels: { routing: '', chat: '', reasoning: '', embeddings: '', audio: '' },
+      defaultModelsStored: {},
+      confidentialModel: null,
+      activeEmbeddingModelId: null,
+    })
+  ),
 }));
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
@@ -72,6 +92,12 @@ import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db/client';
 import { providerModelUsage } from '@/lib/orchestration/admin/global-config-usage';
 import { uniqueViolationError } from '@/tests/helpers/prisma-errors';
+import { getOrchestrationSettings } from '@/lib/orchestration/settings';
+import {
+  __resetAppModelPinsForTests,
+  registerModelPinMover,
+  registerModelPinReporter,
+} from '@/lib/orchestration/model-lifecycle/app-pins';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -106,6 +132,8 @@ function makeModel(overrides: Record<string, unknown> = {}) {
     setup: null,
     isDefault: true,
     isActive: true,
+    retiresAt: null,
+    replacementId: null,
     metadata: null,
     createdBy: ADMIN_ID,
     // Fixed timestamps so the fixture is deterministic — `new Date()`
@@ -191,6 +219,149 @@ describe('GET /api/v1/admin/orchestration/provider-models/:id', () => {
     expect(data.data.configured).toBe(true);
     // test-review:accept tobe_true — structural boolean assertion on API response field
     expect(data.data.configuredActive).toBe(true);
+  });
+});
+
+describe('GET /provider-models/:id — lifecycle and uses (§136 t-1065)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiProviderConfig.findFirst).mockResolvedValue(null);
+  });
+
+  type Body = {
+    data: {
+      replacement?: unknown;
+      lifecycle: { state: string; replacement: { id: string; name: string } | null };
+      uses: {
+        agents: Array<{ name: string; followsPlatform: boolean }>;
+        workflows: Array<{ name: string }>;
+        settings: Array<{ slot: string; source: string; movedBy?: string }>;
+      };
+    };
+  };
+
+  it('reports a retiring model and its successor, without the raw relation', async () => {
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue({
+      ...makeModel({ retiresAt: new Date('2099-03-01T00:00:00Z'), replacementId: 'cm_b' }),
+      replacement: {
+        id: 'cm_b',
+        name: 'Claude Opus 5',
+        modelId: 'claude-opus-5',
+        isActive: true,
+        retiresAt: null,
+      },
+    } as never);
+
+    const body = await parseJson<Body>(await GET(makeGetRequest(MODEL_ID), routeContext(MODEL_ID)));
+
+    expect(body.data.lifecycle).toEqual({
+      state: 'retiring',
+      replacement: {
+        id: 'cm_b',
+        name: 'Claude Opus 5',
+        modelId: 'claude-opus-5',
+        isActive: true,
+        retiresAt: null,
+      },
+    });
+    expect(body.data).not.toHaveProperty('replacement');
+  });
+
+  it('lists agents, marking those whose model follows the platform, and workflows', async () => {
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue({
+      ...makeModel(),
+      replacement: null,
+    } as never);
+    vi.mocked(prisma.aiAgent.findMany).mockResolvedValueOnce([
+      {
+        id: 'a1',
+        name: 'Cleanup',
+        slug: 'cleanup-agent',
+        orgId: null,
+        isSystem: true,
+        bindingOwner: 'platform',
+      },
+      {
+        id: 'a2',
+        name: 'Support',
+        slug: 'support',
+        orgId: null,
+        isSystem: false,
+        bindingOwner: null,
+      },
+      // A platform agent the org has taken over stays where it is.
+      {
+        id: 'a3',
+        name: 'Advisor',
+        slug: 'advisor',
+        orgId: null,
+        isSystem: true,
+        bindingOwner: 'org',
+      },
+    ] as never);
+    vi.mocked(prisma.aiWorkflow.findMany).mockResolvedValueOnce([
+      {
+        id: 'w1',
+        name: 'Triage',
+        slug: 'triage',
+        orgId: null,
+        draftDefinition: {
+          steps: [{ type: 'llm_call', config: { modelOverride: 'claude-opus-4' } }],
+        },
+        publishedVersion: null,
+      },
+    ] as never);
+
+    const body = await parseJson<Body>(await GET(makeGetRequest(MODEL_ID), routeContext(MODEL_ID)));
+
+    expect(body.data.uses.agents).toEqual([
+      { id: 'a1', name: 'Cleanup', slug: 'cleanup-agent', followsPlatform: true },
+      { id: 'a2', name: 'Support', slug: 'support', followsPlatform: false },
+      { id: 'a3', name: 'Advisor', slug: 'advisor', followsPlatform: false },
+    ]);
+    expect(body.data.uses.workflows.map((w) => w.name)).toEqual(['Triage']);
+  });
+
+  it('lists the settings that name it, saved or suggested, with embedding pins left to §132', async () => {
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue({
+      ...makeModel(),
+      replacement: null,
+    } as never);
+    vi.mocked(getOrchestrationSettings).mockResolvedValueOnce({
+      defaultModels: {
+        routing: 'claude-haiku',
+        chat: 'claude-opus-4',
+        reasoning: 'claude-opus-4',
+        embeddings: 'claude-opus-4',
+        audio: '',
+      },
+      defaultModelsStored: { chat: 'claude-opus-4' },
+      confidentialModel: { providerSlug: 'anthropic', model: 'claude-opus-4' },
+      activeEmbeddingModelId: MODEL_ID,
+    } as never);
+
+    const body = await parseJson<Body>(await GET(makeGetRequest(MODEL_ID), routeContext(MODEL_ID)));
+
+    expect(body.data.uses.settings).toEqual([
+      { slot: 'chat', source: 'saved', byIdOnly: true },
+      { slot: 'reasoning', source: 'suggested', byIdOnly: true },
+      { slot: 'embeddings', source: 'suggested', movedBy: 'embedding_switch', byIdOnly: true },
+      { slot: 'confidential', source: 'saved' },
+      { slot: 'active_embedding', source: 'saved', movedBy: 'embedding_switch' },
+    ]);
+  });
+
+  it('reports nothing for a model nothing uses', async () => {
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue({
+      ...makeModel(),
+      replacement: null,
+    } as never);
+
+    const body = await parseJson<Body>(await GET(makeGetRequest(MODEL_ID), routeContext(MODEL_ID)));
+
+    expect(body.data.lifecycle).toEqual({ state: 'current', replacement: null });
+    expect(body.data.uses).toMatchObject({ agents: [], workflows: [], settings: [] });
   });
 });
 
@@ -661,6 +832,65 @@ describe('DELETE /api/v1/admin/orchestration/provider-models/:id', () => {
     expect(prisma.aiProviderModel.update).not.toHaveBeenCalled();
   });
 
+  it('writes an admin audit row naming the deleted model (§136 t-1064)', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(makeModel() as never);
+    vi.mocked(prisma.aiProviderModel.delete).mockResolvedValue(makeModel() as never);
+
+    await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(vi.mocked(prisma.aiAdminAuditLog.create).mock.calls[0][0].data).toMatchObject({
+      action: 'provider_model.delete',
+      entityType: 'provider_model',
+      entityId: MODEL_ID,
+      entityName: 'Claude Opus 4',
+      metadata: { providerSlug: 'anthropic', modelId: 'claude-opus-4' },
+    });
+  });
+
+  it('names, in the delete row, the models whose replacement the delete clears', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(makeModel() as never);
+    // Answer the replacement lookup; the same-id lookup finds nothing.
+    vi.mocked(prisma.aiProviderModel.findMany).mockImplementation(((args: {
+      where: { replacementId?: string };
+    }) =>
+      Promise.resolve(
+        args.where.replacementId === MODEL_ID ? [{ id: 'cm_a', name: 'Claude 3 Opus' }] : []
+      )) as never);
+    vi.mocked(prisma.aiProviderModel.delete).mockResolvedValue(makeModel() as never);
+
+    await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(prisma.aiProviderModel.findMany).toHaveBeenCalledWith({
+      where: { replacementId: MODEL_ID },
+      select: { id: true, name: true },
+    });
+    expect(vi.mocked(prisma.aiAdminAuditLog.create).mock.calls[0][0].data.metadata).toEqual({
+      providerSlug: 'anthropic',
+      modelId: 'claude-opus-4',
+      replacementClearedFor: [{ id: 'cm_a', name: 'Claude 3 Opus' }],
+    });
+  });
+
+  it('writes no audit row when the delete is refused as in use', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(makeModel() as never);
+    vi.mocked(providerModelUsage).mockResolvedValueOnce({
+      agents: [],
+      workflows: [],
+      otherOrgAgents: 1,
+      otherOrgAgentsFollowingPlatform: 0,
+      otherOrgWorkflows: 0,
+      otherOrgWorkflowsByIdOnly: 0,
+    });
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(409);
+    expect(prisma.aiAdminAuditLog.create).not.toHaveBeenCalled();
+  });
+
   it('returns 409 with bound agents when an active agent uses the model', async () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
     vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(
@@ -712,24 +942,27 @@ describe('DELETE /api/v1/admin/orchestration/provider-models/:id', () => {
       agents: [],
       workflows: [],
       otherOrgAgents: 1,
+      otherOrgAgentsFollowingPlatform: 0,
       otherOrgWorkflows: 2,
+      otherOrgWorkflowsByIdOnly: 2,
     });
 
     const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
 
     expect(response.status).toBe(409);
-    expect(providerModelUsage).toHaveBeenCalledWith('openai', 'gpt-4o-mini');
+    expect(providerModelUsage).toHaveBeenCalledWith('openai', 'gpt-4o-mini', {});
     expect(prisma.aiProviderModel.delete).not.toHaveBeenCalled();
     const body = await parseJson<{
       error: { code: string; message: string; details: Record<string, unknown> };
     }>(response);
     expect(body.error.code).toBe('MODEL_IN_USE');
     expect(body.error.message).toBe(
-      'Cannot delete model "GPT-4o mini" — 1 active agent and 2 active workflows still reference it (3 of them in other organisations). Re-point them to a different model first.'
+      'Cannot delete model "GPT-4o mini" — 1 active agent and 2 active workflows (3 of them in other organisations) still reference it. Re-point them to a different model first.'
     );
     expect(body.error.details).toEqual({
       agents: [],
       workflows: [],
+      settings: [],
       otherOrgAgentCount: 1,
       otherOrgWorkflowCount: 2,
     });
@@ -856,5 +1089,494 @@ describe('DELETE /api/v1/admin/orchestration/provider-models/:id', () => {
     const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
     expect(response.status).toBe(200);
     expect(prisma.aiProviderModel.delete).toHaveBeenCalledWith({ where: { id: MODEL_ID } });
+  });
+});
+
+describe('PATCH vendor retirement (§136 t-1064)', () => {
+  const SUCCESSOR_ID = 'cmjbv4i3x00013wsl0000succ';
+
+  /** An active same-provider successor with every capability of `makeModel()`. */
+  function successor(overrides: Record<string, unknown> = {}) {
+    return {
+      id: SUCCESSOR_ID,
+      name: 'Claude Opus 5',
+      providerSlug: 'anthropic',
+      capabilities: ['chat', 'vision'],
+      isActive: true,
+      retiresAt: null,
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * PATCH `body` against a saved row. `findUnique` answers the row itself
+   * for its own id and `candidate` for the successor's.
+   */
+  async function patchWith(
+    body: Record<string, unknown>,
+    options: { current?: Record<string, unknown>; candidate?: Record<string, unknown> | null } = {}
+  ) {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    const existing = makeModel({ isDefault: false, ...options.current });
+    vi.mocked(prisma.aiProviderModel.findUnique).mockImplementation(((args: {
+      where: { id: string };
+    }) =>
+      Promise.resolve(
+        args.where.id === MODEL_ID
+          ? existing
+          : args.where.id === SUCCESSOR_ID
+            ? (options.candidate ?? null)
+            : null
+      )) as never);
+    vi.mocked(prisma.aiProviderModel.update).mockImplementation(((args: {
+      data: Record<string, unknown>;
+    }) => {
+      const replacement = args.data.replacement as
+        { connect?: { id: string }; disconnect?: true } | undefined;
+      const { replacement: _r, ...rest } = args.data;
+      return Promise.resolve({
+        ...existing,
+        ...rest,
+        ...(replacement
+          ? { replacementId: replacement.connect ? replacement.connect.id : null }
+          : {}),
+      });
+    }) as never);
+    return PATCH(makePatchRequest(MODEL_ID, body), routeContext(MODEL_ID));
+  }
+
+  function updateData(): Record<string, unknown> {
+    return vi.mocked(prisma.aiProviderModel.update).mock.calls[0][0].data;
+  }
+
+  it('stores the retirement day as the UTC midnight that begins it, and the successor', async () => {
+    const response = await patchWith(
+      { retiresAt: '2027-03-01', replacementId: SUCCESSOR_ID },
+      { candidate: successor() }
+    );
+
+    expect(response.status).toBe(200);
+    const data = updateData();
+    expect(data.retiresAt).toEqual(new Date('2027-03-01T00:00:00.000Z'));
+    expect(data.replacement).toEqual({ connect: { id: SUCCESSOR_ID } });
+  });
+
+  it('writes an admin audit row naming the old and new value of each changed field', async () => {
+    await patchWith(
+      { retiresAt: '2027-03-01', replacementId: SUCCESSOR_ID },
+      { candidate: successor() }
+    );
+
+    expect(prisma.aiAdminAuditLog.create).toHaveBeenCalledTimes(1);
+    const row = vi.mocked(prisma.aiAdminAuditLog.create).mock.calls[0][0].data;
+    expect(row).toMatchObject({
+      action: 'provider_model.update',
+      entityType: 'provider_model',
+      entityId: MODEL_ID,
+      changes: {
+        retiresAt: { from: null, to: '2027-03-01T00:00:00.000Z' },
+        replacementId: { from: null, to: SUCCESSOR_ID },
+      },
+    });
+  });
+
+  it('records a price change in the audit row (no separate repriced state)', async () => {
+    await patchWith(
+      { inputCostPerMillionTokens: 4, outputCostPerMillionTokens: 20 },
+      { current: { inputCostPerMillionTokens: 3, outputCostPerMillionTokens: 15 } }
+    );
+
+    const row = vi.mocked(prisma.aiAdminAuditLog.create).mock.calls[0][0].data;
+    expect(row.changes).toEqual({
+      inputCostPerMillionTokens: { from: 3, to: 4 },
+      outputCostPerMillionTokens: { from: 15, to: 20 },
+    });
+  });
+
+  it('refuses a replacement on another provider, writing nothing', async () => {
+    const response = await patchWith(
+      { retiresAt: '2027-03-01', replacementId: SUCCESSOR_ID },
+      { candidate: successor({ providerSlug: 'openai', name: 'GPT-5' }) }
+    );
+
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { details: { replacementId: string[] } } }>(response);
+    expect(body.error.details.replacementId[0]).toMatch(/same provider \(anthropic\)/);
+    expect(prisma.aiProviderModel.update).not.toHaveBeenCalled();
+    expect(prisma.aiAdminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['is turned off', { isActive: false }, /turned off/],
+    ['is itself retiring', { retiresAt: new Date('2027-06-01T00:00:00Z') }, /itself being retired/],
+    ['lacks a capability the model has', { capabilities: ['chat'] }, /lacks vision/],
+  ])('refuses a replacement that %s', async (_label, overrides, message) => {
+    const response = await patchWith(
+      { retiresAt: '2027-03-01', replacementId: SUCCESSOR_ID },
+      { current: { capabilities: ['chat', 'vision'] }, candidate: successor(overrides) }
+    );
+
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toMatch(message);
+    expect(prisma.aiProviderModel.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a replacement that does not exist', async () => {
+    const response = await patchWith(
+      { retiresAt: '2027-03-01', replacementId: SUCCESSOR_ID },
+      { candidate: null }
+    );
+
+    expect(response.status).toBe(400);
+    expect(prisma.aiProviderModel.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses the model as its own replacement', async () => {
+    const response = await patchWith(
+      { retiresAt: '2027-03-01', replacementId: MODEL_ID },
+      { candidate: null }
+    );
+
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toMatch(/cannot replace itself/);
+  });
+
+  it('refuses a replacement without a retirement date', async () => {
+    const response = await patchWith({ replacementId: SUCCESSOR_ID }, { candidate: successor() });
+
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toMatch(/retirement date before naming a replacement/);
+  });
+
+  it('refuses a day that is not a day', async () => {
+    const response = await patchWith({ retiresAt: '2027-02-30' });
+
+    expect(response.status).toBe(400);
+    expect(prisma.aiProviderModel.update).not.toHaveBeenCalled();
+  });
+
+  it('clearing the date clears the replacement with it', async () => {
+    const response = await patchWith(
+      { retiresAt: null },
+      {
+        current: {
+          retiresAt: new Date('2027-03-01T00:00:00Z'),
+          replacementId: SUCCESSOR_ID,
+        },
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(updateData()).toMatchObject({ retiresAt: null, replacement: { disconnect: true } });
+  });
+
+  it('lets an unrelated edit through when the stored replacement has stopped qualifying', async () => {
+    // What the edit form sends on every save: the stored replacement and the
+    // unchanged provider and capabilities, beside the field actually edited.
+    const response = await patchWith(
+      {
+        description: 'Edited',
+        replacementId: SUCCESSOR_ID,
+        providerSlug: 'anthropic',
+        capabilities: ['chat'],
+      },
+      {
+        current: {
+          retiresAt: new Date('2027-03-01T00:00:00Z'),
+          replacementId: SUCCESSOR_ID,
+        },
+        candidate: successor({ isActive: false }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(updateData().description).toBe('Edited');
+  });
+
+  it('writes no audit row for a save that changed nothing', async () => {
+    // The form re-sends the saved values; the update returns the row as it was.
+    const response = await patchWith({ name: 'Claude Opus 4', retiresAt: null });
+
+    expect(response.status).toBe(200);
+    expect(prisma.aiProviderModel.update).toHaveBeenCalled();
+    expect(prisma.aiAdminAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('treats the same capabilities in another order as unchanged', async () => {
+    const response = await patchWith(
+      { capabilities: ['vision', 'chat'] },
+      {
+        current: {
+          capabilities: ['chat', 'vision'],
+          retiresAt: new Date('2027-03-01T00:00:00Z'),
+          replacementId: SUCCESSOR_ID,
+        },
+        candidate: successor({ isActive: false }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it('re-checks a stored replacement when the model gains a capability it lacks', async () => {
+    const response = await patchWith(
+      { capabilities: ['chat', 'vision', 'embedding'] },
+      {
+        current: {
+          capabilities: ['chat', 'vision'],
+          retiresAt: new Date('2027-03-01T00:00:00Z'),
+          replacementId: SUCCESSOR_ID,
+        },
+        candidate: successor(),
+      }
+    );
+
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toMatch(/lacks embedding/);
+  });
+
+  it("re-checks a stored replacement when the model's provider changes", async () => {
+    const response = await patchWith(
+      { providerSlug: 'openai' },
+      {
+        current: {
+          retiresAt: new Date('2027-03-01T00:00:00Z'),
+          replacementId: SUCCESSOR_ID,
+        },
+        candidate: successor(),
+      }
+    );
+
+    expect(response.status).toBe(400);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toMatch(/same provider \(openai\)/);
+  });
+});
+
+describe('PATCH capabilities (t-1064)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts vision and documents, which the edit form sends for most chat models', async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    const existing = makeModel({ isDefault: false });
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(existing as never);
+    vi.mocked(prisma.aiProviderModel.update).mockResolvedValue(existing as never);
+
+    const response = await PATCH(
+      makePatchRequest(MODEL_ID, { capabilities: ['chat', 'vision', 'documents'] }),
+      routeContext(MODEL_ID)
+    );
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(prisma.aiProviderModel.update).mock.calls[0][0].data.capabilities).toEqual([
+      'chat',
+      'vision',
+      'documents',
+    ]);
+  });
+});
+
+describe('DELETE refuses while a saved setting names the model (§136 t-1065)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(makeModel() as never);
+  });
+
+  function settingsNaming(overrides: Record<string, unknown>) {
+    vi.mocked(getOrchestrationSettings).mockResolvedValueOnce({
+      defaultModels: { routing: '', chat: '', reasoning: '', embeddings: '', audio: '' },
+      defaultModelsStored: {},
+      confidentialModel: null,
+      activeEmbeddingModelId: null,
+      ...overrides,
+    } as never);
+  }
+
+  it('refuses for the confidential-message model, naming the setting', async () => {
+    settingsNaming({ confidentialModel: { providerSlug: 'anthropic', model: 'claude-opus-4' } });
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(409);
+    const body = await parseJson<{ error: { message: string; details: { settings: string[] } } }>(
+      response
+    );
+    expect(body.error.details.settings).toEqual(['confidential']);
+    expect(body.error.message).toContain('1 saved setting still references it');
+    expect(prisma.aiProviderModel.delete).not.toHaveBeenCalled();
+  });
+
+  it('refuses for a saved default and the active embedding model', async () => {
+    settingsNaming({
+      defaultModels: {
+        routing: '',
+        chat: 'claude-opus-4',
+        reasoning: '',
+        embeddings: '',
+        audio: '',
+      },
+      defaultModelsStored: { chat: 'claude-opus-4' },
+      activeEmbeddingModelId: MODEL_ID,
+    });
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(409);
+    const body = await parseJson<{ error: { details: { settings: string[] } } }>(response);
+    expect(body.error.details.settings).toEqual(['chat', 'active_embedding']);
+  });
+
+  it('lists three kinds of use with commas, and keeps settings out of the other-org count', async () => {
+    settingsNaming({ confidentialModel: { providerSlug: 'anthropic', model: 'claude-opus-4' } });
+    vi.mocked(providerModelUsage).mockResolvedValueOnce({
+      agents: [],
+      workflows: [],
+      otherOrgAgents: 2,
+      otherOrgAgentsFollowingPlatform: 0,
+      otherOrgWorkflows: 1,
+      otherOrgWorkflowsByIdOnly: 1,
+    });
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+    const body = await parseJson<{ error: { message: string } }>(response);
+
+    expect(body.error.message).toBe(
+      'Cannot delete model "Claude Opus 4" — 2 active agents, 1 active workflow (3 of them in other organisations) and 1 saved setting still reference it. Re-point them to a different model first.'
+    );
+  });
+
+  it('allows it when a saved default names the id alone and another active row offers it', async () => {
+    settingsNaming({
+      defaultModels: {
+        routing: '',
+        chat: 'claude-opus-4',
+        reasoning: '',
+        embeddings: '',
+        audio: '',
+      },
+      defaultModelsStored: { chat: 'claude-opus-4' },
+    });
+    // Another provider's active row with the same id keeps the default working.
+    vi.mocked(prisma.aiProviderModel.findMany).mockImplementation(((args: {
+      where: { modelId?: string };
+    }) =>
+      Promise.resolve(
+        args.where.modelId === 'claude-opus-4' ? [{ providerSlug: 'bedrock', retiresAt: null }] : []
+      )) as never);
+    vi.mocked(prisma.aiProviderModel.delete).mockResolvedValue(makeModel() as never);
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("allows it when only the system's suggestion names it: nobody chose it", async () => {
+    settingsNaming({
+      defaultModels: {
+        routing: '',
+        chat: 'claude-opus-4',
+        reasoning: '',
+        embeddings: '',
+        audio: '',
+      },
+    });
+    vi.mocked(prisma.aiProviderModel.delete).mockResolvedValue(makeModel() as never);
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(200);
+    expect(prisma.aiProviderModel.delete).toHaveBeenCalled();
+  });
+});
+
+describe('the app’s own uses of the model (§136 t-1067)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+    vi.mocked(prisma.aiProviderModel.findUnique).mockResolvedValue(makeModel() as never);
+    vi.mocked(prisma.aiProviderModel.delete).mockResolvedValue(makeModel() as never);
+    // tests/setup.ts pins lib/app/model-pins.ts empty; each test registers here.
+    __resetAppModelPinsForTests();
+  });
+
+  it('lists them with the model’s uses', async () => {
+    registerModelPinReporter(() => [{ label: 'Panel: Contracts', where: 'Panels › Judge' }]);
+
+    const body = await parseJson<{
+      data: { uses: { appPins: unknown; otherOrgAppPins: number; appPinsUnavailable: boolean } };
+    }>(await GET(makeGetRequest(MODEL_ID), routeContext(MODEL_ID)));
+
+    expect(body.data.uses.appPins).toEqual([
+      { label: 'Panel: Contracts', where: 'Panels › Judge' },
+    ]);
+    expect(body.data.uses.otherOrgAppPins).toBe(0);
+    expect(body.data.uses.appPinsUnavailable).toBe(false);
+  });
+
+  it('refuses the delete while the app reports a use, and says so', async () => {
+    registerModelPinReporter(() => [{ label: 'Panel: Contracts', where: 'Panels › Judge' }]);
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(409);
+    const body = await parseJson<{
+      error: { code: string; message: string; details: { appPins: unknown } };
+    }>(response);
+    expect(body.error.code).toBe('MODEL_IN_USE');
+    expect(body.error.message).toBe(
+      'Cannot delete model "Claude Opus 4" — 1 use the app reports still references it. Re-point them to a different model first. The app moves its own uses itself.'
+    );
+    expect(body.error.details.appPins).toEqual([
+      { label: 'Panel: Contracts', where: 'Panels › Judge' },
+    ]);
+    expect(prisma.aiProviderModel.delete).not.toHaveBeenCalled();
+  });
+
+  it('with a mover, says moving the model’s uses moves the app’s too (t-1088)', async () => {
+    registerModelPinReporter(() => [{ label: 'Panel: Contracts', where: 'Panels › Judge' }]);
+    registerModelPinMover(() => ({ moved: [] }));
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(409);
+    const body = await parseJson<{ error: { message: string } }>(response);
+    expect(body.error.message).toBe(
+      'Cannot delete model "Claude Opus 4" — 1 use the app reports still references it. Re-point them to a different model first. Moving the model’s uses moves the app’s uses too, except in a suspended organisation or one whose own key cannot use the replacement.'
+    );
+    expect(prisma.aiProviderModel.delete).not.toHaveBeenCalled();
+  });
+
+  it('refuses the delete while the app’s report failed: it cannot be undone', async () => {
+    registerModelPinReporter(() => {
+      throw new Error('panel table missing');
+    });
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(409);
+    const body = await parseJson<{ error: { code: string; message: string } }>(response);
+    expect(body.error.code).toBe('MODEL_USES_UNREADABLE');
+    expect(body.error.message).toContain('could not all be read, so it may still be in use');
+    expect(prisma.aiProviderModel.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes as before when the app reports no use', async () => {
+    registerModelPinReporter(() => []);
+
+    const response = await DELETE(makeDeleteRequest(MODEL_ID), routeContext(MODEL_ID));
+
+    expect(response.status).toBe(200);
+    expect(prisma.aiProviderModel.delete).toHaveBeenCalled();
   });
 });

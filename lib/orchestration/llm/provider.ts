@@ -46,6 +46,61 @@ import type {
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
+ * How long each call of a provider's `testKey()` may take, the response body
+ * included (§137 t-1056). Short: an org's save waits on it, and a host slow to
+ * answer a probe is not one to wait two minutes on.
+ */
+export const KEY_TEST_TIMEOUT_MS = 15_000;
+
+/**
+ * A signal that aborts one key-test call after {@link KEY_TEST_TIMEOUT_MS}.
+ * Passed to each SDK call, so the body is held to the limit too: the SDKs'
+ * own `timeout` stops counting once the headers arrive.
+ */
+export function keyTestSignal(): AbortSignal {
+  return AbortSignal.timeout(KEY_TEST_TIMEOUT_MS);
+}
+
+/**
+ * A key no vendor issues, sent by `testKey()` beside the real one to learn
+ * whether a call checks keys at all (§137 t-1056). Not a secret.
+ */
+export const KNOWN_WRONG_KEY = 'sunrise-key-check-not-a-real-key';
+
+/** A vendor's answer that the key itself was refused: 401 or 403. */
+export function refusesKey(status: number | undefined): boolean {
+  return status === 401 || status === 403;
+}
+
+/**
+ * A call that fails {@link KNOWN_WRONG_KEY} with this status checks keys: any
+ * 4xx but a rate limit or a timeout. Not only 401 and 403: Gemini's and xAI's
+ * OpenAI-compatible APIs refuse a wrong key with 400.
+ */
+export function refusedForTheKey(status: number | undefined): boolean {
+  return status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
+/**
+ * Run a vendor call for its answer alone, for a key test: the HTTP status it
+ * failed with (absent when it succeeded, or got no answer), and its message.
+ */
+export async function probeCall(
+  call: () => Promise<unknown>
+): Promise<{ status?: number; error?: string }> {
+  try {
+    await call();
+    return {};
+  } catch (err) {
+    const failure = toProviderError(err, 'Key test call failed');
+    return {
+      ...(failure.status !== undefined ? { status: failure.status } : {}),
+      error: failure.message,
+    };
+  }
+}
+
+/**
  * Timeout for local providers (Ollama, vLLM, llama.cpp).
  *
  * Local models on prosumer hardware are NOT instant — a 7B model
@@ -172,6 +227,16 @@ export interface LlmProvider {
   testConnection(): Promise<ProviderTestResult>;
 
   /**
+   * Check the client's key alone, with a call the vendor authenticates
+   * (§137 t-1056): `ok: false` when the vendor refuses the key. Used before an
+   * org's own key is saved (`testProviderKey`), where a check a host answers
+   * for any key would store a key that then fails on the org's first call.
+   * Never throws. Optional: a provider without it is tested with
+   * `testConnection()`. `models` may be empty when the check lists none.
+   */
+  testKey?(): Promise<ProviderTestResult>;
+
+  /**
    * Transcribe audio bytes to text. Optional — providers without an
    * audio surface (e.g. Anthropic, plain Ollama) simply omit it. The
    * routing layer (`getAudioProvider` in `provider-manager.ts`) filters
@@ -272,6 +337,17 @@ export const PRIVACY_REFUSED = 'privacy_refused';
 export const PRIVACY_BLOCKED = 'privacy_blocked';
 
 /**
+ * The code a refusal for confidential content carries (§130): the call held
+ * content of a group whose policy is `block`, or whose policy does not permit
+ * this provider (`approved_only`, `local_only`). Apart from
+ * {@link PRIVACY_BLOCKED} because the reader is told something different, and
+ * like it because the reader can carry on: the refused turn, and an earlier
+ * message that held the content, are left out of what later turns send. A
+ * request fault for the same reasons.
+ */
+export const PRIVACY_CONFIDENTIAL = 'privacy_confidential';
+
+/**
  * The codes a monthly spend-cap refusal carries (§110 t-788): the call-time
  * gate's `SpendCapExceededError` (`spend-caps.ts`), and the chat handler's own
  * refusal before a turn starts, which uses the same words for the same cap.
@@ -314,9 +390,15 @@ export const SPEND_CAP_CODES = {
 // about the provider's health, so it must never reach a circuit breaker — at
 // `multi`, one org's refusal would otherwise open the circuit for every org.
 //
-// `privacy_refused` and `privacy_blocked` are the privacy stage's refusals
-// (§127): its policy gives the same answer on a retry and at every provider,
-// and it is not about the provider's health either.
+// `privacy_refused`, `privacy_blocked` and `privacy_confidential` are the
+// privacy stage's refusals (§127, §130): its policy gives the same answer on a
+// retry, and it is not about the provider's health either, so it must never
+// reach a circuit breaker. `privacy_confidential` under a policy that permits
+// some providers (`approved_only`, `local_only`) is NOT the same at every
+// provider: a trusted or local fallback would take the call. It is still a
+// request fault, because failing over mid-turn would count it against the
+// breaker's provider and reuse the primary's model id; moving a flagged turn
+// to a permitted model happens at the turn's start instead (§130 t-1038).
 //
 // The spend-cap codes are the same kind of answer (§110 t-788): a cap that has
 // been reached stays reached on a retry, and every other paid provider is held
@@ -331,6 +413,7 @@ const REQUEST_FAULT_CODES = new Set<string>([
   PROVIDER_NOT_PERMITTED,
   PRIVACY_REFUSED,
   PRIVACY_BLOCKED,
+  PRIVACY_CONFIDENTIAL,
   ...Object.values(SPEND_CAP_CODES),
 ]);
 

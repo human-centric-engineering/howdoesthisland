@@ -217,6 +217,22 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       'usage module. A new caller is a file no import chain connects to this test (§107 t-752).',
   },
   {
+    path: 'tests/unit/lib/tenancy/liveness-probe-sites.test.ts',
+    reason:
+      'scans every non-test source file in the checkout, root files included, with the ' +
+      'TypeScript scanner for code that names `runAsLivenessProbe` (the debug-logged system ' +
+      'bypass for the database health probe) or star-re-exports its module, and fails naming ' +
+      'any but `lib/db/utils.ts`. A new caller is a file no import chain connects to this test (#1262).',
+  },
+  {
+    path: 'tests/unit/lib/tenancy/founder-release-sites.test.ts',
+    reason:
+      'scans every non-test source file in the checkout, root files included, with the ' +
+      'TypeScript scanner for code that names `runAsFounderRelease` (the debug-logged system ' +
+      'bypass for releasing a founder’s signup orgs at sign-in) or star-re-exports its module, and ' +
+      'fails naming any but `lib/tenancy/lifecycle.ts`. A new caller is a file no import chain connects to this test (t-1084).',
+  },
+  {
     path: 'tests/unit/scripts/ci/shared-settings-writes.test.ts',
     reason:
       'parses every route and module under app/ and lib/ and fails naming any route ' +
@@ -285,6 +301,14 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       'every sign-in.',
   },
   {
+    path: 'tests/unit/lib/auth/better-auth-single-core.test.ts',
+    reason:
+      'reads `package.json` and `package-lock.json` and fails when `better-auth` and ' +
+      '`@better-auth/core` are not pinned equal, or when a second core is nested anywhere. ' +
+      'A second core gives the signup hooks a different request-state store, so an invited ' +
+      'user lands without their invitation (t-1081). A lockfile edit reaches no test through the module graph.',
+  },
+  {
     path: 'tests/unit/app/layout-metadata.test.ts',
     reason:
       'walks `app/` off disk to derive the route modules it checks for a leaked ' +
@@ -311,6 +335,13 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
     reason:
       'reads `lib/app/*` off disk to check every seam still ships its ' +
       'documented empty default. A new seam file changes the answer.',
+  },
+  {
+    path: 'tests/unit/setup-seam-pins.test.ts',
+    reason:
+      'asserts `tests/setup.ts` still replaces each pinned `lib/app/*` init. ' +
+      'The edit that drops a pin is to the setup file, which no test imports, ' +
+      'and Sunrise cannot see the loss any other way: it fails only in a fork.',
   },
   {
     path: 'tests/unit/auth-role-literals.test.ts',
@@ -412,6 +443,14 @@ export const ALWAYS_RUN_TESTS: readonly AlwaysRunEntry[] = [
       'allowlist. The change it exists to catch is a NEW call site — three ' +
       'of those have now written a value that is not a row id (#599, #600, ' +
       '#654), and a fourth would be in a file no import chain connects here.',
+  },
+  {
+    path: 'tests/unit/lib/orchestration/llm/cost-log-own-key.test.ts',
+    reason:
+      'walks the tree for every `logCost` call site and compares what each ' +
+      'passes for `ownKey` against a written roster (§137 t-1046). A new call ' +
+      "site that forgets it counts an org's own vendor bill against the " +
+      "platform's caps, and would be in a file no import chain connects here.",
   },
   {
     path: 'tests/unit/lib/validations/trim-order.test.ts',

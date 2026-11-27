@@ -16,10 +16,13 @@
  *   - PATCH invalidates the settings cache
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET, PATCH } from '@/app/api/v1/admin/orchestration/settings/route';
 import { computeChanges } from '@/lib/orchestration/audit/admin-audit-logger';
+import { confidentialModelProblem } from '@/lib/orchestration/llm/confidential-route';
+import { isSealedSecretKeyConfigured } from '@/lib/security/sealed-secrets';
+import { countOrgsWithProviderKeys } from '@/lib/orchestration/llm/org-provider-keys';
 import {
   mockAdminUser,
   mockAuthenticatedUser,
@@ -42,12 +45,17 @@ vi.mock('@/lib/db/client', () => {
       findUnique: vi.fn(),
       upsert: vi.fn(),
     },
+    // Orgs holding their own AI keys, counted for the switch (§137 t-1044)
+    aiOrgProviderKey: { findMany: vi.fn(async () => []) },
     // Watched so a test can show a save asks erasure nothing (t-899)
     dataErasureReceipt: { findMany: vi.fn(async () => []) },
     // The row lock a versioned save of the escalation list takes (t-899)
     $queryRaw: vi.fn(async () => []),
     $transaction: vi.fn(),
 
+    // A default naming its provider must name an active one (§136 t-1068).
+    // Default: every slug is an active provider; specific tests override.
+    aiProviderConfig: { findFirst: vi.fn(async () => ({ id: 'pc_001' })) },
     aiProviderModel: {
       // Registry hydration: PATCH calls hydrateFromDb() before validating.
       // These fixtures carry no DB-managed rows, so return an empty matrix —
@@ -71,6 +79,28 @@ vi.mock('@/lib/db/client', () => {
   prisma.$transaction.mockImplementation((cb: (tx: typeof prisma) => unknown) => cb(prisma));
   return { prisma };
 });
+
+// Whether a sealed-secret master key is configured decides whether orgs' own
+// AI keys can be switched on (§137 t-1044); scripted per test, off by default.
+vi.mock('@/lib/security/sealed-secrets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/security/sealed-secrets')>()),
+  isSealedSecretKeyConfigured: vi.fn(() => false),
+}));
+
+// How many orgs hold their own AI keys (§137 t-1044): its query, and that it
+// counts nothing at single, are the module's own tests. Here only what the
+// route does with the answer.
+vi.mock('@/lib/orchestration/llm/org-provider-keys', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/orchestration/llm/org-provider-keys')>()),
+  countOrgsWithProviderKeys: vi.fn(async () => 0),
+}));
+
+// Whether a model can be the model for confidential messages (§130 t-1038)
+// reads the provider rows; its own tests prove which it accepts. Usable unless
+// a test says otherwise.
+vi.mock('@/lib/orchestration/llm/confidential-route', () => ({
+  confidentialModelProblem: vi.fn(async () => null),
+}));
 
 vi.mock('@/lib/orchestration/llm/model-registry', async (importOriginal) => {
   const actual = await importOriginal<object>();
@@ -540,6 +570,14 @@ describe('Admin Orchestration — /settings', () => {
         privacyIgnoredEntityTypes: { value: ['DATE'] },
         privacyProtectLocalProviders: { value: true },
         privacyEmbeddingsPolicy: { value: 'local_only' },
+        privacyConfidentialPersonal: { value: 'local_only' },
+        privacyConfidentialCommercial: { value: 'approved_only' },
+        confidentialModel: {
+          value: { providerSlug: 'ollama-local', model: 'llama3.1:8b' },
+          writes: 'confidentialModelProvider',
+        },
+        // Off: turning it on needs a master key, which its own tests script.
+        orgProviderKeysEnabled: { value: false },
       };
       // Written only under If-Match against the list's version (§122): its
       // own tests below send one and assert the write.
@@ -573,6 +611,10 @@ describe('Admin Orchestration — /settings', () => {
         privacyIgnoredEntityTypes: ['DATE'],
         privacyProtectLocalProviders: true,
         privacyEmbeddingsPolicy: 'local_only',
+        // Left out, a first save would take the new-install column default
+        // (warn) for a policy the admin chose (§130).
+        privacyConfidentialPersonal: 'allow',
+        privacyConfidentialCommercial: 'block',
       };
 
       const res = await PATCH(makePatch(privacy));
@@ -581,6 +623,62 @@ describe('Admin Orchestration — /settings', () => {
       const args = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
       expect(args?.create).toMatchObject(privacy);
       expect(args?.update).toMatchObject(privacy);
+    });
+
+    describe('the model for confidential messages (§130 t-1038)', () => {
+      const MODEL = { providerSlug: 'ollama-local', model: 'llama3.1:8b' };
+
+      it('writes both halves, on a first save as well', async () => {
+        vi.mocked(prisma.aiOrchestrationSettings.upsert).mockResolvedValue(
+          makeSettingsRow() as never
+        );
+
+        const res = await PATCH(makePatch({ confidentialModel: MODEL }));
+
+        expect(res.status).toBe(200);
+        expect(confidentialModelProblem).toHaveBeenCalledWith(MODEL);
+        const args = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
+        const cols = {
+          confidentialModelProvider: 'ollama-local',
+          confidentialModel: 'llama3.1:8b',
+        };
+        expect(args?.update).toMatchObject(cols);
+        expect(args?.create).toMatchObject(cols);
+      });
+
+      it('clears both halves with null, asking nothing about a model', async () => {
+        vi.mocked(prisma.aiOrchestrationSettings.upsert).mockResolvedValue(
+          makeSettingsRow() as never
+        );
+
+        const res = await PATCH(makePatch({ confidentialModel: null }));
+
+        expect(res.status).toBe(200);
+        expect(confidentialModelProblem).not.toHaveBeenCalled();
+        expect(
+          vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0]?.update
+        ).toMatchObject({ confidentialModelProvider: null, confidentialModel: null });
+      });
+
+      it('refuses a model that could not answer a confidential turn, saying why, and saves nothing', async () => {
+        vi.mocked(confidentialModelProblem).mockResolvedValueOnce('Its provider is turned off.');
+
+        const res = await PATCH(makePatch({ confidentialModel: MODEL }));
+
+        expect(res.status).toBe(400);
+        const body = await parseJson<{ error: { code: string; message: string } }>(res);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+        expect(body.error.message).toBe(
+          "That model can't be the model for confidential messages. Its provider is turned off."
+        );
+        expect(prisma.aiOrchestrationSettings.upsert).not.toHaveBeenCalled();
+      });
+
+      it('refuses half a binding at the schema', async () => {
+        const res = await PATCH(makePatch({ confidentialModel: { providerSlug: 'ollama-local' } }));
+        expect(res.status).toBe(400);
+        expect(prisma.aiOrchestrationSettings.upsert).not.toHaveBeenCalled();
+      });
     });
 
     it('updates voiceInputGloballyEnabled back to true', async () => {
@@ -1096,6 +1194,110 @@ describe('Admin Orchestration — /settings', () => {
       expect(vi.mocked(prisma.aiOrchestrationSettings.upsert)).toHaveBeenCalledOnce();
     });
 
+    // A model pin that names its provider (§136 t-1068). The registry holds
+    // one entry per id: `claude-sonnet-4-6` is Anthropic's there. A pin naming
+    // `microsoft` can only be accepted on the strength of a catalogue row.
+    describe('a defaultModels pin that names its provider (§136 t-1068)', () => {
+      beforeEach(() => {
+        vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(
+          makeSettingsRow() as never
+        );
+        vi.mocked(prisma.aiOrchestrationSettings.upsert).mockResolvedValue(
+          makeSettingsRow() as never
+        );
+      });
+
+      afterEach(() => {
+        // Put back the file-level default (every audio-shaped id matches).
+        vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue({
+          id: 'cm_audio_001',
+        } as never);
+      });
+
+      it('refuses a pair naming a provider that is not active, whatever the catalogue holds (400)', async () => {
+        vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue({ id: 'cm_row' } as never);
+        vi.mocked(prisma.aiProviderConfig.findFirst).mockResolvedValueOnce(null);
+
+        const res = await PATCH(makePatch({ defaultModels: { chat: 'microsoft::gpt-4o' } }));
+
+        expect(res.status).toBe(400);
+        const body = await parseJson<{ error: { code: string; details: unknown } }>(res);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+        expect(body.error.details).toEqual({ task: 'chat', value: 'microsoft::gpt-4o' });
+        expect(vi.mocked(prisma.aiProviderConfig.findFirst)).toHaveBeenCalledWith({
+          where: { slug: 'microsoft', isActive: true },
+          select: { id: true },
+        });
+        expect(vi.mocked(prisma.aiOrchestrationSettings.upsert)).not.toHaveBeenCalled();
+      });
+
+      it('saves a pair whose catalogue row is active, though the registry gives the id to another provider', async () => {
+        vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue({ id: 'cm_row' } as never);
+
+        const res = await PATCH(
+          makePatch({ defaultModels: { chat: 'microsoft::claude-sonnet-4-6' } })
+        );
+
+        expect(res.status).toBe(200);
+        expect(vi.mocked(prisma.aiProviderModel.findFirst)).toHaveBeenCalledWith({
+          where: { providerSlug: 'microsoft', modelId: 'claude-sonnet-4-6', isActive: true },
+          select: { id: true },
+        });
+        expect(vi.mocked(prisma.aiOrchestrationSettings.upsert)).toHaveBeenCalledWith(
+          expect.objectContaining({
+            update: expect.objectContaining({
+              defaultModels: expect.objectContaining({ chat: 'microsoft::claude-sonnet-4-6' }),
+            }),
+          })
+        );
+      });
+
+      it('refuses a pair with no active row when the registry gives the id to another provider (400)', async () => {
+        vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null);
+
+        const res = await PATCH(
+          makePatch({ defaultModels: { reasoning: 'microsoft::claude-sonnet-4-6' } })
+        );
+
+        expect(res.status).toBe(400);
+        const body = await parseJson<{
+          error: { code: string; details: { task: string; value: string } };
+        }>(res);
+        expect(body.error.code).toBe('VALIDATION_ERROR');
+        expect(body.error.details).toEqual({
+          task: 'reasoning',
+          value: 'microsoft::claude-sonnet-4-6',
+        });
+        expect(vi.mocked(prisma.aiOrchestrationSettings.upsert)).not.toHaveBeenCalled();
+      });
+
+      it("saves a pair with no row when the registry's own entry is that provider's", async () => {
+        vi.mocked(prisma.aiProviderModel.findFirst).mockResolvedValue(null);
+
+        const res = await PATCH(
+          makePatch({ defaultModels: { routing: 'anthropic::claude-sonnet-4-6' } })
+        );
+
+        expect(res.status).toBe(200);
+        expect(vi.mocked(prisma.aiOrchestrationSettings.upsert)).toHaveBeenCalledWith(
+          expect.objectContaining({
+            update: expect.objectContaining({
+              defaultModels: expect.objectContaining({ routing: 'anthropic::claude-sonnet-4-6' }),
+            }),
+          })
+        );
+      });
+
+      it('does not ask the catalogue about a bare id', async () => {
+        vi.mocked(prisma.aiProviderModel.findFirst).mockClear();
+
+        const res = await PATCH(makePatch({ defaultModels: { chat: 'claude-sonnet-4-6' } }));
+
+        expect(res.status).toBe(200);
+        expect(vi.mocked(prisma.aiProviderModel.findFirst)).not.toHaveBeenCalled();
+      });
+    });
+
     it('accepts an empty defaultModels patch (no-op merge)', async () => {
       // Edge case: form sends `{ defaultModels: {} }` if every slot was
       // emptied. Schema accepts (partialRecord), route merges nothing,
@@ -1493,6 +1695,106 @@ describe('Admin Orchestration — /settings', () => {
       expect(res.status).toBe(200);
       const upsertCall = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
       expect(upsertCall?.update.embedAllowedOrigins).toEqual([]);
+    });
+  });
+
+  describe("organisations' own AI keys (§137 t-1044)", () => {
+    beforeEach(() => {
+      vi.mocked(auth.api.getSession).mockResolvedValue(mockAdminUser());
+      vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue(
+        makeSettingsRow() as never
+      );
+      vi.mocked(prisma.aiOrchestrationSettings.upsert).mockResolvedValue(
+        makeSettingsRow() as never
+      );
+    });
+
+    it('refuses to turn them on while no master key is configured, writing nothing', async () => {
+      vi.mocked(isSealedSecretKeyConfigured).mockReturnValue(false);
+
+      const res = await PATCH(makePatch({ orgProviderKeysEnabled: true }));
+
+      expect(res.status).toBe(400);
+      const body = await parseJson<{ error: { code: string; details: unknown } }>(res);
+      expect(body.error).toMatchObject({
+        code: 'VALIDATION_ERROR',
+        details: { field: 'orgProviderKeysEnabled' },
+      });
+      expect(prisma.aiOrchestrationSettings.upsert).not.toHaveBeenCalled();
+    });
+
+    it('turns them on once a master key is configured, on a first save as well', async () => {
+      vi.mocked(isSealedSecretKeyConfigured).mockReturnValue(true);
+
+      const res = await PATCH(makePatch({ orgProviderKeysEnabled: true }));
+
+      expect(res.status).toBe(200);
+      const args = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
+      expect(args?.update).toMatchObject({ orgProviderKeysEnabled: true });
+      expect(args?.create).toMatchObject({ orgProviderKeysEnabled: true });
+    });
+
+    it('accepts a resent `true` with no master key, so other settings still save', async () => {
+      vi.mocked(isSealedSecretKeyConfigured).mockReturnValue(false);
+      vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
+        ...makeSettingsRow(),
+        orgProviderKeysEnabled: true,
+      } as never);
+
+      const res = await PATCH(
+        makePatch({ orgProviderKeysEnabled: true, globalMonthlyBudgetUsd: 500 })
+      );
+
+      expect(res.status).toBe(200);
+      const args = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
+      expect(args?.update).toMatchObject({ globalMonthlyBudgetUsd: 500 });
+    });
+
+    it('still answers the settings when the orgs holding keys cannot be counted', async () => {
+      vi.mocked(countOrgsWithProviderKeys).mockRejectedValueOnce(new Error('relation missing'));
+
+      const res = await GET(makeGet());
+
+      expect(res.status).toBe(200);
+      const { data } = await parseJson<{ data: Record<string, unknown> }>(res);
+      expect(data.orgsWithProviderKeys).toBeNull();
+    });
+
+    it('turns them off with no master key: switching off never needs one', async () => {
+      vi.mocked(isSealedSecretKeyConfigured).mockReturnValue(false);
+
+      const res = await PATCH(makePatch({ orgProviderKeysEnabled: false }));
+
+      expect(res.status).toBe(200);
+      const args = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
+      expect(args?.update).toMatchObject({ orgProviderKeysEnabled: false });
+    });
+
+    it('leaves the switch alone on a save that does not name it', async () => {
+      const res = await PATCH(makePatch({ globalMonthlyBudgetUsd: 10 }));
+
+      expect(res.status).toBe(200);
+      const args = vi.mocked(prisma.aiOrchestrationSettings.upsert).mock.calls[0]?.[0];
+      expect(args?.update).not.toHaveProperty('orgProviderKeysEnabled');
+    });
+
+    it('reads the switch, how many orgs hold keys, and whether a master key is configured', async () => {
+      vi.mocked(isSealedSecretKeyConfigured).mockReturnValue(true);
+      vi.mocked(prisma.aiOrchestrationSettings.findUnique).mockResolvedValue({
+        ...makeSettingsRow(),
+        orgProviderKeysEnabled: true,
+      } as never);
+      vi.mocked(countOrgsWithProviderKeys).mockResolvedValueOnce(2);
+
+      const res = await GET(makeGet());
+
+      expect(res.status).toBe(200);
+      const { data } = await parseJson<{ data: Record<string, unknown> }>(res);
+      expect(data).toMatchObject({
+        orgProviderKeysEnabled: true,
+        orgsWithProviderKeys: 2,
+        sealedSecretKeyConfigured: true,
+      });
     });
   });
 });

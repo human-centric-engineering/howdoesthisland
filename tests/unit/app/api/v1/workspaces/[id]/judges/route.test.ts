@@ -9,6 +9,7 @@
  * @see app/api/v1/workspaces/[id]/judges/route.ts
  * @see app/api/v1/workspaces/[id]/judges/[key]/route.ts
  */
+import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 import { DEFAULT_ORG_ROLE, ORG_ADMIN_ROLE, ORG_OWNER_ROLE } from '@/lib/tenancy/roles';
@@ -209,8 +210,10 @@ describe('GET /api/v1/workspaces/[id]/judges', () => {
     expect(prisma.aiAgent.findMany).not.toHaveBeenCalled();
   });
 
-  it('refuses a platform admin acting in another workspace, reading nothing', async () => {
-    const OTHER = 'cmorg0000000000000000org2';
+  // Sunrise 0.21.0: a platform admin is one only in the install org, so that is
+  // where one acting elsewhere is working from (in a customer org they are not).
+  it('refuses a platform admin working from the install org, reading nothing', async () => {
+    const OTHER = INSTALL_ORG_ID;
     mockGetSession.mockResolvedValue({
       ...session(OTHER),
       user: { ...session(OTHER).user, role: 'ADMIN' },

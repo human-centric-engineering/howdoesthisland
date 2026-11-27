@@ -32,7 +32,7 @@ import { prismaFrameworkRepo as repo } from '@/lib/app/frameworks/repo';
 import { materialise } from '@/lib/app/frameworks/store';
 import { JUDGE_PROVIDER_SLUG, judgeAgentSlug } from '@/lib/app/judges/agents';
 import { runJudge } from '@/lib/app/judges/run-judge';
-import { createWorkspaceOrg, equipWorkspace } from '@/lib/app/workspaces/provision';
+import { createWorkspaceOrg, workspaceHasJudgeProvider } from '@/lib/app/workspaces/provision';
 import { prisma } from '@/lib/db/client';
 import { eraseOrg } from '@/lib/privacy/erase-org';
 import { isMultiTenant, runAsOrg, runAsSystem } from '@/lib/tenancy/context';
@@ -78,7 +78,8 @@ async function main(): Promise<number> {
 
   const org = await system(() => createWorkspaceOrg('Smoke judge', `smoke-judge-${Date.now()}`));
   try {
-    const { granted } = await system(() => equipWorkspace(org.id, 'smoke:judge'));
+    // The equip hook ran inside `createWorkspaceOrg`; read what it left.
+    const granted = await system(() => workspaceHasJudgeProvider(org.id));
     check(granted, 'the workspace is approved for the judges’ provider');
     // Without the grant the call would fail at the provider gate, or bill
     // against a set-up the app never runs; the workspace is still erased.

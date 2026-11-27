@@ -14,13 +14,17 @@
  * rest of Phase 4 — copy the voice, not just the structure.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { z } from 'zod';
 import {
+  CONFIDENTIAL_GROUP_DESCRIPTIONS,
+  CONFIDENTIAL_POLICY_LABELS,
+  CONFIDENTIAL_TIGHTENING_POLICIES,
+  isConfidentialTighteningPolicy,
   isTighteningMode,
   PRIVACY_MODE_LABELS,
   PRIVACY_TIGHTENING_MODES,
@@ -44,6 +48,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SaveError } from '@/components/forms/form-error';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
+import type { SaveFailure } from '@/lib/errors/save-error';
 import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/api/client';
 import { API } from '@/lib/api/endpoints';
@@ -153,6 +158,8 @@ const agentFormSchema = z
     outputGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
     citationGuardMode: z.enum(['log_only', 'warn_and_continue', 'block']).nullable().optional(),
     privacyMode: z.enum(PRIVACY_TIGHTENING_MODES).nullable().optional(),
+    privacyConfidentialPersonal: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
+    privacyConfidentialCommercial: z.enum(CONFIDENTIAL_TIGHTENING_POLICIES).nullable().optional(),
     maxHistoryTokens: z.number().int().min(1000).max(2000000).nullable().optional(),
     maxHistoryMessages: z.number().int().min(0).max(500).nullable().optional(),
     retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
@@ -363,6 +370,26 @@ function toModelParamsValue(
   };
 }
 
+/** The agent's confidential-content policy fields (§130), one select each. */
+const CONFIDENTIAL_FIELDS = [
+  'privacyConfidentialPersonal',
+  'privacyConfidentialCommercial',
+] as const;
+
+type ConfidentialField = (typeof CONFIDENTIAL_FIELDS)[number];
+
+/** Each field's label from the core field registry, its one source, and its group's wording. */
+const CONFIDENTIAL_FIELD_TEXT: Record<ConfidentialField, { label: string; help: string }> = {
+  privacyConfidentialPersonal: {
+    label: fieldLabels().privacyConfidentialPersonal,
+    help: CONFIDENTIAL_GROUP_DESCRIPTIONS.personal,
+  },
+  privacyConfidentialCommercial: {
+    label: fieldLabels().privacyConfidentialCommercial,
+    help: CONFIDENTIAL_GROUP_DESCRIPTIONS.commercial,
+  },
+};
+
 export function AgentForm({
   mode,
   agent,
@@ -493,6 +520,16 @@ export function AgentForm({
       outputGuardMode: (agent?.outputGuardMode as AgentFormData['outputGuardMode']) ?? null,
       citationGuardMode: (agent?.citationGuardMode as AgentFormData['citationGuardMode']) ?? null,
       privacyMode: isTighteningMode(agent?.privacyMode) ? agent.privacyMode : null,
+      privacyConfidentialPersonal: isConfidentialTighteningPolicy(
+        agent?.privacyConfidentialPersonal
+      )
+        ? agent.privacyConfidentialPersonal
+        : null,
+      privacyConfidentialCommercial: isConfidentialTighteningPolicy(
+        agent?.privacyConfidentialCommercial
+      )
+        ? agent.privacyConfidentialCommercial
+        : null,
       maxHistoryTokens: agent?.maxHistoryTokens ?? null,
       maxHistoryMessages: agent?.maxHistoryMessages ?? null,
       retentionDays: agent?.retentionDays ?? null,
@@ -535,10 +572,65 @@ export function AgentForm({
     }),
     [currentRuntimePromptManaged, currentRetrievalMode]
   );
+  /**
+   * What a save validation blocked says by Save. Without it the button click
+   * is a silent no-op — `provider` and `model` live on the Model tab, so an
+   * operator sitting on General sees nothing happen and gets no reason why.
+   * That dead end became reachable far more often once the form stopped
+   * inventing a provider when none could be resolved (t-661): refusing to
+   * submit is the correct behaviour, but refusing silently is not. The hook
+   * re-runs it as the fields change, so the list shrinks as they are fixed
+   * (t-1029).
+   */
+  const summariseBlocked = useCallback(
+    (formErrors: FieldErrors<AgentFormData>): SaveFailure<keyof AgentFormData> => {
+      const labels = fieldLabels();
+      const tabs = fieldToTab();
+
+      // `root` is react-hook-form's own key for form-level issues. It is not a
+      // field and has no control to point at, so rendering it would send the
+      // operator hunting for a "root" input that does not exist.
+      const keys = Object.keys(formErrors).filter((key) => key !== 'root');
+
+      // Group by tab, because the fields that block a save are routinely NOT on
+      // the tab the operator is looking at — provider and model live on Model
+      // while the save button sits under General. Labels come from the agent
+      // field registry so the banner says what the <Label> says; the humanised
+      // key is only a fallback for a form field the registry does not describe.
+      const byTab = new Map<string, string[]>();
+      for (const key of keys) {
+        const label = labels[key] ?? key.replace(/([A-Z])/g, ' $1').toLowerCase();
+        const tab = tabs[key] ?? 'Other';
+        const bucket = byTab.get(tab);
+        if (bucket) bucket.push(label);
+        else byTab.set(tab, [label]);
+      }
+
+      // The fields go to <SaveError> too, so it brings their tab forward and
+      // focuses the first, as it does for fields the server rejected.
+      return {
+        message:
+          byTab.size > 0
+            ? `Cannot save — these fields need attention. ${[...byTab.entries()]
+                .map(([tab, fields]) => `${tab}: ${fields.join(', ')}`)
+                .join(' · ')}`
+            : 'Cannot save — some required fields are missing.',
+        stale: false,
+        fields: keys.flatMap((key) => {
+          const field = serverFields[key];
+          const message = field && firstErrorMessage(formErrors[field]);
+          return field && message ? [{ field, message }] : [];
+        }),
+      };
+    },
+    [serverFields]
+  );
   const save = useSaveFailure({
     fallback: 'Could not save agent. Try again in a moment.',
     fields: serverFields,
     setError,
+    errors,
+    summarise: summariseBlocked,
   });
 
   const currentProvider = watch('provider');
@@ -563,6 +655,21 @@ export function AgentForm({
   );
   const storedPrivacyModeUnknown =
     storedPrivacyMode !== null && !isTighteningMode(storedPrivacyMode);
+  // The same for the confidential-content policies (§130): a stored value
+  // this version does not know is kept until the admin chooses one.
+  const [storedConfidential, setStoredConfidential] = useState<
+    Record<ConfidentialField, string | null>
+  >({
+    privacyConfidentialPersonal: agent?.privacyConfidentialPersonal ?? null,
+    privacyConfidentialCommercial: agent?.privacyConfidentialCommercial ?? null,
+  });
+  const [confidentialChosen, setConfidentialChosen] = useState<ReadonlySet<ConfidentialField>>(
+    new Set()
+  );
+  const confidentialUnknown = (field: ConfidentialField): boolean =>
+    storedConfidential[field] !== null &&
+    !isConfidentialTighteningPolicy(storedConfidential[field]) &&
+    !confidentialChosen.has(field);
   const currentVisibility = watch('visibility');
   const currentProfileId = watch('profileId');
   const currentPersona = watch('persona');
@@ -721,52 +828,11 @@ export function AgentForm({
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
 
-  /**
-   * Validation blocked the submit. Without this the button click is a silent
-   * no-op — `provider` and `model` live on the Model tab, so an operator
-   * sitting on General sees nothing happen and gets no reason why. That dead
-   * end became reachable far more often once the form stopped inventing a
-   * provider when none could be resolved (t-661): refusing to submit is the
-   * correct behaviour, but refusing silently is not.
-   */
+  // Validation blocked the submit (see `summariseBlocked`); the summary by
+  // Save then follows the fields as they are fixed.
   const onInvalid = (formErrors: FieldErrors<AgentFormData>) => {
-    const labels = fieldLabels();
-    const tabs = fieldToTab();
-
-    // `root` is react-hook-form's own key for form-level issues. It is not a
-    // field and has no control to point at, so rendering it would send the
-    // operator hunting for a "root" input that does not exist.
-    const keys = Object.keys(formErrors).filter((key) => key !== 'root');
-
-    // Group by tab, because the fields that block a save are routinely NOT on
-    // the tab the operator is looking at — provider and model live on Model
-    // while the save button sits under General. Labels come from the agent
-    // field registry so the banner says what the <Label> says; the humanised
-    // key is only a fallback for a form field the registry does not describe.
-    const byTab = new Map<string, string[]>();
-    for (const key of keys) {
-      const label = labels[key] ?? key.replace(/([A-Z])/g, ' $1').toLowerCase();
-      const tab = tabs[key] ?? 'Other';
-      const bucket = byTab.get(tab);
-      if (bucket) bucket.push(label);
-      else byTab.set(tab, [label]);
-    }
-
     setSaved(false);
-    // The fields go to <SaveError> too, so it brings their tab forward and
-    // focuses the first, as it does for fields the server rejected.
-    save.show(
-      byTab.size > 0
-        ? `Cannot save — these fields need attention. ${[...byTab.entries()]
-            .map(([tab, fields]) => `${tab}: ${fields.join(', ')}`)
-            .join(' · ')}`
-        : 'Cannot save — some required fields are missing.',
-      keys.flatMap((key) => {
-        const field = serverFields[key];
-        const message = field && firstErrorMessage(formErrors[field]);
-        return field && message ? [{ field, message }] : [];
-      })
-    );
+    save.invalid(formErrors);
   };
 
   const onSubmit = async (data: AgentFormData) => {
@@ -834,6 +900,9 @@ export function AgentForm({
         // admin chose another: the select shows it as "the install's mode",
         // and sending that would loosen a protection nobody chose to (§127).
         if (storedPrivacyModeUnknown && !privacyModeChosen) delete editPayload.privacyMode;
+        for (const field of CONFIDENTIAL_FIELDS) {
+          if (confidentialUnknown(field)) delete editPayload[field];
+        }
         if (!authored.model || data.model.length === 0) delete editPayload.model;
 
         await apiClient.patch<AiAgent>(API.ADMIN.ORCHESTRATION.agentById(agent.id), {
@@ -2034,6 +2103,56 @@ export function AgentForm({
                 </p>
               )}
             </div>
+
+            {CONFIDENTIAL_FIELDS.map((field) => (
+              <div key={field} className="grid gap-2 rounded-md border p-3">
+                <Label htmlFor={field}>
+                  {CONFIDENTIAL_FIELD_TEXT[field].label}{' '}
+                  <FieldHelp title={CONFIDENTIAL_FIELD_TEXT[field].label}>
+                    <p>{CONFIDENTIAL_FIELD_TEXT[field].help}</p>
+                    <p className="mt-2">
+                      Where this agent may send a message that holds it. It can only make the
+                      install&apos;s setting (Settings &rarr; LLM privacy) stricter. &ldquo;Trusted
+                      or local providers only&rdquo; sends it to a provider ticked &ldquo;Trusted
+                      with confidential content&rdquo;, or a local one; anywhere else the message is
+                      refused. Confidential content is spotted by a phrase list, which catches what
+                      is said outright and misses what is only implied: an agent whose whole job is
+                      this kind of content belongs on a local or trusted provider from the start.
+                      Leave on &ldquo;Use the install&apos;s setting&rdquo; to inherit it.
+                    </p>
+                  </FieldHelp>
+                </Label>
+                <Select
+                  value={
+                    confidentialUnknown(field) ? '__unknown__' : (watch(field) ?? '__global__')
+                  }
+                  disabled={locked(field)}
+                  onValueChange={(v) => {
+                    setConfidentialChosen((prev) => new Set(prev).add(field));
+                    setValue(field, isConfidentialTighteningPolicy(v) ? v : null, {
+                      shouldValidate: true,
+                    });
+                  }}
+                >
+                  <SelectTrigger id={field}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {confidentialUnknown(field) && (
+                      <SelectItem value="__unknown__" disabled>
+                        Not a setting this version knows (calls refused)
+                      </SelectItem>
+                    )}
+                    <SelectItem value="__global__">Use the install&apos;s setting</SelectItem>
+                    {CONFIDENTIAL_TIGHTENING_POLICIES.map((policy) => (
+                      <SelectItem key={policy} value={policy}>
+                        {CONFIDENTIAL_POLICY_LABELS[policy]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
           </div>
 
           <AgentTestCard providerId={currentProviderId} model={currentModel || null} />
@@ -2503,6 +2622,16 @@ export function AgentForm({
                       citationGuardMode:
                         (fresh.citationGuardMode as AgentFormData['citationGuardMode']) ?? null,
                       privacyMode: isTighteningMode(fresh.privacyMode) ? fresh.privacyMode : null,
+                      privacyConfidentialPersonal: isConfidentialTighteningPolicy(
+                        fresh.privacyConfidentialPersonal
+                      )
+                        ? fresh.privacyConfidentialPersonal
+                        : null,
+                      privacyConfidentialCommercial: isConfidentialTighteningPolicy(
+                        fresh.privacyConfidentialCommercial
+                      )
+                        ? fresh.privacyConfidentialCommercial
+                        : null,
                       maxHistoryTokens: fresh.maxHistoryTokens ?? null,
                       maxHistoryMessages: fresh.maxHistoryMessages ?? null,
                       retentionDays: fresh.retentionDays ?? null,
@@ -2543,6 +2672,11 @@ export function AgentForm({
                     // The restored row's privacy mode is the stored one now.
                     setStoredPrivacyMode(fresh.privacyMode ?? null);
                     setPrivacyModeChosen(false);
+                    setStoredConfidential({
+                      privacyConfidentialPersonal: fresh.privacyConfidentialPersonal ?? null,
+                      privacyConfidentialCommercial: fresh.privacyConfidentialCommercial ?? null,
+                    });
+                    setConfidentialChosen(new Set());
                     // MUST clear authorship. `reset` replaces the form values
                     // but not this state, so without it a provider the operator
                     // picked-but-did-not-save left `authored.provider` true

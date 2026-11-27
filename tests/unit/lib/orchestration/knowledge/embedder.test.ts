@@ -54,6 +54,8 @@ vi.mock('@/lib/orchestration/llm/settings-resolver', () => ({
 // `embedMany` each test controls; `isApiKeyEnvVarSet` drives the retired
 // bare-key message.
 vi.mock('@/lib/orchestration/llm/provider-manager', () => ({
+  // The platform's key, never an org's own (§137).
+  usesOrgOwnKey: () => false,
   getProvider: vi.fn(),
   isApiKeyEnvVarSet: vi.fn(),
 }));
@@ -403,6 +405,20 @@ describe('embedBatch', () => {
     expect(embedMany).not.toHaveBeenCalled();
     // Provenance is still resolved, which proves the resolver ran before the no-op loop.
     expect(result.provenance.model).toBe('text-embedding-3-small');
+  });
+
+  it("embeds in a scope marked as the operator's content, not classified for confidential content (§130)", async () => {
+    const { currentPrivacyScope } = await import('@/lib/orchestration/privacy/scope');
+    vi.mocked(prisma.aiProviderConfig.findMany).mockResolvedValue([makeProvider()] as never);
+    const seen: unknown[] = [];
+    installEmbedMany(async (texts) => {
+      seen.push(currentPrivacyScope()?.operatorContent);
+      return { embeddings: texts.map(() => tagged(0)), inputTokens: texts.length };
+    });
+
+    await embedBatch(['Redundancies are handled by HR.']);
+
+    expect(seen).toEqual([true]);
   });
 
   it('should split 250 texts into 3 batches of 100/100/50 with default batch size', async () => {

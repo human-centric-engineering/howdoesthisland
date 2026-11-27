@@ -6,7 +6,8 @@
  * The admin layout decides, on a full load, whether this viewer may open the
  * page: a platform admin any page, an org admin only one listed as org-tier,
  * by core or by the fork, and a holder of a fork's named tier only one
- * declared for a tier they hold (t-999). Next.js does not re-render a layout on in-app
+ * declared for a tier they hold (t-999), and on a page that requires an
+ * entitlement switch, only where their org has it (§135 t-1034). Next.js does not re-render a layout on in-app
  * navigation, so without this an org admin following a link from an org-tier
  * page to a platform page would get that page's shell, with every API call
  * on it refused.
@@ -18,6 +19,10 @@
  * page. It is the reader's refusal, not the security boundary: the API routes
  * the page calls each ask the policy themselves.
  *
+ * A page whose switch the app shows locked (`whenLacking: 'lock'`, t-1053),
+ * and which the viewer's org lacks, renders why it is closed in its place
+ * instead: the app's message and upgrade link, never the page.
+ *
  * A platform viewer passes straight through, so the console of every platform
  * admin is what it was before this existed.
  */
@@ -25,10 +30,15 @@
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
+import { LockedAdminPage } from '@/components/admin/locked-admin-page';
 import {
+  adminPageRequirementOf,
   adminPageTierOf,
+  lockedAdminPageOf,
   reachesAdminPage,
+  type AdminPageRequirement,
   type AdminReach,
+  type LockedAdminSwitch,
   type NamedTierAdminPage,
 } from '@/lib/auth/admin-tier';
 import { AUTH_LANDING_ROUTE } from '@/lib/auth-landing/route';
@@ -40,26 +50,36 @@ export interface AdminTierGateProps {
   orgTierPages: readonly string[];
   /** The fork's pages declared for a named tier (t-999), as the layout read them. Empty unless it registered one. */
   namedTierPages?: readonly NamedTierAdminPage[];
+  /** The switch each of the fork's pages requires (t-1034), as the layout read them. Empty unless one declared `requires`. */
+  pageRequirements?: readonly AdminPageRequirement[];
+  /** The switches the viewer's org lacks that the app shows locked (t-1053), as the layout read them. */
+  lockedSwitches?: readonly LockedAdminSwitch[];
   children: React.ReactNode;
 }
+
+const NO_LOCKED_SWITCHES: readonly LockedAdminSwitch[] = Object.freeze([]);
 
 export function AdminTierGate({
   reach,
   orgTierPages,
   namedTierPages = [],
+  pageRequirements = [],
+  lockedSwitches = NO_LOCKED_SWITCHES,
   children,
 }: AdminTierGateProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const allowed = reachesAdminPage(
-    reach,
-    pathname,
-    adminPageTierOf(pathname, orgTierPages, namedTierPages)
-  );
+  const pageTier = adminPageTierOf(pathname, orgTierPages, namedTierPages);
+  const pageRequires = adminPageRequirementOf(pathname, orgTierPages, pageRequirements);
+  const allowed = reachesAdminPage(reach, pathname, pageTier, pageRequires);
+  const locked = allowed
+    ? null
+    : lockedAdminPageOf(reach, pathname, pageTier, pageRequires, lockedSwitches);
 
   useEffect(() => {
-    if (!allowed) router.replace(AUTH_LANDING_ROUTE);
-  }, [allowed, router]);
+    if (!allowed && !locked) router.replace(AUTH_LANDING_ROUTE);
+  }, [allowed, locked, router]);
 
-  return allowed ? <>{children}</> : null;
+  if (allowed) return <>{children}</>;
+  return locked ? <LockedAdminPage locked={locked} /> : null;
 }

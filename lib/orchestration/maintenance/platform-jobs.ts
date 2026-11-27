@@ -56,6 +56,8 @@ import { createPlatformAgentCatalogue } from '@/lib/orchestration/agents/platfor
 import { requireOrgId } from '@/lib/tenancy/context';
 import { processPendingErasures } from '@/lib/privacy/erasure-requests';
 import { runWaitlistRetention } from '@/lib/waitlist/retention';
+import { retryOwedOrgCreatedHooks } from '@/lib/tenancy/org-created-hooks';
+import { sweepAbandonedSignupOrgs } from '@/lib/tenancy/signup-org';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -144,6 +146,8 @@ function job<T, R = undefined>(spec: {
  * | `platformAgents`          | 15 min   | per-org | catches up an org behind the running code or what it can reach      |
  * | `pendingErasures`         | every    | system  | a throttled tick would report no work and let the idle gate skip it |
  * | `waitlistRetention`       | 1 hour   | per-org | windows are days and months; entries are tenant-owned (§125)        |
+ * | `orgCreatedHooks`         | 15 min   | system  | retries an app's org-created hook that failed at the create (t-1061) |
+ * | `abandonedSignupOrgs`     | 1 hour   | system  | deletes orgs a failed signup left; one is abandoned after an hour  |
  *
  * `platformAgents` does real work only after a deploy changes the platform
  * agents' definitions, when an org's creation-time reconcile failed, or when
@@ -276,6 +280,32 @@ export const PLATFORM_JOBS: readonly PlatformJob[] = [
     run: () => runWaitlistRetention(),
     // Batch-capped: a deletion may mean more behind it.
     foundWork: (r) => r.unconfirmedDeleted > 0 || r.removedDeleted > 0 || r.closedListDeleted > 0,
+  }),
+  job({
+    name: 'orgCreatedHooks',
+    // Once, not once per org: it selects only the orgs that still owe hooks
+    // and enters each one's scope itself, so an install with many orgs and
+    // none owing pays one read, not one per org (t-1061). With no
+    // hook registered it makes no query at all.
+    scope: { system: 'orgCreatedHooks: run the org-created hooks new orgs still owe (t-1061)' },
+    intervalMs: 15 * MINUTE,
+    run: () => retryOwedOrgCreatedHooks(),
+    // A hook that keeps failing is not work: counting it would hold the idle
+    // gate open, and a scale-to-zero database awake, for as long as it fails.
+    foundWork: (r) => r.succeeded > 0,
+  }),
+  job({
+    name: 'abandonedSignupOrgs',
+    // Once, not once per org: one DELETE over the org table, which has no
+    // row policy, for the orgs a failed self-serve signup left with no
+    // member (t-1062). At `single` it makes no query.
+    scope: {
+      system: 'abandonedSignupOrgs: delete orgs a failed self-serve signup left behind (t-1062)',
+    },
+    intervalMs: HOUR,
+    run: () => sweepAbandonedSignupOrgs(),
+    // Batch-capped: a deletion may mean more behind it.
+    foundWork: (r) => r.deleted > 0,
   }),
 ];
 

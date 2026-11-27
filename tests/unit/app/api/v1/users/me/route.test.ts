@@ -257,6 +257,8 @@ describe('DELETE /api/v1/users/me', () => {
     // Arrange — ADMIN role, count returns 1 (last admin)
     const session = mockAdminUser();
     vi.mocked(prisma.user.count).mockResolvedValue(1);
+    // The last-admin check reads the stored role (t-1032).
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ role: 'ADMIN' } as never);
 
     const request = createMockRequest({
       method: 'DELETE',
@@ -299,6 +301,8 @@ describe('DELETE /api/v1/users/me', () => {
     // The mock returns whatever count() resolves; we assert the QUERY excludes
     // the SERVICE account, which is what makes a 2-row (system+human) DB report 1.
     vi.mocked(prisma.user.count).mockResolvedValue(1);
+    // The last-admin check reads the stored role (t-1032).
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ role: 'ADMIN' } as never);
 
     const request = createMockRequest({
       method: 'DELETE',
@@ -329,6 +333,8 @@ describe('DELETE /api/v1/users/me', () => {
     const userId = session.user.id;
 
     vi.mocked(prisma.user.count).mockResolvedValue(2);
+    // The last-admin check reads the stored role (t-1032).
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ role: 'ADMIN' } as never);
     vi.mocked(requestUserErasure).mockResolvedValue({
       status: 'erased',
       receiptId: 'receipt-1',
@@ -613,6 +619,8 @@ describe('DELETE /api/v1/users/me', () => {
     // Arrange
     const session = mockAdminUser();
     vi.mocked(prisma.user.count).mockResolvedValue(1);
+    // The last-admin check reads the stored role (t-1032).
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ role: 'ADMIN' } as never);
 
     const request = createMockRequest({
       method: 'DELETE',
@@ -652,6 +660,7 @@ describe('GET /api/v1/users/me', () => {
       bio: null,
       phone: null,
       timezone: 'UTC',
+      locale: null,
       location: null,
       preferences: null,
       signupOrgId: null,
@@ -711,6 +720,7 @@ describe('PATCH /api/v1/users/me', () => {
       bio: null,
       phone: null,
       timezone: 'UTC',
+      locale: null,
       location: null,
       preferences: null,
       signupOrgId: null,
@@ -749,6 +759,68 @@ describe('PATCH /api/v1/users/me', () => {
       })
     );
   });
+
+  // §138 t-1071: the interface language a user chose.
+  it('stores a supported locale in its canonical spelling, and returns it', async () => {
+    const session = buildUserSession('USER');
+    vi.mocked(prisma.user.update).mockResolvedValue({
+      id: session.user.id,
+      locale: 'en-XA',
+    } as never);
+
+    const response = await PATCH(
+      createMockRequest({
+        method: 'PATCH',
+        url: 'http://localhost:3000/api/v1/users/me',
+        body: { locale: 'en-xa' },
+      }),
+      session
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { locale: 'en-XA' },
+        select: expect.objectContaining({ locale: true }),
+      })
+    );
+    expect((await parseJSON<SuccessBody>(response)).data).toMatchObject({ locale: 'en-XA' });
+  });
+
+  it('clears the locale with null, to follow the org default', async () => {
+    const session = buildUserSession('USER');
+    vi.mocked(prisma.user.update).mockResolvedValue({ id: session.user.id, locale: null } as never);
+
+    const response = await PATCH(
+      createMockRequest({
+        method: 'PATCH',
+        url: 'http://localhost:3000/api/v1/users/me',
+        body: { locale: null },
+      }),
+      session
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { locale: null } })
+    );
+  });
+
+  it('refuses a locale with no catalogue, writing nothing', async () => {
+    const session = buildUserSession('USER');
+
+    const response = await PATCH(
+      createMockRequest({
+        method: 'PATCH',
+        url: 'http://localhost:3000/api/v1/users/me',
+        body: { locale: 'fr' },
+      }),
+      session
+    );
+
+    expect(response.status).toBe(400);
+    expect(prisma.user.update).not.toHaveBeenCalled(); // test-review:accept no_arg_called — refused by validation;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -776,6 +848,7 @@ describe('PATCH /api/v1/users/me — email change', () => {
     bio: null,
     phone: null,
     timezone: 'UTC',
+    locale: null,
     location: null,
     preferences: null,
     signupOrgId: null,

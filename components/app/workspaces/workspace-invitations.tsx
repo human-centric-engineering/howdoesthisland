@@ -12,6 +12,7 @@
  * Either way the answered invitation leaves the list and the page refreshes.
  */
 
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, X } from 'lucide-react';
@@ -19,7 +20,6 @@ import { Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SaveError } from '@/components/forms/form-error';
-import { ORG_ROLE_LABELS } from '@/components/admin/members/org-role-help';
 import { apiClient } from '@/lib/api/client';
 import { API } from '@/lib/api/endpoints';
 import { useSaveFailure } from '@/lib/hooks/use-save-failure';
@@ -36,6 +36,8 @@ export interface WorkspaceInvitationsProps {
 const expiryFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' });
 
 export function WorkspaceInvitations({ invitations }: WorkspaceInvitationsProps) {
+  // The role names, from Sunrise's catalogue (since Sunrise 0.20.0).
+  const roleLabel = useTranslations('admin.members.roles');
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [answered, setAnswered] = useState<Set<string>>(new Set());
@@ -88,7 +90,7 @@ export function WorkspaceInvitations({ invitations }: WorkspaceInvitationsProps)
               <div>
                 <p className="font-medium">{invitation.workspace.name}</p>
                 <p className="text-muted-foreground text-sm">
-                  As {ORG_ROLE_LABELS[invitation.role].toLowerCase()}
+                  As {roleLabel(invitation.role).toLowerCase()}
                   {invitation.invitedBy ? `, from ${invitation.invitedBy}` : ''}. Open until{' '}
                   {expiryFormat.format(new Date(invitation.expiresAt))}.
                 </p>

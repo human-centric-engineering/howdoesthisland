@@ -31,6 +31,10 @@ const db = vi.hoisted(() => ({
   },
   user: { findUnique: vi.fn(), update: vi.fn() },
   $transaction: vi.fn(),
+  // A healed signup record removes its org's awaiting-founder mark (t-1062).
+  $executeRaw: vi.fn(),
+  // A verified founder's signup orgs, released (t-1062).
+  $queryRaw: vi.fn(),
 }));
 vi.mock('@/lib/db/client', () => ({ prisma: db }));
 
@@ -41,16 +45,40 @@ vi.mock('@/lib/logging', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+const mockRefuseSeats = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/tenancy/meters', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/tenancy/meters')>()),
+  refuseOverSeatsLimit: mockRefuseSeats,
+}));
+
+const mockPendingFor = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/utils/invitation-token', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/utils/invitation-token')>()),
+  pendingInvitationsFor: mockPendingFor,
+}));
+
 const mockReconcile = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/orchestration/agents/reconcile-platform-agents', () => ({
   reconcilePlatformAgents: mockReconcile,
+}));
+
+// The seam's own behaviour is `org-created-hooks.test.ts`; here, only what
+// createOrg() writes and when it dispatches.
+const mockHookKeys = vi.hoisted(() => vi.fn((): string[] => []));
+const mockRunHooks = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/tenancy/org-created-hooks', () => ({
+  orgCreatedHookKeys: mockHookKeys,
+  runOrgCreatedHooks: mockRunHooks,
 }));
 
 import {
   addMember,
   changeMemberRole,
   checkInvitationInto,
+  completeSignupOrg,
+  completeFoundedSignupOrgs,
   createOrg,
+  createSignupOrg,
   OrgLifecycleError,
   removeMember,
   resolveOrgResource,
@@ -82,6 +110,7 @@ const AS_ADMIN = { platformAdmin: false, orgRole: ORG_ADMIN_ROLE } as const;
 
 const human = (id: string, role: string = DEFAULT_USER_ROLE) => ({
   id,
+  email: `${id}@example.com`,
   role,
   accountType: 'HUMAN',
 });
@@ -98,10 +127,15 @@ async function refusal(fn: () => Promise<unknown>): Promise<OrgLifecycleError> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRefuseSeats.mockReset().mockResolvedValue(undefined);
+  mockPendingFor.mockReset().mockResolvedValue({ readable: [], unreadable: 0 });
   mockReconcile.mockReset().mockResolvedValue({});
+  mockHookKeys.mockReset().mockReturnValue([]);
+  mockRunHooks.mockReset().mockResolvedValue({ succeeded: 0, failed: 0, dropped: 0 });
   // The transaction client IS the double, so writes inside are visible.
   db.$transaction.mockImplementation((fn: (tx: typeof db) => Promise<unknown>) => fn(db));
   mockRevoke.mockResolvedValue(0);
+  db.$executeRaw.mockResolvedValue(0);
 });
 
 describe('OrgLifecycleError', () => {
@@ -164,6 +198,97 @@ describe('createOrg', () => {
       expect.stringMatching(/Platform agents not materialised/),
       { orgId: ORG, error: 'provider table locked' }
     );
+  });
+
+  it('with no org-created hook registered, writes only the org and its onboarding mark, and dispatches nothing', async () => {
+    db.org.findUnique.mockResolvedValue(null);
+    db.org.create.mockResolvedValue(orgRow());
+    mockHookKeys.mockReturnValue([]);
+
+    await createOrg({ slug: 'other', name: 'Other Org', source: 'admin' });
+
+    expect(db.org.create).toHaveBeenCalledWith({
+      data: { slug: 'other', name: 'Other Org', settings: { awaitingOnboarding: true } },
+      select: expect.any(Object),
+    });
+    expect(mockRunHooks).not.toHaveBeenCalled();
+  });
+
+  it('records the owed hooks in the same INSERT, then runs them after commit and before the platform agents', async () => {
+    db.org.findUnique.mockResolvedValue(null);
+    db.user.findUnique.mockResolvedValue(human(OWNER));
+    db.org.create.mockResolvedValue(orgRow());
+    mockHookKeys.mockReturnValue(['app:provider', 'app:package']);
+    const order: string[] = [];
+    let committed = false;
+    db.$transaction.mockImplementationOnce(async (fn: (tx: typeof db) => Promise<unknown>) => {
+      const result = await fn(db);
+      committed = true;
+      return result;
+    });
+    mockRunHooks.mockImplementation(async () => {
+      expect(committed).toBe(true);
+      order.push('hooks');
+      return { succeeded: 2, failed: 0, dropped: 0 };
+    });
+    mockReconcile.mockImplementation(async () => {
+      order.push('agents');
+      return {};
+    });
+
+    await createOrg({ slug: 'other', name: 'Other Org', ownerUserId: OWNER, source: 'admin' });
+
+    expect(db.org.create).toHaveBeenCalledWith({
+      data: {
+        slug: 'other',
+        name: 'Other Org',
+        settings: {
+          orgCreated: { owed: ['app:provider', 'app:package'], source: 'admin' },
+          awaitingOnboarding: true,
+        },
+      },
+      select: expect.any(Object),
+    });
+    expect(mockRunHooks).toHaveBeenCalledWith(ORG, { ownerUserId: OWNER });
+    expect(order).toEqual(['hooks', 'agents']);
+  });
+
+  it('returns the org as the hooks left it, not the row as inserted', async () => {
+    const inserted = {
+      ...orgRow(),
+      settings: { orgCreated: { owed: ['app:x'], source: 'admin' } },
+    };
+    const after = { ...orgRow(), settings: null };
+    db.org.findUnique
+      .mockResolvedValueOnce(null) // slug free
+      .mockResolvedValueOnce(after); // re-read after the hooks
+    db.org.create.mockResolvedValue(inserted);
+    mockHookKeys.mockReturnValue(['app:x']);
+
+    const org = await createOrg({ slug: 'other', name: 'Other Org', source: 'admin' });
+
+    expect(org.settings).toBeNull();
+  });
+
+  it("records an app's own call as `app` when it names no source", async () => {
+    db.org.findUnique.mockResolvedValue(null);
+    db.org.create.mockResolvedValue(orgRow());
+    mockHookKeys.mockReturnValue(['app:provider']);
+    mockRunHooks.mockResolvedValue({ succeeded: 1, failed: 0, dropped: 0 });
+
+    await createOrg({ slug: 'other', name: 'Other Org' });
+
+    expect(db.org.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          settings: {
+            orgCreated: { owed: ['app:provider'], source: 'app' },
+            awaitingOnboarding: true,
+          },
+        }),
+      })
+    );
+    expect(mockRunHooks).toHaveBeenCalledWith(ORG, { ownerUserId: null });
   });
 
   it('creates an owner-less org when no owner is named', async () => {
@@ -231,6 +356,100 @@ describe('createOrg', () => {
     ).toBe('USER_NOT_FOUND');
 
     expect(db.org.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSignupOrg (§134 t-1062)', () => {
+  it('creates the org marked as awaiting its founder, with no member, and runs nothing yet', async () => {
+    db.org.findUnique.mockResolvedValue(null);
+    db.org.create.mockResolvedValue(orgRow());
+    mockHookKeys.mockReturnValue(['app:provider']);
+
+    await createSignupOrg({ slug: 'ada-1a2b3c4d', name: 'Ada’s organisation' });
+
+    expect(db.org.create).toHaveBeenCalledWith({
+      data: {
+        slug: 'ada-1a2b3c4d',
+        name: 'Ada’s organisation',
+        settings: {
+          orgCreated: { owed: ['app:provider'], source: 'signup' },
+          awaitingFounder: true,
+          awaitingOnboarding: true,
+        },
+      },
+      select: expect.any(Object),
+    });
+    expect(db.orgMembership.create).not.toHaveBeenCalled();
+    // A hook is told the owner, and there is none yet; the agents wait too.
+    expect(mockRunHooks).not.toHaveBeenCalled();
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it('marks the org even when no org-created hook is registered', async () => {
+    db.org.findUnique.mockResolvedValue(null);
+    db.org.create.mockResolvedValue(orgRow());
+
+    await createSignupOrg({ slug: 'ada-1a2b3c4d', name: 'Ada’s organisation' });
+
+    expect(db.org.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          settings: { awaitingFounder: true, awaitingOnboarding: true },
+        }),
+      })
+    );
+  });
+
+  it('refuses a taken slug like createOrg', async () => {
+    db.org.findUnique.mockResolvedValue({ id: 'someone-else' });
+
+    const error = await refusal(() => createSignupOrg({ slug: 'taken', name: 'X' }));
+
+    expect(error.code).toBe('SLUG_TAKEN');
+    expect(db.org.create).not.toHaveBeenCalled();
+  });
+
+  it('completeSignupOrg runs the deferred hooks with the founder as owner, then the platform agents', async () => {
+    const order: string[] = [];
+    mockRunHooks.mockImplementation(async () => {
+      order.push('hooks');
+      return { succeeded: 1, failed: 0, unregistered: 0 };
+    });
+    mockReconcile.mockImplementation(async () => {
+      order.push('agents');
+      return {};
+    });
+
+    await completeSignupOrg(ORG, OWNER);
+
+    expect(mockRunHooks).toHaveBeenCalledWith(ORG, { ownerUserId: OWNER });
+    expect(mockReconcile).toHaveBeenCalledWith(ORG);
+    expect(order).toEqual(['hooks', 'agents']);
+  });
+
+  it('completeFoundedSignupOrgs sets up each org the release hands back, with its owner', async () => {
+    mockRunHooks.mockResolvedValue({ succeeded: 1, failed: 0, unregistered: 0 });
+    mockReconcile.mockResolvedValue({});
+    db.$queryRaw.mockResolvedValue([{ orgId: ORG, ownerUserId: OWNER }]);
+
+    await completeFoundedSignupOrgs(OWNER);
+
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(mockRunHooks).toHaveBeenCalledWith(ORG, { ownerUserId: OWNER });
+    expect(mockReconcile).toHaveBeenCalledWith(ORG);
+  });
+
+  it('completeFoundedSignupOrgs logs a failed release and sets nothing up, without throwing', async () => {
+    db.$queryRaw.mockRejectedValue(new Error('connection reset'));
+
+    await expect(completeFoundedSignupOrgs(OWNER)).resolves.toBeUndefined();
+
+    expect(mockRunHooks).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      'Failed to release a verified founder’s signup org',
+      expect.any(Error),
+      { userId: OWNER }
+    );
   });
 });
 
@@ -358,6 +577,25 @@ describe('addMember', () => {
       where: { id: OTHER },
       data: { signupOrgId: null, signupOrgRole: null },
     });
+  });
+
+  it('runs the deferred setup of a signup org the heal founded, after the add (t-1062)', async () => {
+    const FOUNDED = 'cmorg00000000000000founded';
+    db.user.findUnique.mockResolvedValue({
+      ...human(OTHER),
+      signupOrgId: FOUNDED,
+      signupOrgRole: ORG_OWNER_ROLE,
+    });
+    db.org.findUnique.mockResolvedValue(orgRow());
+    db.orgMembership.count.mockResolvedValue(3);
+    db.$executeRaw.mockResolvedValue(1); // the founder's mark removed
+    mockRunHooks.mockResolvedValue({ succeeded: 0, failed: 0, unregistered: 0 });
+    mockReconcile.mockResolvedValue({});
+
+    await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_OWNER);
+
+    await vi.waitFor(() => expect(mockReconcile).toHaveBeenCalledWith(FOUNDED));
+    expect(mockRunHooks).toHaveBeenCalledWith(FOUNDED, { ownerUserId: OTHER });
   });
 
   it('a role the caller asked for wins over the one a healed record wrote for the same org (review round 3)', async () => {
@@ -501,6 +739,151 @@ describe('addMember', () => {
       // The count arm is not consulted: the install org's rule is the platform role.
       expect(db.orgMembership.count).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('addMember — the seats limit (§135 t-1035)', () => {
+  const seatsRefusal = () =>
+    new APIError('Your organisation has reached its limit of 3 for Seats.', 'FORBIDDEN', 403, {
+      reason: 'meter_limit_reached',
+    });
+  /** An open invitation for OTHER into `orgId`, as pendingInvitationsFor reads it. */
+  const invitedInto = (orgId: string | undefined) =>
+    mockPendingFor.mockResolvedValue({
+      readable: [
+        {
+          id: 'inv-1',
+          email: `${OTHER}@example.com`,
+          metadata: { name: 'O', role: DEFAULT_USER_ROLE, invitedBy: OWNER, invitedAt: 'x', orgId },
+          expiresAt: new Date(),
+          createdAt: new Date(),
+        },
+      ],
+      unreadable: 0,
+    });
+
+  beforeEach(() => {
+    db.org.findUnique.mockResolvedValue(orgRow());
+    db.user.findUnique.mockResolvedValue(human(OTHER));
+    db.orgMembership.findUnique.mockResolvedValue(null);
+    db.orgMembership.create.mockImplementation(({ data }: { data: object }) =>
+      Promise.resolve({ id: 'm1', createdAt: new Date(), updatedAt: new Date(), ...data })
+    );
+  });
+
+  it('refuses an org admin at the limit, and adds nobody', async () => {
+    mockRefuseSeats.mockRejectedValue(seatsRefusal());
+
+    const error = await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_ADMIN).catch((e) => e);
+
+    expect(error).toBeInstanceOf(APIError);
+    expect(error.status).toBe(403);
+    expect(mockRefuseSeats).toHaveBeenCalledWith(ORG, AS_ADMIN, {
+      alreadyHeld: expect.any(Function),
+    });
+    expect(db.orgMembership.create).not.toHaveBeenCalled();
+  });
+
+  it('answers a request wrong for another reason with that reason, not the limit', async () => {
+    mockRefuseSeats.mockRejectedValue(seatsRefusal());
+    db.orgMembership.findUnique.mockResolvedValue({ id: 'existing' });
+
+    expect((await refusal(() => addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_ADMIN))).code).toBe(
+      'ALREADY_MEMBER'
+    );
+
+    db.user.findUnique.mockResolvedValue(null);
+    expect((await refusal(() => addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_ADMIN))).code).toBe(
+      'USER_NOT_FOUND'
+    );
+    expect(mockRefuseSeats).not.toHaveBeenCalled();
+  });
+
+  /** What addMember answers when the seats check asks whether the seat is held. */
+  async function heldAnswer(): Promise<boolean> {
+    let answer: boolean | undefined;
+    mockRefuseSeats.mockImplementation(
+      async (_orgId: string, _actor: unknown, options: { alreadyHeld: () => Promise<boolean> }) => {
+        answer = await options.alreadyHeld();
+      }
+    );
+    await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_ADMIN);
+    if (answer === undefined) throw new Error('alreadyHeld was not asked');
+    return answer;
+  }
+
+  it('says the seat is held for a user whose invitation into the org takes one', async () => {
+    invitedInto(ORG);
+
+    expect(await heldAnswer()).toBe(true);
+    expect(mockPendingFor).toHaveBeenCalledWith(`${OTHER}@example.com`);
+  });
+
+  it('does not for an invitation into another org, or one that makes staff', async () => {
+    invitedInto('cmorg000000000000000elsew');
+    expect(await heldAnswer()).toBe(false);
+
+    mockPendingFor.mockResolvedValue({
+      readable: [
+        {
+          id: 'inv-2',
+          email: `${OTHER}@example.com`,
+          metadata: {
+            name: 'O',
+            role: PLATFORM_ADMIN_ROLE,
+            invitedBy: OWNER,
+            invitedAt: 'x',
+            orgId: ORG,
+          },
+          expiresAt: new Date(),
+          createdAt: new Date(),
+        },
+      ],
+      unreadable: 0,
+    });
+    expect(await heldAnswer()).toBe(false);
+  });
+
+  it('reads a failed invitation lookup as a held seat, and logs it', async () => {
+    mockPendingFor.mockRejectedValue(new Error('db down'));
+
+    expect(await heldAnswer()).toBe(true);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('seats check'),
+      expect.objectContaining({ orgId: ORG, error: 'db down' })
+    );
+  });
+
+  it('reads no invitations unless the seats check asks', async () => {
+    await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_ADMIN);
+
+    expect(mockPendingFor).not.toHaveBeenCalled(); // test-review:accept no_arg_called — lazy: asked only at the limit
+  });
+
+  it('takes no seat for a user who is platform staff', async () => {
+    db.user.findUnique.mockResolvedValue(human(OTHER, PLATFORM_ADMIN_ROLE));
+
+    await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_ADMIN);
+
+    expect(mockRefuseSeats).not.toHaveBeenCalled(); // test-review:accept no_arg_called — staff take no seat, so nothing is checked
+    expect(db.orgMembership.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an accepted invitation's held seat to the seats check, which decides", async () => {
+    await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_OWNER, undefined, { seatHeld: true });
+
+    expect(mockRefuseSeats).toHaveBeenCalledWith(
+      ORG,
+      AS_OWNER,
+      expect.objectContaining({ seatHeld: true })
+    );
+    expect(db.orgMembership.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the actor to the seats check, which never refuses platform staff', async () => {
+    await addMember(ORG, OTHER, DEFAULT_ORG_ROLE, AS_PLATFORM);
+
+    expect(mockRefuseSeats).toHaveBeenCalledWith(ORG, AS_PLATFORM, expect.anything());
   });
 });
 

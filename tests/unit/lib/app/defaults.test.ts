@@ -44,6 +44,7 @@ import { initAppNav } from '@/lib/app/admin-nav';
 import { publicNavItems, footerNavItems, footerLegalItems } from '@/lib/app/public-nav';
 import { protectedNavItems } from '@/lib/app/protected-nav';
 import { appAuthLandingRoute, appAuthLandingLabel } from '@/lib/app/auth-landing';
+import { appWelcomeRoute } from '@/lib/app/welcome';
 import { initApp } from '@/lib/app/bootstrap';
 import { initAppKnowledgeAccessContributors } from '@/lib/app/knowledge-access-contributors';
 import { initAppGuardFloorContributors } from '@/lib/app/guard-floor-contributors';
@@ -70,6 +71,9 @@ import { occupiedTiers } from '@/lib/app/reserved-tiers';
 import { appOwnModules } from '@/lib/app/own-modules';
 import { APP_CAPABILITY_PAIRS, APP_UNCHECKED_SEEDS } from '@/lib/app/capability-seed-pairs';
 import * as userCreatedHooks from '@/lib/auth/user-created-hooks';
+import * as orgCreatedHooks from '@/lib/tenancy/org-created-hooks';
+import * as signupOrg from '@/lib/tenancy/signup-org';
+import * as appModelPins from '@/lib/orchestration/model-lifecycle/app-pins';
 import { collectAppSubjectData } from '@/lib/app/data-export';
 import { prisma } from '@/lib/db/client';
 import {
@@ -84,6 +88,8 @@ import {
   __resetAppOrgSourceRegistryForTests,
 } from '@/lib/privacy/org-source-registry';
 import { getAppJobs, __resetAppJobsForTests } from '@/lib/orchestration/maintenance/app-jobs';
+import { __resetSealedStoresForTests, getSealedStoreNames } from '@/lib/security/sealed-stores';
+import { CORE_SEALED_STORES } from '@/lib/security/core-sealed-stores';
 import {
   getAppStaleWriters,
   getErasureCleanupHooks,
@@ -118,10 +124,24 @@ import {
   getRegisteredAccountSections,
   __resetAccountSectionRegistryForTests,
 } from '@/lib/account-sections/registry';
+import {
+  registeredEntitlementSwitches,
+  registeredMeters,
+  resolveOrgSwitches,
+  __resetEntitlementRegistryForTests,
+} from '@/lib/tenancy/entitlements';
+import { allMeters } from '@/lib/tenancy/meters';
+import { appLocaleTags, catalogueFor, __resetAppMessagesForTests } from '@/lib/i18n/registry';
+import { supportedLocales } from '@/lib/i18n/locales';
+import enMessages from '@/lib/i18n/messages/en.json';
 import { ORG_TIER_ADMIN_PAGES, adminPageTier } from '@/lib/auth/admin-tier';
 import { APP_ORG_TIER_ADMIN_ROUTES } from '@/lib/app/admin-tier-routes';
 import { appOrgAdminLandingRoute } from '@/lib/app/admin-landing';
 import { orgAdminLanding } from '@/lib/auth/admin-landing';
+import {
+  accessExplainerRegistrations,
+  __resetAccessExplainerForTests,
+} from '@/lib/auth/access-explainer';
 import {
   getAppOrgTierAdminPages,
   namedAdminTiers,
@@ -149,7 +169,7 @@ import {
   __resetAuthorizationPolicyForTests,
 } from '@/lib/auth/authorization';
 
-// tests/setup.ts pins these three seams for every file (#1125, #1139). This
+// tests/setup.ts pins these seams for every file (#1125, #1139, #1324). This
 // file asserts what Sunrise really ships, so it puts the real scaffolds back:
 // their rows below read them through the registries' own lazy wiring, which a
 // per-row `importActual` would bypass.
@@ -168,6 +188,11 @@ vi.mock('@/lib/orchestration/capabilities', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/orchestration/capabilities')>()),
   registerAppCapability: registerAppCapabilitySpy,
 }));
+vi.mock('@/lib/app/org-created', (importOriginal) => importOriginal());
+vi.mock('@/lib/app/signup-org', (importOriginal) => importOriginal());
+vi.mock('@/lib/app/model-pins', (importOriginal) => importOriginal());
+vi.mock('@/lib/app/entitlements', (importOriginal) => importOriginal());
+vi.mock('@/lib/app/access-explainer', (importOriginal) => importOriginal());
 
 /**
  * One row per `lib/app/*` seam.
@@ -357,6 +382,22 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       expect(appAuthLandingRoute).toBe('/home');
       expect(appAuthLandingLabel).toBe('Home');
     },
+  },
+  {
+    seam: 'lib/app/messages.ts',
+    risk: 'a stray string would replace platform text, and a stray locale would become choosable, on every screen of every install',
+    assert: () => {
+      __resetAppMessagesForTests();
+      // The read triggers the lazy init, so this exercises the REAL seam.
+      expect(appLocaleTags()).toEqual([]);
+      expect(supportedLocales()).toEqual(['en', 'en-XA']);
+      expect(catalogueFor('en')).toEqual(enMessages);
+    },
+  },
+  {
+    seam: 'lib/app/welcome.ts',
+    risk: 'a stray value would send every member of every new org on every install to a welcome page after login',
+    assert: () => expect(appWelcomeRoute).toBeNull(),
   },
   {
     seam: 'lib/app/admin-breadcrumbs.ts',
@@ -642,9 +683,22 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     risk: 'a stray flat-config block would apply lint rules to every fork',
     // The root eslint.config.mjs spreads this array last; that spread itself is
     // exercised by every `npm run lint` run.
-    // FORK (HowDoesThisLand): pinned to our one block, the prototype ignore.
+    // FORK (HowDoesThisLand): pinned to our two blocks, the prototype ignore
+    // and (t-91) Sunrise's JSX-literals rule turned off for our own routes.
     // Ledger: .context/app/platform-divergences.md row 2.
-    assert: () => expect(appEslintConfig).toEqual([{ ignores: ['prototype/**'] }]),
+    assert: () =>
+      expect(appEslintConfig).toEqual([
+        { ignores: ['prototype/**'] },
+        {
+          files: [
+            'app/(protected)/{assess,assessments,compare,home,projects,usage}/**/*.tsx',
+            'app/(protected)/settings/{api-keys,workspace}/**/*.tsx',
+            'app/(public)/{developers,example-review,model,quick-scan,r,redeem}/**/*.tsx',
+            'app/(public)/{opengraph-image,twitter-image}.tsx',
+          ],
+          rules: { 'react/jsx-no-literals': 'off' },
+        },
+      ]),
   },
   {
     seam: 'lib/app/jobs.ts',
@@ -652,16 +706,10 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     assert: () => {
       __resetAppJobsForTests();
       // getAppJobs() triggers the lazy init, so this exercises the REAL seam.
-      // FORK (HowDoesThisLand): pinned to our jobs, the signup-workspace
-      // sweep (t-7), assessment recovery (t-22), rewrite recovery (t-81),
+      // FORK (HowDoesThisLand): pinned to our jobs, assessment recovery (t-22), rewrite recovery (t-81),
       // comparison-verdict recovery (t-88) and the retention purge (t-26). Ledger:
       // .context/app/platform-divergences.md row 2.
       expect(getAppJobs().map((job) => [job.name, job.intervalMs, job.scope])).toEqual([
-        [
-          'app:signup-workspace-sweep',
-          15 * 60 * 1000,
-          { system: 'signup workspaces span orgs; Org is a system model' },
-        ],
         ['app:assessment-recovery', 15 * 60 * 1000, 'per-org'],
         ['app:rewrite-recovery', 15 * 60 * 1000, 'per-org'],
         ['app:comparison-verdict-recovery', 15 * 60 * 1000, 'per-org'],
@@ -706,6 +754,45 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       } finally {
         register.mockRestore();
       }
+    },
+  },
+  {
+    seam: 'lib/app/org-created.ts',
+    risk: 'a stray hook would run for every new org on every install, and be recorded on each as owed until it succeeds',
+    assert: () => {
+      orgCreatedHooks.__resetOrgCreatedHooksForTests();
+      // Reading the owed keys runs the lazy init, so this exercises the REAL
+      // seam; an empty list is what makes createOrg() write nothing extra.
+      // FORK (HowDoesThisLand): pinned to our one hook, which equips every new
+      // workspace (t-7, t-91). Ledger: .context/app/platform-divergences.md row 2.
+      expect(orgCreatedHooks.orgCreatedHookKeys()).toEqual(['app:equip-workspace']);
+    },
+  },
+  {
+    seam: 'lib/app/signup-org.ts',
+    risk: 'a stray resolver would decide where every self-serve signup lands at multi on every install, instead of an org of their own',
+    assert: () => {
+      signupOrg.__resetSignupOrgResolverForTests();
+      // The read runs the lazy init, so this exercises the REAL seam; no
+      // resolver is what gives each self-serve signup an org of their own.
+      // FORK (HowDoesThisLand): pinned to our resolver, which only names that
+      // org (t-91). Ledger: .context/app/platform-divergences.md row 2.
+      expect(signupOrg.hasSignupOrgResolver()).toBe(true);
+    },
+  },
+  {
+    seam: 'lib/app/model-pins.ts',
+    risk: 'a stray reporter would add uses to every model on every install, a stray check could refuse every model move, and a stray mover would write into every org on every move',
+    assert: () => {
+      appModelPins.__resetAppModelPinsForTests();
+      // The read runs the lazy init, so this exercises the REAL seam; nothing
+      // registered is what leaves the finder and the move as they were.
+      expect(appModelPins.appModelPinsRegistered()).toEqual({
+        reporter: false,
+        check: false,
+        mover: false,
+        failed: false,
+      });
     },
   },
   {
@@ -774,6 +861,16 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     },
   },
   {
+    seam: 'lib/app/sealed-stores.ts',
+    risk: 'a stray store would have every install\u2019s reseal walk read, and rewrite, rows it never asked it to touch',
+    assert: () => {
+      __resetSealedStoresForTests();
+      // getSealedStoreNames() triggers the lazy init, so this exercises the REAL seam.
+      // Core's own stores (§137 t-1044) are registered first; the app adds none.
+      expect(getSealedStoreNames()).toEqual(CORE_SEALED_STORES.map((store) => store.name));
+    },
+  },
+  {
     seam: 'lib/app/provider-credentials.ts',
     risk: 'a stray credential resolver would send every install\u2019s provider calls out on a key that is not the one its rows name',
     assert: async () => {
@@ -791,7 +888,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
           apiKeyEnvVar: 'SHIPS_EMPTY_TEST_KEY',
           isLocal: false,
         })
-      ).resolves.toEqual({ apiKey: 'from-env', identity: '' });
+      ).resolves.toEqual({ apiKey: 'from-env', identity: '', ownKey: false });
       delete process.env.SHIPS_EMPTY_TEST_KEY;
     },
   },
@@ -825,6 +922,22 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     },
   },
   {
+    seam: 'lib/app/entitlements.ts',
+    risk: 'a stray switch would appear on every org page, and one on by default (whenNothingSet) would be granted to every org nobody had set it on, on every install; a stray `seats` meter would replace the platform’s own seats count, and so who the seats limit refuses',
+    assert: () => {
+      __resetEntitlementRegistryForTests();
+      // The read triggers the lazy init, so this exercises the REAL seam.
+      expect(registeredEntitlementSwitches()).toEqual([]);
+      // …so nothing an org stores, or does not, gives it a switch.
+      expect(resolveOrgSwitches({ on: [], off: [], unreadable: false }).on).toEqual([]);
+      // No meter either (t-1035), so the only one is the platform's own seats.
+      expect(registeredMeters()).toEqual([]);
+      expect(allMeters().map((m) => ({ key: m.key, core: m.core }))).toEqual([
+        { key: 'seats', core: true },
+      ]);
+    },
+  },
+  {
     seam: 'lib/app/admin-tier.ts',
     risk: 'a stray pattern would open that admin page to every org OWNER/ADMIN on every install — the page only, since its API routes declare their own tier, but a page core meant for platform admins alone; a stray closeCoreOrgTierSection() would shut orchestration to every org admin on every install',
     assert: () => {
@@ -840,6 +953,21 @@ const SEAM_DEFAULTS: SeamDefault[] = [
       // …and it closes none of core's sections (t-929), so the routes keep
       // the tier they declare.
       expect(closedCoreOrgTierSections()).toEqual([]);
+    },
+  },
+  {
+    seam: 'lib/app/access-explainer.ts',
+    risk: "a stray area, platform-only surface or section would show every install's admins words about access that are not theirs, a stray audience would hide one of the explainer's own sections from them, and a stray permission row or restated cell would publish a role model the install's policy does not enforce; it opens and closes nothing",
+    assert: () => {
+      __resetAccessExplainerForTests();
+      // The read triggers the lazy init, so this exercises the REAL seam.
+      const registered = accessExplainerRegistrations();
+      expect([...registered.areas.keys()]).toEqual([]);
+      expect([...registered.platformOnly.keys()]).toEqual([]);
+      expect([...registered.sections.keys()]).toEqual([]);
+      expect([...registered.audiences.keys()]).toEqual([]);
+      expect([...registered.permissions.keys()]).toEqual([]);
+      expect([...registered.permissionOverrides.keys()]).toEqual([]);
     },
   },
   {
@@ -1019,16 +1147,22 @@ describe('lib/app/ seams ship empty', () => {
   // real module too: the brand pin derives its keys from it.
   const ROSTER = path.join('tests', 'unit', 'scripts', 'ci', 'admin-tier-roster.test.ts');
   const STALE = path.join('tests', 'unit', 'lib', 'privacy', 'stale-writers.test.ts');
+  // Compares each pinned init against the real one, so it reads past the pin.
+  const PINS = path.join('tests', 'unit', 'setup-seam-pins.test.ts');
   it.each([
     ['brand', 'brand', []],
     ['emails', 'email-override', []],
     ['waitlist-config', 'waitlist-config', []],
     ['llm-providers', 'provider-eligibility', []],
-    ['admin-tier', 'org-tier admin', [ROSTER]],
-    ['user-created', 'user-created', []],
-    ['erasure', 'erasure', [STALE]],
+    ['admin-tier', 'org-tier admin', [ROSTER, PINS]],
+    ['user-created', 'user-created', [PINS]],
+    ['org-created', 'org-created', [PINS]],
+    ['signup-org', 'signup-org', [PINS]],
+    ['model-pins', 'model-pins', [PINS]],
+    ['entitlements', 'entitlements', [ROSTER, PINS]],
+    ['erasure', 'erasure', [STALE, PINS]],
     // FORK (HowDoesThisLand): the authorization pin our setup adds (t-64). Ledger: row 2.
-    ['authorization', 'authorization', []],
+    ['authorization', 'authorization', [PINS]],
   ])('nothing but its readers escapes the suite-wide %s-seam pin', (seam, label, readers) => {
     // tests/setup.ts mocks `@/lib/app/brand` to null for EVERY test file, so
     // that no core test can read a fork's brand and fail for a reason the fork

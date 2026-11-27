@@ -138,8 +138,9 @@ says which piece each feature lands):
 - **The Learn page is the install org's alone.** The Pattern Advisor, the
   Quiz Master and their patterns knowledge help the install's app admins
   build their app, so they exist only in the install org. It is a platform
-  page, so an org admin is not shown it and is refused it (§111). A platform
-  admin switched into a customer org still finds it empty there.
+  page, so an org admin is not shown it and is refused it (§111). So is a
+  platform admin acting in a customer org: there they are presented as their
+  org role (t-1032).
 - **Some process-global state is shared across orgs on purpose.** RLS cannot
   see a Node heap, so every module-level holder in `lib/` is declared in
   [`lib/tenancy/process-state.ts`](../../lib/tenancy/process-state.ts) with
@@ -497,7 +498,11 @@ has the numbers.
   count them. `runAsCredentialLookup` is the same bypass for one credential
   read, logged at `debug`, and `runAsCrossOrgCount` the same for a read-only
   global-config usage count, also at `debug` and confined to one module
-  (§107 t-752). Nothing else should run inside any of them.
+  (§107 t-752). `runAsLivenessProbe` is the same for the database health
+  probe's `SELECT 1`, at `debug` and confined to `lib/db/utils.ts` (#1262),
+  and `runAsFounderRelease` the same for releasing a founder's signup orgs at
+  sign-in, at `debug` and confined to `lib/tenancy/lifecycle.ts` (t-1084).
+  Nothing else should run inside any of them.
 - **Nested creates are stamped; raw inserts are not.** The injection walks
   every write and stamps create-shaped nodes at any depth. A raw `INSERT`
   stamps itself from the parent row (above). An update payload is never

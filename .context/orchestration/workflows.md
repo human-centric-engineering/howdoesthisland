@@ -121,18 +121,18 @@ Lives in `lib/orchestration/workflows/semantic-validator.ts`. Requires Prisma + 
 
 1. **Collect references** — single pass over steps to extract unique model overrides (from `llm_call`, `route`, `reflect`, `guard`, `evaluate`, `plan`, `orchestrator` steps) and capability slugs (from `tool_call` steps).
 2. **Batch DB queries** — two parallel queries: active providers and active capabilities matching the collected slugs.
-3. **Check model overrides** — each `modelOverride` must exist in the model registry and its provider must be active.
+3. **Check model overrides** — each `modelOverride` is a model pin ([§ Step model pins](#step-model-pins)). A bare id must exist in the model registry; a pin naming its provider must name an active catalogue row of that provider (or the registry's entry for the id must be that provider's), the one extra query this needs running only when a pair is present. Either way the provider it runs on — the pin's, else the registry's — must be active, and at `multi` approved for the org.
 4. **Check capability slugs** — each `capabilitySlug` must match an active capability.
 
 ### Semantic error codes
 
-| `code`                   | `stepId` | Meaning                                                                             |
-| ------------------------ | -------- | ----------------------------------------------------------------------------------- |
-| `UNKNOWN_MODEL_OVERRIDE` | yes      | Step references a model not in the registry                                         |
-| `INACTIVE_PROVIDER`      | yes      | Step's model override belongs to an inactive provider                               |
-| `PROVIDER_NOT_APPROVED`  | yes      | At `multi`, the override's provider is not one the org is approved for (§120 t-743) |
-| `INACTIVE_CAPABILITY`    | yes      | `tool_call` step references an inactive or unknown capability                       |
-| `INACTIVE_AGENT`         | yes      | `agent_call` step references an inactive or unknown agent                           |
+| `code`                   | `stepId` | Meaning                                                                                    |
+| ------------------------ | -------- | ------------------------------------------------------------------------------------------ |
+| `UNKNOWN_MODEL_OVERRIDE` | yes      | Step references a model not in the registry, or a provider that offers no model of that id |
+| `INACTIVE_PROVIDER`      | yes      | Step's model override belongs to an inactive provider                                      |
+| `PROVIDER_NOT_APPROVED`  | yes      | At `multi`, the override's provider is not one the org is approved for (§120 t-743)        |
+| `INACTIVE_CAPABILITY`    | yes      | `tool_call` step references an inactive or unknown capability                              |
+| `INACTIVE_AGENT`         | yes      | `agent_call` step references an inactive or unknown agent                                  |
 
 The `/validate` and `/dry-run` endpoints run both structural and semantic validation. `PROVIDER_NOT_APPROVED` is checked on the save paths only — workflow create (`POST /workflows`) and save-as-template, which otherwise publish a v1 without semantic checks, plus publish, rollback and `/validate` — and not by execution or `/dry-run`, where a step the call-time gate refuses takes its own error strategy rather than failing the whole run up front. Publish and rollback re-check only providers the new version **introduces**: one the replaced published version already used is not refused, so a workflow stranded by a later policy change can still publish an unrelated edit. Unlike the other semantic checks, an unreadable provider policy fails the save (500) rather than being skipped; `/validate`, which saves nothing, skips it with a logged error instead. This check also covers `supervisor` steps' overrides, which the existence checks above do not. On create and save-as-template, which run no existence check, an override whose model the registry cannot resolve is refused too where the policy applies, since its provider cannot be checked. At `single` and for the install org none of this runs. The workflow builder UI currently runs structural checks only (semantic checks require DB access).
 
@@ -169,6 +169,8 @@ The validator only covers authoring. Runtime execution lives in `lib/orchestrati
 - **Executor registry** — one executor per `WorkflowStep.type`; each executor self-registers via the barrel at `lib/orchestration/engine/executors/index.ts`.
 - **Error strategies** — `retry`, `fallback`, `skip`, `fail` per step; budget enforcement with 80% warning.
 - **`expectedSkip` flag** — optional step-config boolean (default `false`). When `errorStrategy: 'skip'` fires on a step that has `expectedSkip: true`, the trace entry carries the flag through so the admin UI renders the row as muted "Optional step skipped: <reason>" rather than the standard skip styling, and the expanded view uses a slate "Skip reason" pane instead of a red "Error" pane. The diagnostic is preserved either way; the flag only tones down styling for steps you actively expect to skip in normal operation (optional enrichment, missing env vars, vendor downtime). Don't use it for skips that signal a broken integration. Wired through `stepErrorConfigSchema`, `StepResult.expectedSkip`, `ExecutionTraceEntry.expectedSkip`.
+- **Joins** — a step with edges in from several steps runs once every one of them has run or can no longer run. Two guards may share a failure step through their `fail` edges, and a `route`'s branches may meet at one join; a join after a `parallel` step still waits for every branch. See [engine.md → Joins and untaken steps](./engine.md#joins-and-untaken-steps).
+- **`terminalStatus: 'failed'`** — a `send_notification` step with it ends the run FAILED with its interpolated body as the reason, whether the notice was sent or its send failed and was skipped (`errorStrategy: 'skip'`, or `'fallback'` with no `fallbackStepId`). A skipped send keeps its delivery error on the trace entry (t-1078). The executor carries the reason on the error (`ExecutorError.failWorkflow`) and the engine's skip path puts it on the skipped result. When the executor could not (the step hit its `timeoutMs`), the engine fails the run with the step's error instead. With a `fallbackStepId`, the failed send hands on to that step and the run carries on: the fallback step owns the branch's outcome.
 - **Human approval pause** — `human_approval` executor interpolates `prompt` against the live `ExecutionContext` (so `{{stepId.output}}` references expand to accumulated upstream outputs) then throws `PausedForApproval` carrying the interpolated text. Engine flips the row to `paused_for_approval` and exits cleanly. The admin UI renders the prompt as markdown — see [`admin/orchestration-approvals.md`](../admin/orchestration-approvals.md#expand-view).
 
 The three execute/read/approve admin routes are live; see [`admin-api.md`](./admin-api.md#executions) for the HTTP contract.
@@ -201,6 +203,16 @@ Per-attempt-index is intentionally absent — the engine's `recoveryAttempts` ca
 | `reflect`           | Per-iteration                                    | Resumes at the next iteration with the prior draft restored. See [`engine.md`](./engine.md#recovery-model).                                                                                                                                                                                                                                                                                                              |
 
 `llm_call`, `chain`, `parallel`, `route`, `guard`, `evaluate`, `judge_call`, `plan`, `rag_retrieve`, `human_approval` are not in the table because they do not have external side effects — `llm_call` and `judge_call` re-run (paying the token cost), the rest are pure dispatch logic over already-completed steps.
+
+### Step model pins
+
+A step's `config.modelOverride` (`llm_call`, `route`, `reflect`, `guard`, `evaluate`, `plan`, `orchestrator`, `supervisor`, `chat_turn`) is a **model pin**: `provider::model`, so a step pinned to Azure's `gpt-4o` runs on Azure and not on whichever provider the model registry gives `gpt-4o` (§136 t-1068; the format and its helpers are in [`llm-providers.md` § A pin names its provider](./llm-providers.md#a-pin-names-its-provider-136-t-1068)). Empty or absent means the `chat` task default, itself a pin.
+
+- **A bare model id still works, unchanged:** it runs on the provider the registry gives the id. Every workflow saved before t-1068 is one; nothing is rewritten, and a step's pin names its provider once someone picks its model again in the builder.
+- **The builder writes pairs.** Its model picker (`block-editors/model-override-field.tsx`) offers the catalogue's active chat models whose provider is set up and active (`toModelOptions`, as the default-models form scopes its options), one option per provider's model, read once per builder. A value the catalogue does not hold is kept and shown as itself (`gpt-4o (by model id, no provider)`) rather than dropped.
+- **`chat_turn`** is the one step with a provider of its own (its agent's). A bare override replaces the model on that binding; a pin naming a provider runs there, without the agent's fallbacks (even when it names the agent's own provider), and so is checked on save (it must exist, and at `multi` its provider must be approved) and counted as a use of that model. An empty override is no override.
+- **Pricing is by model id**, as an agent's turns are.
+- **For a fork's own executor**: pass `config.modelOverride` to `runLlmCall` unchanged and it is resolved. Reading it as a model id yourself (a registry lookup, a cost estimate) takes `pinModelId(...)` from `@/lib/orchestration/llm/model-pin` first.
 
 ### `chat_turn` — conversational step with auto-loaded history
 
@@ -337,7 +349,7 @@ Schema mode is the deterministic alternative to LLM-mode for structural checks w
 
 On schema parse failure the guard's output carries:
 
-- `passed: false`, `verdict: 'fail'`, `reason: 'Schema validation failed at <path>: <message>'`
+- `passed: false`, `verdict: 'fail'`, and a `reason` naming every issue: `'Schema validation failed at <path>: <message>'` for one, or `'Schema validation failed with N issues:'` followed by one `- <path>: <message>` line per issue for several (50 at most, shared out across the issues' first path segment — the producing step, under `inputStepIds` — so one step's flood cannot hide another's; then `- …and K more`). The reason is what a retry back-edge hands the producer as `{{vars.__retryContext.failureReason}}`, and what a crash-resume rebuilds it from, so it carries the whole list; until t-1076 it named only the first issue.
 - `issues`: the full Zod `ZodIssue[]` array — interpolate `{{guard.output.issues}}` into a downstream retry's prompt for precise field-level feedback
 
 Typed `ExecutorError` codes:

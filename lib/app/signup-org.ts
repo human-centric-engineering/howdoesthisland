@@ -1,55 +1,73 @@
 /**
- * App signup-org resolver: which org a person who signs up without an
- * invitation joins.
+ * App signup-org resolver registration (§134 t-1062).
  *
- * **Fork-owned scaffold**, added by this fork with the seam it feeds
- * (`lib/tenancy/signup-org.ts`, t-6). `null` means no resolver: an uninvited
- * signup joins the install org, exactly as before.
+ * **Fork-owned scaffold** — Sunrise ships this empty and does NOT change it
+ * after release, so your edits here merge cleanly on upgrade (the stable
+ * contract is this file's export, not its body). Treat it like the other
+ * `lib/app/*` seams.
  *
- * Set it to a function, and `userCreateBeforeHook` treats an uninvited signup
- * as an invitation into the org it returns. The first member who is not
- * platform staff becomes its `OWNER` (the resolver stands as the grantor,
- * `resolvedSignupMemberships`), and the first session starts in it. Invited signups and the
- * first human on a fresh database (a platform admin) are never asked, nor is a
- * signup whose first-admin bootstrap check failed before it could rule out the
- * first human: that signup takes the install-org default.
+ * Auto-wired: `userCreateBeforeHook` (`lib/auth/config.ts`) calls this once,
+ * lazily, before the first self-serve signup asks. Only at
+ * `TENANCY_MODE=multi`, and only for a signup with no invitation or one from
+ * the install org's own waitlist; invited signups and platform admins are
+ * never asked, and at `single` nothing changes.
  *
- * **Contract.**
- * - Return the id of an org that already exists: it runs before the user row
- *   does. An org it creates for a signup that then fails (a duplicate email,
- *   a double submit) is left with no members, and nothing in this repo sweeps
- *   those yet: a resolver that creates orgs must ship that sweep with it.
- * - A throw, an empty answer, or an org that does not exist or is not `ACTIVE`
- *   falls back to the install org, logged at `error`. The signup is never refused.
- * - Never return an org the person should not be in: every org it names, they
- *   join. A password signup's address is not verified yet (`emailVerified` is
- *   `false`), so never place one by email domain alone: anyone can type
- *   `x@acme.com`.
- * - The first member who is not platform staff becomes its `OWNER`, with no
- *   admin in the loop. Staff already in the org (a platform `ADMIN`, a SERVICE
- *   account) do not count, so an org staff prepared still makes the signup its
- *   `OWNER`. Never name an org that could have no non-staff members but still
- *   holds data (one whose members all left), or that two concurrent signups
- *   could both find empty: both would be recorded as `OWNER`. The install org
- *   is never bootstrapped. And if reading the org's member
- *   count fails, the signup is recorded as `MEMBER`, so a new org can end up
- *   with no `OWNER` until a platform admin promotes one.
- * - It runs inside the signup request, so keep it cheap. `createOrg` also runs
- *   the platform-agent reconcile for the new org before it returns.
+ * With nothing registered, each such signup gets a new org of their own, as
+ * its OWNER, and starts there. Register a resolver to choose otherwise:
  *
- * Example — a new workspace per signup:
+ *   import { prisma } from '@/lib/db/client';
+ *   import { requiresEmailVerification } from '@/lib/auth/verification-status';
+ *   import { registerSignupOrgResolver } from '@/lib/tenancy/signup-org';
  *
- *   export const appSignupOrgResolver: SignupOrgResolver | null = async ({ name }) =>
- *     (await createOrg({ slug: `ws-${randomUUID()}`, name: `${name}'s workspace` })).id;
+ *   export function initAppSignupOrgResolver(): void {
+ *     // People from a customer's domain join that customer's org, but only
+ *     // on an address that is, or must be, proven.
+ *     registerSignupOrgResolver(async ({ email, emailVerified }) => {
+ *       if (!emailVerified && !requiresEmailVerification()) return { kind: 'own' };
+ *       const domain = email.split('@')[1]?.toLowerCase();
+ *       const org = domain
+ *         ? await prisma.org.findFirst({ where: { slug: ORG_SLUG_BY_DOMAIN[domain] } })
+ *         : null;
+ *       return org ? { kind: 'join', orgId: org.id } : { kind: 'own' };
+ *     });
+ *   }
+ *
+ * The resolver receives `{ email, emailVerified, name, signupMethod,
+ * waitlistEntryId }` and answers one of:
+ * - `{ kind: 'own', name? }` — a new org of their own, as OWNER (the default);
+ * - `{ kind: 'join', orgId, role? }` — an existing org, as `role` (default
+ *   MEMBER; taken as given, so name OWNER only when the match proves it);
+ * - `{ kind: 'install' }` — the install org, as before this seam existed.
+ *
+ * Runs BEFORE the user row exists. On an email signup the address is not
+ * proven yet (`emailVerified: false`): it is safe to match on only where the
+ * install requires verification before sign-in (`REQUIRE_EMAIL_VERIFICATION`,
+ * the production default), since otherwise anyone can sign up as any address.
+ * An OAuth signup's flag is the provider's, and can be false too.
+ *
+ * A resolver that throws, runs past 5 seconds, answers nothing, or names an
+ * org that does not exist, is suspended, is at its seats limit, or is another
+ * signup's still awaiting its founder, puts the signup in the install org, logged at
+ * `error`: a fault here never refuses a signup. Empty = an org of their own
+ * for every self-serve signup at `multi`.
+ *
+ * Full guide: CUSTOMIZATION.md §4 · .context/tenancy/identity.md
  */
-import type { SignupOrgResolver } from '@/lib/tenancy/signup-org';
-import { provisionSignupWorkspace } from '@/lib/app/workspaces/provision';
+import { registerSignupOrgResolver } from '@/lib/tenancy/signup-org';
 
 /**
- * HowDoesThisLand (t-7, D1): every uninvited signup gets a workspace of its
- * own, granted Anthropic and OpenAI and the default budget. The orgs it creates for a signup
- * that then fails are erased by the sweep in `lib/app/workspaces/sweep.ts`,
- * registered in `lib/app/jobs.ts`.
+ * The name a self-serve signup's workspace starts with, which its owner can
+ * change. Deliberately not the person's: the org row outlives their erasure,
+ * so a name copied from theirs would survive it (owner ruling, t-91).
  */
-export const appSignupOrgResolver: SignupOrgResolver | null = (signup) =>
-  provisionSignupWorkspace(signup);
+export const SIGNUP_WORKSPACE_NAME = 'My workspace';
+
+/**
+ * HowDoesThisLand (t-7, D1; moved onto Sunrise's seam in t-91): every
+ * self-serve signup gets a workspace of their own, as its `OWNER`. That is
+ * Sunrise's default; this only names it. What the workspace is given is the
+ * org-created hook's (`lib/app/org-created.ts`).
+ */
+export function initAppSignupOrgResolver(): void {
+  registerSignupOrgResolver(() => ({ kind: 'own', name: SIGNUP_WORKSPACE_NAME }));
+}

@@ -20,6 +20,21 @@
  *      step's output is restored.
  *   6. With `privacyMode: off`, the same step sends the identifiers as they
  *      are: provider behaviour unchanged.
+ *   7. Confidential content (§130 t-1037): with the Personal policy at
+ *      `local_only` and mode `off`, a chat turn holding a health disclosure
+ *      to a cloud provider is refused before it is sent (the provider
+ *      receives nothing), the reader is told why, and the next turn in the
+ *      same conversation is answered without the disclosure.
+ *   8. With the Personal policy at `warn`, the turn is answered and the user
+ *      is told once: the next turn, which resends the disclosure, is not.
+ *   9. Routing (§130 t-1038): with the Personal policy at `local_only` and a
+ *      REAL local Ollama chat model set as the model for confidential
+ *      messages, the same flagged turn is answered by Ollama, the cloud
+ *      provider receives nothing, the user is told once that the
+ *      conversation moved, and the next turn stays on Ollama. Needs Ollama
+ *      on localhost:11434 with the chat model pulled (`OLLAMA_SMOKE_MODEL`,
+ *      default `qwen2.5:0.5b`); without them this part says NOT RUN, which is
+ *      not a pass.
  *
  * Safety:
  *   - The install's privacy settings are changed for the run and put back in
@@ -67,6 +82,12 @@ const NINO = 'TJ 33 15 36 A';
 const SEEDED = [NAME, EMAIL, NINO];
 
 let failures = 0;
+/** Parts that could not run: reported as not run, never as passed. */
+const notRun: string[] = [];
+
+const OLLAMA_URL = 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_SMOKE_MODEL ?? 'qwen2.5:0.5b';
+const OLLAMA_PROVIDER = `${PREFIX}-ollama`;
 function check(ok: boolean, label: string): void {
   console.log(`    ${ok ? '✓' : '✗'} ${label}`);
   if (!ok) failures++;
@@ -165,17 +186,246 @@ function workflowProvider(received: LlmMessage[][]): LlmProvider {
   };
 }
 
-async function setPrivacy(privacyMode: string, privacyEmbeddingsPolicy: string): Promise<void> {
+async function setPrivacy(
+  privacyMode: string,
+  privacyEmbeddingsPolicy: string,
+  privacyConfidentialPersonal = 'allow',
+  privacyConfidentialCommercial = 'allow'
+): Promise<void> {
   await prisma.aiOrchestrationSettings.update({
     where: { slug: 'global' },
-    data: { privacyMode, privacyEmbeddingsPolicy },
+    data: {
+      privacyMode,
+      privacyEmbeddingsPolicy,
+      privacyConfidentialPersonal,
+      privacyConfidentialCommercial,
+    },
   });
   invalidateOrchestrationSettingsCache();
 }
 
+const DISCLOSURE = "I've been signed off with depression";
+
+/** A cloud chat provider that answers every call, and records what it was sent. */
+function plainChatProvider(received: LlmMessage[][]): LlmProvider {
+  return {
+    ...chatProvider(received),
+    async *chatStream(messages: LlmMessage[]): AsyncIterable<StreamChunk> {
+      received.push(structuredClone(messages));
+      yield { type: 'text', content: 'Noted.' };
+      yield { type: 'done', usage: { inputTokens: 10, outputTokens: 2 }, finishReason: 'stop' };
+    },
+  };
+}
+
+async function confidentialTurns(userId: string): Promise<void> {
+  const agent = await prisma.aiAgent.create({
+    data: {
+      slug: `${AGENT_SLUG}-confidential`,
+      name: 'Smoke Privacy Agent (confidential)',
+      description: 'Throwaway agent for scripts/smoke/privacy-leak.ts — safe to delete.',
+      provider: CHAT_PROVIDER,
+      model: 'fake-model-1',
+      systemInstructions: 'You are an HR assistant.',
+      isActive: true,
+      createdBy: userId,
+    },
+  });
+  const received: LlmMessage[][] = [];
+  registerProviderInstance(CHAT_PROVIDER, plainChatProvider(received));
+  const turn = async (message: string, conversationId?: string) => {
+    const events: ChatEvent[] = [];
+    for await (const event of streamChat({
+      message,
+      agentSlug: agent.slug,
+      userId,
+      ...(conversationId ? { conversationId } : {}),
+    })) {
+      events.push(event);
+    }
+    const started = events.find((e) => e.type === 'start');
+    return { events, conversationId: started?.type === 'start' ? started.conversationId : null };
+  };
+
+  console.log('\n════ chat turn, confidential content under local_only ════');
+  await setPrivacy('off', 'allow', 'local_only', 'allow');
+  const refused = await turn(`${DISCLOSURE}. How do I tell my manager?`);
+  const error = refused.events.find((e) => e.type === 'error');
+  console.log(`    provider calls: ${received.length}; error: ${JSON.stringify(error)}`);
+  check(received.length === 0, 'a flagged turn to a cloud provider never reached it');
+  check(
+    error?.type === 'error' && error.code === 'privacy_confidential',
+    'the reader is told it was confidential content'
+  );
+  if (!refused.conversationId) throw new Error('the refused turn never started');
+  const after = await turn('What is the holiday policy?', refused.conversationId);
+  check(
+    !after.events.some((e) => e.type === 'error'),
+    'the next turn in the conversation is answered'
+  );
+  check(
+    received.length === 1 && !JSON.stringify(received).includes(DISCLOSURE),
+    'and its call no longer carries the disclosure'
+  );
+
+  console.log('\n════ chat turn, confidential content under warn ════');
+  await setPrivacy('off', 'allow', 'warn', 'allow');
+  const warned = await turn(`${DISCLOSURE}. Can you help me plan my return?`);
+  const notes = warned.events.filter((e) => e.type === 'warning');
+  console.log(`    notes: ${JSON.stringify(notes.map((n) => n.type === 'warning' && n.code))}`);
+  check(
+    notes.length === 1 && notes[0].type === 'warning' && notes[0].code === 'confidential_personal',
+    'the turn is answered, and the user told once'
+  );
+  if (!warned.conversationId) throw new Error('the warned turn never started');
+  const again = await turn('And after that?', warned.conversationId);
+  check(
+    !again.events.some((e) => e.type === 'warning'),
+    'the next turn resends the disclosure and is not told again'
+  );
+}
+
+/** Whether Ollama answers and has the chat model pulled. */
+async function ollamaHasModel(): Promise<boolean> {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return false;
+    const body: unknown = await res.json();
+    const models =
+      body !== null && typeof body === 'object' && 'models' in body && Array.isArray(body.models)
+        ? (body.models as unknown[])
+        : [];
+    return models.some(
+      (m) =>
+        m !== null &&
+        typeof m === 'object' &&
+        'name' in m &&
+        (m.name === OLLAMA_MODEL || m.name === `${OLLAMA_MODEL}:latest`)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function movedToLocalModel(userId: string): Promise<void> {
+  console.log('\n════ chat turn, confidential content moved to a local Ollama model ════');
+  if (!(await ollamaHasModel())) {
+    console.log(
+      `    NOT RUN: Ollama is not answering on ${OLLAMA_URL}, or \`${OLLAMA_MODEL}\` is not pulled (ollama pull ${OLLAMA_MODEL})`
+    );
+    notRun.push('routing to a local Ollama model');
+    return;
+  }
+  await prisma.aiProviderConfig.create({
+    data: {
+      slug: OLLAMA_PROVIDER,
+      name: 'Smoke Privacy Ollama',
+      providerType: 'openai-compatible',
+      baseUrl: `${OLLAMA_URL}/v1`,
+      isLocal: true,
+      isActive: true,
+    },
+  });
+  await prisma.aiProviderModel.create({
+    data: {
+      slug: `${OLLAMA_PROVIDER}-model`,
+      providerSlug: OLLAMA_PROVIDER,
+      modelId: OLLAMA_MODEL,
+      name: `Smoke ${OLLAMA_MODEL}`,
+      description: 'Throwaway model row for scripts/smoke/privacy-leak.ts — safe to delete.',
+      capabilities: ['chat'],
+      tierRole: 'worker',
+      deploymentProfiles: ['sovereign'],
+      local: true,
+      reasoningDepth: 'none',
+      latency: 'fast',
+      costEfficiency: 'very_high',
+      contextLength: 'medium',
+      toolUse: 'none',
+      bestRole: 'Smoke test',
+    },
+  });
+  await prisma.aiOrchestrationSettings.update({
+    where: { slug: 'global' },
+    data: { confidentialModelProvider: OLLAMA_PROVIDER, confidentialModel: OLLAMA_MODEL },
+  });
+  await setPrivacy('off', 'allow', 'local_only', 'allow');
+
+  const agent = await prisma.aiAgent.create({
+    data: {
+      slug: `${AGENT_SLUG}-moved`,
+      name: 'Smoke Privacy Agent (moved)',
+      description: 'Throwaway agent for scripts/smoke/privacy-leak.ts — safe to delete.',
+      provider: CHAT_PROVIDER,
+      model: 'fake-model-1',
+      systemInstructions: 'You are an HR assistant. Answer in one short sentence.',
+      maxTokens: 60,
+      isActive: true,
+      createdBy: userId,
+    },
+  });
+  const received: LlmMessage[][] = [];
+  registerProviderInstance(CHAT_PROVIDER, plainChatProvider(received));
+  const turn = async (message: string, conversationId?: string) => {
+    const events: ChatEvent[] = [];
+    for await (const event of streamChat({
+      message,
+      agentSlug: agent.slug,
+      userId,
+      ...(conversationId ? { conversationId } : {}),
+    })) {
+      events.push(event);
+    }
+    const started = events.find((e) => e.type === 'start');
+    return { events, conversationId: started?.type === 'start' ? started.conversationId : null };
+  };
+
+  const moved = await turn(`${DISCLOSURE}. How do I tell my manager?`);
+  const reply = moved.events
+    .map((e) => (e.type === 'content' ? e.delta : ''))
+    .join('')
+    .trim();
+  const error = moved.events.find((e) => e.type === 'error');
+  const notes = moved.events.filter((e) => e.type === 'warning');
+  console.log(
+    `    cloud provider calls: ${received.length}; error: ${JSON.stringify(error ?? null)}`
+  );
+  console.log(`    notes: ${JSON.stringify(notes)}`);
+  console.log(`    ${OLLAMA_MODEL} replied: ${JSON.stringify(reply)}`);
+  check(received.length === 0, 'the cloud provider received nothing');
+  check(!error && reply.length > 0, 'the turn was answered');
+  check(
+    notes.length === 1 && notes[0].type === 'warning' && notes[0].code === 'confidential_moved',
+    'the user is told once that the conversation moved'
+  );
+  if (!moved.conversationId) throw new Error('the moved turn never started');
+  const answer = await prisma.aiMessage.findFirst({
+    where: { conversationId: moved.conversationId, role: 'assistant' },
+    select: { providerSlug: true, modelId: true },
+  });
+  console.log(`    saved answer: ${JSON.stringify(answer)}`);
+  check(
+    answer?.providerSlug === OLLAMA_PROVIDER && answer.modelId === OLLAMA_MODEL,
+    'the saved answer names the local model that wrote it'
+  );
+  const cost = await prisma.aiCostLog.findFirst({
+    where: { conversationId: moved.conversationId },
+    select: { provider: true, model: true },
+  });
+  console.log(`    cost row: ${JSON.stringify(cost)}`);
+  check(cost?.model === OLLAMA_MODEL, 'the turn is costed against the local model');
+
+  const next = await turn('What is the holiday policy?', moved.conversationId);
+  check(
+    received.length === 0 && !next.events.some((e) => e.type === 'error'),
+    'the next turn stays on the local model'
+  );
+  check(!next.events.some((e) => e.type === 'warning'), 'and is not told again');
+}
+
 async function cleanUp(): Promise<void> {
   const agents = await prisma.aiAgent.findMany({
-    where: { slug: AGENT_SLUG },
+    where: { slug: { startsWith: AGENT_SLUG } },
     select: { id: true },
   });
   for (const { id } of agents) {
@@ -184,6 +434,8 @@ async function cleanUp(): Promise<void> {
     await prisma.aiConversation.deleteMany({ where: { agentId: id } });
     await prisma.aiAgent.delete({ where: { id } });
   }
+  await prisma.aiProviderModel.deleteMany({ where: { providerSlug: OLLAMA_PROVIDER } });
+  await prisma.aiProviderConfig.deleteMany({ where: { slug: OLLAMA_PROVIDER } });
   const workflows = await prisma.aiWorkflow.findMany({
     where: { slug: { startsWith: WORKFLOW_SLUG } },
     select: { id: true },
@@ -330,7 +582,14 @@ async function main(): Promise<void> {
   if (!user) throw new Error('No user rows in the dev DB: seed one first.');
   const before = await prisma.aiOrchestrationSettings.findUnique({
     where: { slug: 'global' },
-    select: { privacyMode: true, privacyEmbeddingsPolicy: true },
+    select: {
+      privacyMode: true,
+      privacyEmbeddingsPolicy: true,
+      privacyConfidentialPersonal: true,
+      privacyConfidentialCommercial: true,
+      confidentialModelProvider: true,
+      confidentialModel: true,
+    },
   });
   if (!before) throw new Error('No orchestration settings row: open the settings page once.');
 
@@ -341,8 +600,27 @@ async function main(): Promise<void> {
     await workflowStep(user.id, 'pseudonymise');
     await setPrivacy('off', 'allow');
     await workflowStep(user.id, 'off');
+    // Refused, not moved: no model for confidential messages yet.
+    await prisma.aiOrchestrationSettings.update({
+      where: { slug: 'global' },
+      data: { confidentialModelProvider: null, confidentialModel: null },
+    });
+    await confidentialTurns(user.id);
+    await movedToLocalModel(user.id);
   } finally {
-    await setPrivacy(before.privacyMode, before.privacyEmbeddingsPolicy);
+    await prisma.aiOrchestrationSettings.update({
+      where: { slug: 'global' },
+      data: {
+        confidentialModelProvider: before.confidentialModelProvider,
+        confidentialModel: before.confidentialModel,
+      },
+    });
+    await setPrivacy(
+      before.privacyMode,
+      before.privacyEmbeddingsPolicy,
+      before.privacyConfidentialPersonal,
+      before.privacyConfidentialCommercial
+    );
     // The turn's reply embedding is fire-and-forget: let it settle first.
     await new Promise((r) => setTimeout(r, 500));
     await cleanUp();
@@ -355,6 +633,10 @@ async function main(): Promise<void> {
   if (failures > 0) {
     console.error(`\n✗ ${failures} check(s) failed`);
     process.exit(1);
+  }
+  if (notRun.length > 0) {
+    console.log(`\n✓ privacy leak smoke passed, but NOT RUN: ${notRun.join('; ')}`);
+    return;
   }
   console.log('\n✓ privacy leak smoke passed');
 }

@@ -471,6 +471,32 @@ describe('importOrchestrationConfig', () => {
     expect(data.privacyMode).toBe(value);
   });
 
+  it.each([
+    ['keeps the agent’s own policies when the backup predates them', undefined, false, undefined],
+    ['writes the backup’s policies', 'local_only', true, 'local_only'],
+    ['clears them when the backup says inherit', null, true, null],
+  ])('on overwrite %s (§130 t-1037)', async (_label, inBackup, written, value) => {
+    mockTx.aiAgent.findFirst.mockResolvedValue({ id: 'existing-id', slug: 'support-bot' });
+    mockTx.aiAgent.update.mockResolvedValue({});
+    const agent =
+      inBackup === undefined
+        ? makeAgent()
+        : {
+            ...makeAgent(),
+            privacyConfidentialPersonal: inBackup,
+            privacyConfidentialCommercial: inBackup,
+          };
+    const payload = { ...minPayload, data: { ...minPayload.data, agents: [agent] } };
+
+    await importOrchestrationConfig(payload, 'user-1', SHARED_SCOPE);
+
+    const data = mockTx.aiAgent.update.mock.calls[0][0].data as Record<string, unknown>;
+    for (const field of ['privacyConfidentialPersonal', 'privacyConfidentialCommercial']) {
+      expect(field in data).toBe(written);
+      expect(data[field]).toBe(value);
+    }
+  });
+
   it("saves an overwritten agent's restored config as a new agent version, after its grants", async () => {
     mockTx.aiAgent.findFirst.mockResolvedValue({ id: 'existing-id', slug: 'support-bot' });
     mockTx.aiAgent.update.mockResolvedValue({});
@@ -705,6 +731,65 @@ describe('importOrchestrationConfig', () => {
     expect(invalidateSettingsCache).toHaveBeenCalledOnce();
   });
 
+  it('restores a model pin in defaultModels verbatim, naming its provider (§136 t-1068)', async () => {
+    mockTx.aiOrchestrationSettings.upsert.mockResolvedValue({});
+    const defaultModels = {
+      chat: 'microsoft::gpt-4o',
+      routing: 'gpt-4o-mini', // a bare id saved before pins named a provider
+      embeddings: 'text-embedding-3-small',
+    };
+
+    const payload = {
+      ...minPayload,
+      data: { ...minPayload.data, settings: { ...makeSettings(), defaultModels } },
+    };
+    await importOrchestrationConfig(payload, 'user-1', SHARED_SCOPE);
+
+    expect(mockTx.aiOrchestrationSettings.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ defaultModels }),
+        update: expect.objectContaining({ defaultModels }),
+      })
+    );
+  });
+
+  it("keeps a step's provider-named modelOverride in the imported version snapshot (§136 t-1068)", async () => {
+    mockTx.aiWorkflow.findUnique.mockResolvedValue(null);
+    mockTx.aiWorkflow.create.mockResolvedValue({ id: 'wf-1' });
+    mockTx.aiWorkflow.update.mockResolvedValue({ id: 'wf-1' });
+    mockTx.aiWorkflowVersion.create.mockResolvedValue({ id: 'wfv-1', version: 1 });
+    const workflow = makeWorkflow({
+      workflowDefinition: {
+        steps: [
+          {
+            id: 'step-1',
+            name: 'Step One',
+            type: 'llm_call',
+            config: { prompt: 'hi', modelOverride: 'microsoft::gpt-4o' },
+            nextSteps: [],
+          },
+        ],
+        entryStepId: 'step-1',
+        errorStrategy: 'fail',
+      },
+    });
+
+    const payload = { ...minPayload, data: { ...minPayload.data, workflows: [workflow] } };
+    await importOrchestrationConfig(payload, 'user-1', SHARED_SCOPE);
+
+    expect(mockTx.aiWorkflowVersion.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        snapshot: expect.objectContaining({
+          steps: [
+            expect.objectContaining({
+              config: { prompt: 'hi', modelOverride: 'microsoft::gpt-4o' },
+            }),
+          ],
+        }),
+      }),
+    });
+  });
+
   it('restores the failed-webhook retention window (#838)', async () => {
     mockTx.aiOrchestrationSettings.upsert.mockResolvedValue({});
 
@@ -736,6 +821,60 @@ describe('importOrchestrationConfig', () => {
     const call = mockTx.aiOrchestrationSettings.upsert.mock.calls[0][0];
     expect(call.create).toMatchObject(privacy);
     expect(call.update).toMatchObject(privacy);
+  });
+
+  it("restores the install's confidential-content policies (§130 t-1037)", async () => {
+    mockTx.aiOrchestrationSettings.upsert.mockResolvedValue({});
+    const policies = {
+      privacyConfidentialPersonal: 'local_only',
+      privacyConfidentialCommercial: 'approved_only',
+    };
+    const payload = {
+      ...minPayload,
+      data: { ...minPayload.data, settings: { ...makeSettings(), ...policies } },
+    };
+    await importOrchestrationConfig(payload, 'user-1', SHARED_SCOPE);
+
+    const call = mockTx.aiOrchestrationSettings.upsert.mock.calls[0][0];
+    expect(call.create).toMatchObject(policies);
+    expect(call.update).toMatchObject(policies);
+  });
+
+  it.each([
+    [
+      'writes the backup’s model',
+      { providerSlug: 'ollama-local', model: 'llama3.1:8b' },
+      { confidentialModelProvider: 'ollama-local', confidentialModel: 'llama3.1:8b' },
+    ],
+    [
+      'clears it when the backup has none',
+      null,
+      { confidentialModelProvider: null, confidentialModel: null },
+    ],
+  ])('restores the model for confidential messages: %s (§130 t-1038)', async (_l, model, cols) => {
+    mockTx.aiOrchestrationSettings.upsert.mockResolvedValue({});
+    const payload = {
+      ...minPayload,
+      data: { ...minPayload.data, settings: { ...makeSettings(), confidentialModel: model } },
+    };
+    await importOrchestrationConfig(payload, 'user-1', SHARED_SCOPE);
+
+    const call = mockTx.aiOrchestrationSettings.upsert.mock.calls[0][0];
+    expect(call.create).toMatchObject(cols);
+    expect(call.update).toMatchObject(cols);
+  });
+
+  it('leaves the model for confidential messages alone when the backup predates it', async () => {
+    mockTx.aiOrchestrationSettings.upsert.mockResolvedValue({});
+    await importOrchestrationConfig(
+      { ...minPayload, data: { ...minPayload.data, settings: makeSettings() } },
+      'user-1',
+      SHARED_SCOPE
+    );
+
+    const call = mockTx.aiOrchestrationSettings.upsert.mock.calls[0][0];
+    expect('confidentialModel' in call.update).toBe(false);
+    expect('confidentialModelProvider' in call.update).toBe(false);
   });
 
   it.each(['pseudonymise', 'redact', 'block'])(
@@ -770,6 +909,8 @@ describe('importOrchestrationConfig', () => {
       'privacyIgnoredEntityTypes',
       'privacyProtectLocalProviders',
       'privacyEmbeddingsPolicy',
+      'privacyConfidentialPersonal',
+      'privacyConfidentialCommercial',
     ]) {
       expect(call.update).not.toHaveProperty(key);
       expect(call.create).not.toHaveProperty(key);

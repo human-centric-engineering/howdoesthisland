@@ -105,14 +105,14 @@ export interface AppCoverageExclusion {
  */
 export const appCoverageExclusions: AppCoverageExclusion[] = [
   {
-    // HowDoesThisLand (t-7). By name, so a sibling module in scripts/app/
+    // HowDoesThisLand (t-7, t-91). By name, so a sibling module in scripts/app/
     // stays gated.
     pattern: 'scripts/app/smoke-signup-workspace.ts',
     reason:
       'a tsx smoke run by hand against the real dev database, as ' +
       'scripts/smoke/** is: real signups, real Postgres, nothing imports it. ' +
-      'The logic it drives lives in lib/app/workspaces/, which stays gated and ' +
-      'has its own tests.',
+      'The logic it drives lives in lib/app/workspaces/ and lib/app/org-created.ts, ' +
+      'which stay gated and have their own tests.',
   },
   {
     // HowDoesThisLand (t-10), by name like the one above.
