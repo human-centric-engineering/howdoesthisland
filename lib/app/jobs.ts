@@ -39,6 +39,7 @@ import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { purgeExpiredContent } from '@/lib/app/retention/purge';
 import { recoverRewrites } from '@/lib/app/rewrites/recover';
 import { recoverVerdicts } from '@/lib/app/comparisons/verdict';
+import { sweepFinishedEvents } from '@/lib/app/events/notify';
 
 /** The assessment recovery job's name, as the tick logs it. */
 export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
@@ -48,6 +49,9 @@ export const REWRITE_RECOVERY_JOB = 'app:rewrite-recovery';
 
 /** The comparison-verdict recovery job's name, as the tick logs it. */
 export const VERDICT_RECOVERY_JOB = 'app:comparison-verdict-recovery';
+
+/** The finished-event sweep's name, as the tick logs it. */
+export const FINISHED_EVENTS_JOB = 'app:finished-events';
 
 /** The retention purge's name, as the tick logs it. */
 export const RETENTION_PURGE_JOB = 'app:retention-purge';
@@ -86,6 +90,17 @@ export function initAppJobs(): void {
     intervalMs: 15 * 60 * 1000,
     scope: 'per-org',
     run: () => recoverVerdicts(),
+  });
+
+  // Send the finished events a workspace's reviews and comparisons are still
+  // owed (t-99): one whose process died before its send, or a review the
+  // recovery job gave up on, which nothing else notifies. Per workspace, at
+  // the recovery jobs' interval, for the same reason.
+  registerAppJob({
+    name: FINISHED_EVENTS_JOB,
+    intervalMs: 15 * 60 * 1000,
+    scope: 'per-org',
+    run: () => sweepFinishedEvents(),
   });
 
   // Delete content and assessments past the workspace's window, and judge

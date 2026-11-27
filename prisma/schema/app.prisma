@@ -246,6 +246,10 @@ model Assessment {
   createdByUserId    String?
   startedAt          DateTime?
   completedAt        DateTime?
+  /// When its `app.assessment.finished` event was queued for the workspace's
+  /// subscriptions (t-99, `lib/app/events/notify.ts`). Null while it runs, and
+  /// on a final review whose event the recovery sweep has still to send.
+  notifiedAt         DateTime?
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   judgeRuns          JudgeRun[]
@@ -261,6 +265,8 @@ model Assessment {
   @@index([status, leaseExpiresAt])
   @@index([contentId])
   @@index([projectId, createdAt])
+  /// The finished-event sweep's read (t-99).
+  @@index([orgId, notifiedAt])
   @@map("app_assessment")
 }
 
@@ -784,11 +790,17 @@ model AssessmentSet {
   /// process only once the attempt is older than any call can live.
   verdictStartedAt      DateTime?
   verdictCompletedAt    DateTime?
+  /// When its `app.<kind>.finished` event was queued (t-99,
+  /// `lib/app/events/notify.ts`): null until every member and the verdict
+  /// have ended and the event is sent.
+  notifiedAt            DateTime?
 
   @@index([orgId, kind, createdAt])
   @@index([projectId])
   /// The budget check's in-flight read and recovery's sweep (t-88).
   @@index([orgId, verdictStatus])
+  /// The finished-event sweep's read (t-99).
+  @@index([orgId, notifiedAt])
   @@map("app_assessment_set")
 }
 

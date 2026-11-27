@@ -80,6 +80,7 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { createPrivacyScope, runInPrivacyScope } from '@/lib/orchestration/privacy/scope';
 import { requireOrgId } from '@/lib/tenancy/context';
+import { notifyAfterVerdict } from '@/lib/app/events/notify';
 
 /** Why a comparison has no verdict, for `SKIPPED`. */
 export type VerdictSkipReason =
@@ -272,6 +273,7 @@ export async function startVerdict(setId: string, now: Date = new Date()): Promi
       reason: 'too_few_completed' satisfies VerdictSkipReason,
       model: null,
     });
+    if (ended) notifyAfterVerdict(setId);
     return ended ? 'skipped' : 'not_due';
   }
   if (set.verdictAttempts >= MAX_ATTEMPTS) {
@@ -281,6 +283,7 @@ export async function startVerdict(setId: string, now: Date = new Date()): Promi
       reason: LOST_VERDICT_CODE,
       model: null,
     });
+    if (ended) notifyAfterVerdict(setId);
     return ended ? 'gave_up' : 'not_due';
   }
 
@@ -549,7 +552,8 @@ async function drive(
   }
   for (let tries = 1; tries <= 2; tries += 1) {
     try {
-      await end(orgId, set, mine, ending);
+      // The workspace's subscriptions (t-99): the comparison has finished.
+      if (await end(orgId, set, mine, ending)) notifyAfterVerdict(set.id);
       return;
     } catch (err) {
       // Twice failed: left `RUNNING`; once its lease runs out, recovery asks again.

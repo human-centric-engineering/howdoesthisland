@@ -93,4 +93,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/comparisons/',
   // HowDoesThisLand as MCP tools: the capabilities and what they answer (t-92).
   'lib/app/mcp/',
+  // A workspace's webhooks and the finished events they are sent (t-99).
+  'lib/app/events/',
 ];
