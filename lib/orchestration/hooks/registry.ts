@@ -987,6 +987,12 @@ export async function retryHookDelivery(deliveryId: string): Promise<boolean> {
     where: { id: deliveryId },
     include: { hook: true },
   });
+  // FORK (HowDoesThisLand, t-99): only the caller's own org's delivery, as in
+  // the retry pass. Sent in the caller's context, another org's (reachable at
+  // `multi` without row isolation) would go with no pinned dispatcher.
+  // Ledger row 37.
+  const { orgId } = requireTenantContext();
+  if (delivery && orgId !== null && delivery.orgId && delivery.orgId !== orgId) return false;
   if (!delivery || !delivery.hook) return false;
   if (!delivery.hook.isEnabled) return false;
   // Stopped by an erasure: what it would send is about the erased person

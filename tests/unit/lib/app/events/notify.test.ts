@@ -328,6 +328,22 @@ describe('the end of a review, wired', () => {
   });
 });
 
+describe('a comparison’s sweep clock', () => {
+  it('runs from its last draft’s end, not from when it was made', async () => {
+    const made = new Date(Date.now() - 3 * 86_400_000);
+    const draft = review('QUEUED');
+    const set = comparison([review('COMPLETED', { notifiedAt: new Date() }), draft], {
+      verdictStatus: 'SKIPPED',
+      verdict: null,
+      updatedAt: made,
+    });
+    await runAsOrg(ORG_A, async () => notifyAfterReview(ORG_A, String(draft.id)));
+    await vi.waitFor(() =>
+      expect(z.date().parse(set.updatedAt).getTime()).toBeGreaterThan(made.getTime())
+    );
+  });
+});
+
 describe('a finished comparison', () => {
   it('is sent with each draft’s state and scores and the verdict, and no draft label', async () => {
     const a = review('COMPLETED');

@@ -476,6 +476,22 @@ describe('GET …/event-subscriptions/{subscriptionId}', () => {
     });
   });
 
+  it('changes a hook whose stored action it cannot read, rather than failing', async () => {
+    mockPrisma.aiEventHook.findFirst.mockResolvedValue(hookRow({ action: 'not an action' }));
+    const off = await item.PATCH(req(`${BASE}/${SUB}`, 'PATCH', { isEnabled: false }), subParams());
+    expect(off.status).toBe(200);
+    const headersOnly = await item.PATCH(
+      req(`${BASE}/${SUB}`, 'PATCH', { headers: { 'X-A': '1' } }),
+      subParams()
+    );
+    expect(headersOnly.status).toBe(400);
+    const both = await item.PATCH(
+      req(`${BASE}/${SUB}`, 'PATCH', { url: 'https://n.example.com/h', headers: {} }),
+      subParams()
+    );
+    expect(both.status).toBe(200);
+  });
+
   it('refuses a malformed subscription id', async () => {
     const res = await item.GET(req(`${BASE}/nope`), {
       params: Promise.resolve({ id: WS, subscriptionId: 'nope' }),

@@ -156,7 +156,16 @@ export function notifyAfterReview(orgId: string, assessmentId: string): void {
         where: { orgId, assessmentId, set: { notifiedAt: null } },
         select: { setId: true },
       });
-      for (const { setId } of sets) await notifySet(setId);
+      for (const { setId } of sets) {
+        // A draft ending does not touch its comparison's row, so the sweep's
+        // grace and window, read from `updatedAt`, would run from when the
+        // comparison was made. Touched here, they run from its last draft.
+        await prisma.assessmentSet.updateMany({
+          where: { id: setId, orgId, notifiedAt: null },
+          data: { updatedAt: new Date() },
+        });
+        await notifySet(setId);
+      }
     },
     'app: finished events',
     { assessmentId }

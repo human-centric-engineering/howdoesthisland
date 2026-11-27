@@ -24,7 +24,12 @@ const mockEnv = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
-const mocks = vi.hoisted(() => ({ fetch: vi.fn(), update: vi.fn(), deliveryFindMany: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  update: vi.fn(),
+  deliveryFindMany: vi.fn(),
+  deliveryFindUnique: vi.fn(),
+}));
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiEventHook: {
@@ -44,14 +49,7 @@ vi.mock('@/lib/db/client', () => ({
       ),
       update: vi.fn().mockResolvedValue({ id: 'del-1' }),
       updateMany: mocks.update,
-      findUnique: vi.fn().mockResolvedValue({
-        id: 'del-1',
-        attempts: 0,
-        status: 'pending',
-        destination: null,
-        destinationFingerprint: null,
-        previousDestinations: null,
-      }),
+      findUnique: mocks.deliveryFindUnique,
       findMany: mocks.deliveryFindMany,
       updateManyAndReturn: vi.fn().mockResolvedValue([{ id: 'del-1', createdAt: new Date() }]),
     },
@@ -66,6 +64,7 @@ import {
   emitHookEventDurably,
   invalidateHookCache,
   processPendingHookRetries,
+  retryHookDelivery,
 } from '@/lib/orchestration/hooks/registry';
 import { UnsafeResolvedAddressError } from '@/lib/security/safe-dispatcher';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
@@ -111,6 +110,16 @@ beforeEach(() => {
   mockEnv.TENANCY_MODE = 'multi';
   mocks.fetch.mockResolvedValue({ ok: true, status: 200 });
   mocks.update.mockResolvedValue({ count: 1 });
+  // The row a failed attempt reads back before recording its failure.
+  mocks.deliveryFindUnique.mockResolvedValue({
+    id: 'del-1',
+    attempts: 0,
+    status: 'pending',
+    createdAt: new Date(),
+    destination: null,
+    destinationFingerprint: null,
+    previousDestinations: null,
+  });
 });
 
 describe('the hook sender, for a customer org', () => {
@@ -146,6 +155,24 @@ describe('the retry pass', () => {
     expect(mocks.deliveryFindMany.mock.calls[0]?.[0].where).toMatchObject({
       orgId: INSTALL_ORG_ID,
     });
+  });
+
+  it('refuses a manual retry of another org’s delivery, sending nothing', async () => {
+    mocks.deliveryFindUnique.mockResolvedValue({
+      id: 'del-9',
+      orgId: CUSTOMER,
+      status: 'failed',
+      nextRetryAt: null,
+      stoppedByErasure: false,
+      hook: {
+        isEnabled: true,
+        action: { type: 'webhook', url: 'https://a.example.com/h' },
+        secret: null,
+      },
+    });
+    expect(await runAsOrg(INSTALL_ORG_ID, () => retryHookDelivery('del-9'))).toBe(false);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });
 

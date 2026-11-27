@@ -404,7 +404,16 @@ export async function updateSubscription(
   mintOrgFor(orgId);
   const existing = await findOurs(orgId, id);
   if (body.projectId !== undefined) await requireProject(orgId, body.projectId);
-  const action = storedAction.parse(existing.action);
+  // A hook core's admin route made can hold an action this module did not
+  // write; such a row can still be renamed, switched or moved, and a new
+  // address (which brings its headers) replaces the action whole.
+  const stored = storedAction.safeParse(existing.action);
+  const action = stored.success ? stored.data : null;
+  if (!action && body.url === undefined && body.headers !== undefined) {
+    throw new ValidationError('This webhook has no address to keep: give `url` too', {
+      url: ['Required with `headers` here'],
+    });
+  }
 
   const data: Prisma.AiEventHookUpdateManyMutationInput = {};
   if (body.name !== undefined) data.name = body.name;
@@ -413,10 +422,13 @@ export async function updateSubscription(
   if (body.url !== undefined || body.headers !== undefined) {
     // A new address always comes with its headers (the schema), so stored
     // ones are kept only for the address they were set for.
-    const headers = body.headers ?? action.headers;
+    const headers = body.headers ?? action?.headers;
+    const url = body.url ?? action?.url;
+    // Unreachable: no address in the body and none stored is refused above.
+    if (url === undefined) throw new NotFoundError('Subscription not found');
     data.action = {
       type: 'webhook',
-      url: body.url ?? action.url,
+      url,
       ...(headers ? { headers } : {}),
     };
   }
