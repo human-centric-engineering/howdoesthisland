@@ -202,6 +202,11 @@ review's editor summary in a run that died is not. And a verdict whose ending
 could not be written twice is left `running` until its lease runs out, then
 asked again: the first answer is paid for and lost.
 
+**Telling the workspace.** Once every draft is final and the verdict has
+settled, the comparison sends `app.comparison.finished` to the workspace's
+webhooks (from `end()`, or with its last draft when it has no verdict to wait
+for). See [`webhooks.md`](./webhooks.md).
+
 ## The budget and the per-user cap
 
 **The budget is checked for every draft it reviews together.** A draft that
