@@ -241,6 +241,21 @@ describe('equipWorkspace on an org that already has values (a retry)', () => {
     expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({ monthlyBudgetUsd: 10 });
   });
 
+  it('does not give back a budget an admin removed after an earlier attempt equipped it', async () => {
+    await equipWorkspace(ORG_ID, 'src');
+    // The admin clears the cap: the slice now reads the same as never set.
+    const equipped = store.settings.get(ORG_ID) as Record<string, unknown>;
+    store.settings.set(ORG_ID, { ...equipped, quotas: {} });
+    fakePrisma.org.update.mockClear();
+
+    const result = await equipWorkspace(ORG_ID, 'src', { reconcile: true });
+
+    expect(result).toMatchObject({ grantKept: true, budgetKept: true });
+    expect(fakePrisma.org.update).not.toHaveBeenCalled();
+    expect(readOrgQuotas(store.settings.get(ORG_ID))).toEqual({});
+    expect(mockReconcile).toHaveBeenCalledWith(ORG_ID, 'src');
+  });
+
   it('treats an admin’s deliberately empty grant as set, not as absent', async () => {
     store.settings.set(ORG_ID, { providers: { approved: [] } });
 

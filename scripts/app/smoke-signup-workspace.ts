@@ -205,7 +205,7 @@ async function main(): Promise<void> {
   console.log('an org made directly, as a platform admin makes one');
   // In a system scope, as the admin route's guard enters one for its handler.
   const direct = await system(() =>
-    createOrg({ slug: `smoke-ws-direct-${stamp}`, name: 'Direct Smoke' })
+    createOrg({ slug: `smoke-ws-direct-${stamp}`, name: 'Direct Smoke', source: 'admin' })
   );
   orgIds.add(direct.id);
   await verifyEquipped(direct.id);

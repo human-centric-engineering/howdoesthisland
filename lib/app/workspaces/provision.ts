@@ -46,6 +46,7 @@ import { forgetOrgRequestCap } from '@/lib/security/org-request-cap';
 import { JUDGE_PROVIDER_SLUG, WORKSPACE_PROVIDER_SLUGS } from '@/lib/app/workspaces/provider-slug';
 import {
   APP_SETTINGS_KEY,
+  readAppSettings,
   withSettingsConflictRetry as withConflictRetry,
 } from '@/lib/app/workspaces/app-settings';
 import { isRecord } from '@/lib/utils';
@@ -142,6 +143,13 @@ async function findWorkspaceProviders(): Promise<{
   };
 }
 
+/**
+ * Set in the `app` slice by the write that equips a workspace. A retry that
+ * finds it writes nothing: an admin may since have removed the budget or
+ * narrowed the grant, which reads the same as never set.
+ */
+const EQUIPPED_MARK = 'workspaceEquipped';
+
 /** What {@link equipWorkspace} did. */
 export interface EquipResult {
   /** The judges' provider was granted by this run. */
@@ -194,12 +202,20 @@ export async function equipWorkspace(
         if (!row) throw new Error(`equipWorkspace: no org ${orgId}`);
         const settings: Record<string, unknown> = isRecord(row.settings) ? { ...row.settings } : {};
 
-        const grantKept = orgProviderPolicySchema.safeParse(settings[ORG_PROVIDERS_KEY]).success;
+        // An earlier attempt committed its write: whatever the org holds now
+        // is what it wrote or what an admin set since (a budget removed, a
+        // grant narrowed), and neither is undone.
+        const app = readAppSettings(row.settings);
+        const equippedBefore = app[EQUIPPED_MARK] === true;
+
+        const grantKept =
+          equippedBefore || orgProviderPolicySchema.safeParse(settings[ORG_PROVIDERS_KEY]).success;
         const grantWritten = !grantKept && providers.approved.length > 0;
         // No jurisdiction restriction: none is ruled for this app yet.
         if (grantWritten) settings[ORG_PROVIDERS_KEY] = { approved: providers.approved };
 
-        const budgetKept = readOrgQuotas(row.settings, { orgId }).monthlyBudgetUsd !== undefined;
+        const budgetKept =
+          equippedBefore || readOrgQuotas(row.settings, { orgId }).monthlyBudgetUsd !== undefined;
         if (!budgetKept) {
           // Beside every other cap and the meter limits, as stored.
           const quotas = settings[ORG_QUOTAS_KEY];
@@ -210,6 +226,7 @@ export async function equipWorkspace(
         }
 
         if (grantWritten || !budgetKept) {
+          settings[APP_SETTINGS_KEY] = { ...app, [EQUIPPED_MARK]: true };
           await tx.org.update({
             where: { id: orgId },
             data: { settings: settings as Prisma.InputJsonObject },
@@ -261,7 +278,7 @@ export async function equipWorkspace(
   const granted = grantWritten && providers.judges;
   const fields = { orgId, granted, grantWritten, grantKept, budgetKept };
   if (grantWritten || grantKept) logger.info('Workspace equipped', fields);
-  else logger.warn('Workspace given its budget but no provider: none exists to grant', fields);
+  else logger.warn('Workspace has no provider: none exists to grant', fields);
   return { granted, grantKept, budgetKept };
 }
 
