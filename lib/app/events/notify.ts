@@ -214,6 +214,9 @@ export async function sweepFinishedEvents(
       kind: 'COMPARISON',
       notifiedAt: null,
       verdictStatus: { in: ['COMPLETED', 'FAILED', 'SKIPPED'] },
+      // Not one whose drafts still run: a comparison made with too few judges
+      // is `SKIPPED` from the start, and would hold a place in every pass.
+      members: { none: { assessment: { status: { in: ['QUEUED', 'RUNNING'] } } } },
       updatedAt: { lt: before },
     },
     orderBy: { updatedAt: 'asc' },

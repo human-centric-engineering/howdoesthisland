@@ -31,7 +31,7 @@ const mockPrisma = vi.hoisted(() => {
     org: { findUnique: vi.fn() },
     orgMembership: { findUnique: vi.fn(), findMany: vi.fn() },
     aiApiKey: { findFirst: vi.fn(), update: vi.fn() },
-    project: { count: vi.fn() },
+    project: { findFirst: vi.fn() },
     aiEventHook: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -159,7 +159,7 @@ beforeEach(() => {
   );
   mockPrisma.aiEventHook.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.aiEventHook.deleteMany.mockResolvedValue({ count: 1 });
-  mockPrisma.project.count.mockResolvedValue(1);
+  mockPrisma.project.findFirst.mockResolvedValue({ archivedAt: null });
 });
 
 describe('who may reach the webhook routes', () => {
@@ -268,7 +268,9 @@ describe('POST …/event-subscriptions', () => {
     expect(body.data.subscription).not.toHaveProperty('secret');
     expect(mockInvalidate).toHaveBeenCalled();
     // The project was checked as the workspace's.
-    expect(mockPrisma.project.count).toHaveBeenCalledWith({ where: { id: PROJECT, orgId: WS } });
+    expect(mockPrisma.project.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: PROJECT, orgId: WS } })
+    );
     // Audited and logged without the secret.
     expect(logAdminAction).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'hook.create', entityId: SUB })
@@ -284,6 +286,9 @@ describe('POST …/event-subscriptions', () => {
     ['the metadata address', { ...valid, url: 'https://169.254.169.254/latest' }],
     ['a reserved header', { ...valid, headers: { 'X-Sunrise-Signature': 'forged' } }],
     ['a header with a line break', { ...valid, headers: { 'X-Token': 'a\r\nX-Evil: 1' } }],
+    ['a header value fetch cannot send', { ...valid, headers: { 'X-Token': 'clé✓' } }],
+    ['a header the sender manages', { ...valid, headers: { Connection: 'close' } }],
+    ['two headers differing only in case', { ...valid, headers: { 'X-A': '1', 'x-a': '2' } }],
     ['a field the route does not take', { ...valid, secret: 'mine' }],
     ['no name', { ...valid, name: '' }],
   ])('refuses %s, writing nothing', async (_label, body) => {
@@ -294,7 +299,9 @@ describe('POST …/event-subscriptions', () => {
   });
 
   it('refuses a project that is not the workspace’s', async () => {
-    mockPrisma.project.count.mockResolvedValue(0);
+    mockPrisma.project.findFirst.mockResolvedValue(null);
+    expect((await create({ ...valid, projectId: PROJECT })).status).toBe(400);
+    mockPrisma.project.findFirst.mockResolvedValue({ archivedAt: new Date() });
     expect((await create({ ...valid, projectId: PROJECT })).status).toBe(400);
     expect(mockPrisma.aiEventHook.create).not.toHaveBeenCalled();
   });
@@ -310,9 +317,32 @@ describe('POST …/event-subscriptions', () => {
 });
 
 describe('PATCH and DELETE …/event-subscriptions/{subscriptionId}', () => {
-  it('changes the address keeping the headers, scoped to the workspace’s app hooks', async () => {
+  it('refuses a new address without its headers, so a stored credential never follows it', async () => {
     const res = await item.PATCH(
-      req(`${BASE}/${SUB}`, 'PATCH', { url: 'https://new.example.com/hook', projectId: null }),
+      req(`${BASE}/${SUB}`, 'PATCH', { url: 'https://attacker.example.com/x' }),
+      subParams()
+    );
+    expect(res.status).toBe(400);
+    expect(mockPrisma.aiEventHook.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('refuses any change during a support session, since it outlives the grant', async () => {
+    mockGetSession.mockResolvedValue(session(WS, 'ADMIN'));
+    mockOrgForMint.fn = () => {
+      throw new ForbiddenError('Credentials cannot be created during a support session');
+    };
+    const res = await item.PATCH(req(`${BASE}/${SUB}`, 'PATCH', { isEnabled: true }), subParams());
+    expect(res.status).toBe(403);
+    expect(mockPrisma.aiEventHook.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('changes the address with its headers, scoped to the workspace’s app hooks', async () => {
+    const res = await item.PATCH(
+      req(`${BASE}/${SUB}`, 'PATCH', {
+        url: 'https://new.example.com/hook',
+        headers: { Authorization: 'Bearer new-token' },
+        projectId: null,
+      }),
       subParams()
     );
     expect(res.status).toBe(200);
@@ -325,15 +355,16 @@ describe('PATCH and DELETE …/event-subscriptions/{subscriptionId}', () => {
     expect(call.data.action).toEqual({
       type: 'webhook',
       url: 'https://new.example.com/hook',
-      headers: { Authorization: 'Bearer receiver-token' },
+      headers: { Authorization: 'Bearer new-token' },
     });
     expect(mockInvalidate).toHaveBeenCalled();
     // The audit says what changed, never a header's value.
     expect(logAdminAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        metadata: { changed: ['url', 'projectId'], workspaceWebhook: true },
+        metadata: { changed: ['url', 'headers', 'projectId'], workspaceWebhook: true },
       })
     );
+    expect(JSON.stringify(vi.mocked(logAdminAction).mock.calls)).not.toContain('new-token');
   });
 
   it('answers 404 for another workspace’s hook, or one for a core event, writing nothing', async () => {
@@ -479,18 +510,21 @@ describe('the service’s other changes', () => {
     expect(mockPrisma.aiEventHook.create.mock.calls[0]?.[0].data.filter).toEqual({});
   });
 
-  it('keeps a hook with no headers headerless when only the address changes', async () => {
-    mockPrisma.aiEventHook.findFirst.mockResolvedValue(
-      hookRow({ action: { type: 'webhook', url: 'https://cms.example.com/hook' } })
-    );
+  it('stores a new address with no headers when it is given `{}`', async () => {
     await item.PATCH(
-      req(`${BASE}/${SUB}`, 'PATCH', { url: 'https://n.example.com/h' }),
+      req(`${BASE}/${SUB}`, 'PATCH', { url: 'https://n.example.com/h', headers: {} }),
       subParams()
     );
     expect(mockPrisma.aiEventHook.updateMany.mock.calls[0]?.[0].data.action).toEqual({
       type: 'webhook',
       url: 'https://n.example.com/h',
+      headers: {},
     });
+  });
+
+  it('keeps the stored headers when only the headers are left out and the address is unchanged', async () => {
+    await item.PATCH(req(`${BASE}/${SUB}`, 'PATCH', { name: 'Renamed' }), subParams());
+    expect(mockPrisma.aiEventHook.updateMany.mock.calls[0]?.[0].data).toEqual({ name: 'Renamed' });
   });
 
   it('answers 404 when the row went between the read and the write', async () => {

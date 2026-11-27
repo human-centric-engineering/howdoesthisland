@@ -397,6 +397,21 @@ describe('the sweep', () => {
     expect(history.notifiedAt).not.toBeNull();
   });
 
+  it('passes over a comparison whose drafts still run, though its verdict was skipped at the start', async () => {
+    const inFlight = comparison(
+      [review('COMPLETED', { notifiedAt: new Date() }), review('QUEUED')],
+      {
+        verdictStatus: 'SKIPPED',
+        verdict: null,
+        verdictReason: 'too_few_judges',
+      }
+    );
+    const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());
+    expect(swept.comparisons).toBe(0);
+    expect(inFlight.notifiedAt).toBeNull();
+    expect(mocks.engineForVersion).not.toHaveBeenCalled();
+  });
+
   it('touches only its own workspace’s rows', async () => {
     const other = review('COMPLETED', { orgId: ORG_B });
     const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());

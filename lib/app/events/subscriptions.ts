@@ -51,21 +51,54 @@ const urlField = z
   .refine((url) => isSafeProviderUrl(url), 'The address must be public, not a private network');
 
 /** A header name as HTTP allows it (a token), and a value with no line breaks. */
+/**
+ * Header names `fetch` (undici) refuses to send, or manages itself: a hook
+ * carrying one would fail every delivery.
+ */
+const FORBIDDEN_HEADER_NAMES = new Set([
+  'connection',
+  'content-length',
+  'content-type',
+  'expect',
+  'host',
+  'keep-alive',
+  'proxy-connection',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+/**
+ * A header name as HTTP allows it (a token), and a value of visible Latin-1
+ * plus space and tab, which is what `fetch` will send. Names compared ignoring
+ * case, as HTTP does: two that differ only in case would be merged into one.
+ */
 const headersField = z
   .record(
     z
       .string()
       .min(1)
       .max(100)
-      .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, 'Not a valid header name'),
+      .regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, 'Not a valid header name')
+      .refine((name) => !FORBIDDEN_HEADER_NAMES.has(name.toLowerCase()), {
+        error: 'This header is set by the sender and cannot be given',
+      }),
     z
       .string()
       .max(1000)
-      .regex(/^[^\r\n]*$/, 'A header value cannot contain a line break')
+      .regex(
+        /^[\t\x20-\x7e\x80-\xff]*$/,
+        'A header value can hold only printable characters, with no line breaks'
+      )
   )
   .refine((h) => Object.keys(h).length <= MAX_SUBSCRIPTION_HEADERS, {
     error: `At most ${MAX_SUBSCRIPTION_HEADERS} headers`,
   })
+  .refine(
+    (h) => new Set(Object.keys(h).map((k) => k.toLowerCase())).size === Object.keys(h).length,
+    { error: 'Two headers have the same name' }
+  )
   .refine((h) => !hasReservedHookHeader(h), RESERVED_HEADER_ERROR);
 
 /** Body of `POST /api/v1/workspaces/{id}/event-subscriptions`. */
@@ -82,7 +115,10 @@ export const createSubscriptionSchema = z
   })
   .strict();
 
-/** Body of `PATCH …/event-subscriptions/{subscriptionId}`. `headers` replaces them all. */
+/**
+ * Body of `PATCH …/event-subscriptions/{subscriptionId}`. `headers` replaces
+ * them all, and must come with a new `url`.
+ */
 export const updateSubscriptionSchema = z
   .object({
     name: z.string().trim().min(1, 'Give the subscription a name').max(100).optional(),
@@ -93,7 +129,14 @@ export const updateSubscriptionSchema = z
     isEnabled: z.boolean().optional(),
   })
   .strict()
-  .refine((body) => Object.keys(body).length > 0, { error: 'Give at least one field to change' });
+  .refine((body) => Object.keys(body).length > 0, { error: 'Give at least one field to change' })
+  // A header value can be the receiver's credential, and it is never read
+  // back: carried over to a new address, it would be sent to someone the
+  // admin who set it never chose. So a new address takes its headers afresh.
+  .refine((body) => body.url === undefined || body.headers !== undefined, {
+    error: 'A new address needs its headers sent again: give `headers` too, or `{}` for none',
+    path: ['headers'],
+  });
 
 export type CreateSubscription = z.infer<typeof createSubscriptionSchema>;
 export type UpdateSubscription = z.infer<typeof updateSubscriptionSchema>;
@@ -270,10 +313,20 @@ const NO_FILTER = {};
 /** Refuse unless the project is the workspace's. */
 async function requireProject(orgId: string, projectId: string | null | undefined): Promise<void> {
   if (!projectId) return;
-  const found = await prisma.project.count({ where: { id: projectId, orgId } });
-  if (found === 0) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, orgId },
+    select: { archivedAt: true },
+  });
+  if (!project) {
     throw new ValidationError('No such project in this workspace', {
       projectId: ['Not a project in this workspace'],
+    });
+  }
+  // An archived project takes no new reviews, so a webhook scoped to it
+  // would never fire.
+  if (project.archivedAt !== null) {
+    throw new ValidationError('That project is archived', {
+      projectId: ['An archived project has no new work to send'],
     });
   }
 }
@@ -343,6 +396,10 @@ export async function updateSubscription(
   id: string,
   body: UpdateSubscription
 ): Promise<{ subscription: EventSubscription; changed: string[] }> {
+  // A change outlives the session that made it: where the workspace's
+  // finished work is sent, and with what, is the credential's to decide, so a
+  // support session may not change it any more than make one (`orgForMint`).
+  mintOrgFor(orgId);
   const existing = await findOurs(orgId, id);
   if (body.projectId !== undefined) await requireProject(orgId, body.projectId);
   const action = storedAction.parse(existing.action);
@@ -352,6 +409,8 @@ export async function updateSubscription(
   if (body.eventType !== undefined) data.eventType = body.eventType;
   if (body.isEnabled !== undefined) data.isEnabled = body.isEnabled;
   if (body.url !== undefined || body.headers !== undefined) {
+    // A new address always comes with its headers (the schema), so stored
+    // ones are kept only for the address they were set for.
     const headers = body.headers ?? action.headers;
     data.action = {
       type: 'webhook',
@@ -384,9 +443,10 @@ export async function deleteSubscription(orgId: string, id: string): Promise<{ n
 }
 
 /**
- * Give a subscription a new secret. Answers it once. Deliveries are signed
- * with it from the next send on; a receiver should accept both for a moment
- * while it switches over.
+ * Give a subscription a new secret. Answers it once. Each server signs with
+ * it once its hook cache next loads, within a minute (core caches hooks per
+ * process for 60 seconds), so a receiver should accept both secrets for a
+ * minute while it switches over.
  */
 export async function rotateSubscriptionSecret(
   orgId: string,

@@ -77,17 +77,29 @@ The rules, each refused with 400 `VALIDATION_ERROR` unless it says otherwise:
   (`withOutboundDispatcher` in core's `postHook`, ledger row 37). A name whose DNS
   answer is private is refused. Its `lastError` then reads the same as a name that
   does not exist, so the deliveries list maps nothing of the operator's network.
-- `headers`: at most 10, valid names, no line breaks, not `X-Sunrise-Signature`
-  or `X-Sunrise-Timestamp`. Their values are sent with each delivery and never
-  read back; the audit log records which fields changed, never a value.
-- `projectId`: a project in this workspace. The subscription then gets only
-  that project's work (core's equality filter on `data.projectId`).
+- `headers`: at most 10, valid names, values of printable Latin-1 with no line
+  breaks (what `fetch` can send), no two names differing only in case, and not
+  `X-Sunrise-Signature`, `X-Sunrise-Timestamp` or a header the sender manages
+  (`Connection`, `Content-Type`, `Host`, `Transfer-Encoding` and the like).
+  Their values are sent with each delivery and never read back; the audit log
+  records which fields changed, never a value. **A new `url` must bring its
+  `headers`** (`{}` for none): a stored value can be the receiver's credential,
+  and carried over it would go to an address the admin who set it never chose.
+- `projectId`: a project in this workspace, not archived (an archived project
+  takes no new reviews). The subscription then gets only that project's work
+  (core's equality filter on `data.projectId`).
 - At most 10 subscriptions a workspace: 409 `SUBSCRIPTION_LIMIT`.
 
 **Why not an API key.** The secret is a credential, and a key must not mint
 credentials, so these routes take a browser session only, as the workspace's MCP
 keys do. For the same reason, a platform admin who entered under a support grant
-cannot make one or rotate its secret (`orgForMint`).
+cannot make one, change one or rotate its secret (`orgForMint`): each outlives
+the grant. They can still list, read and delete.
+
+**A change takes up to a minute everywhere.** Core caches each org's hooks per
+process for 60 seconds. The server that made a change drops its cache at once,
+but another server may send with the old address or secret, or a disabled hook,
+for up to a minute. After rotating, accept both secrets for a minute.
 
 ### What a subscription is
 
@@ -99,6 +111,9 @@ admins only, including the one that rotates a secret, so the workspace's routes
 (`generateHookSecret`, `invalidateHookCache`), with no platform edit. Every
 query names the workspace and the app's event types, so a hook a platform admin
 made in the same org for a core event is never listed, changed or deleted here.
+Core's `loadHooks` also names the org when it reads hooks to send to, rather
+than leaving it to row isolation alone (ledger row 37), so at `multi` without
+the policies enabled one workspace's events still reach only its own hooks.
 
 ## Verifying a delivery
 

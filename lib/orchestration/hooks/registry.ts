@@ -151,8 +151,12 @@ async function loadHooks(): Promise<Map<string, CachedHook[]>> {
     return cached.byType;
   }
 
+  // FORK (HowDoesThisLand, t-99): the org named as well as the policies'
+  // filter. A workspace owner can now make a hook, and at `multi` with row
+  // isolation not enabled the policies filter nothing, so this read alone
+  // decided whose hooks an event reached: every org's. Ledger row 37.
   const hooks = await prisma.aiEventHook.findMany({
-    where: { isEnabled: true },
+    where: { isEnabled: true, orgId },
     select: { id: true, eventType: true, action: true, filter: true, secret: true },
   });
 

@@ -3,13 +3,16 @@
  *
  * GET    …/event-subscriptions/[subscriptionId] — the subscription.
  * PATCH  …/event-subscriptions/[subscriptionId] — any of `{ name, eventType,
- *   url, headers, projectId, isEnabled }`. `headers` replaces them all;
+ *   url, headers, projectId, isEnabled }`. `headers` replaces them all, and a
+ *   new `url` must bring its `headers` (`{}` for none), so a stored header
+ *   value is never sent to an address its setter did not choose;
  *   `projectId: null` widens it to the whole workspace.
  * DELETE …/event-subscriptions/[subscriptionId] — stops it. Its deliveries are
  *   kept, as the record of what was sent.
  *
- * Errors: as the collection route, and 404 `NOT_FOUND` for a subscription
- * that is not this workspace's, or not one of the app's events.
+ * Errors: as the collection route; 404 `NOT_FOUND` for a subscription that
+ * is not this workspace's, or not one of the app's events; and 403
+ * `FORBIDDEN` for a `PATCH` in a support session, since the change outlives it.
  */
 import { withAuth } from '@/lib/auth/guards';
 import { successResponse } from '@/lib/api/responses';

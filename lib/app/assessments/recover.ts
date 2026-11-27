@@ -41,6 +41,7 @@ import { chargeEndedReview, chargeLapsedEphemeralRuns, uncharged } from '@/lib/a
 import { logger } from '@/lib/logging';
 import { beginAssessment } from '@/lib/app/assessments/run';
 import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
+import { notifyAfterReview } from '@/lib/app/events/notify';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 
@@ -115,7 +116,11 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
   }
   // A comparison waiting on a review given up on starts its verdict now (t-88),
   // not at the verdict recovery's next tick.
-  for (const { id } of spent) startVerdictsAfterReview(orgId, id);
+  for (const { id } of spent) {
+    startVerdictsAfterReview(orgId, id);
+    // Its finished event (t-99) goes now too, not at the sweep's next pass.
+    notifyAfterReview(orgId, id);
+  }
 
   // Cancelled reviews whose run died before its last write (`freePlace`).
   // Those from before charging began are left alone (`uncharged`).

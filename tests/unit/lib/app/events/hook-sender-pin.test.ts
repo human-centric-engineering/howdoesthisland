@@ -65,6 +65,7 @@ import { emitHookEventDurably, invalidateHookCache } from '@/lib/orchestration/h
 import { UnsafeResolvedAddressError } from '@/lib/security/safe-dispatcher';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { runAsOrg } from '@/lib/tenancy/context';
+import { prisma } from '@/lib/db/client';
 
 const CUSTOMER = 'cmorg000000000000000team1';
 
@@ -118,6 +119,15 @@ describe('the hook sender, for a customer org', () => {
       'Could not reach the destination: its host is not allowed or does not exist'
     );
     expect(error).not.toContain('10.0.0.5');
+  });
+});
+
+describe('which hooks an event reaches', () => {
+  it('reads only the emitting org’s hooks, not trusting row isolation alone', async () => {
+    await sendAs(CUSTOMER);
+    expect(prisma.aiEventHook.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { isEnabled: true, orgId: CUSTOMER } })
+    );
   });
 });
 
