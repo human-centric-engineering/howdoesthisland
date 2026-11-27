@@ -51,6 +51,15 @@ const SETTLED_VERDICTS = new Set(['completed', 'failed', 'skipped']);
  */
 export const SWEEP_GRACE_MS = 2 * 60 * 1000;
 
+/**
+ * How long after it ended the sweep keeps trying to send a row's event. A send
+ * that keeps failing (a delivery row that cannot be written) is otherwise
+ * tried every pass for ever, and each try resends to the subscriptions whose
+ * rows were written. An event a day late is worth less than none, as core
+ * says of its own unsent rows.
+ */
+export const SWEEP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 /** Rows of each kind the sweep sends per workspace per pass. */
 export const SWEEP_BATCH = 50;
 
@@ -175,13 +184,15 @@ async function notifySet(setId: string): Promise<void> {
  * {@link SWEEP_BATCH} of each kind: the recovery tick's backstop for a send
  * lost with its process, and for work that ended where nothing notifies (the
  * recovery job giving up on a review). Rows that ended before events existed
- * were stamped by their migration, so history is never sent.
+ * were stamped by their migration, so history is never sent; a row whose send
+ * has failed for {@link SWEEP_WINDOW_MS} is given up on.
  */
 export async function sweepFinishedEvents(
   now: Date = new Date()
 ): Promise<{ assessments: number; comparisons: number; failed: number }> {
   const orgId = requireOrgId();
   const before = new Date(now.getTime() - SWEEP_GRACE_MS);
+  const since = new Date(now.getTime() - SWEEP_WINDOW_MS);
   let failed = 0;
 
   const reviews = await prisma.assessment.findMany({
@@ -189,9 +200,10 @@ export async function sweepFinishedEvents(
       orgId,
       notifiedAt: null,
       status: { in: FINAL_STATUSES },
-      updatedAt: { lt: before },
+      updatedAt: { lt: before, gte: since },
     },
-    orderBy: { updatedAt: 'asc' },
+    // Newest first, so a row whose send keeps failing cannot hold the batch.
+    orderBy: { updatedAt: 'desc' },
     take: SWEEP_BATCH,
     select: { id: true },
   });
@@ -217,9 +229,10 @@ export async function sweepFinishedEvents(
       // Not one whose drafts still run: a comparison made with too few judges
       // is `SKIPPED` from the start, and would hold a place in every pass.
       members: { none: { assessment: { status: { in: ['QUEUED', 'RUNNING'] } } } },
-      updatedAt: { lt: before },
+      updatedAt: { lt: before, gte: since },
     },
-    orderBy: { updatedAt: 'asc' },
+    // Newest first, so a row whose send keeps failing cannot hold the batch.
+    orderBy: { updatedAt: 'desc' },
     take: SWEEP_BATCH,
     select: { id: true },
   });

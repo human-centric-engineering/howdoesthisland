@@ -50,10 +50,10 @@ const urlField = z
   .refine((url) => url.startsWith('https://'), 'The address must start https://')
   .refine((url) => isSafeProviderUrl(url), 'The address must be public, not a private network');
 
-/** A header name as HTTP allows it (a token), and a value with no line breaks. */
 /**
- * Header names `fetch` (undici) refuses to send, or manages itself: a hook
- * carrying one would fail every delivery.
+ * Header names `fetch` (undici) refuses to send or manages itself, so a hook
+ * carrying one would fail every delivery, and the one core sends the event
+ * type in.
  */
 const FORBIDDEN_HEADER_NAMES = new Set([
   'connection',
@@ -67,6 +67,8 @@ const FORBIDDEN_HEADER_NAMES = new Set([
   'trailer',
   'transfer-encoding',
   'upgrade',
+  // Core sends the event type in it; one stored here would replace it.
+  'x-hook-event',
 ]);
 
 /**

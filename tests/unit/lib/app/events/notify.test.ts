@@ -13,6 +13,7 @@
  * @see lib/app/events/notify.ts
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { createFakeDb, type FakeDb, type Row } from '@/tests/unit/lib/app/assessments/fake-db';
 
 const mocks = vi.hoisted(() => ({
@@ -62,6 +63,7 @@ vi.stubGlobal('fetch', mocks.fetch);
 
 import {
   SWEEP_GRACE_MS,
+  SWEEP_WINDOW_MS,
   notifyAfterReview,
   notifyAfterVerdict,
   sendAssessmentFinished,
@@ -102,7 +104,8 @@ const posts = (): Post[] =>
       headers: init.headers,
     })
   );
-const dataOf = (post: Post) => (JSON.parse(post.body) as { data: Row }).data;
+const sentBody = z.object({ data: z.record(z.string(), z.unknown()) });
+const dataOf = (post: Post): Row => sentBody.parse(JSON.parse(post.body)).data;
 const settle = () => new Promise((r) => setTimeout(r, 30));
 
 /** A review in `status`, ended long enough ago for the sweep to take it. */
@@ -214,7 +217,7 @@ describe('a finished review', () => {
       overall: 71,
       band: 'strong',
       projectId: null,
-      completedAt: (row.completedAt as Date).toISOString(),
+      completedAt: z.date().parse(row.completedAt).toISOString(),
     });
     expect(row.notifiedAt).toBeInstanceOf(Date);
   });
@@ -410,6 +413,21 @@ describe('the sweep', () => {
     expect(swept.comparisons).toBe(0);
     expect(inFlight.notifiedAt).toBeNull();
     expect(mocks.engineForVersion).not.toHaveBeenCalled();
+  });
+
+  it('gives up on a row that ended more than a day ago, and takes the newest first', async () => {
+    const stale = review('COMPLETED', {
+      updatedAt: new Date(Date.now() - SWEEP_WINDOW_MS - 60_000),
+    });
+    const fresh = review('COMPLETED');
+    const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());
+    await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    expect(swept.assessments).toBe(1);
+    expect(fresh.notifiedAt).toBeInstanceOf(Date);
+    expect(stale.notifiedAt).toBeNull();
+    expect(fake.db.assessment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { updatedAt: 'desc' } })
+    );
   });
 
   it('touches only its own workspace’s rows', async () => {

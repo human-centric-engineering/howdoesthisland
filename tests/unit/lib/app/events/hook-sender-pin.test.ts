@@ -24,7 +24,7 @@ const mockEnv = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
-const mocks = vi.hoisted(() => ({ fetch: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetch: vi.fn(), update: vi.fn(), deliveryFindMany: vi.fn() }));
 vi.mock('@/lib/db/client', () => ({
   prisma: {
     aiEventHook: {
@@ -52,6 +52,7 @@ vi.mock('@/lib/db/client', () => ({
         destinationFingerprint: null,
         previousDestinations: null,
       }),
+      findMany: mocks.deliveryFindMany,
       updateManyAndReturn: vi.fn().mockResolvedValue([{ id: 'del-1', createdAt: new Date() }]),
     },
   },
@@ -61,7 +62,11 @@ vi.mock('@/lib/logging', () => ({
 }));
 vi.stubGlobal('fetch', mocks.fetch);
 
-import { emitHookEventDurably, invalidateHookCache } from '@/lib/orchestration/hooks/registry';
+import {
+  emitHookEventDurably,
+  invalidateHookCache,
+  processPendingHookRetries,
+} from '@/lib/orchestration/hooks/registry';
 import { UnsafeResolvedAddressError } from '@/lib/security/safe-dispatcher';
 import { INSTALL_ORG_ID } from '@/lib/tenancy/constants';
 import { runAsOrg } from '@/lib/tenancy/context';
@@ -74,7 +79,10 @@ async function sendAs(orgId: string): Promise<{ dispatcher?: unknown }> {
     emitHookEventDurably('app.assessment.finished', { eventId: 'assessment:a1' })
   );
   await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
-  return mocks.fetch.mock.calls[0]?.[1] as { dispatcher?: unknown };
+  return z
+    .object({ dispatcher: z.unknown().optional() })
+    .loose()
+    .parse(mocks.fetch.mock.calls[0]?.[1]);
 }
 
 /** The `lastError` the failed attempt recorded. */
@@ -128,6 +136,16 @@ describe('which hooks an event reaches', () => {
     expect(prisma.aiEventHook.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { isEnabled: true, orgId: CUSTOMER } })
     );
+  });
+});
+
+describe('the retry pass', () => {
+  it('reads only its own org’s due deliveries, so another org’s retry is never sent unpinned', async () => {
+    mocks.deliveryFindMany.mockResolvedValue([]);
+    await runAsOrg(INSTALL_ORG_ID, () => processPendingHookRetries());
+    expect(mocks.deliveryFindMany.mock.calls[0]?.[0].where).toMatchObject({
+      orgId: INSTALL_ORG_ID,
+    });
   });
 });
 

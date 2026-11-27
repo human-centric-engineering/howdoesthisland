@@ -905,10 +905,17 @@ function scheduleRetry(deliveryId: string, delayMs: number, armedFor: Date): voi
 export async function processPendingHookRetries(): Promise<number> {
   // Before the read: each row and its hook are its attempt's copy (t-886).
   const takenAt = new Date();
+  // FORK (HowDoesThisLand, t-99): this job runs once per org, and the org is
+  // named as well as the policies' filter, as in `loadHooks`. At `multi` with
+  // row isolation not enabled the install org's pass read every org's rows,
+  // and sent a customer org's retry with no pinned dispatcher
+  // (`withOutboundDispatcher` reads the pass's org). Ledger row 37.
+  const { orgId } = requireTenantContext();
   const pending = await prisma.aiEventHookDelivery.findMany({
     // `pending` too: a row whose first attempt never ran, its lease run out
     // (#834). A manual retry's reset holds one the same way.
     where: {
+      ...(orgId !== null ? { orgId } : {}),
       status: { in: [...AWAITING_RETRY_STATUSES] },
       nextRetryAt: { lte: new Date() },
       attempts: { lt: MAX_ATTEMPTS },

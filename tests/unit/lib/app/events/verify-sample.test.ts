@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { signHookPayload } from '@/lib/orchestration/hooks/signing';
 
 type Verify = (
@@ -36,7 +37,8 @@ function loadSample(): Verify {
   if (typeof verify !== 'function') {
     throw new Error('The sample exports no verifyHowDoesThisLandWebhook');
   }
-  return verify as Verify;
+  return (rawBody, headers, secret, nowSeconds) =>
+    z.boolean().parse(verify(rawBody, headers, secret, nowSeconds));
 }
 
 const verify = loadSample();

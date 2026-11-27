@@ -288,6 +288,10 @@ describe('POST …/event-subscriptions', () => {
     ['a header with a line break', { ...valid, headers: { 'X-Token': 'a\r\nX-Evil: 1' } }],
     ['a header value fetch cannot send', { ...valid, headers: { 'X-Token': 'clé✓' } }],
     ['a header the sender manages', { ...valid, headers: { Connection: 'close' } }],
+    [
+      'the event-type header core sends',
+      { ...valid, headers: { 'X-Hook-Event': 'app.comparison.finished' } },
+    ],
     ['two headers differing only in case', { ...valid, headers: { 'X-A': '1', 'x-a': '2' } }],
     ['a field the route does not take', { ...valid, secret: 'mine' }],
     ['no name', { ...valid, name: '' }],

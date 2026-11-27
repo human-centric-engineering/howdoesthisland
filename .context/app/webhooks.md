@@ -79,7 +79,7 @@ The rules, each refused with 400 `VALIDATION_ERROR` unless it says otherwise:
   does not exist, so the deliveries list maps nothing of the operator's network.
 - `headers`: at most 10, valid names, values of printable Latin-1 with no line
   breaks (what `fetch` can send), no two names differing only in case, and not
-  `X-Sunrise-Signature`, `X-Sunrise-Timestamp` or a header the sender manages
+  `X-Sunrise-Signature`, `X-Sunrise-Timestamp`, `X-Hook-Event` or a header the sender manages
   (`Connection`, `Content-Type`, `Host`, `Transfer-Encoding` and the like).
   Their values are sent with each delivery and never read back; the audit log
   records which fields changed, never a value. **A new `url` must bring its
@@ -112,8 +112,9 @@ admins only, including the one that rotates a secret, so the workspace's routes
 query names the workspace and the app's event types, so a hook a platform admin
 made in the same org for a core event is never listed, changed or deleted here.
 Core's `loadHooks` also names the org when it reads hooks to send to, rather
-than leaving it to row isolation alone (ledger row 37), so at `multi` without
-the policies enabled one workspace's events still reach only its own hooks.
+than leaving it to row isolation alone, and so does its retry pass (ledger row
+37), so at `multi` without the policies enabled one workspace's events still
+reach only its own hooks, and its retries are still pinned.
 
 ## Verifying a delivery
 
@@ -166,7 +167,10 @@ queued (`lib/app/events/notify.ts`):
 3. If the process dies first, or a review ends where nothing notifies (the
    recovery job giving up on it), the `app:finished-events` job (every 15
    minutes, per workspace) sends what is owed. It leaves rows that ended in the
-   last two minutes (`SWEEP_GRACE_MS`) to the send already under way.
+   last two minutes (`SWEEP_GRACE_MS`) to the send already under way, takes the
+   newest first, and gives up on a row that ended more than a day ago
+   (`SWEEP_WINDOW_MS`): a send that keeps failing would otherwise resend every
+   pass to the subscriptions whose rows were written.
 
 The migration (`20261127100000_app_finished_events`) stamped every review and
 comparison that had already ended, so the sweep never sends history.
