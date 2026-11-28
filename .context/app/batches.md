@@ -106,7 +106,7 @@ own first**, and a batch item names it by id:
    `INVALID_FILE_TYPE`, 422 `TEXT_TOO_LONG`, `TOO_MANY_PAGES`,
    `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE`, 400 `CONTENT_EMPTY`.
 2. It is stored as a `Content` row with its text, `sourceKind: 'FILE'`, no
-   review, and **`awaitingBatch: true`**. 201 with `{ id, fileName, title,
+   review, and **`awaitingBatch: true`**: 201 with `{ id, fileName, title,
 wordCount, createdAt, expiresAt }`. No raw file is kept, so no storage
    provider is involved.
 3. `POST /api/v1/batches` with `{ contentId: id, label? }` among its items.
@@ -115,46 +115,56 @@ wordCount, createdAt, expiresAt }`. No raw file is kept, so no storage
    copied, and its text was checked at upload, so nothing is left to refuse it
    for but whether it can be taken.
 
+The limits are a single review's: intake reads up to 10 MB. On Vercel (staging)
+the platform refuses any body over 4.5 MB with a 413 of its own before the route
+runs, as it does a single review's upload.
+
 **One review takes an upload, once.** The batch checks every upload it names
-before anything is held: 409 `CONTENT_IN_USE` for a file a review already has
-(an upload another batch took, or a file a single review read), and 404
-`CONTENT_NOT_FOUND` for anything else: not in this workspace (another
-workspace's reads as none), a pasted text's or a page's content, or an upload
-past its `expiresAt`, deleted or not yet, each with `details.position` and `details.contentId`.
-Naming one twice in a body is 400 `VALIDATION_ERROR` at the second place. The
-check answers the common case; **the claim is what holds**. The transaction
+before anything is held, each refusal with `details.position` and
+`details.contentId`:
+
+- 409 `CONTENT_IN_USE` for a file a review already has: an upload another batch
+  took, or a file a single review read.
+- 404 `CONTENT_NOT_FOUND` for anything else: not in this workspace (another
+  workspace's reads as none), a pasted text's or a page's content, or an upload
+  past its `expiresAt`, deleted or not yet.
+- 400 `VALIDATION_ERROR` for one upload named twice in a body, at the second
+  place.
+
+The check answers the common case; **the claim is what holds**. The transaction
 writing the item's review clears `awaitingBatch` in a conditional update
-(`claimUpload` in `lib/app/assessments/enqueue.ts`), and under Postgres's
-default isolation a second update of the same row waits for the first and then
-re-checks its condition on the row the first left. So of two batches racing for
-one upload one wins, and the other is refused with the same 409 and its position,
+(`claimUpload` in `lib/app/assessments/enqueue.ts`). Under Postgres's default
+isolation a second update of the same row waits for the first, then re-checks
+its condition on the row the first left. So of two batches racing for one
+upload one wins, and the other is refused with the same 409 and its position,
 storing nothing.
 
 **Unclaimed for a day, deleted.** An upload that never joins a batch would
 otherwise be kept forever by a workspace with no retention window. The
 `app:unclaimed-uploads` job (`lib/app/jobs.ts`), hourly and per workspace,
 deletes uploads still `awaitingBatch` 24 hours after they were made
-(`purgeUnclaimedUploads` in `lib/app/batches/uploads.ts`), so one goes at most an
-hour past its `expiresAt`; from then until it is deleted, a batch is refused it as
-above. Its delete waits on, and re-checks after, a claim in flight the same way,
-so it never takes an upload a batch has just claimed, nor a
+(`purgeUnclaimedUploads` in `lib/app/batches/uploads.ts`), so one goes at most
+an hour past its `expiresAt`. From then until it is deleted, a batch is refused
+it as above. The job's delete waits on, and re-checks after, a claim in flight
+in the same way, so it never takes an upload a batch has just claimed, nor a
 review with it.
 
 **The retention purge.** Its shortest window, 1 day, is no shorter than the
 claim window, so an upload a batch can still claim is never one it would take.
 At the edge, where one is claimed as the purge runs, the purge's "no assessment"
-condition reads the rows as they were when it started. So it also leaves content
-updated inside its window: the claim moves `updatedAt`, a column of the row
-itself, which Postgres re-checks after waiting on the claim's lock
+condition reads the rows as they were when it started. So it also leaves
+content updated inside its window: the claim moves `updatedAt`, a column of the
+row itself, which Postgres re-checks after waiting on the claim's lock
 (`lib/app/retention/purge.ts`). Without that, the purge could delete the upload
 and, by the cascade, the review just written on it.
 
 **Their own allowance.** Uploads count against **`UPLOADS_PER_HOUR`** (200, as
-many as batch items) per user. A caller with no room left is refused before the
-body is read, and each upload is counted once `readUpload` accepts its body,
-before its text is extracted (a body it refuses is bounded only by the `/api/v1`
-section cap): reading and extracting a 10 MB file is the work it bounds. The `/api/v1` section cap alone
-would allow 6,000 an hour. 429 `RATE_LIMIT_EXCEEDED` past it.
+many as batch items) per user: reading and extracting a 10 MB file is the work
+it bounds, which the `/api/v1` section cap alone would allow 6,000 times an
+hour. A caller with no room left is refused before the body is read, 429
+`RATE_LIMIT_EXCEEDED`. Each upload is counted once `readUpload` accepts its
+body, before its text is extracted; a body `readUpload` refuses is not counted,
+and only the section cap bounds those.
 
 An upload is the workspace's and its uploader's data as any content row is: in
 the subject export by `createdByUserId`, and in the workspace export.
