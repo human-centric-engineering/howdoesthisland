@@ -1,7 +1,7 @@
 /**
- * Tests: the `batches` routes (t-101).
+ * Tests: the `batches` routes (t-101), and the uploads a batch names (t-102).
  *
- * POST/GET /api/v1/batches · GET/DELETE …/{id}
+ * POST/GET /api/v1/batches · GET/DELETE …/{id} · POST /api/v1/contents
  *
  * Real: the guard, the batch service, the review options as a single review
  * resolves them, the budget check and its holds, enqueue, the job (claim, the
@@ -14,7 +14,10 @@
  * `fetchPage` (each address serves a text `SCORES` knows), and core's durable
  * emit, which records each event.
  *
+ * Uploads are read by the real intake (`extractText`), from `.txt` files.
+ *
  * @see app/api/v1/batches/
+ * @see app/api/v1/contents/
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -145,18 +148,21 @@ vi.mock('@/lib/app/frameworks/api/catalog', () => ({
 }));
 
 import { POST as create, GET as list } from '@/app/api/v1/batches/route';
+import { POST as uploadFile } from '@/app/api/v1/contents/route';
 import { GET as read, DELETE as remove } from '@/app/api/v1/batches/[id]/route';
 import { createHowDoesThisLandEngine } from '@/lib/app/frameworks/howdoesthisland/engine';
 import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engine/baseline-fixtures';
 import { createMockAuthSession } from '@/tests/helpers/auth';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
-import { batchItemLimiter } from '@/lib/app/batches/limiter';
-import { BATCH_ITEMS_PER_HOUR } from '@/lib/app/batches/limits';
+import { batchItemLimiter, uploadLimiter } from '@/lib/app/batches/limiter';
+import { BATCH_ITEMS_PER_HOUR, UPLOADS_PER_HOUR } from '@/lib/app/batches/limits';
+import { purgeUnclaimedUploads, UPLOAD_CLAIM_WINDOW_MS } from '@/lib/app/batches/uploads';
+import { MAX_UPLOAD_BODY_BYTES } from '@/lib/app/intake/upload';
 import { resetKicksForTests } from '@/lib/app/assessments/kick';
 import { forgetEarlyScansForTests } from '@/lib/app/assessments/early-scan';
 import { JudgeRunError } from '@/lib/app/judges/run-judge';
 import { IntakeError, IntakeErrorCodes } from '@/lib/app/intake/errors';
-import { batchDetailSchema, batchSummarySchema } from '@/lib/app/api/registry';
+import { batchDetailSchema, batchSummarySchema, uploadSchema } from '@/lib/app/api/registry';
 import { forgetSpendCaps } from '@/lib/orchestration/llm/spend-caps';
 import { RUNNING_PER_WORKSPACE } from '@/lib/app/assessments/limits';
 import { runAsOrg } from '@/lib/tenancy/context';
@@ -276,6 +282,14 @@ function post(body: unknown) {
     })
   );
 }
+const UPLOADS = 'http://localhost/api/v1/contents';
+/** A file as `POST /api/v1/contents` takes it: one `file` part, and given options, an `options` part. */
+function postFile(name: string, content: string | Buffer<ArrayBuffer>, options?: unknown) {
+  const form = new FormData();
+  form.append('file', new File([content], name));
+  if (options !== undefined) form.append('options', JSON.stringify(options));
+  return uploadFile(new NextRequest(UPLOADS, { method: 'POST', body: form }));
+}
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const getList = (query = '') => list(new NextRequest(`${BASE}${query}`));
 const getOne = (id: string) => read(new NextRequest(`${BASE}/${id}`), params(id));
@@ -289,6 +303,15 @@ interface Envelope {
   error?: { code: string; message: string; details?: Record<string, unknown> };
 }
 const json = async (res: Response) => (await res.json()) as Envelope;
+
+/** Upload a file and answer its id, failing unless it was stored. */
+async function uploaded(name: string, content: string): Promise<string> {
+  const res = await postFile(name, content);
+  const env = await json(res);
+  if (res.status !== 201)
+    throw new Error(`expected 201, got ${res.status}: ${JSON.stringify(env)}`);
+  return uploadSchema.parse(env.data).id;
+}
 
 /** POST a batch and answer its parsed body, failing unless it was accepted. */
 async function batch(body: Record<string, unknown>) {
@@ -357,6 +380,8 @@ beforeEach(() => {
   forgetSpendCaps();
   aiAssessmentLimiter.reset(`user:${ALICE}`);
   batchItemLimiter.reset(`user:${ALICE}`);
+  uploadLimiter.reset(`user:${ALICE}`);
+  uploadLimiter.reset(`user:${BOB}`);
   resetKicksForTests();
   forgetEarlyScansForTests();
   signedIn(ALICE, WS_A);
@@ -526,6 +551,232 @@ describe('POST /api/v1/batches', () => {
       expect(res.status).toBe(400);
     }
     expect(fake.sets).toEqual([]);
+  });
+});
+
+describe('POST /api/v1/contents (t-102)', () => {
+  it('reads a file’s text and stores it in the caller’s workspace, with no review, for a batch to take', async () => {
+    const res = await postFile('launch.txt', DRAFT_A);
+    expect(res.status).toBe(201);
+    const body = uploadSchema.parse((await json(res)).data);
+    expect(body).toMatchObject({ fileName: 'launch.txt', title: 'launch', wordCount: 11 });
+    expect(Date.parse(body.expiresAt) - Date.parse(body.createdAt)).toBe(UPLOAD_CLAIM_WINDOW_MS);
+    expect(fake.contents).toEqual([
+      expect.objectContaining({
+        id: body.id,
+        orgId: WS_A,
+        sourceKind: 'FILE',
+        fileName: 'launch.txt',
+        text: DRAFT_A,
+        wordCount: 11,
+        createdByUserId: ALICE,
+        awaitingBatch: true,
+      }),
+    ]);
+    expect(fake.contents[0]?.textSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(fake.assessments).toEqual([]);
+  });
+
+  it('415 INVALID_FILE_TYPE for a format intake does not read, storing nothing', async () => {
+    const res = await postFile('draft.exe', 'MZ');
+    expect(res.status).toBe(415);
+    expect((await json(res)).error?.code).toBe('INVALID_FILE_TYPE');
+    expect(fake.contents).toEqual([]);
+  });
+
+  it('413 FILE_TOO_LARGE for a body over the proxy limit, before it is read', async () => {
+    const form = new FormData();
+    form.append('file', new File([DRAFT_A], 'launch.txt'));
+    const request = new NextRequest(UPLOADS, {
+      method: 'POST',
+      body: form,
+      headers: { 'content-length': String(MAX_UPLOAD_BODY_BYTES + 1) },
+    });
+    const formData = vi.spyOn(request, 'formData');
+    const res = await uploadFile(request);
+    expect(res.status).toBe(413);
+    expect((await json(res)).error?.code).toBe('FILE_TOO_LARGE');
+    expect(formData).not.toHaveBeenCalled();
+    expect(fake.contents).toEqual([]);
+  });
+
+  it('refuses a file with no text, and one longer than a review takes, as a review’s upload is', async () => {
+    const empty = await postFile('empty.txt', '   \n  ');
+    expect(empty.status).toBe(422);
+    expect((await json(empty)).error?.code).toBe('NO_TEXT');
+    const long = await postFile('long.txt', 'word '.repeat(9_000));
+    expect(long.status).toBe(422);
+    expect((await json(long)).error?.code).toBe('TEXT_TOO_LONG');
+    expect(fake.contents).toEqual([]);
+  });
+
+  it('400 VALIDATION_ERROR for a JSON body, and for options it does not take', async () => {
+    const asJson = await uploadFile(
+      new NextRequest(UPLOADS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: DRAFT_A }),
+      })
+    );
+    expect(asJson.status).toBe(400);
+    expect((await json(asJson)).error?.code).toBe('VALIDATION_ERROR');
+    const withOptions = await postFile('launch.txt', DRAFT_A, { projectId: 'project-1' });
+    expect(withOptions.status).toBe(400);
+    expect(fake.contents).toEqual([]);
+  });
+
+  it('429 past the uploads a person may make in an hour, storing nothing more', async () => {
+    for (let i = 0; i < UPLOADS_PER_HOUR; i++) uploadLimiter.check(`user:${ALICE}`);
+    const res = await postFile('launch.txt', DRAFT_A);
+    expect(res.status).toBe(429);
+    expect(fake.contents).toEqual([]);
+  });
+});
+
+describe('POST /api/v1/batches — uploaded files (t-102)', () => {
+  it('reviews an upload as text, titled by its label, taking the row it was stored in', async () => {
+    const first = await uploaded('launch.txt', DRAFT_A);
+    const second = await uploaded('pricing.txt', DRAFT_B);
+    const created = await batch({
+      items: [
+        { contentId: first, label: 'Launch email' },
+        { contentId: second },
+        ...texts(DRAFT_C),
+      ],
+    });
+    expect(created.items.map((i) => [i.position, i.label, i.source?.kind])).toEqual([
+      [0, 'Launch email', 'file'],
+      [1, null, 'file'],
+      [2, 'Item 1', 'text'],
+    ]);
+    // No copy: the two uploads became the reviews' content, and one row was written for the text.
+    expect(fake.contents).toHaveLength(3);
+    expect(fake.assessments.slice(0, 2).map((a) => a.contentId)).toEqual([first, second]);
+    expect(fake.contents.find((c) => c.id === first)).toMatchObject({
+      awaitingBatch: false,
+      title: 'Launch email',
+    });
+    // Unlabelled, it keeps the title intake gave it.
+    expect(fake.contents.find((c) => c.id === second)).toMatchObject({
+      awaitingBatch: false,
+      title: 'pricing',
+    });
+
+    const ended = await untilEnded(created.id);
+    expect(ended.items.map((i) => i.status)).toEqual(['completed', 'completed', 'completed']);
+    // Each was scored on its own file's text.
+    expect(ended.items.map((i) => i.overall)).toEqual([55, 56, 50]);
+  });
+
+  it('refuses another workspace’s upload with 404, naming the item, storing nothing', async () => {
+    signedIn(BOB, WS_B);
+    const bobs = await uploaded('launch.txt', DRAFT_A);
+    signedIn(ALICE, WS_A);
+    const mine = await uploaded('pricing.txt', DRAFT_B);
+
+    const res = await post({ judges: TWO, items: [{ contentId: mine }, { contentId: bobs }] });
+    expect(res.status).toBe(404);
+    expect((await json(res)).error).toMatchObject({
+      code: 'CONTENT_NOT_FOUND',
+      details: { position: 1, contentId: bobs },
+    });
+    expect(fake.assessments).toEqual([]);
+    expect(fake.sets).toEqual([]);
+    // Neither was taken: Alice's can still join a batch, and Bob's is untouched.
+    expect(fake.contents.map((c) => c.awaitingBatch)).toEqual([true, true]);
+  });
+
+  it('refuses an upload already taken with 409, naming the item, storing nothing', async () => {
+    const taken = await uploaded('launch.txt', DRAFT_A);
+    await batch({ items: [{ contentId: taken }] });
+
+    const res = await post({ judges: TWO, items: [...texts(DRAFT_B), { contentId: taken }] });
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'CONTENT_IN_USE',
+      details: { position: 1, contentId: taken },
+    });
+    expect(fake.assessments).toHaveLength(1);
+    expect(fake.sets).toHaveLength(1);
+  });
+
+  it('refuses the content of a review that was never an upload, as taken', async () => {
+    await batch({ items: texts(DRAFT_A) });
+    const reviewed = String(fake.contents[0]?.id);
+    const res = await post({ judges: TWO, items: [{ contentId: reviewed }] });
+    expect(res.status).toBe(409);
+    expect((await json(res)).error?.code).toBe('CONTENT_IN_USE');
+  });
+
+  it('refuses an upload taken between the check and the write, naming the item, storing nothing', async () => {
+    const raced = await uploaded('pricing.txt', DRAFT_B);
+    // The check reads it still waiting; another batch takes it before this one writes.
+    fake.db.content.findMany.mockImplementationOnce(async () => {
+      const rows = fake.contents.map((c) => ({ ...c }));
+      const row = fake.contents.find((c) => c.id === raced);
+      if (row) row.awaitingBatch = false;
+      return rows;
+    });
+
+    // First: the fake's transaction does not roll back what an item before it wrote.
+    const res = await post({ judges: TWO, items: [{ contentId: raced }, ...texts(DRAFT_A)] });
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({
+      code: 'CONTENT_IN_USE',
+      details: { position: 0, contentId: raced },
+    });
+    expect(fake.assessments).toEqual([]);
+    expect(fake.sets).toEqual([]);
+  });
+
+  it('refuses naming one upload twice in a batch, at the second place', async () => {
+    const id = await uploaded('launch.txt', DRAFT_A);
+    const res = await post({ judges: TWO, items: [{ contentId: id }, { contentId: id }] });
+    expect(res.status).toBe(400);
+    const { error } = await json(res);
+    expect(error?.code).toBe('VALIDATION_ERROR');
+    expect(JSON.stringify(error?.details)).toContain('items.1.contentId');
+    expect(fake.contents[0]?.awaitingBatch).toBe(true);
+  });
+});
+
+describe('the unclaimed-upload purge (t-102)', () => {
+  it('deletes this workspace’s uploads unclaimed for 24 hours, keeping claimed, newer and another workspace’s', async () => {
+    const stale = await uploaded('stale.txt', DRAFT_A);
+    const staleToo = await uploaded('stale-too.txt', DRAFT_C);
+    const claimed = await uploaded('claimed.txt', DRAFT_B);
+    const fresh = await uploaded('fresh.txt', DRAFT_D);
+    await batch({ items: [{ contentId: claimed }] });
+    await batch({ items: texts(DRAFT_E) });
+    signedIn(BOB, WS_B);
+    const bobs = await uploaded('bobs.txt', DRAFT_A);
+
+    const now = new Date();
+    const aged = new Date(now.getTime() - UPLOAD_CLAIM_WINDOW_MS - 60_000);
+    for (const c of fake.contents) if (c.id !== fresh) c.createdAt = aged;
+
+    expect(await runAsOrg(WS_A, () => purgeUnclaimedUploads(now))).toEqual({ uploads: 2 });
+    const left = fake.contents.map((c) => c.id);
+    expect(left).not.toContain(stale);
+    expect(left).not.toContain(staleToo);
+    // Claimed, the batch's pasted text (never an upload), newer, and Bob's stay.
+    expect(left).toEqual(expect.arrayContaining([claimed, fresh, bobs]));
+    expect(fake.contents).toHaveLength(4);
+    expect(fake.assessments).toHaveLength(2);
+
+    // Bob's goes in his workspace's own pass, and a second pass finds nothing.
+    expect(await runAsOrg(WS_B, () => purgeUnclaimedUploads(now))).toEqual({ uploads: 1 });
+    expect(await runAsOrg(WS_A, () => purgeUnclaimedUploads(now))).toEqual({ uploads: 0 });
+  });
+
+  it('keeps one exactly 24 hours old, deleting it only once past the window', async () => {
+    const id = await uploaded('launch.txt', DRAFT_A);
+    const createdAt = fake.contents[0]?.createdAt as Date;
+    const at = (ms: number) => new Date(createdAt.getTime() + ms);
+    const purgeAt = (ms: number) => runAsOrg(WS_A, () => purgeUnclaimedUploads(at(ms)));
+    expect(await purgeAt(UPLOAD_CLAIM_WINDOW_MS)).toEqual({ uploads: 0 });
+    expect(await purgeAt(UPLOAD_CLAIM_WINDOW_MS + 1)).toEqual({ uploads: 1 });
+    expect(fake.contents.map((c) => c.id)).not.toContain(id);
   });
 });
 

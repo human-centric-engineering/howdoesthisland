@@ -2,9 +2,9 @@
 
 A content team checking every page of a site, or a CMS checking every draft
 before it publishes, used to send one review per call and track each one. A
-batch takes many texts or pages in one call, reviews them all the same way,
-answers its progress in one read, and sends one event when the last one ends.
-Built in t-101 (f-batch-webhooks, app-plan §21).
+batch takes many texts, pages or uploaded files in one call, reviews them all
+the same way, answers its progress in one read, and sends one event when the
+last one ends. Built in t-101 (f-batch-webhooks, app-plan §21); files in t-102.
 
 A batch is a comparison's set (`.context/app/comparisons.md`) with more members
 and no verdict: the same `AssessmentSet` and `AssessmentSetMember` rows, kind
@@ -15,23 +15,24 @@ its own report.
 
 | Route                         | What it does                                                                               |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `POST /api/v1/batches`        | Review 1 to `APP_BATCH_MAX_ITEMS` texts or pages the same way. 202 at once.                |
+| `POST /api/v1/contents`       | Upload one file for a batch: its text is read now and kept 24 hours for a batch to take.   |
+| `POST /api/v1/batches`        | Review 1 to `APP_BATCH_MAX_ITEMS` texts, pages or uploads the same way. 202 at once.       |
 | `GET /api/v1/batches`         | The workspace's batches, newest first, each with its counts; `page`, `limit`, `projectId`. |
 | `GET /api/v1/batches/{id}`    | One batch: its state, counts by state, and each item's state, score and review id.         |
 | `DELETE /api/v1/batches/{id}` | Delete the batch. Its items' reviews stay, and any still running carry on.                 |
 
-All four take a browser session or an API key with the `assess` scope, and are
+All five take a browser session or an API key with the `assess` scope, and are
 the workspace's: another workspace's id is a 404. Contracts:
 `lib/app/api/registry.ts`; code: `lib/app/batches/`.
 
 The body is `{ items, profile?, judges?, framework?, version?, context?,
-projectId? }`. Each item is `{ text, label? }` or `{ url, label? }`, a label of
-up to 80 characters. The rest are a review's options, given once and resolved
+projectId? }`. Each item is `{ text, label? }`, `{ url, label? }` or
+`{ contentId, label? }` (an upload, below), a label of up to 80 characters. The rest are a review's options, given once and resolved
 once (`resolveReviewOptions`), as a comparison's are. A refusal of an option is
 the review's (`CONTEXT_INVALID`, `PROFILE_UNKNOWN`, `PROJECT_ARCHIVED`, …). A
 pasted text that is empty or too long refuses the whole batch (`CONTENT_EMPTY`,
-`TEXT_TOO_LONG`), with the item's place in `items` as `details.position`. A file
-is not taken.
+`TEXT_TOO_LONG`), with the item's place in `items` as `details.position`. So does
+an upload that cannot be taken (`CONTENT_NOT_FOUND`, `CONTENT_IN_USE`).
 
 ### How many items
 
@@ -43,7 +44,8 @@ more than the setting, is 400 `VALIDATION_ERROR`.
 
 ## Refused whole
 
-Before anything is written: the options, every pasted text, then the credits and
+Before anything is written: the options, every pasted text, every upload named,
+then the credits and
 monthly budget for **every item together** (`assertReviewFits` with the item
 count, then `reserveSetBudget` under the lock, as a comparison's drafts are). A
 workspace that cannot cover all of them stores none: 402 `INSUFFICIENT_CREDITS`
@@ -88,6 +90,60 @@ a single review makes in its request (`.context/app/intake.md`).
 
 A page's title is its label when it has one, and otherwise the page's own title
 once fetched. Its `sourceUrl` becomes where the redirects ended.
+
+## Uploaded files
+
+A batch cannot carry its files in one request. Vercel refuses any body over
+4.5 MB before the route runs (`.context/app/intake.md`), and reading a hundred
+files would hold the request far too long. So **each file is uploaded on its
+own first**, and a batch item names it by id:
+
+1. `POST /api/v1/contents`, `multipart/form-data` with one `file` part
+   (`readUpload`), as a single review takes a file. An `options` part, if sent,
+   must be `{}`: the project and label are the batch's and the item's. Its text
+   is read in that request (`extractText`, then `assessableText`), under the
+   same limits and refusals as a review's upload: 413 `FILE_TOO_LARGE`, 415
+   `INVALID_FILE_TYPE`, 422 `TEXT_TOO_LONG`, `TOO_MANY_PAGES`,
+   `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE`, 400 `CONTENT_EMPTY`.
+2. It is stored as a `Content` row with its text, `sourceKind: 'FILE'`, no
+   review, and **`awaitingBatch: true`**. 201 with `{ id, fileName, title,
+wordCount, createdAt, expiresAt }`. No raw file is kept, so no storage
+   provider is involved.
+3. `POST /api/v1/batches` with `{ contentId: id, label? }` among its items.
+   The item's review takes that row as its content, in the batch's project,
+   titled by its label or else the title intake gave the file. Nothing is
+   copied, and its text was checked at upload, so nothing is left to refuse it
+   for but whether it can be taken.
+
+**One review takes an upload, once.** The batch checks every upload it names
+before anything is held: 404 `CONTENT_NOT_FOUND` for one not in this workspace
+(another workspace's reads as none) or already deleted, 409 `CONTENT_IN_USE` for
+one another review took, each with `details.position` and `details.contentId`.
+Naming one twice in a body is 400 `VALIDATION_ERROR` at the second place. The
+check answers the common case; **the claim is what holds**. The transaction
+writing the item's review clears `awaitingBatch` in a conditional update
+(`claimUpload` in `lib/app/assessments/enqueue.ts`), and under Postgres's
+default isolation a second update of the same row waits for the first and then
+re-checks its condition on the row the first left. So of two batches racing for
+one upload one wins, and the other is refused with the same 409 and its position,
+storing nothing.
+
+**Unclaimed for a day, deleted.** An upload that never joins a batch would
+otherwise be kept forever by a workspace with no retention window. The
+`app:unclaimed-uploads` job (`lib/app/jobs.ts`), hourly and per workspace,
+deletes uploads still `awaitingBatch` 24 hours after they were made
+(`purgeUnclaimedUploads` in `lib/app/batches/uploads.ts`), so one goes at most an
+hour past its `expiresAt`. Its delete waits on, and re-checks after, a claim in
+flight the same way, so it never takes an upload a batch has just claimed, nor a
+review with it.
+
+**Their own allowance.** Uploads count against **`UPLOADS_PER_HOUR`** (200, as
+many as batch items) per user, counted once the body is read, before its text
+is: reading a 10 MB file is the work it bounds. The `/api/v1` section cap alone
+would allow 6,000 an hour. 429 `RATE_LIMIT_EXCEEDED` past it.
+
+An upload is the workspace's and its uploader's data as any content row is: in
+the subject export by `createdByUserId`, and in the workspace export.
 
 ## Places
 
@@ -144,7 +200,8 @@ so it never starts, recovers or holds budget for one.
 - **`total`** and **`counts`**: how many items are in each state, `purged`
   included.
 - **`items`**, in the order sent: `position`, `label`, `assessmentId`,
-  `status`, `source: { kind, url }`, `overall`, `band` and `errorCode`.
+  `status`, `source: { kind, url }` (`kind` is `text`, `url` or `file`),
+  `overall`, `band` and `errorCode`.
 
 The list carries each batch's `total` and `counts`, not its items, which may be
 a hundred.
@@ -180,6 +237,15 @@ left, as it does a comparison's.
   ending final; born settled and never taken by the verdict machinery;
   `app.batch.finished` once, after the last item, and from the sweep when its
   send was lost; a purged item read as purged; the list, 404s and delete.
+  Uploads (t-102), read by the real intake: a good file stored for a batch, a
+  refused type, an over-size body, a file with no text or too much, a body that
+  is not multipart, the allowance; an upload reviewed as text from its own row;
+  another workspace's (404), one taken (409), one taken between the check and
+  the write (409, nothing stored) and one named twice (400), each placed; and
+  the purge over a mixed population (stale, claimed, newer, another
+  workspace's), and at the window's edge.
+- `tests/unit/lib/app/assessments/enqueue.test.ts`: the claim itself, filing the
+  upload in the project and keeping or replacing its title, and its two refusals.
 - `tests/unit/lib/app/env.test.ts`: `APP_BATCH_MAX_ITEMS` parses 1 to 100 and
   refuses anything else at boot.
 - `npm run smoke:batch` (`scripts/app/smoke-batch.ts`): a `quick` batch of more

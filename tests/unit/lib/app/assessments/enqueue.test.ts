@@ -1,5 +1,5 @@
 /**
- * Tests: enqueueAssessment and startAssessmentInBackground (t-22).
+ * Tests: enqueueAssessment and startAssessmentInBackground (t-22), and an upload claimed (t-102).
  *
  * Mocked: Prisma (the in-memory fake), the engine lookup, the idle gate and
  * `keepRunningAfterResponse`. The assertions are on the rows written, what is
@@ -295,6 +295,65 @@ describe('enqueueAssessments (t-87)', () => {
     await runAsOrg(ORG, () => enqueueAssessments([input()], async () => undefined));
 
     expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), undefined);
+  });
+});
+
+describe('an upload a batch item names (t-102)', () => {
+  /** An upload as `POST /api/v1/contents` stores one. */
+  async function upload(orgId = ORG) {
+    return fake.db.content.create({
+      data: {
+        orgId,
+        title: 'launch',
+        sourceKind: 'FILE',
+        fileName: 'launch.txt',
+        text: 'Book a demo.',
+        textSha256: 'f'.repeat(64),
+        wordCount: 3,
+        awaitingBatch: true,
+      },
+    });
+  }
+  const claiming = (uploadId: string, over: Partial<EnqueueAssessmentInput['content']> = {}) =>
+    input({ content: { text: null, sourceKind: 'FILE', uploadId, ...over } });
+
+  it('takes the upload as the review’s content, filing it in the project, without writing another', async () => {
+    fake.projects.push({ id: 'project-1', orgId: ORG, archivedAt: null });
+    const { id } = await upload();
+    const queued = await runAsOrg(ORG, () =>
+      enqueueAssessment(claiming(id, { projectId: 'project-1', title: 'Launch email' }))
+    );
+
+    expect(queued.contentId).toBe(id);
+    expect(fake.contents).toHaveLength(1);
+    expect(fake.contents[0]).toMatchObject({
+      awaitingBatch: false,
+      projectId: 'project-1',
+      title: 'Launch email',
+      text: 'Book a demo.',
+    });
+    expect(fake.assessments[0]).toMatchObject({ contentId: id, projectId: 'project-1' });
+  });
+
+  it('keeps the title intake gave it when the item has no label', async () => {
+    const { id } = await upload();
+    await runAsOrg(ORG, () => enqueueAssessment(claiming(id)));
+    expect(fake.contents[0]).toMatchObject({ title: 'launch', projectId: null });
+  });
+
+  it('refuses one taken already as upload_in_use, and another workspace’s as upload_not_found', async () => {
+    const { id: mine } = await upload();
+    await runAsOrg(ORG, () => enqueueAssessment(claiming(mine)));
+    const taken = await refusal(runAsOrg(ORG, () => enqueueAssessment(claiming(mine))));
+    expect(taken.code).toBe('upload_in_use');
+    expect(taken.details).toEqual({ contentId: mine });
+
+    const { id: theirs } = await upload('org-b');
+    const elsewhere = await refusal(runAsOrg(ORG, () => enqueueAssessment(claiming(theirs))));
+    expect(elsewhere.code).toBe('upload_not_found');
+    expect(elsewhere.details).toEqual({ contentId: theirs });
+    expect(fake.contents.find((c) => c.id === theirs)).toMatchObject({ awaitingBatch: true });
+    expect(fake.assessments).toHaveLength(1);
   });
 });
 

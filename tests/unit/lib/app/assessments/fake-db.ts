@@ -63,7 +63,9 @@
  * reads honour `members: { none: { assessment: { status } } }`, and
  * `assessmentSetMember.findMany` honours `set: { … }` and returns each member
  * with its `set`. For batches (t-101): `content.updateMany`, for the text a
- * page's run writes.
+ * page's run writes. For uploads (t-102): `content.findMany` and
+ * `findFirst`, each answering copies of the whole rows, so a test can change
+ * a row between a read and a write as another request would.
  */
 import { vi } from 'vitest';
 
@@ -331,11 +333,29 @@ export function createFakeDb() {
     content: {
       create: vi.fn(async ({ data }: { data: Row }) => {
         seq += 1;
-        const row = { id: `content-${seq}`, ...data, createdAt: new Date() };
+        // The columns' defaults, as Postgres fills them, under what was written.
+        const row = {
+          id: `content-${seq}`,
+          projectId: null,
+          sourceUrl: null,
+          fileName: null,
+          awaitingBatch: false,
+          ...data,
+          createdAt: new Date(),
+        };
         contents.push(row);
-        return { id: row.id };
+        // The whole row, whatever it selects, as the reads answer (t-102: an upload's view).
+        return { ...row };
       }),
-      // A page a batch named, its text written by its run (t-101).
+      // The uploads a batch names (t-102).
+      findMany: vi.fn(async ({ where }: { where?: Row }) =>
+        contents.filter((c) => matches(c, where)).map((c) => ({ ...c }))
+      ),
+      findFirst: vi.fn(async ({ where }: { where?: Row }) => {
+        const row = contents.find((c) => matches(c, where));
+        return row ? { ...row } : null;
+      }),
+      // A page a batch named, its text written by its run (t-101); an upload claimed (t-102).
       updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
         const rows = contents.filter((c) => matches(c, where));
         for (const row of rows) apply(row, data);
