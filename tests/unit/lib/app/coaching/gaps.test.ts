@@ -175,6 +175,20 @@ describe('recommendations', () => {
     ]);
   });
 
+  it('take an id that is an object’s own property name for no part of the model', () => {
+    const view = blank();
+    view.recommendations = [{ ...rec, number: 1, dimensionId: 'constructor', impact: 'toString' }];
+    view.copy.notes = [
+      { ...DRAFT_VIEW.copy.notes[0], number: 1, polarity: 'weakness', dimensionId: '__proto__' },
+    ];
+    expect(gapsOf({ view })).toEqual([
+      expect.objectContaining({
+        id: 'recommendation-1',
+        sources: [{ kind: 'recommendation', number: 1 }],
+      }),
+    ]);
+  });
+
   it('put an impact they do not know after low, as the report does', () => {
     const view = blank();
     view.recommendations = [
@@ -199,6 +213,11 @@ describe('recommendations', () => {
       slotsOf('See our [case study][1] and [the guide](/guide). [x] Done [emphasis added].')
     ).toEqual([]);
     expect(slotsOf('We cut [a cost] by [a number] [1].')).toEqual(['a cost', 'a number']);
+    // Two slots side by side are both slots; only a numbered second bracket makes a link.
+    expect(slotsOf('We cut costs by [percentage][over what period].')).toEqual([
+      'percentage',
+      'over what period',
+    ]);
   });
 
   it('asked in their own words with no issue, quote nothing', () => {
@@ -373,6 +392,8 @@ const idsOf = (list: unknown): string[] =>
  */
 const TEMPLATE_TERMS = [
   ...MODEL_TERMS,
+  'dimension',
+  'dimensions',
   'weight',
   'weights',
   'formula',
@@ -417,7 +438,7 @@ describe('no gap carries the model’s internal vocabulary', () => {
 
   it('keeping a writer’s fact that shares a word with a plain-word id or an ordinary word', () => {
     // `move` is a duty's id and `audience` a group's; the report shows both as names.
-    const label = 'what would move your audience to reply, and the product’s weight';
+    const label = 'what would move your audience to reply, the product’s weight and dimensions';
     const gaps = gapsOf({ view: blank(), rewrite: draft(`Hi [ADD: ${label}].`) });
     expect(gaps).toEqual([expect.objectContaining({ id: 'placeholder-rw-1-p1', missing: label })]);
   });

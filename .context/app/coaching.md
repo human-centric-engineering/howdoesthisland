@@ -96,7 +96,7 @@ Once facts are saved (t-109), they will drop gaps too.
 The questions are the app's own words, written per topic. Text taken from the
 review (a recommendation's issue, a note, a placeholder's label) is used only
 when it carries none of the model's ids and none of the words in
-`MODEL_TERMS` (rubric, dimension, weighting).
+`MODEL_TERMS` (rubric, weighting).
 
 The ids (`modelVocabulary`) are those of its appeals, dimensions, moves,
 levers, red flags, lenses, duties, groups and judges, but only the id-shaped
@@ -105,8 +105,8 @@ ones, with an underscore or a digit: `eth_borrowed`, `mv_specific_testimonial`,
 in the report as a name, so it is not private, and banning it would drop a
 writer's fact that happens to use the word ("what would move your audience").
 `MODEL_TERMS` is kept as short for the same reason: a fact may mention a
-product's weight or formula. The app's own templates are held to the wider list
-(weights, formula, levers, judges as well) by their test.
+product's weight, formula or dimensions. The app's own templates are held to the
+wider list (dimensions, weights, formula, levers, judges as well) by their test.
 
 A `found` entry that carries one is left out. A placeholder or a recommendation
 that would have to be asked in such words is not asked at all.

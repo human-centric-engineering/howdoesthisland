@@ -61,17 +61,13 @@ export const MAX_GAPS = 15;
 
 /**
  * Words that only describe how the model works, which no gap may carry.
- * Kept to words a writer's own facts would not use: `weight`, `formula` or
- * `judge` can be part of a real fact (a product's weight), so they are not
- * here, and the app's own templates are held to a wider list by their test.
+ * Kept to words a writer's own facts would not use: `weight`, `formula`,
+ * `dimensions` or `judge` can be part of a real fact (a product's weight, a
+ * box's dimensions), so they are not here. A real dimension's id
+ * (`eth_borrowed`) is caught by {@link modelVocabulary}, and the app's own
+ * templates are held to a wider list by their test.
  */
-export const MODEL_TERMS = [
-  'rubric',
-  'dimension',
-  'dimensions',
-  'weighting',
-  'weightings',
-] as const;
+export const MODEL_TERMS = ['rubric', 'weighting', 'weightings'] as const;
 
 /** Where a gap came from: what the report shows, by its own numbering. */
 export type GapSource =
@@ -207,6 +203,13 @@ export type TopicId = keyof typeof TOPICS;
 const topicOf = (id: TopicId): Topic => TOPICS[id];
 
 /**
+ * The topic a part of the model needs, if any. An own key only: an id from a
+ * stored result such as `constructor` is not a topic.
+ */
+const topicFor = (dimensionId: string): TopicId | undefined =>
+  Object.hasOwn(TOPIC_OF, dimensionId) ? TOPIC_OF[dimensionId] : undefined;
+
+/**
  * Which part of the model needs which fact (HowDoesThisLand 0.5.x). A part
  * missing here is a craft change the rewrite can make alone (polish,
  * structure, clarity, surprise), so a note on it is not a gap; a
@@ -312,7 +315,7 @@ export function vocabularyTest(words: readonly string[]): (text: string) => bool
  * single letter (`[x]`) or an editor's `[sic]` or `[emphasis added]`,
  * which are text, not facts to ask for.
  */
-const SLOT = /\[(?!ADD:)([^[\]\n]+)\](?![([])/gi;
+const SLOT = /\[(?!ADD:)([^[\]\n]+)\](?!\(|\[\d+\])/gi;
 
 const NOT_A_SLOT = /^(?:[\d\s,–-]+|\p{L}|sic|…|\.\.\.|emphasis (?:added|mine|in original))$/iu;
 
@@ -332,9 +335,11 @@ export function slotsOf(rewrite: string): string[] {
 
 /** Strength of a source, for the order: lower first. */
 const IMPACT_RANK: Readonly<Record<string, number>> = { high: 1, medium: 2, low: 3 };
-/** As the report orders them (`impactRank` in `view.ts`): any case, an unknown impact as low. */
-const impactRank = (impact: string): number =>
-  IMPACT_RANK[impact.toLowerCase()] ?? UNKNOWN_IMPACT_RANK;
+/** As the report orders them (`impactRank` in `view.ts`): any case, an unknown impact after low. */
+const impactRank = (impact: string): number => {
+  const key = impact.toLowerCase();
+  return Object.hasOwn(IMPACT_RANK, key) ? IMPACT_RANK[key] : UNKNOWN_IMPACT_RANK;
+};
 /** After low, as the report puts an impact it does not know, and before every note. */
 const UNKNOWN_IMPACT_RANK = 3.5;
 const NOTE_RANK = 4;
@@ -412,7 +417,7 @@ export function buildGaps({ view, rewrite, known, vocabulary }: GapsInput): Gap[
     if (slots.length === 0) continue;
     const rank = impactRank(r.impact);
     const source: GapSource = { kind: 'recommendation', number: r.number };
-    const topic = TOPIC_OF[r.dimensionId];
+    const topic = topicFor(r.dimensionId);
     if (topic) fromTopic(topic, source, rank, r.number, r.issue);
     else addOwnWords(r, slots, rank, source, clean, add);
   }
@@ -420,7 +425,7 @@ export function buildGaps({ view, rewrite, known, vocabulary }: GapsInput): Gap[
   // 3. Notes on weaknesses, where the weakness needs a fact.
   for (const n of view.copy.notes) {
     if (n.polarity !== 'weakness') continue;
-    const topic = TOPIC_OF[n.dimensionId];
+    const topic = topicFor(n.dimensionId);
     if (topic) fromTopic(topic, { kind: 'note', number: n.number }, NOTE_RANK, n.number, n.note);
   }
 
@@ -430,7 +435,7 @@ export function buildGaps({ view, rewrite, known, vocabulary }: GapsInput): Gap[
     if (appeal.score >= LOW_APPEAL_SCORE) continue;
     const rows = view.dimensions.find((g) => g.id === appeal.id)?.rows ?? [];
     const topics = rows.flatMap((row) => {
-      const topic = TOPIC_OF[row.id];
+      const topic = topicFor(row.id);
       return topic ? [{ topic, score: row.score }] : [];
     });
     if (topics.some((t) => covered.has(t.topic))) continue;
