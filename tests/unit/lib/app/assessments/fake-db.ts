@@ -61,7 +61,9 @@
  * nothing held), its members' assessments carry their `content`, and it has
  * `findFirst`, `updateMany` and `aggregate` (summing `verdictHeldUsd`). Its
  * reads honour `members: { none: { assessment: { status } } }`, and
- * `assessmentSetMember.findMany` honours `set: { … }`.
+ * `assessmentSetMember.findMany` honours `set: { … }` and returns each member
+ * with its `set`. For batches (t-101): `content.updateMany`, for the text a
+ * page's run writes.
  */
 import { vi } from 'vitest';
 
@@ -310,6 +312,12 @@ export function createFakeDb() {
         const row = { id: `content-${seq}`, ...data, createdAt: new Date() };
         contents.push(row);
         return { id: row.id };
+      }),
+      // A page a batch named, its text written by its run (t-101).
+      updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = contents.filter((c) => matches(c, where));
+        for (const row of rows) apply(row, data);
+        return { count: rows.length };
       }),
       deleteMany: vi.fn(async ({ where }: { where: Row & { assessments?: { none: Row } } }) => {
         const { assessments: rel, ...own } = where;
@@ -646,11 +654,16 @@ export function createFakeDb() {
       }),
       findMany: vi.fn(async ({ where }: { where?: Row & { set?: Row } }) => {
         const { set: onSet, ...own } = where ?? {};
-        return setMembers.filter((m) => {
-          if (!matches(m, own)) return false;
-          const set = sets.find((r) => r.id === m.setId);
-          return !onSet || (set !== undefined && matches(set, onSet));
-        });
+        return (
+          setMembers
+            .filter((m) => {
+              if (!matches(m, own)) return false;
+              const set = sets.find((r) => r.id === m.setId);
+              return !onSet || (set !== undefined && matches(set, onSet));
+            })
+            // With its set, for a select of `set: { select: { kind } }` (t-101).
+            .map((m) => ({ ...m, set: sets.find((r) => r.id === m.setId) ?? null }))
+        );
       }),
     },
     aiKnowledgeDocument: {
