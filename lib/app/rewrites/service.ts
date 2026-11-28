@@ -190,6 +190,8 @@ export async function startRewrite(
     );
   }
   const text = review.content.text;
+  // Only a page a batch has not fetched yet has none, and it has not finished.
+  if (text === null) throw notRewritable('This review has no text to rewrite from yet.');
   const projectContext = rewriteContext(review);
   // Built now, so a review the engine cannot read is refused before anything
   // is held or written. A published version never changes, so the call

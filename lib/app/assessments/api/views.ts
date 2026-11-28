@@ -55,7 +55,8 @@ export type AssessmentSummary = {
   project: { id: string; name: string } | null;
   title: string | null;
   source: { kind: 'text' | 'file' | 'url'; url: string | null; fileName: string | null };
-  wordCount: number;
+  /** `null` for a page a batch has not fetched yet, or could not (t-101). */
+  wordCount: number | null;
   overall: number | null;
   band: string | null;
   costUsd: number;
@@ -78,9 +79,10 @@ export type AssessmentDetail = AssessmentSummary & {
   /**
    * The copy that was assessed, as intake stored it. The result's highlights
    * and red flags are character offsets into it, so a reader of the result
-   * needs it to place them (the report, t-29).
+   * needs it to place them (the report, t-29). `null` for a page a batch
+   * has not fetched yet, or could not (t-101): its address is `source.url`.
    */
-  text: string;
+  text: string | null;
   /** Who the text is for, defaults applied. */
   context: unknown;
   /**

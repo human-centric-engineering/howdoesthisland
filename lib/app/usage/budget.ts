@@ -147,7 +147,7 @@
  *
  * **Comparisons** (t-87). A comparison's drafts are checked together: the
  * estimate is one review's times the drafts, so the set is refused whole
- * rather than half-started ({@link reserveComparisonBudget}). Under the lock
+ * rather than half-started ({@link reserveSetBudget}). Under the lock
  * it takes one hold per draft, each released as that draft's review is
  * stored, which is then held in its place as any queued review is.
  *
@@ -785,7 +785,7 @@ export async function budgetRefusal(
  * t-87) with `extraUsd` beside them (its verdict, t-88): refused whole when
  * their estimates together do not fit. Holds
  * nothing: a request checked before its other refusals, which
- * {@link reserveReviewBudget} or {@link reserveComparisonBudget} checks
+ * {@link reserveReviewBudget} or {@link reserveSetBudget} checks
  * again. Answers the rate it read, for that check to reuse; `null` when it
  * calls no judge, or neither bound nor the history can be read.
  */
@@ -936,15 +936,16 @@ export async function reserveReviewBudget(
 }
 
 /**
- * {@link reserveReviewBudget} for a comparison's `drafts` stored reviews
- * (t-87), each of `profile` calling `judgeCount` judges, and its verdict's
- * `verdictUsd` (t-88): checked together under the lock, so the set is
+ * {@link reserveReviewBudget} for a set's `drafts` stored reviews: a
+ * comparison's drafts (t-87) or a batch's items (t-101), each of `profile`
+ * calling `judgeCount` judges, and a comparison verdict's `verdictUsd`
+ * (t-88; a batch has none): checked together under the lock, so the set is
  * refused whole (402) when their estimates together do not fit, and held as
  * one hold per draft, the first carrying the verdict's. The caller releases
  * each once its review is stored, and all of them however the request ends.
  * Empty when nothing is held, as {@link reserveReviewBudget}'s `null`.
  */
-export async function reserveComparisonBudget(
+export async function reserveSetBudget(
   orgId: string,
   profile: string,
   judgeCount: number,

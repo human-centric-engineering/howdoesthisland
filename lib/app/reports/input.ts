@@ -182,6 +182,13 @@ export type ReportRedFlag = z.infer<typeof redFlagSchema>;
  * fields (its id, source, timings, each run's cost) are stripped.
  */
 export const reportAssessmentSchema = sharedAssessmentSchema.extend({
+  /**
+   * `null` for a page a batch has not fetched yet, or could not (t-101): it
+   * is queued, running or failed, so it reads as pending or with no result,
+   * and never reaches the report itself (`ReadableAssessment`).
+   */
+  text: z.string().nullable(),
+  wordCount: z.number().int().nullable(),
   /** Its project, for the rewrite drawer's brief invitation (t-83). Not served on a share link. */
   projectId: z.string().nullish(),
   /**
@@ -199,6 +206,15 @@ export const reportAssessmentSchema = sharedAssessmentSchema.extend({
   errorCode: z.string().nullable().optional(),
 });
 export type ReportAssessment = z.infer<typeof reportAssessmentSchema>;
+
+/** A review the report can be built from: scored, so it has its text (t-101). */
+export type ReadableAssessment = ReportAssessment & { text: string; wordCount: number };
+
+/** `a` with its text, or `null` for one with none: a batch page not fetched, or not readable. */
+export function readableAssessment(a: ReportAssessment): ReadableAssessment | null {
+  const { text, wordCount } = a;
+  return text === null || wordCount === null ? null : { ...a, text, wordCount };
+}
 
 // ─── The model ──────────────────────────────────────────────────────────────
 

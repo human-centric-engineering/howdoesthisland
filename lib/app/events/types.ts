@@ -17,8 +17,11 @@ export const ASSESSMENT_FINISHED = 'app.assessment.finished';
 /** Every draft of a comparison reached a final state, and its verdict settled. */
 export const COMPARISON_FINISHED = 'app.comparison.finished';
 
+/** Every item of a batch reached a final state (t-101), or was purged. */
+export const BATCH_FINISHED = 'app.batch.finished';
+
 /** What a workspace may subscribe a URL to. Never a core event. */
-export const APP_EVENT_TYPES = [ASSESSMENT_FINISHED, COMPARISON_FINISHED] as const;
+export const APP_EVENT_TYPES = [ASSESSMENT_FINISHED, COMPARISON_FINISHED, BATCH_FINISHED] as const;
 
 export type AppEventType = (typeof APP_EVENT_TYPES)[number];
 

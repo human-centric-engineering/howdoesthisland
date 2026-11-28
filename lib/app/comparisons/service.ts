@@ -11,7 +11,7 @@
  *
  * **Refused whole.** Everything that can be refused is checked before
  * anything is written: the options, every draft's text, and the budget for
- * every draft together (`reserveComparisonBudget`), so a workspace that
+ * every draft together (`reserveSetBudget`), so a workspace that
  * cannot cover all of them stores none (402). Then every draft's content and
  * review, the set and its members are written in one transaction.
  *
@@ -54,7 +54,7 @@ import {
 } from '@/lib/app/assessments/api/service';
 import {
   assertReviewFits,
-  reserveComparisonBudget,
+  reserveSetBudget,
   type BudgetHold,
   type ReviewRate,
 } from '@/lib/app/usage/budget';
@@ -210,7 +210,17 @@ async function reusedReviews(
         { position, reason: 'options_differ', differs }
       );
     }
-    reused.set(position, { assessmentId, text: row.content.text });
+    // Completed, so its text was read (a page a batch fetches has none before, t-101).
+    const { text } = row.content;
+    if (text === null) {
+      throw new APIError(
+        'That review has not finished yet. Compare it once it has.',
+        'REVIEW_NOT_COMPARABLE',
+        409,
+        { position, reason: 'not_finished' }
+      );
+    }
+    reused.set(position, { assessmentId, text });
   }
   return reused;
 }
@@ -302,7 +312,7 @@ export async function prepareComparison(body: CreateComparisonBody): Promise<Pre
  * before it took what was left, holding nothing.
  */
 export async function holdComparisonBudget(prepared: PreparedComparison): Promise<void> {
-  prepared.holds = await reserveComparisonBudget(
+  prepared.holds = await reserveSetBudget(
     requireOrgId(),
     storedProfileName(prepared.profile),
     prepared.judges.length,

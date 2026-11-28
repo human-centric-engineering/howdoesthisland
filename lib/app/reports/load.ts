@@ -22,6 +22,7 @@
 import { requireServerData } from '@/lib/api/server-load';
 import { logger } from '@/lib/logging';
 import {
+  readableAssessment,
   reportAssessmentSchema,
   reportModelSchema,
   reportResultSchema,
@@ -105,6 +106,13 @@ export async function loadReport(
   const a = assessment.data;
   if (a.status === 'queued' || a.status === 'running') return { kind: 'pending', assessment: a };
   if (a.result === null) return { kind: 'no_result', assessment: a };
+  // A result comes only with its text: a page a batch could not read has
+  // neither (t-101). Read as unreadable rather than drawn without its copy.
+  const readable = readableAssessment(a);
+  if (!readable) {
+    logger.error('Report: a result with no text', undefined, logAs);
+    return { kind: 'unreadable' };
+  }
 
   const result = reportResultSchema.safeParse(a.result);
   if (!result.success) {
@@ -138,7 +146,7 @@ export async function loadReport(
 
   return {
     kind: 'ready',
-    view: buildReportView({ assessment: a, result: result.data, model: model.data }),
+    view: buildReportView({ assessment: readable, result: result.data, model: model.data }),
     projectId: a.projectId ?? null,
   };
 }

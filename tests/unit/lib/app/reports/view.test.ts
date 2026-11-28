@@ -11,6 +11,7 @@ import {
   reportAssessmentSchema,
   reportModelSchema,
   reportResultSchema,
+  readableAssessment,
   type ReportAssessment,
 } from '@/lib/app/reports/input';
 import {
@@ -31,8 +32,10 @@ import {
 } from '@/tests/unit/lib/app/reports/fixtures';
 
 function view(assessment: ReportAssessment = apiAssessment(), culture = true): ReportView {
+  const readable = readableAssessment(assessment);
+  if (!readable) throw new Error('a report needs its text');
   return buildReportView({
-    assessment,
+    assessment: readable,
     result: reportResultSchema.parse(assessment.result),
     model: reportModelSchema.parse(modelDocument(culture)),
   });

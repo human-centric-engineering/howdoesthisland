@@ -117,6 +117,8 @@ const APP_ROUTE_DIRS = [
   'rewrites',
   // Comparisons of drafts (t-87).
   'comparisons',
+  // Batches of reviews (t-101).
+  'batches',
   'scan',
   'shared-reports',
   'shares',

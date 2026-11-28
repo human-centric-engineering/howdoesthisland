@@ -89,7 +89,9 @@ export type VerdictSkipReason =
   /** Its drafts call too few AI reviewers for the editor to run (`EDITOR_MIN_JUDGES`). */
   | 'too_few_judges'
   /** Made before verdicts were: none was held or asked for. */
-  | 'predates_verdicts';
+  | 'predates_verdicts'
+  /** A batch (t-101): the editor is not asked to choose between its items. */
+  | 'not_asked';
 
 /** Why a verdict failed, for `FAILED`: the call's code, `lost`, or `internal_error`. */
 export const LOST_VERDICT_CODE = 'lost';
@@ -318,7 +320,10 @@ export async function startVerdict(setId: string, now: Date = new Date()): Promi
 /** The drafts the editor weighs: those whose review completed, in position order. */
 function completedDrafts(set: VerdictSet): VerdictDraft[] {
   return set.members.flatMap((m) =>
-    m.assessment?.status === 'COMPLETED' && m.assessment.result !== null
+    // A completed review always has its text; only a page not fetched yet has none (t-101).
+    m.assessment?.status === 'COMPLETED' &&
+    m.assessment.result !== null &&
+    m.assessment.content.text !== null
       ? [
           {
             position: m.position,

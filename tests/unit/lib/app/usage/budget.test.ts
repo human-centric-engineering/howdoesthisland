@@ -289,7 +289,7 @@ import {
   estimateVerdictCost,
   REWRITE_HISTORY,
   VERDICT_HISTORY,
-  reserveComparisonBudget,
+  reserveSetBudget,
   reserveReviewBudget,
   reserveRewriteBudget,
 } from '@/lib/app/usage/budget';
@@ -1921,7 +1921,7 @@ describe('a comparison’s drafts, checked together (t-87)', () => {
     state.spent = 7.5;
 
     const err = await refusal(async () => {
-      await reserveComparisonBudget(ORG, 'full', 7, 3);
+      await reserveSetBudget(ORG, 'full', 7, 3);
     });
 
     expect(err).toMatchObject({
@@ -1940,7 +1940,7 @@ describe('a comparison’s drafts, checked together (t-87)', () => {
     state.credits = 250;
 
     const err = await refusal(async () => {
-      await reserveComparisonBudget(ORG, 'full', 7, 3);
+      await reserveSetBudget(ORG, 'full', 7, 3);
     });
 
     expect(err).toMatchObject({
@@ -1953,7 +1953,7 @@ describe('a comparison’s drafts, checked together (t-87)', () => {
   it('holds one stored hold per draft under one lock, which a later check counts', async () => {
     state.spent = 5;
 
-    const holds = await reserveComparisonBudget(ORG, 'full', 7, 3);
+    const holds = await reserveSetBudget(ORG, 'full', 7, 3);
 
     expect(holds).toHaveLength(3);
     expect(state.holds).toEqual(
@@ -1986,7 +1986,7 @@ describe('a comparison’s drafts, checked together (t-87)', () => {
   });
 
   it('holds nothing for drafts that call no judge', async () => {
-    expect(await reserveComparisonBudget(ORG, 'quick', 0, 3)).toEqual([]);
+    expect(await reserveSetBudget(ORG, 'quick', 0, 3)).toEqual([]);
     expect(state.locked).toEqual([]);
   });
 });
@@ -2016,7 +2016,7 @@ describe('a comparison’s verdict, held with its drafts (t-88)', () => {
   it('refuses the set whole when its drafts fit but its verdict beside them does not', async () => {
     state.spent = 7.5;
     const err = await refusal(async () => {
-      await reserveComparisonBudget(ORG, 'full', 7, 2, undefined, 0.6);
+      await reserveSetBudget(ORG, 'full', 7, 2, undefined, 0.6);
     });
     expect(err).toMatchObject({
       code: 'BUDGET_EXCEEDED',
@@ -2033,7 +2033,7 @@ describe('a comparison’s verdict, held with its drafts (t-88)', () => {
 
   it('holds the verdict’s part on the first hold, which a later check counts', async () => {
     state.spent = 5;
-    await reserveComparisonBudget(ORG, 'full', 7, 2, undefined, 0.6);
+    await reserveSetBudget(ORG, 'full', 7, 2, undefined, 0.6);
     expect(state.holds.map((h) => (h as HoldRow & { extraUsd: number }).extraUsd)).toEqual([
       0.6, 0,
     ]);

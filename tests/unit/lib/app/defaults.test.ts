@@ -666,13 +666,14 @@ const SEAM_DEFAULTS: SeamDefault[] = [
     seam: 'lib/app/env.ts',
     risk: 'a stray key would make an unset env var fail boot on every install',
     // FORK (HowDoesThisLand): pinned to our keys, the culture switch (D11,
-    // t-11), the quick-scan switch (t-61) and the PDF renderer's Chromium
-    // path (t-31), all optional, so an unset env still parses. Ledger:
-    // .context/app/platform-divergences.md row 2.
+    // t-11), the quick-scan switch (t-61), the batch size (t-101) and the PDF
+    // renderer's Chromium path (t-31), all optional, so an unset env still
+    // parses. Ledger: .context/app/platform-divergences.md row 2.
     assert: () => {
       expect(Object.keys(appEnvSchema.shape)).toEqual([
         'CULTURE_MODULE_ENABLED',
         'QUICK_SCAN_ENABLED',
+        'APP_BATCH_MAX_ITEMS',
         'PDF_CHROMIUM_PATH',
       ]);
       expect(appEnvSchema.parse({})).toEqual({});
@@ -1103,6 +1104,8 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         'scripts/app/smoke-credit-charge.ts',
         // FORK (HowDoesThisLand): and the rewrite charge's smoke (t-81, t-85).
         'scripts/app/smoke-rewrite-charge.ts',
+        // FORK (HowDoesThisLand): and the batch smoke (t-101).
+        'scripts/app/smoke-batch.ts',
         // FORK (HowDoesThisLand): and the MCP tools smoke (t-92).
         'scripts/app/smoke-mcp-tools.ts',
         // FORK (HowDoesThisLand): and the judge smoke (t-19).

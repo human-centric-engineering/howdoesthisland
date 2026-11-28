@@ -20,6 +20,9 @@ import { MAX_TYPED_CODE } from '@/lib/app/credits/codes/wire';
  */
 export const textField = z.string().max(MAX_CONTENT_CHARS * 2);
 
+/** A page's address: http(s) only. Intake refuses one that is not a public address. */
+export const urlField = z.url({ protocol: /^https?$/ }).max(MAX_URL_CHARS);
+
 /** The framework and version to score against; both default (`versionToScore`). */
 export const versionChoice = {
   framework: slugParam.optional(),
@@ -47,10 +50,7 @@ export const scanRequestSchema = z.strictObject({
  * travels as its own bytes rather than as base64 the proxy would cut short.
  */
 export const assessmentSourceSchema = z.union(
-  [
-    z.strictObject({ text: textField }),
-    z.strictObject({ url: z.url({ protocol: /^https?$/ }).max(MAX_URL_CHARS) }),
-  ],
+  [z.strictObject({ text: textField }), z.strictObject({ url: urlField })],
   {
     error:
       'Give source as { text } or { url }; send a file as multipart/form-data, in a `file` part',

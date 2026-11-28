@@ -39,7 +39,7 @@ import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { MAX_ATTEMPTS, RECOVERY_BATCH } from '@/lib/app/assessments/limits';
 import { chargeEndedReview, chargeLapsedEphemeralRuns, uncharged } from '@/lib/app/credits/charge';
 import { logger } from '@/lib/logging';
-import { beginAssessment } from '@/lib/app/assessments/run';
+import { beginAssessment, inTurn } from '@/lib/app/assessments/run';
 import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
 import { notifyAfterReview } from '@/lib/app/events/notify';
 import { prisma } from '@/lib/db/client';
@@ -170,14 +170,10 @@ export async function recoverAssessments(now: Date = new Date()): Promise<Recove
   // counted, but only a later take in this workspace would clear them.
   await prisma.assessmentPlace.deleteMany({ where: { orgId, leaseExpiresAt: { lte: now } } });
 
-  const candidates = await prisma.assessment.findMany({
-    where: { ...stalled, attempts: { lt: MAX_ATTEMPTS } },
-    orderBy: { createdAt: 'asc' },
-    take: RECOVERY_BATCH,
-    select: { id: true },
-  });
+  // In the order a freed place goes (`inTurn`): no review waits behind a batch.
+  const candidates = await inTurn({ ...stalled, attempts: { lt: MAX_ATTEMPTS } }, RECOVERY_BATCH);
   let redriven = 0;
-  for (const { id } of candidates) {
+  for (const id of candidates) {
     const run = await beginAssessment(id);
     if (!run) continue;
     redriven += 1;

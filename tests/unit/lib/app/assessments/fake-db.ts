@@ -61,7 +61,9 @@
  * nothing held), its members' assessments carry their `content`, and it has
  * `findFirst`, `updateMany` and `aggregate` (summing `verdictHeldUsd`). Its
  * reads honour `members: { none: { assessment: { status } } }`, and
- * `assessmentSetMember.findMany` honours `set: { … }`.
+ * `assessmentSetMember.findMany` honours `set: { … }` and returns each member
+ * with its `set`. For batches (t-101): `content.updateMany`, for the text a
+ * page's run writes.
  */
 import { vi } from 'vitest';
 
@@ -208,6 +210,28 @@ export function createFakeDb() {
     });
   };
 
+  /**
+   * `where` on a review, with `setMembers: { none | some: { set: { … } } }`
+   * read against its places in sets (t-101: the next queued review to start
+   * prefers one in no batch).
+   */
+  const matchesReview = (row: Row, where: Row = {}): boolean => {
+    const { setMembers: rel, ...own } = where as Row & {
+      setMembers?: { none?: { set: Row }; some?: { set: Row } };
+    };
+    if (!matches(row, own)) return false;
+    if (!rel) return true;
+    const inSet = (on: { set: Row }) =>
+      setMembers.some((m) => {
+        if (m.assessmentId !== row.id) return false;
+        const set = sets.find((s) => s.id === m.setId);
+        return set !== undefined && matches(set, on.set);
+      });
+    if (rel.none && inSet(rel.none)) return false;
+    if (rel.some && !inSet(rel.some)) return false;
+    return true;
+  };
+
   type Order = { createdAt?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }[];
   const ordered = (rows: Row[], orderBy?: Order): Row[] => {
     const first = Array.isArray(orderBy) ? orderBy[0] : orderBy;
@@ -237,7 +261,7 @@ export function createFakeDb() {
           orderBy?: Order;
         }) => {
           const rows = ordered(
-            assessments.filter((a) => matches(a, where)),
+            assessments.filter((a) => matchesReview(a, where)),
             orderBy
           );
           const from = skip ?? 0;
@@ -310,6 +334,12 @@ export function createFakeDb() {
         const row = { id: `content-${seq}`, ...data, createdAt: new Date() };
         contents.push(row);
         return { id: row.id };
+      }),
+      // A page a batch named, its text written by its run (t-101).
+      updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = contents.filter((c) => matches(c, where));
+        for (const row of rows) apply(row, data);
+        return { count: rows.length };
       }),
       deleteMany: vi.fn(async ({ where }: { where: Row & { assessments?: { none: Row } } }) => {
         const { assessments: rel, ...own } = where;
@@ -646,11 +676,16 @@ export function createFakeDb() {
       }),
       findMany: vi.fn(async ({ where }: { where?: Row & { set?: Row } }) => {
         const { set: onSet, ...own } = where ?? {};
-        return setMembers.filter((m) => {
-          if (!matches(m, own)) return false;
-          const set = sets.find((r) => r.id === m.setId);
-          return !onSet || (set !== undefined && matches(set, onSet));
-        });
+        return (
+          setMembers
+            .filter((m) => {
+              if (!matches(m, own)) return false;
+              const set = sets.find((r) => r.id === m.setId);
+              return !onSet || (set !== undefined && matches(set, onSet));
+            })
+            // With its set, for a select of `set: { select: { kind } }` (t-101).
+            .map((m) => ({ ...m, set: sets.find((r) => r.id === m.setId) ?? null }))
+        );
       }),
     },
     aiKnowledgeDocument: {

@@ -95,4 +95,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/mcp/',
   // A workspace's webhooks and the finished events they are sent (t-99).
   'lib/app/events/',
+  // Batches: many texts or pages reviewed the same way in one call (t-101).
+  'lib/app/batches/',
 ];

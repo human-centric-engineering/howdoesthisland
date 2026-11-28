@@ -15,12 +15,12 @@ declared in the registry ([`api.md`](./api.md)).
 All four are the workspace's: each carries `orgId` and the `org_isolation`
 policy, and a member's erasure clears their id and leaves the rows.
 
-| Model        | Table             | Holds                                                                                                                 |
-| ------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `Content`    | `app_content`     | The text as intake produced it, its source and checksum. Kept so a run can be re-driven, until retention.             |
-| `Assessment` | `app_assessment`  | The version, profile, the judges it resolved to, the context, the state, the lease, the result and cost.              |
-| `JudgeRun`   | `app_judge_run`   | One judge's outcome: model, cost, tokens, timing, or the failure and its code.                                        |
-| `JudgeReply` | `app_judge_reply` | A succeeded run's validated reply and its drops. Its own row because retention deletes it sooner than the run (t-26). |
+| Model        | Table             | Holds                                                                                                                                                             |
+| ------------ | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Content`    | `app_content`     | The text as intake produced it, its source and checksum. Kept so a run can be re-driven, until retention. No text yet for a page a batch has not fetched (below). |
+| `Assessment` | `app_assessment`  | The version, profile, the judges it resolved to, the context, the state, the lease, the result and cost.                                                          |
+| `JudgeRun`   | `app_judge_run`   | One judge's outcome: model, cost, tokens, timing, or the failure and its code.                                                                                    |
+| `JudgeReply` | `app_judge_reply` | A succeeded run's validated reply and its drops. Its own row because retention deletes it sooner than the run (t-26).                                             |
 
 `createdByUserId` (both) and `apiKeyId` are plain strings with hand-written
 `SET NULL` FKs and drift probes, so core's `User` and `AiApiKey` are not
@@ -47,6 +47,13 @@ anything: `content_empty`, `content_too_long` (over 40,000 characters, never
 truncated), `version_not_found` (no published version with that id) or
 `profile_unknown`. It drops NUL characters, which Postgres refuses in a text
 column. It wakes the maintenance tick (`noteMaintenanceWork`).
+
+**A page with no text yet** (t-101): `content: { text: null, sourceKind:
+'URL', sourceUrl }` stores the page's address and no text, hash or word count,
+which the `app_content_text_pending_fetch` constraint allows for a page alone.
+Its run fetches it when it starts (below). Only a batch does this
+([`batches.md`](./batches.md)); a single review fetches its page in the
+request.
 
 `runJudges` (`fan-out.ts`) is the judge fan-out on its own, with no rows, for
 a run that keeps nothing (`store: false`). Passed `ephemeral: true`, each
@@ -83,7 +90,9 @@ from either of the first two.
   in the workspace, stored or kept nowhere (see "Running places" below). The
   count and the claim are one serializable transaction. A fourth assessment
   stays `QUEUED`. When a run ends, however it ends, it starts the workspace's
-  oldest queued assessment itself.
+  next queued assessment itself: the oldest in no batch, then the oldest batch
+  item (t-101), so a review someone is waiting for never queues behind a
+  batch's hundred pages.
 - **The budget, again (t-53).** Once claimed, an assessment that has no
   judge run yet is checked against the workspace's credits and monthly
   budget, holding back only the reviews in flight created before it: it may
@@ -179,6 +188,20 @@ its cost rows are an hour quiet. At most three of each a tick.
 
 It is idempotent: a second pass finds every row final or held by a live
 lease, and every charge already written.
+
+## A page fetched by its run
+
+A review stored with a page's address and no text (a batch's, t-101) is fetched
+by its own run: after the claim and the budget check, before the quick scan
+(`fetchPendingPage` in `run.ts`). The text, its hash and word count are written
+under the lease in one transaction. A page that cannot be read ends the review
+`FAILED` at once with intake's code as `errorCode` (`FETCH_FAILED`,
+`FETCH_TIMEOUT`, `URL_NOT_ALLOWED`, `TEXT_TOO_LONG`, `CONTENT_EMPTY`, …) and
+`startedAt` cleared, since nothing ran; it is not retried. An error that is not
+the page's (the database) hands the run back to the queue, as any other does.
+Until the fetch succeeds the review's read answers `text: null` and
+`wordCount: null`, and has no early quick scan. See
+[`batches.md`](./batches.md).
 
 ## Telling a workspace it ended
 
@@ -358,7 +381,7 @@ Each route's docblock lists its error codes. A few rules hold across them:
   free place before it charges the per-user cap, so a caller retrying a busy
   workspace keeps its allowance. It does not wait (owner ruling, 2026-11-20):
   a caller who wants to queue sends a stored review. When a place frees, the
-  workspace's oldest queued stored review starts. The quick scan calls no
+  workspace's next queued stored review starts (as above). The quick scan calls no
   model and takes no place. Without this, the per-user cap was the only bound, and five
   members could have ~200 model calls in flight.
 - **The quick scan before the judges (t-77).** A stored review that calls

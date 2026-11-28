@@ -37,7 +37,7 @@ import {
   type BuiltProjectContext,
 } from '@/lib/app/projects/context';
 import { runJudges } from '@/lib/app/assessments/fan-out';
-import { AssessmentInputError, type AssessmentInputErrorCode } from '@/lib/app/assessments/errors';
+import { AssessmentInputError, INPUT_ERRORS } from '@/lib/app/assessments/errors';
 import {
   enqueueAssessment,
   startAssessmentInBackground,
@@ -80,16 +80,6 @@ import {
   type EphemeralAssessment,
   type JudgeRunView,
 } from '@/lib/app/assessments/api/views';
-
-/** How each refusal from the library reaches a caller. */
-const INPUT_ERRORS: Record<AssessmentInputErrorCode, { code: string; status: number }> = {
-  content_empty: { code: 'CONTENT_EMPTY', status: 400 },
-  // The code intake uses for the same limit on an upload (`IntakeErrorCodes`).
-  content_too_long: { code: 'TEXT_TOO_LONG', status: 422 },
-  version_not_found: { code: 'FRAMEWORK_VERSION_NOT_FOUND', status: 404 },
-  profile_unknown: { code: 'PROFILE_UNKNOWN', status: 400 },
-  project_archived: { code: 'PROJECT_ARCHIVED', status: 409 },
-};
 
 /** An `AssessmentInputError` as the `APIError` a route answers with; anything else as it is. */
 export function asApiError(err: unknown): unknown {

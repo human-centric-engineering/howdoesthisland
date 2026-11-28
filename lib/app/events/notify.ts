@@ -16,7 +16,7 @@
  * **At least once.** Two starters (the end of a run and the sweep, or the
  * last two drafts of a comparison ending together) can both send before
  * either stamps. Each event carries a stable `eventId` (`assessment:<id>`,
- * `comparison:<id>`) so a receiver can drop a repeat, as core's own retries
+ * `comparison:<id>`, `batch:<id>`) so a receiver can drop a repeat, as core's own retries
  * already require of it.
  *
  * **What a payload says.** Ids, the state, and scores and bands, nothing
@@ -29,7 +29,7 @@
  * run inside `runAsOrg`, or the per-org tick): core refuses a hook emit with
  * no org, and the queries name the org too.
  */
-import type { AssessmentStatus } from '@prisma/client';
+import type { AssessmentSetKind, AssessmentStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
@@ -37,7 +37,8 @@ import { emitHookEventDurably } from '@/lib/orchestration/hooks/registry';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { stateOf } from '@/lib/app/assessments/api/views';
 import { readComparison } from '@/lib/app/comparisons/views';
-import { ASSESSMENT_FINISHED, COMPARISON_FINISHED } from '@/lib/app/events/types';
+import { readBatch } from '@/lib/app/batches/views';
+import { ASSESSMENT_FINISHED, BATCH_FINISHED, COMPARISON_FINISHED } from '@/lib/app/events/types';
 
 /** The states a review cannot leave. */
 const FINAL_STATUSES: AssessmentStatus[] = ['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'];
@@ -136,8 +137,50 @@ export async function sendComparisonFinished(setId: string): Promise<boolean> {
 }
 
 /**
+ * Send the batch's finished event (t-101), if every item is final (or purged)
+ * and it is not yet sent. Answers whether this call sent it. Rejects when the
+ * event could not be queued, leaving `notifiedAt` unset. A batch asks for no
+ * verdict, so its last item ending is all it waits on.
+ */
+export async function sendBatchFinished(setId: string): Promise<boolean> {
+  const orgId = requireOrgId();
+  const pending = await prisma.assessmentSet.count({
+    where: { id: setId, orgId, kind: 'BATCH', notifiedAt: null },
+  });
+  if (pending === 0) return false;
+  const batch = await readBatch(setId);
+  if (!batch || batch.status === 'running') return false;
+  await emitHookEventDurably(BATCH_FINISHED, {
+    eventId: `batch:${batch.id}`,
+    batchId: batch.id,
+    status: batch.status,
+    projectId: batch.projectId,
+    total: batch.total,
+    counts: batch.counts,
+    // Not the labels or the pages' addresses: see "What a payload says".
+    items: batch.items.map((i) => ({
+      position: i.position,
+      assessmentId: i.assessmentId,
+      status: i.status,
+      overall: i.overall,
+      band: i.band,
+    })),
+  });
+  await prisma.assessmentSet.updateMany({
+    where: { id: batch.id, orgId, notifiedAt: null },
+    data: { notifiedAt: new Date() },
+  });
+  return true;
+}
+
+/** Send a set's finished event, by its kind. */
+async function sendSetFinished(setId: string, kind: AssessmentSetKind): Promise<boolean> {
+  return kind === 'BATCH' ? await sendBatchFinished(setId) : await sendComparisonFinished(setId);
+}
+
+/**
  * A review has just ended (or been cancelled): send its event, then those of
- * the comparisons it was the last unfinished draft of, after the response.
+ * the comparisons and batches it was the last unfinished member of, after the response.
  * A comparison whose verdict is still to come is sent when the verdict ends
  * ({@link notifyAfterVerdict}). Never throws: a failure is left for the sweep.
  */
@@ -154,9 +197,9 @@ export function notifyAfterReview(orgId: string, assessmentId: string): void {
       }
       const sets = await prisma.assessmentSetMember.findMany({
         where: { orgId, assessmentId, set: { notifiedAt: null } },
-        select: { setId: true },
+        select: { setId: true, set: { select: { kind: true } } },
       });
-      for (const { setId } of sets) {
+      for (const { setId, set } of sets) {
         // A draft ending does not touch its comparison's row, so the sweep's
         // grace and window, read from `updatedAt`, would run from when the
         // comparison was made. Touched here, they run from its last draft.
@@ -164,7 +207,7 @@ export function notifyAfterReview(orgId: string, assessmentId: string): void {
           where: { id: setId, orgId, notifiedAt: null },
           data: { updatedAt: new Date() },
         });
-        await notifySet(setId);
+        await notifySet(setId, set.kind);
       }
     },
     'app: finished events',
@@ -174,15 +217,18 @@ export function notifyAfterReview(orgId: string, assessmentId: string): void {
 
 /** A comparison's verdict has just ended: send its event, after the response. Never throws. */
 export function notifyAfterVerdict(setId: string): void {
-  keepRunningAfterResponse(() => notifySet(setId), 'app: finished events', { setId });
+  keepRunningAfterResponse(() => notifySet(setId, 'COMPARISON'), 'app: finished events', {
+    setId,
+  });
 }
 
-async function notifySet(setId: string): Promise<void> {
+async function notifySet(setId: string, kind: AssessmentSetKind): Promise<void> {
   try {
-    await sendComparisonFinished(setId);
+    await sendSetFinished(setId, kind);
   } catch (err) {
-    logger.warn('A finished comparison’s event was not queued; the sweep will send it', {
+    logger.warn('A finished set’s event was not queued; the sweep will send it', {
       setId,
+      kind,
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -198,7 +244,7 @@ async function notifySet(setId: string): Promise<void> {
  */
 export async function sweepFinishedEvents(
   now: Date = new Date()
-): Promise<{ assessments: number; comparisons: number; failed: number }> {
+): Promise<{ assessments: number; comparisons: number; batches: number; failed: number }> {
   const orgId = requireOrgId();
   const before = new Date(now.getTime() - SWEEP_GRACE_MS);
   const since = new Date(now.getTime() - SWEEP_WINDOW_MS);
@@ -229,34 +275,40 @@ export async function sweepFinishedEvents(
     }
   }
 
-  const sets = await prisma.assessmentSet.findMany({
-    where: {
-      orgId,
-      kind: 'COMPARISON',
-      notifiedAt: null,
-      verdictStatus: { in: ['COMPLETED', 'FAILED', 'SKIPPED'] },
-      // Not one whose drafts still run: a comparison made with too few judges
-      // is `SKIPPED` from the start, and would hold a place in every pass.
-      members: { none: { assessment: { status: { in: ['QUEUED', 'RUNNING'] } } } },
-      updatedAt: { lt: before, gte: since },
-    },
-    // Newest first, so a row whose send keeps failing cannot hold the batch.
-    orderBy: { updatedAt: 'desc' },
-    take: SWEEP_BATCH,
-    select: { id: true },
-  });
-  let comparisons = 0;
-  for (const { id } of sets) {
-    try {
-      if (await sendComparisonFinished(id)) comparisons += 1;
-    } catch (err) {
-      failed += 1;
-      logger.warn('The sweep could not queue a finished comparison’s event', {
-        setId: id,
-        error: err instanceof Error ? err.message : String(err),
-      });
+  // Comparisons and batches, each kind with its own share of the pass, so
+  // owed batches cannot crowd out owed comparisons. A batch is `SKIPPED` from
+  // birth (t-101), so it is due once none of its items still runs.
+  const sent = { COMPARISON: 0, BATCH: 0 };
+  for (const kind of ['COMPARISON', 'BATCH'] as const) {
+    const sets = await prisma.assessmentSet.findMany({
+      where: {
+        orgId,
+        kind,
+        notifiedAt: null,
+        verdictStatus: { in: ['COMPLETED', 'FAILED', 'SKIPPED'] },
+        // Not one whose drafts still run: a comparison made with too few judges
+        // is `SKIPPED` from the start, and would hold a place in every pass.
+        members: { none: { assessment: { status: { in: ['QUEUED', 'RUNNING'] } } } },
+        updatedAt: { lt: before, gte: since },
+      },
+      // Newest first, so a row whose send keeps failing cannot hold the batch.
+      orderBy: { updatedAt: 'desc' },
+      take: SWEEP_BATCH,
+      select: { id: true },
+    });
+    for (const { id } of sets) {
+      try {
+        if (await sendSetFinished(id, kind)) sent[kind] += 1;
+      } catch (err) {
+        failed += 1;
+        logger.warn('The sweep could not queue a finished set’s event', {
+          setId: id,
+          kind,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 
-  return { assessments, comparisons, failed };
+  return { assessments, comparisons: sent.COMPARISON, batches: sent.BATCH, failed };
 }

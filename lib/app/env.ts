@@ -67,6 +67,19 @@ export const appEnvSchema = z.object({
     .optional()
     .transform((val) => (val === undefined ? undefined : val === 'true'))
     .describe('Offer the quick scan (on by default; false withdraws it)'),
+  /**
+   * The most items one batch takes (t-101, `.context/app/batches.md`): a
+   * whole number from 1 to 100, 10 when unset. Staging runs at 10 and
+   * production at 100. Read through `batchMaxItems()`
+   * (`lib/app/batches/limits.ts`), never directly.
+   */
+  APP_BATCH_MAX_ITEMS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('The most items one batch of reviews takes, 1 to 100 (10 when unset)'),
   PDF_CHROMIUM_PATH: z
     .string()
     .min(1)

@@ -332,7 +332,7 @@ export async function collectAppSubjectData({ userId }: AppSubjectQuery): Promis
       omit: { leaseExpiresAt: true, heldUsd: true, callStart: true },
       orderBy: { createdAt: 'asc' },
     }),
-    // The comparisons they started (t-87), each with its drafts' places. The
+    // The comparisons and batches they started (t-87, t-101), each with its members' places. The
     // reviews themselves are in `assessments`, as they asked for each.
     prisma.assessmentSet.findMany({
       where: { createdByUserId: userId },

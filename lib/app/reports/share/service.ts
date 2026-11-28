@@ -60,15 +60,16 @@ export type SharedAssessment = Pick<
   | 'judges'
   | 'framework'
   | 'title'
-  | 'wordCount'
   | 'overall'
   | 'band'
   | 'createdAt'
   | 'completedAt'
-  | 'text'
   | 'overlay'
   | 'result'
 > & {
+  /** A report is of a scored review, which always has its text (see {@link isReportable}). */
+  text: string;
+  wordCount: number;
   judgeRuns: Pick<JudgeRunView, 'judge' | 'status' | 'model'>[];
   /** The context used (t-75): whether a brief was given and the documents' titles. */
   contextUsed: SharedContextUsed | null;
@@ -302,16 +303,26 @@ export async function readSharedReport(
   return entered.value;
 }
 
-/** `hasReport`, on the detail's wire-form status. */
-const isReportable = (a: AssessmentDetail): boolean =>
-  (a.status === 'completed' || a.status === 'partial') && a.completedAt !== null;
+/** A review a report can be read of: {@link isReportable}. */
+type ReportableAssessment = AssessmentDetail & { text: string; wordCount: number };
+
+/**
+ * `hasReport`, on the detail's wire-form status. A scored review always has
+ * its text; only a page a batch could not fetch has none (t-101), and it has
+ * failed.
+ */
+const isReportable = (a: AssessmentDetail): a is ReportableAssessment =>
+  (a.status === 'completed' || a.status === 'partial') &&
+  a.completedAt !== null &&
+  a.text !== null &&
+  a.wordCount !== null;
 
 /**
  * The fields a share serves, picked one by one, so a field added to the
  * detail is not shared by default. Not `context`: it is open JSON the caller
  * supplied (briefs, client names, links) and the report never reads it.
  */
-function sharedView(a: AssessmentDetail, result: unknown): SharedAssessment {
+function sharedView(a: ReportableAssessment, result: unknown): SharedAssessment {
   return {
     status: a.status,
     profile: a.profile,

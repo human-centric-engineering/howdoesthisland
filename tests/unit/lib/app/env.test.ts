@@ -1,5 +1,5 @@
 /**
- * The app's env schema (t-11, t-61): the culture switch (D11) and the
+ * The app's env schema (t-11, t-61, t-101): the culture switch (D11) and the
  * quick-scan switch each take `true` or `false`, are optional, and refuse
  * anything else at boot rather than guessing which way a typo meant.
  *
@@ -25,5 +25,23 @@ describe.each(['CULTURE_MODULE_ENABLED', 'QUICK_SCAN_ENABLED'] as const)('%s', (
 
   it.each([['yes'], ['1'], ['TRUE'], ['']])('refuses %j', (raw) => {
     expect(appEnvSchema.safeParse({ [key]: raw }).success).toBe(false);
+  });
+});
+
+describe('APP_BATCH_MAX_ITEMS (t-101)', () => {
+  it.each([
+    ['1', 1],
+    ['10', 10],
+    ['100', 100],
+  ])('parses %s to %s', (raw, parsed) => {
+    expect(appEnvSchema.parse({ APP_BATCH_MAX_ITEMS: raw }).APP_BATCH_MAX_ITEMS).toBe(parsed);
+  });
+
+  it('is undefined when unset, so batchMaxItems() applies its default of 10', () => {
+    expect(appEnvSchema.parse({}).APP_BATCH_MAX_ITEMS).toBeUndefined();
+  });
+
+  it.each([['0'], ['101'], ['2.5'], ['ten'], ['-3']])('refuses %j at boot', (raw) => {
+    expect(appEnvSchema.safeParse({ APP_BATCH_MAX_ITEMS: raw }).success).toBe(false);
   });
 });

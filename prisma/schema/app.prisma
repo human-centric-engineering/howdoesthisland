@@ -170,9 +170,13 @@ model Content {
   sourceKind      ContentSourceKind
   sourceUrl       String?
   fileName        String?
-  text            String
-  textSha256      String
-  wordCount       Int
+  /// Null only for a page a batch has not fetched yet (t-101): its address
+  /// is `sourceUrl`, and the run fetches it when it starts
+  /// (`lib/app/assessments/run.ts`), writing all three at once. Nothing reads
+  /// a review's text before then.
+  text            String?
+  textSha256      String?
+  wordCount       Int?
   /// Who added it. FK → user, ON DELETE SET NULL (the workspace keeps it).
   createdByUserId String?
   createdAt       DateTime          @default(now())
@@ -806,6 +810,9 @@ model AssessmentSet {
 
 enum AssessmentSetKind {
   COMPARISON
+  /// Many texts or pages reviewed the same way, with no verdict (t-101,
+  /// `lib/app/batches/`). Born with its verdict `SKIPPED` (`not_asked`).
+  BATCH
 }
 
 /// Where a comparison's verdict is (t-88). `WAITING` for its drafts' reviews

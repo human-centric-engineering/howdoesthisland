@@ -11,7 +11,7 @@
  * Prose says "review" (app-plan, "The words we use"); events and fields are
  * quoted as the API names them.
  */
-import { ASSESSMENT_FINISHED, COMPARISON_FINISHED } from '@/lib/app/events/types';
+import { ASSESSMENT_FINISHED, BATCH_FINISHED, COMPARISON_FINISHED } from '@/lib/app/events/types';
 
 /** Where the settings page sends someone to read how to receive one. */
 export const WEBHOOKS_DOCS_HREF = '/developers#webhooks';
@@ -23,6 +23,10 @@ export const WEBHOOK_EVENTS: [event: string, sentWhen: string][] = [
     'A stored review ends: `completed`, `partial`, `failed` or `cancelled`. A `store: false` review sends nothing, since there is nothing to read back.',
   ],
   [COMPARISON_FINISHED, 'Every draft of a comparison has ended, and its verdict has settled.'],
+  [
+    BATCH_FINISHED,
+    "Every item of a batch has ended: each item's review id, state, score and band, and how many are in each state.",
+  ],
 ];
 
 export const SAMPLE_BODY = `{
