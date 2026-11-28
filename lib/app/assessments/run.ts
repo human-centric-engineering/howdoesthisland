@@ -81,6 +81,19 @@
  * fails is an error that is not a judge's: back to the queue, no judge
  * called. Its embeddings are charged with the review (`assessmentId`).
  *
+ * **A page a batch names** (t-101, `.context/app/batches.md`) is fetched by
+ * its own run, not by the request that asked for it, so one slow site holds
+ * up nothing but its own review. Its content row is stored with the address
+ * and no text (the `app_content_text_pending_fetch` constraint allows that
+ * for a page alone); once claimed and past the budget check, the run fetches
+ * it ({@link fetchPendingPage}) and writes the text, its hash and its word
+ * count under the lease, before the quick scan or any judge reads it. Nothing
+ * else reads a review's text before then: the early quick scan and every
+ * view treat no text as nothing yet. A page that cannot be read (it fails to
+ * load, is too long, isn't text) fails the review at once, with intake's
+ * code as its `errorCode`: fetching it again would most likely fail again,
+ * and a batch's other items carry on.
+ *
  * **Privacy.** The run is one privacy scope (`assessment:<id>`), and each
  * judge's call sits in its agent's scope inside it (`runJudge`), so each
  * agent's privacy mode applies to its call.
@@ -114,6 +127,12 @@ import { budgetRefusal } from '@/lib/app/usage/budget';
 import { chargeEndedReview } from '@/lib/app/credits/charge';
 import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
 import { notifyAfterReview } from '@/lib/app/events/notify';
+import { fetchPage } from '@/lib/app/intake/fetch-page';
+import { IntakeError } from '@/lib/app/intake/errors';
+import { countWords } from '@/lib/app/intake/extract-text';
+import { assessableText } from '@/lib/app/assessments/text';
+import { AssessmentInputError, INPUT_ERRORS } from '@/lib/app/assessments/errors';
+import { sha256 } from '@/lib/app/frameworks/store';
 import {
   buildProjectContext,
   parseProjectContext,
@@ -183,22 +202,26 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
         projectContext: true,
         project: { select: { id: true, brief: true } },
         createdByUserId: true,
-        content: { select: { text: true, sourceUrl: true } },
+        content: { select: { id: true, title: true, text: true, sourceUrl: true } },
         judgeRuns: { include: { reply: { select: { output: true } } } },
       },
     });
     const refused = row ? await refuseOverBudget(row, orgId, token) : null;
+    // A page a batch named is read now, past the budget check (t-101).
+    const ready = row && !refused ? await withText(row, token) : null;
     if (!row) {
       outcome = 'lease_lost';
     } else if (refused) {
       outcome = refused;
+    } else if (typeof ready === 'string' || ready === null) {
+      outcome = ready ?? 'lease_lost';
     } else {
       const scope = createPrivacyScope({
-        scopeId: `assessment:${row.id}`,
+        scopeId: `assessment:${ready.id}`,
         orgId,
-        ...(row.createdByUserId ? { userId: row.createdByUserId } : {}),
+        ...(ready.createdByUserId ? { userId: ready.createdByUserId } : {}),
       });
-      outcome = await runInPrivacyScope(scope, () => drive(row, orgId, token, lease));
+      outcome = await runInPrivacyScope(scope, () => drive(ready, orgId, token, lease));
     }
   } catch (err) {
     // Not the judges' and not final (the database, most likely): back to the
@@ -223,6 +246,90 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     notifyAfterReview(orgId, assessmentId);
   }
   return outcome;
+}
+
+/** A review's row as {@link execute} reads it, before its text is known. */
+type ReadRow = Omit<AssessmentRow, 'content'> & {
+  content: { id: string; title: string | null; text: string | null; sourceUrl: string | null };
+};
+
+/**
+ * The row with its text: as stored, or, for a page a batch has not fetched
+ * yet, fetched now ({@link fetchPendingPage}). Otherwise how the run ended.
+ */
+async function withText(row: ReadRow, token: string): Promise<AssessmentRow | RunOutcome> {
+  const { text, sourceUrl } = row.content;
+  if (text !== null) return { ...row, content: { text, sourceUrl } };
+  return await fetchPendingPage(row, token);
+}
+
+/**
+ * Fetch the page a batch named and store its text under the lease (t-101):
+ * see the file header. A page that cannot be read fails the review with
+ * intake's code. An error that is not the page's (the database) throws, and
+ * the run is handed back to the queue as for any other.
+ */
+async function fetchPendingPage(row: ReadRow, token: string): Promise<AssessmentRow | RunOutcome> {
+  const { sourceUrl } = row.content;
+  // The constraint keeps an address on every row with no text; failed, not thrown, if not.
+  if (sourceUrl === null) {
+    const written = await finish(row.id, token, {
+      status: 'FAILED',
+      error: 'There is no text to assess.',
+      errorCode: INPUT_ERRORS.content_empty.code,
+    });
+    return written ? 'failed' : await lostTo(row.id);
+  }
+  let page: Awaited<ReturnType<typeof fetchPage>>;
+  let text: string;
+  try {
+    page = await fetchPage(sourceUrl);
+    text = assessableText(page.text);
+  } catch (err) {
+    const code =
+      err instanceof IntakeError
+        ? err.intakeCode
+        : err instanceof AssessmentInputError
+          ? INPUT_ERRORS[err.code].code
+          : null;
+    if (code === null || !(err instanceof Error)) throw err;
+    logger.info('A batch’s page could not be read; its review fails', {
+      assessmentId: row.id,
+      errorCode: code,
+    });
+    const written = await finish(row.id, token, {
+      status: 'FAILED',
+      error: err.message,
+      errorCode: code,
+      // Nothing ran: the fetch was all it did.
+      startedAt: null,
+    });
+    return written ? 'failed' : await lostTo(row.id);
+  }
+  const textSha256 = await sha256(text);
+  const stored = await prisma.$transaction(async (tx) => {
+    // Under the lease, so a run that lost it writes nothing; the row lock it
+    // takes holds off a successor's claim until the text is in.
+    const { count } = await tx.assessment.updateMany({
+      where: { id: row.id, leaseToken: token, status: 'RUNNING' },
+      data: { error: null },
+    });
+    if (count === 0) return false;
+    await tx.content.updateMany({
+      where: { id: row.content.id, text: null },
+      data: {
+        text,
+        textSha256,
+        wordCount: countWords(text),
+        // Where the redirects ended, as intake records a page it fetched in the request.
+        sourceUrl: page.url,
+        title: row.content.title ?? page.title,
+      },
+    });
+    return true;
+  });
+  if (!stored) return await lostTo(row.id);
+  return { ...row, content: { text, sourceUrl: page.url } };
 }
 
 const STOPPED_ON_ERROR = 'Its run stopped on an error that was not a judge’s.';

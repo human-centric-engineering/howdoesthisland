@@ -38,7 +38,8 @@ export interface EarlyScanInputs {
   frameworkVersionId: string;
   context: unknown;
   overlay: unknown;
-  text: string;
+  /** `null` for a page a batch has not fetched yet (t-101): nothing to scan. */
+  text: string | null;
   sourceUrl: string | null;
 }
 
@@ -48,8 +49,12 @@ export const MEMO_LIMIT = 200;
 const memo = new Map<string, EarlyQuickScan | null>();
 
 export async function earlyQuickScan(review: EarlyScanInputs): Promise<EarlyQuickScan | null> {
+  // A page not fetched yet has nothing to show, and is not remembered as
+  // nothing: once its run has fetched it, the next read scans the text.
+  const { text } = review;
+  if (text === null) return null;
   if (memo.has(review.id)) return memo.get(review.id) ?? null;
-  const answer = await workOut(review);
+  const answer = await workOut({ ...review, text });
   if (memo.size >= MEMO_LIMIT) {
     const oldest = memo.keys().next();
     if (!oldest.done) memo.delete(oldest.value);
@@ -58,7 +63,7 @@ export async function earlyQuickScan(review: EarlyScanInputs): Promise<EarlyQuic
   return answer;
 }
 
-async function workOut(review: EarlyScanInputs): Promise<EarlyQuickScan | null> {
+async function workOut(review: EarlyScanInputs & { text: string }): Promise<EarlyQuickScan | null> {
   const loaded = await engineForVersion(review.frameworkVersionId);
   if (!loaded) return null;
   try {

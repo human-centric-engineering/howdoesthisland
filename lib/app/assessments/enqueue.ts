@@ -29,7 +29,12 @@ import { requireOrgId } from '@/lib/tenancy/context';
 
 export interface EnqueueAssessmentInput {
   content: {
-    text: string;
+    /**
+     * `null` for a page a batch names (t-101): stored with its address
+     * (`sourceKind: 'URL'`, `sourceUrl`) and no text, which its run fetches
+     * when it starts (`run.ts`).
+     */
+    text: string | null;
     title?: string | null;
     sourceKind: 'TEXT' | 'FILE' | 'URL';
     sourceUrl?: string | null;
@@ -82,8 +87,8 @@ const SEVERAL_TRANSACTION = { maxWait: 10_000, timeout: 15_000 };
 /** One input checked as far as the store can, ready to write. */
 interface CheckedInput {
   input: EnqueueAssessmentInput;
-  text: string;
-  textSha256: string;
+  /** With its hash and word count, or none of the three for a page its run will fetch. */
+  text: { text: string; textSha256: string; wordCount: number } | null;
   versionId: string;
   judges: readonly string[];
 }
@@ -94,7 +99,12 @@ async function checkInput(
   input: EnqueueAssessmentInput,
   engineOf: (versionId: string) => Promise<LoadedEngine>
 ): Promise<CheckedInput> {
-  const text = assessableText(input.content.text);
+  const raw = input.content.text;
+  if (raw === null && (input.content.sourceKind !== 'URL' || !input.content.sourceUrl)) {
+    // Only a page has an address to fetch later; anything else must come with its text.
+    throw new AssessmentInputError('content_empty', 'There is no text to assess.');
+  }
+  const text = raw === null ? null : assessableText(raw);
   const loaded = await engineOf(input.frameworkVersionId);
   if (!loaded || loaded.version.status !== 'PUBLISHED') {
     throw new AssessmentInputError('version_not_found', 'There is no such published version.');
@@ -108,7 +118,13 @@ async function checkInput(
     }
     throw err;
   }
-  return { input, text, textSha256: await sha256(text), versionId: loaded.version.id, judges };
+  return {
+    input,
+    text:
+      text === null ? null : { text, textSha256: await sha256(text), wordCount: countWords(text) },
+    versionId: loaded.version.id,
+    judges,
+  };
 }
 
 /**
@@ -163,7 +179,7 @@ export async function enqueueAssessments<T>(
         }
       }
       const enqueued: EnqueuedAssessment[] = [];
-      for (const { input, text, textSha256, versionId, judges } of checked) {
+      for (const { input, text, versionId, judges } of checked) {
         const userId = input.userId ?? null;
         const projectId = input.content.projectId ?? null;
         const content = await tx.content.create({
@@ -174,9 +190,9 @@ export async function enqueueAssessments<T>(
             sourceKind: input.content.sourceKind,
             sourceUrl: input.content.sourceUrl ?? null,
             fileName: input.content.fileName ?? null,
-            text,
-            textSha256,
-            wordCount: countWords(text),
+            text: text?.text ?? null,
+            textSha256: text?.textSha256 ?? null,
+            wordCount: text?.wordCount ?? null,
             createdByUserId: userId,
           },
           select: { id: true },

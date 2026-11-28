@@ -164,4 +164,12 @@ export function registerAppDriftProbes(): void {
     table: 'app_assessment_set',
     probe: constraintExists('app_assessment_set_createdByUserId_fkey', 'ON DELETE SET NULL'),
   });
+  // t-101: a content row has no text only while it is a page a batch has not
+  // fetched yet. The definition is pinned on `sourceUrl`, the half that says so.
+  registerAppDriftProbe({
+    name: 'app_content_text_pending_fetch (text missing only for a page not yet fetched)',
+    kind: 'CHECK constraint',
+    table: 'app_content',
+    probe: constraintExists('app_content_text_pending_fetch', '"sourceUrl" IS NOT NULL'),
+  });
 }
