@@ -79,4 +79,12 @@ describe('the webhook verification sample', () => {
     expect(verify(BODY, {}, SECRET, NOW)).toBe(false);
     expect(verify(BODY, headersFor(BODY, SECRET, NOW - 301), SECRET, NOW)).toBe(false);
   });
+
+  it('refuses a signature that is not hex, rather than throwing', () => {
+    const headers = {
+      ...headersFor(BODY, SECRET),
+      'x-sunrise-signature': `sha256=${'z'.repeat(64)}`,
+    };
+    expect(verify(BODY, headers, SECRET, NOW)).toBe(false);
+  });
 });

@@ -254,9 +254,12 @@ const ours = (orgId: string, id?: string): Prisma.AiEventHookWhereInput => ({
 /**
  * The workspace's subscriptions, newest first, each with its newest delivery.
  *
- * One indexed read per subscription for that delivery, at most
+ * One read per subscription for that delivery, at most
  * {@link MAX_SUBSCRIPTIONS_PER_WORKSPACE} of them: Prisma's `distinct` would
  * load every delivery of every subscription and drop all but one in memory.
+ * Each read finds the subscription's deliveries by core's `hookId` index and
+ * sorts them, since core has no `(hookId, createdAt)` index; core's retention
+ * job prunes deliveries, which keeps that sort small.
  */
 export async function listSubscriptions(orgId: string): Promise<EventSubscriptionListItem[]> {
   const rows = await prisma.aiEventHook.findMany({

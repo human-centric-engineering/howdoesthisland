@@ -9,6 +9,8 @@
  *
  * **A secret is shown once**, in a dialog that holds the only copy this page
  * has: closing it drops the value from state, so it is gone from the page.
+ * Only its own buttons close it, never a click outside or Escape, so a
+ * stray press cannot lose a secret nobody copied yet.
  * A second secret can't be made while one is showing, so none is lost
  * unseen.
  *
@@ -19,7 +21,7 @@
  * settings, so the two read alike.
  */
 
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle, Copy } from 'lucide-react';
 
@@ -130,7 +132,8 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
   const { copied, copy } = useCopyToClipboard();
   const [copyFailed, setCopyFailed] = useState(false);
 
-  const [toggling, setToggling] = useState<string | null>(null);
+  // Each switch waits on its own request, so one finishing never frees another.
+  const [toggling, setToggling] = useState<ReadonlySet<string>>(new Set());
   const toggle = useSaveFailure({
     fallback: 'The webhook could not be switched. Try again in a moment.',
     fields: NO_SERVER_FIELDS,
@@ -165,12 +168,16 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
   const [status, setStatus] = useState<string | null>(null);
   const [openDeliveries, setOpenDeliveries] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<Record<string, Deliveries>>({});
+  // The latest load per webhook: an earlier, slower answer must not replace it.
+  const deliveryRequests = useRef<Record<string, number>>({});
 
   const atLimit = subscriptions.length >= MAX_SUBSCRIPTIONS_PER_WORKSPACE;
   const projectName = (id: string | null): string =>
     id === null
       ? 'Whole workspace'
-      : (projects.find((p) => p.id === id)?.name ?? 'An archived project');
+      : // Not among the live projects the page read: archived, or past the
+        // first page of them. Neither is certain, so the label claims neither.
+        (projects.find((p) => p.id === id)?.name ?? 'A project not listed here');
 
   const showSecret = (next: Shown) => {
     setCopyFailed(false);
@@ -228,7 +235,7 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
 
   const handleToggle = async (row: SubscriptionRow, isEnabled: boolean) => {
     setStatus(null);
-    setToggling(row.id);
+    setToggling((ids) => new Set(ids).add(row.id));
     toggle.clear();
     try {
       const sent = await apiClient.patch<unknown>(subscriptionEndpoint(orgId, row.id), {
@@ -241,7 +248,11 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
     } catch (err) {
       toggle.report(err);
     } finally {
-      setToggling(null);
+      setToggling((ids) => {
+        const next = new Set(ids);
+        next.delete(row.id);
+        return next;
+      });
     }
   };
 
@@ -284,18 +295,21 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
   };
 
   const loadDeliveries = async (id: string) => {
-    setDeliveries((all) => ({ ...all, [id]: { state: 'loading' } }));
+    const request = (deliveryRequests.current[id] ?? 0) + 1;
+    deliveryRequests.current[id] = request;
+    const settle = (next: Deliveries) => {
+      if (deliveryRequests.current[id] !== request) return;
+      setDeliveries((all) => ({ ...all, [id]: next }));
+    };
+    settle({ state: 'loading' });
     try {
       const sent = await apiClient.get<unknown>(deliveriesEndpoint(orgId, id), {
         params: { limit: RECENT_DELIVERIES },
       });
       const parsed = deliveryListSchema.safeParse(sent);
-      setDeliveries((all) => ({
-        ...all,
-        [id]: parsed.success ? { state: 'loaded', items: parsed.data } : { state: 'failed' },
-      }));
+      settle(parsed.success ? { state: 'loaded', items: parsed.data } : { state: 'failed' });
     } catch {
-      setDeliveries((all) => ({ ...all, [id]: { state: 'failed' } }));
+      settle({ state: 'failed' });
     }
   };
 
@@ -318,7 +332,10 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
         }}
       >
         {shown ? (
-          <DialogContent>
+          <DialogContent
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>
                 {shown.rotated ? 'New signing secret' : 'Signing secret'} for &ldquo;{shown.name}
@@ -455,9 +472,9 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
                   </p>
                   <p>
                     Each message is a signed <code>POST</code>. Answer it with a <code>2xx</code>{' '}
-                    within 10 seconds; anything else is tried again three times, after 10 seconds, a
-                    minute and five minutes. A message can arrive twice, so use its{' '}
-                    <code>eventId</code> to ignore a repeat.
+                    within 10 seconds; anything else is tried twice more, after 10 seconds and after
+                    a minute. A message can arrive twice, so use its <code>eventId</code> to ignore
+                    a repeat.
                   </p>
                   <p>
                     <Link href={WEBHOOKS_DOCS_HREF} className="underline underline-offset-2">
@@ -591,7 +608,7 @@ export function WebhooksManager({ orgId, initialSubscriptions, projects }: Webho
                     <TableCell>
                       <Switch
                         checked={row.isEnabled}
-                        disabled={toggling === row.id}
+                        disabled={toggling.has(row.id)}
                         onCheckedChange={(next) => void handleToggle(row, next)}
                         aria-label={`Send to ${row.name}`}
                       />

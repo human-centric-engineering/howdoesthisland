@@ -471,7 +471,7 @@ export default async function DevelopersPage() {
           <h3 className="pt-2 font-semibold">Answering, and repeats</h3>
           <p>
             Answer with a <code>2xx</code> within 10 seconds, then do the work. Anything else is
-            tried again after 10 seconds, a minute and five minutes. A message can arrive more than
+            tried twice more, after 10 seconds and after a minute. A message can arrive more than
             once, so use <code>data.eventId</code> to ignore a repeat. The webhook&rsquo;s page
             lists its recent deliveries, with the answer your receiver gave each.
           </p>

@@ -54,7 +54,7 @@ function verifyHowDoesThisLandWebhook(rawBody, headers, secret, nowSeconds) {
 
   const expected = createHmac('sha256', secret).update(\`\${timestamp}.\${rawBody}\`).digest('hex');
   const given = signature.slice('sha256='.length);
-  if (given.length !== expected.length) return false;
+  if (!/^[0-9a-f]{64}$/.test(given)) return false;
   return timingSafeEqual(Buffer.from(given, 'hex'), Buffer.from(expected, 'hex'));
 }
 

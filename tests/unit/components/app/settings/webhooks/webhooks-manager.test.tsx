@@ -104,8 +104,8 @@ describe('WebhooksManager', () => {
       expect(second).toHaveTextContent('Spring launch');
       expect(second).toHaveTextContent('Nothing sent yet');
       expect(within(second).getByRole('switch')).not.toBeChecked();
-      // Projects are listed live only, so one not among them is an archived one.
-      expect(third).toHaveTextContent('An archived project');
+      // Not among the live projects read: archived or past the first page, so neither is claimed.
+      expect(third).toHaveTextContent('A project not listed here');
     });
 
     it('says so when there are none', () => {
@@ -158,14 +158,21 @@ describe('WebhooksManager', () => {
       expect(urlInput()).toHaveValue('');
     });
 
-    it('drops the secret when the dialog is closed with Escape too', async () => {
+    it('keeps the secret open through Escape and a click outside, so a stray press loses nothing', async () => {
       vi.mocked(apiClient.post).mockResolvedValue(created());
       const { user } = setup([]);
       await fillAndAdd(user);
       await screen.findByRole('dialog');
 
       await user.keyboard('{Escape}');
+      // The overlay sits outside the dialog's content: a press there is a click outside.
+      const overlay = document.querySelector('[data-state="open"][class*="fixed inset-0"]');
+      expect(overlay).not.toBeNull();
+      await user.click(overlay as HTMLElement);
 
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByTestId('webhook-secret')).toHaveTextContent('whsec_the_whole_secret');
+      await user.click(screen.getByRole('button', { name: 'Close' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
       expect(document.body).not.toHaveTextContent('whsec_the_whole_secret');
     });
@@ -266,6 +273,22 @@ describe('WebhooksManager', () => {
       );
       expect(await screen.findByText('“CMS” is off.')).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Send to CMS' })).not.toBeChecked();
+    });
+
+    it('keeps a switch disabled until its own request ends, whatever another one does', async () => {
+      let finishFirst: (value: unknown) => void = () => {};
+      vi.mocked(apiClient.patch)
+        .mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+        .mockImplementationOnce(() => new Promise(() => {}));
+      const { user } = setup([row(), row({ id: 'hook-2', name: 'Second' })]);
+
+      await user.click(screen.getByRole('switch', { name: 'Send to CMS' }));
+      await user.click(screen.getByRole('switch', { name: 'Send to Second' }));
+      finishFirst({ subscription: row({ isEnabled: false }) });
+
+      expect(await screen.findByText('“CMS” is off.')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Send to CMS' })).toBeEnabled();
+      expect(screen.getByRole('switch', { name: 'Send to Second' })).toBeDisabled();
     });
 
     it('leaves the switch as it was and shows the refusal when it fails', async () => {
@@ -392,6 +415,36 @@ describe('WebhooksManager', () => {
 
       await user.click(screen.getByRole('button', { name: 'Hide deliveries of CMS' }));
       expect(screen.queryByText('The last 2 deliveries to “CMS”')).toBeNull();
+    });
+
+    it('shows the latest load, not an earlier one that answers after it', async () => {
+      let finishFirst: (value: unknown) => void = () => {};
+      vi.mocked(apiClient.get)
+        .mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+        .mockResolvedValueOnce([]);
+      const { user } = setup();
+
+      await user.click(screen.getByRole('button', { name: 'Deliveries of CMS' }));
+      await user.click(screen.getByRole('button', { name: 'Hide deliveries of CMS' }));
+      await user.click(screen.getByRole('button', { name: 'Deliveries of CMS' }));
+      expect(await screen.findByText('Nothing has been sent to it yet.')).toBeInTheDocument();
+
+      finishFirst([
+        {
+          id: 'old',
+          eventId: 'assessment:stale',
+          status: 'delivered',
+          attempts: 1,
+          lastAttemptAt: null,
+          nextRetryAt: null,
+          lastResponseCode: 200,
+          lastError: null,
+          createdAt: '2026-11-27T11:00:00.000Z',
+        },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(screen.queryByText('assessment:stale')).toBeNull();
+      expect(screen.getByText('Nothing has been sent to it yet.')).toBeInTheDocument();
     });
 
     it('says when nothing has been sent, and offers a retry when the load fails', async () => {
