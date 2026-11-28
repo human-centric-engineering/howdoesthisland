@@ -85,6 +85,7 @@
     "smoke:judge": "tsx --env-file=.env.local scripts/app/smoke-judge.ts",
     "smoke:credit-charge": "tsx --env-file=.env.local scripts/app/smoke-credit-charge.ts",
     "smoke:rewrite-charge": "tsx --env-file=.env.local scripts/app/smoke-rewrite-charge.ts",
+    "smoke:batch": "tsx --env-file=.env.local scripts/app/smoke-batch.ts",
     "smoke:redeem-codes": "tsx --env-file=.env.local scripts/app/smoke-redeem-codes.ts",
     "calibrate": "tsx --env-file=.env.local scripts/app/calibrate.ts",
     "smoke:tenancy": "tsx --env-file=.env.local scripts/smoke/tenancy.ts",

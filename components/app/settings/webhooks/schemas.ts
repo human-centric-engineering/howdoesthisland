@@ -8,6 +8,7 @@ import {
   APP_EVENT_TYPES,
   ASSESSMENT_FINISHED,
   COMPARISON_FINISHED,
+  BATCH_FINISHED,
   type AppEventType,
 } from '@/lib/app/events/types';
 
@@ -94,6 +95,7 @@ export type ProjectChoice = z.infer<typeof projectChoiceListSchema>[number];
 export const EVENT_LABELS: Record<AppEventType, string> = {
   [ASSESSMENT_FINISHED]: 'A review finishes',
   [COMPARISON_FINISHED]: 'A comparison finishes',
+  [BATCH_FINISHED]: 'A batch finishes',
 };
 
 /** Core's delivery states, as a person reads them. */

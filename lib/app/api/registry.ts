@@ -106,6 +106,12 @@ import {
   listComparisonsQuerySchema,
 } from '@/lib/app/comparisons/validations';
 import {
+  batchIdParamSchema,
+  createBatchSchema,
+  listBatchesQuerySchema,
+} from '@/lib/app/batches/validations';
+import { ITEM_STATES } from '@/lib/app/batches/views';
+import {
   createRewriteSchema,
   listRewritesQuerySchema,
   rewriteIdParamSchema,
@@ -478,7 +484,13 @@ export const assessmentSummarySchema = z.object({
     url: z.string().nullable(),
     fileName: z.string().nullable(),
   }),
-  wordCount: z.number().int(),
+  wordCount: z
+    .number()
+    .int()
+    .nullable()
+    .describe(
+      '`null` for a page a batch has not fetched yet, or could not fetch (its address is `source.url`).'
+    ),
   overall: z.number().nullable(),
   band: z.string().nullable(),
   costUsd: z.number(),
@@ -539,7 +551,12 @@ export const earlyQuickScanSchema = z.object({
 /** `AssessmentDetail`. */
 export const assessmentDetailSchema = assessmentSummarySchema.extend({
   /** The copy assessed; the result's offsets point into it. */
-  text: z.string(),
+  text: z
+    .string()
+    .nullable()
+    .describe(
+      "The copy assessed; the result's offsets point into it. `null` for a page a batch has not fetched yet, or could not fetch (`source.url`)."
+    ),
   context: assessmentContextField,
   overlay: assessmentOverlayField,
   contextUsed: contextUsedField,
@@ -584,6 +601,10 @@ export const sharedAssessmentSchema = assessmentDetailSchema
     overlay: true,
   })
   .extend({
+    // A report is of a scored review, which always has its text: only a page a
+    // batch has not fetched yet, or could not, has none (t-101), and it has no result.
+    text: z.string(),
+    wordCount: z.number().int(),
     result: sharedResultField,
     judgeRuns: z.array(sharedJudgeRunSchema),
     // The report lists the context used (t-75): whether a brief was given and
@@ -757,6 +778,58 @@ export const comparisonDetailSchema = comparisonSummarySchema.extend({
       description:
         "The editor's verdict on which draft lands better with this reader, asked for once every draft's review has ended and two or more completed.",
     }),
+});
+
+// --- Batches (t-101): `BatchSummary` and `BatchDetail` in
+// `lib/app/batches/views.ts`.
+
+const BATCH_STATES = ['running', 'completed', 'partial', 'failed'] as const;
+
+/** `BatchItem` in `views.ts`. */
+const batchItemSchema = z.object({
+  position: z.number().int(),
+  label: z.string().nullable(),
+  assessmentId: z.string().nullable(),
+  status: z.enum(ITEM_STATES),
+  source: z
+    .object({ kind: z.enum(['text', 'url']), url: z.string().nullable() })
+    .nullable()
+    .meta({
+      description:
+        "Text or a page, and the page's address (where its redirects ended, once fetched); `null` once purged.",
+    }),
+  overall: z.number().nullable(),
+  band: z.string().nullable(),
+  errorCode: z.string().nullable().meta({
+    description:
+      "Why it failed, when that has a code: intake's for a page that could not be read (`FETCH_FAILED`, `FETCH_TIMEOUT`, `URL_NOT_ALLOWED`, `TEXT_TOO_LONG`, `CONTENT_EMPTY`, …), or the budget's.",
+  }),
+});
+
+/** `BatchSummary` in `views.ts`. */
+export const batchSummarySchema = z.object({
+  id: z.string(),
+  kind: z.literal('batch'),
+  status: z.enum(BATCH_STATES).meta({
+    description:
+      '`running` while any item is queued or running; then `completed` when every item completed, `failed` when none was scored, `partial` otherwise.',
+  }),
+  framework: frameworkRefSchema,
+  profile: z.string(),
+  judges: z.array(z.string()),
+  projectId: z.string().nullable(),
+  project: z.object({ id: z.string(), name: z.string() }).nullable(),
+  createdAt: isoDateTime,
+  total: z.number().int(),
+  counts: z
+    .record(z.enum(ITEM_STATES), z.number().int())
+    .meta({ description: 'How many items are in each state.' }),
+});
+
+/** `BatchDetail` in `views.ts`. */
+export const batchDetailSchema = batchSummarySchema.extend({
+  context: assessmentContextField,
+  items: z.array(batchItemSchema),
 });
 
 /** What `remove()` in `lib/app/assessments/api/service.ts` returns. */
@@ -1196,6 +1269,56 @@ export const APP_ROUTES: readonly RouteContract[] = [
     summary: "Delete a comparison. Its drafts' reviews stay in the workspace's history.",
     auth: ASSESS,
     request: { params: comparisonIdParamSchema },
+    response: { status: 200, data: assessmentDeletedSchema },
+  },
+  // Batches (t-101).
+  {
+    method: 'POST',
+    path: '/api/v1/batches',
+    summary:
+      "Review many texts or pages the same way, in one call: 1 to the install's batch size (`APP_BATCH_MAX_ITEMS`, 10 unless it is set, at most 100). Every item gets the same framework version, context, project and AI reviewers, and is an ordinary review in the workspace's history, titled with its label. A page is fetched when its own review starts, not in this call, and one that cannot be read fails that item alone. Answered 202 at once; follow the batch with its GET, or subscribe to `app.batch.finished`. Items count against a batch allowance of their own per user per hour, not the per-minute limit.",
+    auth: ASSESS,
+    request: { body: createBatchSchema },
+    errors: [
+      {
+        status: 402,
+        code: 'INSUFFICIENT_CREDITS',
+        description:
+          "The workspace's CopyCredits, less what its reviews and rewrites in flight hold, do not cover every item's estimate together. Nothing was stored and no item was reviewed. `details` as for a review, `estimateCredits` being every item's.",
+      },
+      {
+        status: 402,
+        code: 'BUDGET_EXCEEDED',
+        description:
+          "Every item's estimate together is more than what is left of the workspace's monthly AI budget. Nothing was stored. `details` as for a review.",
+      },
+    ],
+    response: { status: 202, data: batchDetailSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/batches',
+    summary:
+      "List the workspace's batches, newest first, each with how many items are in each state. Filter by `projectId`.",
+    auth: ASSESS,
+    request: { query: listBatchesQuerySchema },
+    response: { status: 200, data: z.array(batchSummarySchema), meta: paginationMetaSchema },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/batches/{id}',
+    summary:
+      "Get one batch: its state, how many items are in each state, and each item's state, score, band, review id and failure code. An item whose review was deleted or purged reads as `purged`.",
+    auth: ASSESS,
+    request: { params: batchIdParamSchema },
+    response: { status: 200, data: batchDetailSchema },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/batches/{id}',
+    summary: "Delete a batch. Its items' reviews stay in the workspace's history.",
+    auth: ASSESS,
+    request: { params: batchIdParamSchema },
     response: { status: 200, data: assessmentDeletedSchema },
   },
   {

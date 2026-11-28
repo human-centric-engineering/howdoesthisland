@@ -142,6 +142,16 @@ export const appCoverageExclusions: AppCoverageExclusion[] = [
       'lib/app/usage/budget.ts, which stay gated and have their own tests.',
   },
   {
+    // HowDoesThisLand (t-101), by name like the ones above.
+    pattern: 'scripts/app/smoke-batch.ts',
+    reason:
+      'a tsx smoke run by hand against the real dev database: a page stored ' +
+      'with no text under its CHECK constraint, its run writing the text, and ' +
+      'the real claim starting more items than places in turn. Nothing ' +
+      'imports it. What it drives is lib/app/batches/ and ' +
+      'lib/app/assessments/run.ts, which stay gated and have their own tests.',
+  },
+  {
     // HowDoesThisLand (t-92), by name like the ones above.
     pattern: 'scripts/app/smoke-mcp-tools.ts',
     reason:
