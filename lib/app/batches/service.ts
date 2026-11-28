@@ -79,6 +79,7 @@ import {
   type CreateBatchBody,
 } from '@/lib/app/batches/validations';
 import { readBatch, type BatchDetail } from '@/lib/app/batches/views';
+import { UPLOAD_CLAIM_WINDOW_MS } from '@/lib/app/batches/limits';
 
 /** A request checked as far as it can be without writing anything. */
 export interface PreparedBatch extends ResolvedReviewOptions {
@@ -127,29 +128,33 @@ export async function prepareBatch(body: CreateBatchBody): Promise<PreparedBatch
 }
 
 /**
- * Every upload the items name is this workspace's and not taken yet, or the
- * first that is not is refused with its place in `items` as
- * `details.position`: 404 `CONTENT_NOT_FOUND` (another workspace's reads as
- * none, as every lookup here does; and one deleted unclaimed after 24
- * hours), 409 `CONTENT_IN_USE`. The claim in the write is what holds; this
- * answers the common case before the budget is held.
+ * Every upload the items name is this workspace's, not taken yet and not
+ * past its window, or the first that is not is refused with its place in
+ * `items` as `details.position`: 409 `CONTENT_IN_USE` for an upload a review
+ * took, and 404 `CONTENT_NOT_FOUND` for anything else (another workspace's
+ * reads as none, as every lookup here does; so does a content row that was
+ * never an upload, and one past its 24 hours, deleted or not yet). The claim
+ * in the write is what holds; this answers the common case before the budget
+ * is held.
  */
 async function checkUploads(items: readonly BatchItemInput[]): Promise<void> {
   const ids = items.flatMap((item) => (isUploadItem(item) ? [item.contentId] : []));
   if (ids.length === 0) return;
   const rows = await prisma.content.findMany({
     where: { orgId: requireOrgId(), id: { in: ids } },
-    select: { id: true, awaitingBatch: true },
+    select: { id: true, awaitingBatch: true, sourceKind: true, createdAt: true },
   });
   const byId = new Map(rows.map((row) => [row.id, row]));
+  const oldest = Date.now() - UPLOAD_CLAIM_WINDOW_MS;
   for (const [position, item] of items.entries()) {
     if (!isUploadItem(item)) continue;
     const row = byId.get(item.contentId);
-    if (row?.awaitingBatch) continue;
+    if (row?.awaitingBatch && row.createdAt.getTime() > oldest) continue;
+    const taken = row?.sourceKind === 'FILE' && !row.awaitingBatch;
     throw asApiError(
       new AssessmentInputError(
-        row ? 'upload_in_use' : 'upload_not_found',
-        row
+        taken ? 'upload_in_use' : 'upload_not_found',
+        taken
           ? 'This upload is already being reviewed. Upload the file again to review it in another batch.'
           : 'There is no such upload in this workspace. One no batch takes within 24 hours is deleted.',
         { contentId: item.contentId, position }

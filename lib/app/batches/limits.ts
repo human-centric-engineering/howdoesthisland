@@ -37,9 +37,19 @@ export const ITEM_LABEL_MAX = 80;
 export const BATCH_ITEMS_PER_HOUR = 200;
 
 /**
+ * How long an upload waits for a batch to take it (t-102): 24 hours. Past it,
+ * it cannot be claimed (`claimUpload` in `lib/app/assessments/enqueue.ts`)
+ * and the hourly job deletes it (`lib/app/batches/uploads.ts`). No longer than
+ * the shortest retention window (1 day, `lib/app/retention/settings.ts`), so a
+ * claimable upload is never one the retention purge would take.
+ */
+export const UPLOAD_CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
  * Uploads per user per hour (t-102, `POST /api/v1/contents`): as many as
  * {@link BATCH_ITEMS_PER_HOUR}, since an upload is only of use as a batch
- * item. Each reads a file of up to 10 MB in the request, which is the work
- * this bounds; the `/api/v1` section cap alone would allow 6,000 an hour.
+ * item. Each reads a file of up to 10 MB in the request and extracts its
+ * text, the work this bounds: a caller with no room left is refused before
+ * the body is read. The `/api/v1` section cap alone would allow 6,000 an hour.
  */
 export const UPLOADS_PER_HOUR = BATCH_ITEMS_PER_HOUR;

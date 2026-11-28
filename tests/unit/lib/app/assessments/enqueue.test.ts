@@ -355,6 +355,16 @@ describe('an upload a batch item names (t-102)', () => {
     expect(fake.contents.find((c) => c.id === theirs)).toMatchObject({ awaitingBatch: true });
     expect(fake.assessments).toHaveLength(1);
   });
+
+  it('refuses one past its window as upload_not_found, leaving it for the job to delete', async () => {
+    const { id } = await upload();
+    const row = fake.contents.find((c) => c.id === id);
+    if (row) row.createdAt = new Date(Date.now() - 24 * 60 * 60 * 1000 - 1);
+    const err = await refusal(runAsOrg(ORG, () => enqueueAssessment(claiming(id))));
+    expect(err.code).toBe('upload_not_found');
+    expect(row).toMatchObject({ awaitingBatch: true });
+    expect(fake.assessments).toEqual([]);
+  });
 });
 
 describe('startAssessmentInBackground', () => {

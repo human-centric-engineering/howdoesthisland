@@ -155,8 +155,12 @@ import { loadModel } from '@/tests/unit/lib/app/frameworks/howdoesthisland/engin
 import { createMockAuthSession } from '@/tests/helpers/auth';
 import { aiAssessmentLimiter } from '@/lib/app/assessments/api/limiter';
 import { batchItemLimiter, uploadLimiter } from '@/lib/app/batches/limiter';
-import { BATCH_ITEMS_PER_HOUR, UPLOADS_PER_HOUR } from '@/lib/app/batches/limits';
-import { purgeUnclaimedUploads, UPLOAD_CLAIM_WINDOW_MS } from '@/lib/app/batches/uploads';
+import {
+  BATCH_ITEMS_PER_HOUR,
+  UPLOAD_CLAIM_WINDOW_MS,
+  UPLOADS_PER_HOUR,
+} from '@/lib/app/batches/limits';
+import { purgeUnclaimedUploads } from '@/lib/app/batches/uploads';
 import { MAX_UPLOAD_BODY_BYTES } from '@/lib/app/intake/upload';
 import { resetKicksForTests } from '@/lib/app/assessments/kick';
 import { forgetEarlyScansForTests } from '@/lib/app/assessments/early-scan';
@@ -625,11 +629,23 @@ describe('POST /api/v1/contents (t-102)', () => {
     expect(fake.contents).toEqual([]);
   });
 
-  it('429 past the uploads a person may make in an hour, storing nothing more', async () => {
+  it('429 past the uploads a person may make in an hour, before the body is read, storing nothing', async () => {
     for (let i = 0; i < UPLOADS_PER_HOUR; i++) uploadLimiter.check(`user:${ALICE}`);
-    const res = await postFile('launch.txt', DRAFT_A);
+    const form = new FormData();
+    form.append('file', new File([DRAFT_A], 'launch.txt'));
+    const request = new NextRequest(UPLOADS, { method: 'POST', body: form });
+    const formData = vi.spyOn(request, 'formData');
+    const res = await uploadFile(request);
     expect(res.status).toBe(429);
+    expect(formData).not.toHaveBeenCalled();
     expect(fake.contents).toEqual([]);
+  });
+
+  it('counts the upload that uses the last of the allowance, then refuses the next', async () => {
+    for (let i = 0; i < UPLOADS_PER_HOUR - 1; i++) uploadLimiter.check(`user:${ALICE}`);
+    expect((await postFile('launch.txt', DRAFT_A)).status).toBe(201);
+    expect((await postFile('pricing.txt', DRAFT_B)).status).toBe(429);
+    expect(fake.contents).toHaveLength(1);
   });
 });
 
@@ -700,12 +716,46 @@ describe('POST /api/v1/batches — uploaded files (t-102)', () => {
     expect(fake.sets).toHaveLength(1);
   });
 
-  it('refuses the content of a review that was never an upload, as taken', async () => {
+  it('refuses the content of a review that was never an upload as no such upload', async () => {
     await batch({ items: texts(DRAFT_A) });
     const reviewed = String(fake.contents[0]?.id);
     const res = await post({ judges: TWO, items: [{ contentId: reviewed }] });
-    expect(res.status).toBe(409);
-    expect((await json(res)).error?.code).toBe('CONTENT_IN_USE');
+    expect(res.status).toBe(404);
+    expect((await json(res)).error?.code).toBe('CONTENT_NOT_FOUND');
+  });
+
+  it('refuses an upload past its expiresAt that the job has not deleted yet, as no such upload', async () => {
+    const expired = await uploaded('launch.txt', DRAFT_A);
+    const row = fake.contents[0];
+    row.createdAt = new Date(Date.now() - UPLOAD_CLAIM_WINDOW_MS - 1_000);
+
+    const res = await post({ judges: TWO, items: [{ contentId: expired }] });
+    expect(res.status).toBe(404);
+    expect((await json(res)).error).toMatchObject({
+      code: 'CONTENT_NOT_FOUND',
+      details: { position: 0, contentId: expired },
+    });
+    expect(row.awaitingBatch).toBe(true);
+    expect(fake.assessments).toEqual([]);
+  });
+
+  it('refuses an upload that expires between the check and the write, in the write', async () => {
+    const id = await uploaded('launch.txt', DRAFT_A);
+    // The check reads it inside its window; it is past it by the claim.
+    fake.db.content.findMany.mockImplementationOnce(async () => {
+      const rows = fake.contents.map((c) => ({ ...c }));
+      fake.contents[0].createdAt = new Date(Date.now() - UPLOAD_CLAIM_WINDOW_MS - 1_000);
+      return rows;
+    });
+
+    const res = await post({ judges: TWO, items: [{ contentId: id }] });
+    expect(res.status).toBe(404);
+    expect((await json(res)).error).toMatchObject({
+      code: 'CONTENT_NOT_FOUND',
+      details: { position: 0, contentId: id },
+    });
+    expect(fake.contents[0]?.awaitingBatch).toBe(true);
+    expect(fake.assessments).toEqual([]);
   });
 
   it('refuses an upload taken between the check and the write, naming the item, storing nothing', async () => {
@@ -1077,7 +1127,10 @@ describe('a batch whose items are purged by retention', () => {
     if (!aged) throw new Error('no review');
     aged.createdAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
     const agedContent = fake.contents.find((c) => c.id === aged.contentId);
-    if (agedContent) agedContent.createdAt = aged.createdAt;
+    if (agedContent) {
+      agedContent.createdAt = aged.createdAt;
+      agedContent.updatedAt = aged.createdAt;
+    }
     mocks.orgSettings.mockResolvedValue({ settings: { app: { retention: { days: 30 } } } });
 
     const purged = await runAsOrg(WS_A, () => purgeExpiredContent());

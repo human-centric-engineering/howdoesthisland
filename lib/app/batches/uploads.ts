@@ -18,11 +18,13 @@
  * stored.
  *
  * **Unclaimed for a day, deleted.** An upload that never joins a batch would
- * otherwise be kept forever by a workspace with no retention window. The
- * hourly job ({@link purgeUnclaimedUploads}) deletes those still waiting
- * {@link UPLOAD_CLAIM_WINDOW_MS} after they were made. A claim racing it is
- * safe the same way: whichever writes the row first wins, and the other's
- * condition no longer holds.
+ * otherwise be kept forever by a workspace with no retention window. Past
+ * `UPLOAD_CLAIM_WINDOW_MS` it can no longer be claimed, and the hourly job
+ * ({@link purgeUnclaimedUploads}) deletes it. A claim racing that job is safe
+ * the same way: whichever writes the row first wins, and the other's
+ * condition no longer holds. The retention purge, whose shortest window is
+ * no shorter, leaves content a claim has just updated
+ * (`lib/app/retention/purge.ts`).
  *
  * Runs in the caller's tenant context (the route's guard, or the job's
  * per-workspace pass).
@@ -34,9 +36,7 @@ import { countWords, extractText } from '@/lib/app/intake/extract-text';
 import type { UploadedFile } from '@/lib/app/intake/upload';
 import { assessableText } from '@/lib/app/assessments/text';
 import { refusingAsApi } from '@/lib/app/assessments/api/service';
-
-/** How long an upload waits for a batch to take it before it is deleted: 24 hours. */
-export const UPLOAD_CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000;
+import { UPLOAD_CLAIM_WINDOW_MS } from '@/lib/app/batches/limits';
 
 /** An upload, as `POST /api/v1/contents` answers it. */
 export interface UploadView {

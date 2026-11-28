@@ -26,6 +26,7 @@ import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { prisma } from '@/lib/db/client';
 import { noteMaintenanceWork } from '@/lib/orchestration/maintenance/idle-gate';
 import { requireOrgId } from '@/lib/tenancy/context';
+import { UPLOAD_CLAIM_WINDOW_MS } from '@/lib/app/batches/limits';
 
 export interface EnqueueAssessmentInput {
   content: {
@@ -262,14 +263,17 @@ export async function enqueueAssessments<T>(
 
 /**
  * Take an upload for the review being written (t-102): clear its
- * `awaitingBatch` where it is still set, in this workspace, and file it in
- * the review's project, under its label when there is one. The update's
- * condition is what makes the claim single: a second transaction naming the
- * same row waits for the first, and Postgres re-checks the condition on the
- * row the first left, which no longer has it set. So does the job's delete
- * (`lib/app/batches/uploads.ts`). Throws `upload_in_use` when it was taken,
- * `upload_not_found` when it is not this workspace's or is gone, each with
- * the `contentId`; the transaction then stores nothing.
+ * `awaitingBatch` where it is still set, in this workspace, and not past
+ * `UPLOAD_CLAIM_WINDOW_MS`, and file it in the review's project, under its
+ * label when there is one. The update's condition is what makes the claim
+ * single: a second transaction naming the same row waits for the first, and
+ * Postgres re-checks the condition on the row the first left, which no longer
+ * has it set. So does the job's delete (`lib/app/batches/uploads.ts`). The
+ * update also moves `updatedAt`, which keeps the retention purge off the row
+ * (`lib/app/retention/purge.ts`). Throws `upload_in_use` when a review took
+ * it, and `upload_not_found` when it is not this workspace's upload, is past
+ * its window, or is gone, each with the `contentId`; the transaction then
+ * stores nothing.
  */
 async function claimUpload(
   tx: Prisma.TransactionClient,
@@ -278,7 +282,12 @@ async function claimUpload(
   into: { projectId: string | null; title: string | null }
 ): Promise<{ id: string }> {
   const { count } = await tx.content.updateMany({
-    where: { id, orgId, awaitingBatch: true },
+    where: {
+      id,
+      orgId,
+      awaitingBatch: true,
+      createdAt: { gt: new Date(Date.now() - UPLOAD_CLAIM_WINDOW_MS) },
+    },
     data: {
       awaitingBatch: false,
       projectId: into.projectId,
@@ -286,8 +295,11 @@ async function claimUpload(
     },
   });
   if (count === 1) return { id };
-  const exists = await tx.content.findFirst({ where: { id, orgId }, select: { id: true } });
-  throw exists
+  const taken = await tx.content.findFirst({
+    where: { id, orgId, sourceKind: 'FILE', awaitingBatch: false },
+    select: { id: true },
+  });
+  throw taken
     ? new AssessmentInputError(
         'upload_in_use',
         'This upload is already being reviewed. Upload the file again to review it in another batch.',

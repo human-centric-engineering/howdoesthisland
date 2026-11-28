@@ -21,8 +21,9 @@
  * body over `MAX_UPLOAD_BODY_BYTES`, refused before it is read), 415
  * `INVALID_FILE_TYPE`, 422 `TEXT_TOO_LONG`, `TOO_MANY_PAGES`,
  * `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE`. 429 `RATE_LIMIT_EXCEEDED`
- * past `UPLOADS_PER_HOUR` per user, counted once the body is read, so a
- * refused type counts too: it was read. 401, 403 as every route.
+ * past `UPLOADS_PER_HOUR` per user: a caller with no room left is refused
+ * before the body is read, and an upload is counted once its body has been
+ * read, so a refused type counts too. 401, 403 as every route.
  */
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth/guards';
@@ -44,8 +45,11 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       file: ['Send exactly one file, in the `file` part'],
     });
   }
+  const key = `user:${session.user.id}`;
+  const room = uploadLimiter.peek(key);
+  if (room.remaining < 1) return createRateLimitResponse({ ...room, success: false });
   const { file } = await readUpload(request, contentUploadOptionsSchema);
-  const limit = uploadLimiter.check(`user:${session.user.id}`);
+  const limit = uploadLimiter.check(key);
   if (!limit.success) return createRateLimitResponse(limit);
   const upload = await storeUpload(file, session.user.id);
   return successResponse(upload, undefined, { status: 201 });

@@ -27,6 +27,7 @@ interface ContentRow {
   id: string;
   orgId: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 interface AssessmentRow {
   id: string;
@@ -178,7 +179,7 @@ const fakePrisma = vi.hoisted(() => {
     },
     content: {
       deleteMany: vi.fn(({ where }: { where: Record<string, unknown> }) => {
-        allowed(where, ['orgId', 'createdAt', 'assessments']);
+        allowed(where, ['orgId', 'createdAt', 'updatedAt', 'assessments']);
         if (JSON.stringify(where.assessments) !== JSON.stringify({ none: {} })) {
           throw new Error('fake models only `assessments: { none: {} }`');
         }
@@ -186,6 +187,7 @@ const fakePrisma = vi.hoisted(() => {
           (c) =>
             c.orgId === where.orgId &&
             before(c.createdAt, where.createdAt) &&
+            before(c.updatedAt, where.updatedAt) &&
             !db.assessments.some((a) => a.contentId === c.id)
         );
         const ids = new Set(hit.map((c) => c.id));
@@ -298,7 +300,12 @@ function piece(
   completedAt: Date | null = daysAgo(ageDays)
 ) {
   const n = ++seq;
-  const content = { id: `c${n}`, orgId, createdAt: daysAgo(ageDays) };
+  const content = {
+    id: `c${n}`,
+    orgId,
+    createdAt: daysAgo(ageDays),
+    updatedAt: daysAgo(ageDays),
+  };
   const assessment = {
     id: `a${n}`,
     orgId,
@@ -358,6 +365,19 @@ describe('with a content window', () => {
     expect(ids(db.contents)).toEqual(ids([recent.content, edge.content]));
     // Their judge runs and replies went with them (the cascade).
     expect(ids(db.judgeRuns)).toEqual(ids([recent.run, edge.run]));
+  });
+
+  it('keeps old content updated inside the window, as an upload a batch claims while the purge runs (t-102)', async () => {
+    // An old upload no assessment is on yet, as the purge's snapshot sees it,
+    // that a claim has just updated: the row's own column keeps it.
+    const claimed = { id: 'c-claimed', orgId: WS, createdAt: daysAgo(120), updatedAt: NOW };
+    const stale = { id: 'c-stale', orgId: WS, createdAt: daysAgo(120), updatedAt: daysAgo(120) };
+    db.contents.push(claimed, stale);
+
+    const result = await purgeExpiredContent(NOW);
+
+    expect(result).toMatchObject({ contents: 1 });
+    expect(ids(db.contents)).toEqual(['c-claimed']);
   });
 
   it('a second pass changes nothing', async () => {

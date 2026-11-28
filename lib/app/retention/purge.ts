@@ -6,9 +6,13 @@
  *
  * 1. **with a content window**: deletes the assessments created before it,
  *    with their judge runs and replies (FK cascade); then the content created
- *    before it that no assessment is left on. A content row a newer
- *    assessment still uses stays until that one ages out too, so a purge
- *    never takes an assessment inside the window with it.
+ *    and last updated before it that no assessment is left on. A content row
+ *    a newer assessment still uses stays until that one ages out too, so a
+ *    purge never takes an assessment inside the window with it. `updatedAt`
+ *    is what makes that hold for an upload a batch claims as this runs
+ *    (t-102, `claimUpload`): the delete's "no assessment" reads the rows as
+ *    they were when it started, but Postgres re-checks the row's own columns
+ *    after waiting on the claim's lock, and the claim has moved `updatedAt`.
  * 2. **always**: deletes judge replies (`JudgeReply`) older than the reply
  *    window, 30 days unless the workspace set another. The judge run keeps
  *    its status, model, cost, tokens and timing, and the assessment's
@@ -110,7 +114,12 @@ export async function purgeExpiredContent(now: Date = new Date()): Promise<Purge
       : // No store that caches PDFs: there are no files to remove first.
         (await prisma.assessment.deleteMany({ where: expired })).count;
     ({ count: contents } = await prisma.content.deleteMany({
-      where: { orgId, createdAt: { lt: cutoff }, assessments: { none: {} } },
+      where: {
+        orgId,
+        createdAt: { lt: cutoff },
+        updatedAt: { lt: cutoff },
+        assessments: { none: {} },
+      },
     }));
     ({ count: comparisons } = await prisma.assessmentSet.deleteMany({
       where: {

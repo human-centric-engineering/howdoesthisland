@@ -342,6 +342,7 @@ export function createFakeDb() {
           awaitingBatch: false,
           ...data,
           createdAt: new Date(),
+          updatedAt: new Date(),
         };
         contents.push(row);
         // The whole row, whatever it selects, as the reads answer (t-102: an upload's view).
