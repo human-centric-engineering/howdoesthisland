@@ -334,7 +334,8 @@ against core's `/api/v1` tree: `webhooks` is taken by core, so subscriptions use
 | `…/projects`, `…/projects/{id}/documents`                 | Projects and their context                                   | `projects`          |
 | `GET  usage`                                              | This month's usage and limits                                | `assess`            |
 | `GET  openapi.json`                                       | The OpenAPI 3.1 document, generated from the route contracts | anyone              |
-| _phase 2:_ `batches`, `panels`, `event-subscriptions`     | Batches, audience panels, webhook subscriptions              | `assess`            |
+| _phase 2:_ `batches`, `panels`                            | Batches, audience panels                                     | `assess`            |
+| `…/workspaces/{id}/event-subscriptions` (t-99)            | Webhook subscriptions to finished work                       | owner/admin session |
 
 **Profiles** meet varying needs without a new endpoint per use: `quick` (no AI), `core`
 (the four appeals), `full` (all nine), and the model's `judge_catalogue` groups (`craft`,

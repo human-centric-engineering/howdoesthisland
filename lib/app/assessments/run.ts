@@ -113,6 +113,7 @@ import { requireOrgId } from '@/lib/tenancy/context';
 import { budgetRefusal } from '@/lib/app/usage/budget';
 import { chargeEndedReview } from '@/lib/app/credits/charge';
 import { startVerdictsAfterReview } from '@/lib/app/comparisons/verdict';
+import { notifyAfterReview } from '@/lib/app/events/notify';
 import {
   buildProjectContext,
   parseProjectContext,
@@ -215,9 +216,12 @@ async function execute(assessmentId: string, orgId: string, token: string): Prom
     );
   }
   startNextQueued(orgId, assessmentId);
-  // A comparison waiting on this draft (t-88): its verdict, once every draft is final.
-  if (outcome !== 'requeued' && outcome !== 'lease_lost')
+  if (outcome !== 'requeued' && outcome !== 'lease_lost') {
+    // A comparison waiting on this draft (t-88): its verdict, once every draft is final.
     startVerdictsAfterReview(orgId, assessmentId);
+    // The workspace's subscriptions (t-99): this review's finished event.
+    notifyAfterReview(orgId, assessmentId);
+  }
   return outcome;
 }
 
@@ -881,6 +885,10 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
   // No run will end it: a comparison waiting on it starts its verdict here
   // (t-88), once the cancel is committed, so the start reads it final.
   if (ended === 'idle') startVerdictsAfterReview(orgId, assessmentId);
+  // Cancelled is final to whoever asked for it, whether or not a run still
+  // has judges landing (t-99): its finished event goes now. The run's own end
+  // finds it already sent.
+  if (ended !== null) notifyAfterReview(orgId, assessmentId);
   return ended !== null;
 }
 

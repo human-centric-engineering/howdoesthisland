@@ -47,6 +47,13 @@ import {
 } from '@/lib/app/workspaces/mcp-keys';
 import { chooseJudgeModelSchema, judgeModelParamsSchema } from '@/lib/app/judges/validations';
 import {
+  createSubscriptionSchema,
+  listDeliveriesQuerySchema,
+  subscriptionParamsSchema,
+  updateSubscriptionSchema,
+} from '@/lib/app/events/subscriptions';
+import { APP_EVENT_TYPES } from '@/lib/app/events/types';
+import {
   ASSESSMENT_STATES,
   assessmentIdParamSchema,
   assessmentUploadOptionsSchema,
@@ -372,6 +379,35 @@ export const workspaceMcpKeySchema = z.object({
   lastUsedAt: isoDateTime.nullable(),
   createdAt: isoDateTime,
   createdByName: z.string().nullable(),
+});
+
+/** `EventSubscription` in `lib/app/events/subscriptions.ts`. */
+export const eventSubscriptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  eventType: z.enum(APP_EVENT_TYPES),
+  url: z.string(),
+  headerNames: z.array(z.string()),
+  projectId: z.string().nullable(),
+  isEnabled: z.boolean(),
+  hasSecret: z.boolean(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+  createdByName: z.string().nullable(),
+});
+
+/** `EventDelivery` in `lib/app/events/subscriptions.ts`. */
+export const eventDeliverySchema = z.object({
+  id: z.string(),
+  eventType: z.string(),
+  eventId: z.string().nullable(),
+  status: z.string(),
+  attempts: z.number().int(),
+  lastAttemptAt: isoDateTime.nullable(),
+  nextRetryAt: isoDateTime.nullable(),
+  lastResponseCode: z.number().int().nullable(),
+  lastError: z.string().nullable(),
+  createdAt: isoDateTime,
 });
 
 /** `JudgeModelChoice` in `lib/app/judges/model-choice.ts`. */
@@ -1275,6 +1311,78 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: WORKSPACE_ADMIN_ENTERED,
     request: { params: workspaceMcpKeyParamsSchema },
     response: { status: 200, data: z.object({ key: workspaceMcpKeySchema }) },
+  },
+
+  // A workspace's webhook subscriptions (t-99, `.context/app/webhooks.md`).
+  {
+    method: 'GET',
+    path: '/api/v1/workspaces/{id}/event-subscriptions',
+    summary: "List the workspace's webhooks, newest first. Never a secret or a header's value.",
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: orgIdParamSchema },
+    response: { status: 200, data: z.object({ subscriptions: z.array(eventSubscriptionSchema) }) },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/workspaces/{id}/event-subscriptions',
+    summary:
+      'Subscribe an https address to finished reviews or comparisons. Deliveries are signed; the secret is shown once.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: orgIdParamSchema, body: createSubscriptionSchema },
+    errors: [
+      {
+        status: 409,
+        code: 'SUBSCRIPTION_LIMIT',
+        description: 'The workspace already has the most webhooks it may.',
+      },
+    ],
+    response: {
+      status: 201,
+      data: z.object({ subscription: eventSubscriptionSchema, secret: z.string() }),
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/workspaces/{id}/event-subscriptions/{subscriptionId}',
+    summary: 'Read one of the workspace’s webhooks.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: subscriptionParamsSchema },
+    response: { status: 200, data: z.object({ subscription: eventSubscriptionSchema }) },
+  },
+  {
+    method: 'PATCH',
+    path: '/api/v1/workspaces/{id}/event-subscriptions/{subscriptionId}',
+    summary: 'Change a webhook’s name, event, address, headers, project or whether it is on.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: subscriptionParamsSchema, body: updateSubscriptionSchema },
+    response: { status: 200, data: z.object({ subscription: eventSubscriptionSchema }) },
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/workspaces/{id}/event-subscriptions/{subscriptionId}',
+    summary: 'Delete a webhook. Its deliveries are kept as the record of what was sent.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: subscriptionParamsSchema },
+    response: { status: 200, data: z.object({ deleted: z.literal(true) }) },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/workspaces/{id}/event-subscriptions/{subscriptionId}/rotate-secret',
+    summary: 'Give a webhook a new signing secret, shown once.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: subscriptionParamsSchema },
+    response: {
+      status: 200,
+      data: z.object({ id: z.string(), secret: z.string(), rotatedAt: isoDateTime }),
+    },
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/workspaces/{id}/event-subscriptions/{subscriptionId}/deliveries',
+    summary: 'List a webhook’s deliveries, newest first, with each one’s status and last response.',
+    auth: WORKSPACE_ADMIN_ENTERED,
+    request: { params: subscriptionParamsSchema, query: listDeliveriesQuerySchema },
+    response: { status: 200, data: z.array(eventDeliverySchema), meta: paginationMetaSchema },
   },
 
   // Calibration, for platform admins (t-38). Publishing stays a CLI action.

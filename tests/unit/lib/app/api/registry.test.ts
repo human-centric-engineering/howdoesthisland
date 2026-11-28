@@ -39,6 +39,8 @@ import {
   invitationForInviteeSchema,
   judgeModelChoiceSchema,
   workspaceMcpKeySchema,
+  eventSubscriptionSchema,
+  eventDeliverySchema,
   judgeRunViewSchema,
   kindMetaSchema,
   paginationMetaSchema,
@@ -66,6 +68,7 @@ import type { CreatedWorkspace } from '@/lib/app/workspaces/create';
 import type { InvitationForInvitee, acceptInvitation } from '@/lib/app/workspaces/invitations';
 import type { JudgeModelChoice } from '@/lib/app/judges/model-choice';
 import type { WorkspaceMcpKey } from '@/lib/app/workspaces/mcp-keys';
+import type { EventDelivery, EventSubscription } from '@/lib/app/events/subscriptions';
 import type { WorkspaceSettings } from '@/lib/app/retention/settings';
 import type {
   AssessmentDetail,
@@ -359,6 +362,10 @@ describe('response schemas match what the services return', () => {
     >();
     expectTypeOf<z.infer<typeof judgeModelChoiceSchema>>().toEqualTypeOf<Wire<JudgeModelChoice>>();
     expectTypeOf<z.infer<typeof workspaceMcpKeySchema>>().toEqualTypeOf<Wire<WorkspaceMcpKey>>();
+    expectTypeOf<z.infer<typeof eventSubscriptionSchema>>().toEqualTypeOf<
+      Wire<EventSubscription>
+    >();
+    expectTypeOf<z.infer<typeof eventDeliverySchema>>().toEqualTypeOf<Wire<EventDelivery>>();
     expectTypeOf<z.infer<typeof workspaceSettingsSchema>>().toEqualTypeOf<
       Wire<WorkspaceSettings>
     >();

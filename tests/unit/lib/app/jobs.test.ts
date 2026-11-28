@@ -1,5 +1,5 @@
 /**
- * Tests: the app's maintenance jobs (t-22, t-26, t-81) — each registration runs the
+ * Tests: the app's maintenance jobs (t-22, t-26, t-81, t-99) — each registration runs the
  * work it names. Names, intervals and scopes are pinned in defaults.test.ts.
  *
  * FORK NOTE: this is HowDoesThisLand's own test of its own seam, so it reads
@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   recoverAssessments: vi.fn(),
   purgeExpiredContent: vi.fn(),
   recoverRewrites: vi.fn(),
+  sweepFinishedEvents: vi.fn(),
+}));
+vi.mock('@/lib/app/events/notify', () => ({
+  sweepFinishedEvents: mocks.sweepFinishedEvents,
 }));
 vi.mock('@/lib/app/rewrites/recover', () => ({
   recoverRewrites: mocks.recoverRewrites,
@@ -26,7 +30,12 @@ vi.mock('@/lib/app/retention/purge', () => ({
   purgeExpiredContent: mocks.purgeExpiredContent,
 }));
 
-import { ASSESSMENT_RECOVERY_JOB, RETENTION_PURGE_JOB, REWRITE_RECOVERY_JOB } from '@/lib/app/jobs';
+import {
+  ASSESSMENT_RECOVERY_JOB,
+  FINISHED_EVENTS_JOB,
+  RETENTION_PURGE_JOB,
+  REWRITE_RECOVERY_JOB,
+} from '@/lib/app/jobs';
 import { __resetAppJobsForTests, getAppJobs } from '@/lib/orchestration/maintenance/app-jobs';
 
 const job = (name: string) => {
@@ -51,6 +60,13 @@ describe('initAppJobs', () => {
     mocks.recoverRewrites.mockResolvedValue({ failed: 1 });
     expect(await job(REWRITE_RECOVERY_JOB).run()).toEqual({ failed: 1 });
     expect(mocks.recoverRewrites).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the finished-event sweep, returning its counts', async () => {
+    const counts = { assessments: 2, comparisons: 1, failed: 0 };
+    mocks.sweepFinishedEvents.mockResolvedValue(counts);
+    expect(await job(FINISHED_EVENTS_JOB).run()).toEqual(counts);
+    expect(mocks.sweepFinishedEvents).toHaveBeenCalledTimes(1);
   });
 
   it('runs the retention purge, returning its counts', async () => {

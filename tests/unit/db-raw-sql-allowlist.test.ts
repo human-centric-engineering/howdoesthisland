@@ -109,6 +109,13 @@ const ALLOWLIST: ReadonlyArray<{ file: string; calls: number; why: string }> = [
     calls: 1,
     why: "an admin's credit change reads the workspace's status with `SELECT … FOR SHARE` in the transaction that writes the entry, so a workspace suspended at the same moment is not credited after its check passed (t-57). Prisma has no row lock; it reads `org`, a system table with no RLS policy, by id",
   },
+  // FORK (HowDoesThisLand): a workspace's webhooks, one writer at a time (t-99).
+  // Ledger: .context/app/platform-divergences.md row 19.
+  {
+    file: 'lib/app/events/subscriptions.ts',
+    calls: 1,
+    why: "making a workspace's webhook counts its subscriptions and writes the new one under `pg_advisory_xact_lock(hashtext(key))`, keyed on the workspace's id, so two made at once cannot both pass the cap of ten (t-99). Prisma has no call for it, and it touches no table, so RLS has nothing to filter",
+  },
   // FORK (HowDoesThisLand): the budget check's per-workspace lock (t-50, t-81).
   // Ledger: .context/app/platform-divergences.md.
   {

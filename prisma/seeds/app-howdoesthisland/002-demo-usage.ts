@@ -222,6 +222,9 @@ const unit: SeedUnit = {
             requestedVia: 'APP',
             createdAt,
             completedAt: createdAt,
+            // Demo history, not work anyone is waiting on: no finished event
+            // is owed for it (t-99, `lib/app/events/notify.ts`).
+            notifiedAt: createdAt,
           },
         });
         await prisma.aiCostLog.createMany({

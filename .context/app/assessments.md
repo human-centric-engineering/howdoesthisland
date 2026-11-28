@@ -180,6 +180,13 @@ its cost rows are an hour quiet. At most three of each a tick.
 It is idempotent: a second pass finds every row final or held by a live
 lease, and every charge already written.
 
+## Telling a workspace it ended
+
+A stored review that reaches a final state sends `app.assessment.finished` to
+the workspace's webhooks, from the run's end and from `cancelAssessment`, with
+the recovery sweep as the backstop. `notifiedAt` records that it was queued.
+See [`webhooks.md`](./webhooks.md).
+
 ## Retention
 
 A workspace has two windows (D10, t-26), both stored in `Org.settings.app`

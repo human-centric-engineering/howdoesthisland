@@ -29,7 +29,9 @@ import { prisma } from '@/lib/db/client';
 import { logger } from '@/lib/logging';
 import { keepRunningAfterResponse } from '@/lib/api/after-response';
 import { loggableUrl } from '@/lib/logging/redact-path';
-import { describeFetchFailure } from '@/lib/errors/fetch-error';
+// FORK (HowDoesThisLand): see the pin in `postHook`.
+// Ledger: .context/app/platform-divergences.md row 37.
+import { describeOutboundFailure, withOutboundDispatcher } from '@/lib/security/safe-dispatcher';
 import {
   HookEventPayloadSchema,
   WebhookActionSchema,
@@ -149,8 +151,12 @@ async function loadHooks(): Promise<Map<string, CachedHook[]>> {
     return cached.byType;
   }
 
+  // FORK (HowDoesThisLand, t-99): the org named as well as the policies'
+  // filter. A workspace owner can now make a hook, and at `multi` with row
+  // isolation not enabled the policies filter nothing, so this read alone
+  // decided whose hooks an event reached: every org's. Ledger row 37.
   const hooks = await prisma.aiEventHook.findMany({
-    where: { isEnabled: true },
+    where: { isEnabled: true, orgId },
     select: { id: true, eventType: true, action: true, filter: true, secret: true },
   });
 
@@ -614,35 +620,45 @@ async function postHook(
       signingHeaders[SIGNATURE_HEADER] = signature;
     }
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Hook-Event': payload.eventType,
-        ...(customHeaders ?? {}),
-        ...signingHeaders,
-      },
-      body,
-      signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS.hook),
-      // Refuse redirects rather than follow them (#534). `fetch` defaults to
-      // 'follow'. The hook URL itself IS re-checked at dispatch — `loadHooks`
-      // and `parseDeliveryForDispatch` both re-parse the stored action through
-      // `WebhookActionSchema`, which carries the `isSafeProviderUrl` refine — but
-      // a redirect TARGET is a second address no schema ever saw
-      // that this request would POST the event payload AND its HMAC signature
-      // headers to. Erroring is also what GitHub and Stripe do for outbound
-      // webhooks: an endpoint that moved should be re-pointed, not chased.
-      // The failure surfaces as a normal delivery error and is retried.
-      redirect: 'error',
-    });
+    // FORK (HowDoesThisLand, t-99): pinned to a checked address when acting
+    // for a customer org, as the webhook dispatcher is (§111 t-811). The URL
+    // guards read its text, not where it resolves, and a workspace owner can
+    // now choose a hook's URL. No dispatcher (unchanged) for the install org,
+    // the system scope and `single`. Ledger row 37.
+    const res = await fetch(
+      url,
+      withOutboundDispatcher({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Hook-Event': payload.eventType,
+          ...(customHeaders ?? {}),
+          ...signingHeaders,
+        },
+        body,
+        signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS.hook),
+        // Refuse redirects rather than follow them (#534). `fetch` defaults to
+        // 'follow'. The hook URL itself IS re-checked at dispatch — `loadHooks`
+        // and `parseDeliveryForDispatch` both re-parse the stored action through
+        // `WebhookActionSchema`, which carries the `isSafeProviderUrl` refine — but
+        // a redirect TARGET is a second address no schema ever saw
+        // that this request would POST the event payload AND its HMAC signature
+        // headers to. Erroring is also what GitHub and Stripe do for outbound
+        // webhooks: an endpoint that moved should be re-pointed, not chased.
+        // The failure surfaces as a normal delivery error and is retried.
+        redirect: 'error',
+      })
+    );
 
     return res.ok
       ? { ok: true, statusCode: res.status }
       : { ok: false, statusCode: res.status, error: `HTTP ${res.status}` };
   } catch (err: unknown) {
     // undici renders a refused redirect, a DNS failure and a connection reset
-    // all as a bare "fetch failed"; the reason lives on `cause`.
-    return { ok: false, error: describeFetchFailure(err) };
+    // all as a bare "fetch failed"; the reason lives on `cause`. For a
+    // customer org, a refused or unresolvable address reads the same, so
+    // `lastError` maps nothing of the operator's network (FORK, t-99).
+    return { ok: false, error: describeOutboundFailure(err) };
   }
 }
 
@@ -889,10 +905,17 @@ function scheduleRetry(deliveryId: string, delayMs: number, armedFor: Date): voi
 export async function processPendingHookRetries(): Promise<number> {
   // Before the read: each row and its hook are its attempt's copy (t-886).
   const takenAt = new Date();
+  // FORK (HowDoesThisLand, t-99): this job runs once per org, and the org is
+  // named as well as the policies' filter, as in `loadHooks`. At `multi` with
+  // row isolation not enabled the install org's pass read every org's rows,
+  // and sent a customer org's retry with no pinned dispatcher
+  // (`withOutboundDispatcher` reads the pass's org). Ledger row 37.
+  const { orgId } = requireTenantContext();
   const pending = await prisma.aiEventHookDelivery.findMany({
     // `pending` too: a row whose first attempt never ran, its lease run out
     // (#834). A manual retry's reset holds one the same way.
     where: {
+      ...(orgId !== null ? { orgId } : {}),
       status: { in: [...AWAITING_RETRY_STATUSES] },
       nextRetryAt: { lte: new Date() },
       attempts: { lt: MAX_ATTEMPTS },
@@ -964,6 +987,12 @@ export async function retryHookDelivery(deliveryId: string): Promise<boolean> {
     where: { id: deliveryId },
     include: { hook: true },
   });
+  // FORK (HowDoesThisLand, t-99): only the caller's own org's delivery, as in
+  // the retry pass. Sent in the caller's context, another org's (reachable at
+  // `multi` without row isolation) would go with no pinned dispatcher.
+  // Ledger row 37.
+  const { orgId } = requireTenantContext();
+  if (delivery && orgId !== null && delivery.orgId && delivery.orgId !== orgId) return false;
   if (!delivery || !delivery.hook) return false;
   if (!delivery.hook.isEnabled) return false;
   // Stopped by an erasure: what it would send is about the erased person
