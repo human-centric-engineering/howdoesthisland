@@ -2,7 +2,7 @@
 
 A CMS or a script that starts a review used to poll it until it ended. A
 workspace can instead subscribe an address to its finished work: each time a
-review or a comparison ends, the address is sent a signed `POST` saying so, and
+review, a comparison or a batch ends, the address is sent a signed `POST` saying so, and
 the caller reads the rest from the API by id. Built in t-99 (f-batch-webhooks,
 app-plan §21).
 
@@ -12,6 +12,7 @@ app-plan §21).
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `app.assessment.finished` | A stored review reaches a final state: `completed`, `partial`, `failed` or `cancelled`.                  |
 | `app.comparison.finished` | Every draft of a comparison is final **and** its verdict has settled (`completed`, `failed`, `skipped`). |
+| `app.batch.finished`      | Every item of a batch is final or purged (t-101, `.context/app/batches.md`). A batch has no verdict.     |
 
 There is one event per kind, at every final state, with the state in the
 payload. A caller waiting for its work is told when it failed or was cancelled,
@@ -43,6 +44,12 @@ in flight are still landing: to the person who asked, it is over.
 `comparisonId`, `status` (`completed`, `partial` or `failed`, as
 `GET /api/v1/comparisons/{id}` reads it), `projectId`, `verdict: { status,
 draft }` and `drafts: [{ position, assessmentId, status, overall, band }]`.
+
+`app.batch.finished` carries `eventId` (`batch:<id>`), `batchId`, `status`
+(`completed`, `partial` or `failed`, as `GET /api/v1/batches/{id}` reads it),
+`projectId`, `total`, `counts` (items per state) and `items: [{ position,
+assessmentId, status, overall, band }]`. Not the labels, and not the pages'
+addresses.
 
 **A payload holds ids, states and scores, nothing else**: no text, no titles or
 draft labels, no user ids. Core keeps every delivery row as the record of what
@@ -191,6 +198,7 @@ queued (`lib/app/events/notify.ts`):
 1. The code that ends a review (the run's end in `run.ts`, and `cancelAssessment`)
    calls `notifyAfterReview`. A comparison's event goes when its verdict ends
    (`verdict.ts`), or with its last draft when it has no verdict to wait for.
+   A batch's goes with its last item: it has no verdict (`sendBatchFinished`).
 2. That calls core's `emitHookEventDurably`, which resolves once every matching
    subscription's delivery row is written. Only then is `notifiedAt` stamped.
    From that row on, core sends and retries the delivery itself.
