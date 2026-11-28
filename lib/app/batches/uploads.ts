@@ -62,6 +62,7 @@ export async function storeUpload(file: UploadedFile, userId: string): Promise<U
   // The check a review's upload meets when it is stored (`enqueue.ts`), here
   // at upload: a batch naming it later has nothing left to refuse it for.
   const text = await refusingAsApi(() => assessableText(extracted.text));
+  const wordCount = countWords(text);
   const row = await prisma.content.create({
     data: {
       orgId: requireOrgId(),
@@ -70,17 +71,17 @@ export async function storeUpload(file: UploadedFile, userId: string): Promise<U
       fileName: file.name,
       text,
       textSha256: await sha256(text),
-      wordCount: countWords(text),
+      wordCount,
       createdByUserId: userId,
       awaitingBatch: true,
     },
-    select: { id: true, fileName: true, title: true, wordCount: true, createdAt: true },
+    select: { id: true, title: true, createdAt: true },
   });
   return {
     id: row.id,
-    fileName: row.fileName ?? file.name,
+    fileName: file.name,
     title: row.title,
-    wordCount: row.wordCount ?? 0,
+    wordCount,
     createdAt: row.createdAt.toISOString(),
     expiresAt: new Date(row.createdAt.getTime() + UPLOAD_CLAIM_WINDOW_MS).toISOString(),
   };

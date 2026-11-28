@@ -764,9 +764,10 @@ describe('the unclaimed-upload purge (t-102)', () => {
     expect(fake.contents).toHaveLength(4);
     expect(fake.assessments).toHaveLength(2);
 
-    // Bob's goes in his workspace's own pass, and a second pass finds nothing.
+    // Bob's goes in his workspace's own pass, and a second pass, at the job's
+    // own now, finds nothing.
     expect(await runAsOrg(WS_B, () => purgeUnclaimedUploads(now))).toEqual({ uploads: 1 });
-    expect(await runAsOrg(WS_A, () => purgeUnclaimedUploads(now))).toEqual({ uploads: 0 });
+    expect(await runAsOrg(WS_A, () => purgeUnclaimedUploads())).toEqual({ uploads: 0 });
   });
 
   it('keeps one exactly 24 hours old, deleting it only once past the window', async () => {
