@@ -692,7 +692,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         {
           files: [
             'app/(protected)/{assess,assessments,compare,home,projects,usage}/**/*.tsx',
-            'app/(protected)/settings/{api-keys,workspace}/**/*.tsx',
+            'app/(protected)/settings/{api-keys,webhooks,workspace}/**/*.tsx',
             'app/(public)/{developers,example-review,model,quick-scan,r,redeem}/**/*.tsx',
             'app/(public)/{opengraph-image,twitter-image}.tsx',
           ],
