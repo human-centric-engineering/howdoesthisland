@@ -81,7 +81,15 @@ export const ALL_SLOTS = ALL_JUDGES.map((j) => `judge_${j}`);
 
 /** The assessment as `GET /api/v1/assessments/{id}` answers: judges by slot, as stored. */
 /** `GET /api/v1/assessments/{id}`'s answer, on the wire: more than the report reads. */
-export type ApiAssessment = z.infer<typeof assessmentDetailSchema>;
+/**
+ * A scored review on the wire. Its text and word count are there: only a
+ * page a batch has not fetched has none (t-101), and a test of that spreads
+ * `text: null` over this.
+ */
+export type ApiAssessment = z.infer<typeof assessmentDetailSchema> & {
+  text: string;
+  wordCount: number;
+};
 
 export function apiAssessment(over: Partial<ApiAssessment> = {}): ApiAssessment {
   const judges = over.judges ?? ALL_SLOTS;

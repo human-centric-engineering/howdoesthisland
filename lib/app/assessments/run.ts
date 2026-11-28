@@ -358,33 +358,43 @@ async function stoppedOnError(assessmentId: string, token: string): Promise<RunO
 }
 
 /**
- * Start the workspace's oldest queued assessment, now that a place is free
+ * Start the workspace's next queued assessment, now that a place is free
  * (this run's, or a `store: false` run's: `finished` is absent then), without
- * waiting for it. This is what picks up an assessment that
- * was queued while the workspace was at its limit; the recovery job is the
- * backstop. Tries the next few in turn, since another claimer may take the
- * oldest first. Never throws.
+ * waiting for it. This is what picks up an assessment that was queued while
+ * the workspace was at its limit; the recovery job is the backstop. Tries the
+ * next few in turn, since another claimer may take one first. Never throws.
+ *
+ * **Which is next** (t-101): the oldest review in no batch, then the oldest
+ * batch item. A batch is bulk work its caller follows by its event; a review
+ * pasted in the workbench, or a comparison's draft, is someone waiting. So a
+ * hundred-page batch takes the places nobody else is waiting for, and never
+ * puts a person behind ninety-seven of its items. Oldest first within each,
+ * by id on a tie: a batch's items are written in one transaction.
  */
 export function startNextQueued(orgId: string, finished?: string): void {
   keepRunningAfterResponse(
     async () => {
-      const queued = await prisma.assessment.findMany({
-        where: {
-          orgId,
-          status: 'QUEUED',
-          attempts: { lt: MAX_ATTEMPTS },
-          ...(finished ? { id: { not: finished } } : {}),
-          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
-        },
-        orderBy: { createdAt: 'asc' },
-        take: RUNNING_PER_WORKSPACE,
-        select: { id: true },
-      });
-      for (const { id } of queued) {
-        const run = await beginAssessment(id);
-        if (run) {
-          await run.done;
-          return;
+      const due = {
+        orgId,
+        status: 'QUEUED' as const,
+        attempts: { lt: MAX_ATTEMPTS },
+        ...(finished ? { id: { not: finished } } : {}),
+        OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
+      };
+      const inBatch = { set: { kind: 'BATCH' as const } };
+      for (const setMembers of [{ none: inBatch }, { some: inBatch }]) {
+        const queued = await prisma.assessment.findMany({
+          where: { ...due, setMembers },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: RUNNING_PER_WORKSPACE,
+          select: { id: true },
+        });
+        for (const { id } of queued) {
+          const run = await beginAssessment(id);
+          if (run) {
+            await run.done;
+            return;
+          }
         }
       }
     },

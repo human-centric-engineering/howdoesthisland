@@ -96,6 +96,21 @@ at most that many of its items; every run that ends starts the workspace's next
 queued review (`startNextQueued`), and the recovery job is the backstop. Starting
 every item at once would only have the rest of the claims refused.
 
+**A batch takes the places nobody else is waiting for.** When a place frees, the
+next review to start is the workspace's oldest in no batch, then its oldest batch
+item, by id on a tie. A batch is bulk work its caller follows by its event; a
+review pasted in the workbench, or a comparison's draft, is someone waiting. So a
+person who pastes one review after a 100-page batch waits for one place to free,
+not for 97 batch items. A batch only waits while the workspace is busy with work
+people are waiting for.
+
+**Written in one transaction.** Every item's content and review, the set and its
+members go in together, two inserts an item. The transaction's timeout grows with
+the count (`severalTransaction` in `lib/app/assessments/enqueue.ts`): a
+comparison's 15 seconds, and a quarter-second more for each review past five,
+about 39 seconds for a hundred. Measured on the dev database, a hundred items of
+about 12,000 characters each write in under 150ms.
+
 ## The per-user allowance
 
 Every item counts against **`BATCH_ITEMS_PER_HOUR`** (200) per user, not the

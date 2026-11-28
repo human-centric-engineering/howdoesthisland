@@ -210,6 +210,28 @@ export function createFakeDb() {
     });
   };
 
+  /**
+   * `where` on a review, with `setMembers: { none | some: { set: { … } } }`
+   * read against its places in sets (t-101: the next queued review to start
+   * prefers one in no batch).
+   */
+  const matchesReview = (row: Row, where: Row = {}): boolean => {
+    const { setMembers: rel, ...own } = where as Row & {
+      setMembers?: { none?: { set: Row }; some?: { set: Row } };
+    };
+    if (!matches(row, own)) return false;
+    if (!rel) return true;
+    const inSet = (on: { set: Row }) =>
+      setMembers.some((m) => {
+        if (m.assessmentId !== row.id) return false;
+        const set = sets.find((s) => s.id === m.setId);
+        return set !== undefined && matches(set, on.set);
+      });
+    if (rel.none && inSet(rel.none)) return false;
+    if (rel.some && !inSet(rel.some)) return false;
+    return true;
+  };
+
   type Order = { createdAt?: 'asc' | 'desc' } | { createdAt?: 'asc' | 'desc' }[];
   const ordered = (rows: Row[], orderBy?: Order): Row[] => {
     const first = Array.isArray(orderBy) ? orderBy[0] : orderBy;
@@ -239,7 +261,7 @@ export function createFakeDb() {
           orderBy?: Order;
         }) => {
           const rows = ordered(
-            assessments.filter((a) => matches(a, where)),
+            assessments.filter((a) => matchesReview(a, where)),
             orderBy
           );
           const from = skip ?? 0;

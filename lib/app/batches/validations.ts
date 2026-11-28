@@ -62,7 +62,7 @@ export const batchItemsField = z
         maximum: max,
         inclusive: true,
         input: items,
-        message: `Give at most ${max} items: this workspace's batches take up to ${max}`,
+        message: `Give at most ${max} items: a batch here takes up to ${max}`,
       });
     }
   })

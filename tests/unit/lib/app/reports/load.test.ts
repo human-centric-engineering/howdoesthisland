@@ -60,6 +60,29 @@ describe('loadReport', () => {
     expect(m.model).not.toHaveBeenCalled();
   });
 
+  it('reads a batch page not fetched yet as pending, and one that could not be read as having no result (t-101)', async () => {
+    const page = { text: null, wordCount: null, result: null, completedAt: null };
+    answer({ ...apiAssessment({ status: 'queued' }), ...page });
+    expect((await loadReport('asm_1', apiReportSource)).kind).toBe('pending');
+
+    answer({
+      ...apiAssessment({ status: 'failed', errorCode: 'FETCH_FAILED', error: 'Not fetched.' }),
+      ...page,
+    });
+    const load = await loadReport('asm_1', apiReportSource);
+    expect(load.kind).toBe('no_result');
+    if (load.kind === 'no_result') expect(load.assessment.errorCode).toBe('FETCH_FAILED');
+    expect(m.error).not.toHaveBeenCalled();
+  });
+
+  it('is unreadable, and logs it, for a result that comes with no text', async () => {
+    answer({ ...apiAssessment(), text: null, wordCount: null });
+    expect((await loadReport('asm_1', apiReportSource)).kind).toBe('unreadable');
+    expect(m.error).toHaveBeenCalledWith('Report: a result with no text', undefined, {
+      assessmentId: 'asm_1',
+    });
+  });
+
   it('has no result when a final run stored none', async () => {
     answer(apiAssessment({ status: 'failed', result: null, error: 'Could not score.' }));
     expect((await loadReport('asm_1', apiReportSource)).kind).toBe('no_result');

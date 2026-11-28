@@ -90,7 +90,9 @@ from either of the first two.
   in the workspace, stored or kept nowhere (see "Running places" below). The
   count and the claim are one serializable transaction. A fourth assessment
   stays `QUEUED`. When a run ends, however it ends, it starts the workspace's
-  oldest queued assessment itself.
+  next queued assessment itself: the oldest in no batch, then the oldest batch
+  item (t-101), so a review someone is waiting for never queues behind a
+  batch's hundred pages.
 - **The budget, again (t-53).** Once claimed, an assessment that has no
   judge run yet is checked against the workspace's credits and monthly
   budget, holding back only the reviews in flight created before it: it may
@@ -379,7 +381,7 @@ Each route's docblock lists its error codes. A few rules hold across them:
   free place before it charges the per-user cap, so a caller retrying a busy
   workspace keeps its allowance. It does not wait (owner ruling, 2026-11-20):
   a caller who wants to queue sends a stored review. When a place frees, the
-  workspace's oldest queued stored review starts. The quick scan calls no
+  workspace's next queued stored review starts (as above). The quick scan calls no
   model and takes no place. Without this, the per-user cap was the only bound, and five
   members could have ~200 model calls in flight.
 - **The quick scan before the judges (t-77).** A stored review that calls

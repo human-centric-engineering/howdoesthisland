@@ -22,6 +22,7 @@ import {
 import {
   reportModelSchema,
   reportResultSchema,
+  readableAssessment,
   type ReportAssessment,
 } from '@/lib/app/reports/input';
 import { buildReportView } from '@/lib/app/reports/view';
@@ -35,8 +36,10 @@ import {
 import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 
 function viewOf(a: ReportAssessment, culture = true) {
+  const readable = readableAssessment(a);
+  if (!readable) throw new Error('a report needs its text');
   return buildReportView({
-    assessment: a,
+    assessment: readable,
     result: reportResultSchema.parse(a.result),
     model: reportModelSchema.parse(modelDocument(culture)),
   });

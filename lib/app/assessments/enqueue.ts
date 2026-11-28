@@ -84,6 +84,22 @@ export async function enqueueAssessment(
  */
 const SEVERAL_TRANSACTION = { maxWait: 10_000, timeout: 15_000 };
 
+/**
+ * What each review beyond a comparison's five adds to the transaction's
+ * timeout (t-101): a batch writes up to a hundred, two inserts each, one
+ * after another. A quarter-second a review covers a database ~50ms away
+ * (two round trips and the row), so a hundred get 15s + 95 × 0.25s ≈ 39s.
+ */
+const PER_REVIEW_MS = 250;
+
+/** The transaction for `count` reviews' rows: {@link SEVERAL_TRANSACTION}, longer for a batch. */
+export function severalTransaction(count: number): { maxWait: number; timeout: number } {
+  return {
+    ...SEVERAL_TRANSACTION,
+    timeout: SEVERAL_TRANSACTION.timeout + Math.max(0, count - 5) * PER_REVIEW_MS,
+  };
+}
+
 /** One input checked as far as the store can, ready to write. */
 interface CheckedInput {
   input: EnqueueAssessmentInput;
@@ -217,7 +233,7 @@ export async function enqueueAssessments<T>(
       }
       return { enqueued, also: await alsoWrite(tx, enqueued) };
     },
-    several ? SEVERAL_TRANSACTION : undefined
+    several ? severalTransaction(inputs.length) : undefined
   );
 
   noteMaintenanceWork('app:assessment-queued');

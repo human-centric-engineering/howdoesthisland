@@ -16,6 +16,7 @@
  *   disagree. Marking the wrong words would be worse than not marking them.
  */
 import type {
+  ReadableAssessment,
   ReportAssessment,
   ReportModel,
   ReportRecommendation,
@@ -298,7 +299,7 @@ function weightingOf(overlay: unknown, appeals: Names, dims: Names): string[] | 
 }
 
 export interface BuildReportInput {
-  assessment: ReportAssessment;
+  assessment: ReadableAssessment;
   result: ReportResult;
   model: ReportModel;
 }

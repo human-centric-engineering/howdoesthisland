@@ -554,6 +554,17 @@ describe('POST /api/v1/batches — how many items (APP_BATCH_MAX_ITEMS)', () => 
     expect((await batch({ judges: undefined, profile: 'quick', items: many(40) })).total).toBe(40);
   });
 
+  it('writes a hundred items in a transaction sized for them, not a comparison’s five', async () => {
+    mockEnv.APP_BATCH_MAX_ITEMS = 100;
+
+    await batch({ judges: undefined, profile: 'quick', items: many(100) });
+
+    expect(fake.db.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 15_000 + 95 * 250,
+    });
+  });
+
   it('refuses more than 100 whatever the setting says', async () => {
     mockEnv.APP_BATCH_MAX_ITEMS = 500;
     expect((await post({ profile: 'quick', items: many(101) })).status).toBe(400);
@@ -673,6 +684,34 @@ describe('POST /api/v1/batches — more items than running places', () => {
     expect(done.counts.completed).toBe(8);
     expect(most).toBeLessThanOrEqual(RUNNING_PER_WORKSPACE * TWO.length);
     expect(fake.places).toEqual([]);
+  });
+});
+
+describe('POST /api/v1/batches — sharing the places with someone waiting', () => {
+  it('lets a review queued after a batch take the next free place before the batch’s waiting items', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    // The order reviews start in, by their text.
+    const started: string[] = [];
+    mocks.runJudge.mockImplementation(async (slot: string, req: { text?: string }) => {
+      if (slot === TWO[0]) started.push(String(req.text));
+      await gate;
+      return reply(slot);
+    });
+    await batch({ items: texts(DRAFT_A, DRAFT_B, DRAFT_C, DRAFT_D, DRAFT_E) });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(started).toHaveLength(RUNNING_PER_WORKSPACE);
+    // A single review asked for now, with every place taken: it waits queued.
+    const waiting = fake.seed({ orgId: WS_A, judges: TWO, createdByUserId: ALICE });
+    const content = fake.contents.find((c) => c.id === waiting.contentId);
+    if (content) content.text = 'Someone is waiting for this one.';
+
+    release();
+    await new Promise((r) => setTimeout(r, 300));
+
+    // The fourth review to start is the one someone is waiting for.
+    expect(started[RUNNING_PER_WORKSPACE]).toBe('Someone is waiting for this one.');
+    expect(started).toHaveLength(6);
   });
 });
 
