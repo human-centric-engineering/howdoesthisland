@@ -165,7 +165,8 @@ export const stateOf = (status: AssessmentStatus): AssessmentState => STATE[stat
 
 export const toDbStatus = (state: AssessmentState): AssessmentStatus => DB_STATUS[state];
 
-const SOURCE_KIND = { TEXT: 'text', FILE: 'file', URL: 'url' } as const;
+/** A content row's source as the API names it; a batch's items read it too (t-102). */
+export const SOURCE_KIND = { TEXT: 'text', FILE: 'file', URL: 'url' } as const;
 
 const summarySelect = {
   id: true,

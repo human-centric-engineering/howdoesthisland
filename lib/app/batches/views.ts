@@ -23,7 +23,7 @@
 import type { ContentSourceKind, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
-import { isFinal, stateOf, type FrameworkRef } from '@/lib/app/assessments/api/views';
+import { isFinal, SOURCE_KIND, stateOf, type FrameworkRef } from '@/lib/app/assessments/api/views';
 import { ASSESSMENT_STATES } from '@/lib/app/assessments/api/validations';
 import type { DraftState } from '@/lib/app/comparisons/views';
 
@@ -44,7 +44,7 @@ export type BatchItem = {
   assessmentId: string | null;
   status: ItemState;
   /** Text, a page or an uploaded file, and a page's address (where its redirects ended, once fetched). */
-  source: { kind: BatchItemSourceKind; url: string | null } | null;
+  source: { kind: (typeof SOURCE_KIND)[ContentSourceKind]; url: string | null } | null;
   overall: number | null;
   band: string | null;
   /**
@@ -143,17 +143,6 @@ const detailSelect = {
 type HeaderRow = Prisma.AssessmentSetGetPayload<{ select: typeof headerSelect }>;
 type SummaryRow = Prisma.AssessmentSetGetPayload<{ select: typeof summarySelect }>;
 type DetailRow = Prisma.AssessmentSetGetPayload<{ select: typeof detailSelect }>;
-
-/** What an item is: pasted text, a page, or an uploaded file (t-102). */
-export const BATCH_ITEM_SOURCE_KINDS = ['text', 'url', 'file'] as const;
-export type BatchItemSourceKind = (typeof BATCH_ITEM_SOURCE_KINDS)[number];
-
-/** An item's source as the API names it: pasted text, a page, or an upload (t-102). */
-const SOURCE_KIND: Record<ContentSourceKind, BatchItemSourceKind> = {
-  TEXT: 'text',
-  URL: 'url',
-  FILE: 'file',
-};
 
 function itemView(member: DetailRow['members'][number]): BatchItem {
   const review = member.assessment;

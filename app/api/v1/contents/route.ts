@@ -22,8 +22,10 @@
  * `INVALID_FILE_TYPE`, 422 `TEXT_TOO_LONG`, `TOO_MANY_PAGES`,
  * `PDF_HAS_NO_TEXT`, `NO_TEXT`, `FILE_UNREADABLE`. 429 `RATE_LIMIT_EXCEEDED`
  * past `UPLOADS_PER_HOUR` per user: a caller with no room left is refused
- * before the body is read, and an upload is counted once its body has been
- * read, so a refused type counts too. 401, 403 as every route.
+ * before the body is read. An upload is counted once `readUpload` accepts
+ * its body, before its text is extracted, so a refused type counts too; a
+ * body `readUpload` refuses is not counted, and only the `/api/v1` section
+ * cap bounds those. 401, 403 as every route.
  */
 import type { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth/guards';

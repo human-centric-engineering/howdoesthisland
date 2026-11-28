@@ -111,7 +111,7 @@ import {
   createBatchSchema,
   listBatchesQuerySchema,
 } from '@/lib/app/batches/validations';
-import { BATCH_ITEM_SOURCE_KINDS, ITEM_STATES } from '@/lib/app/batches/views';
+import { ITEM_STATES } from '@/lib/app/batches/views';
 import {
   createRewriteSchema,
   listRewritesQuerySchema,
@@ -793,7 +793,7 @@ const batchItemSchema = z.object({
   assessmentId: z.string().nullable(),
   status: z.enum(ITEM_STATES),
   source: z
-    .object({ kind: z.enum(BATCH_ITEM_SOURCE_KINDS), url: z.string().nullable() })
+    .object({ kind: z.enum(['text', 'file', 'url']), url: z.string().nullable() })
     .nullable()
     .meta({
       description:
@@ -1300,13 +1300,13 @@ export const APP_ROUTES: readonly RouteContract[] = [
         status: 404,
         code: 'CONTENT_NOT_FOUND',
         description:
-          'An item names an upload that is not in this workspace, or was deleted unclaimed after 24 hours. `details.position` is its place in `items`; nothing was stored.',
+          'An item names no upload this workspace can use: not in this workspace, not an upload (a pasted text or a page), or past its `expiresAt`. `details.position` is its place in `items`; nothing was stored.',
       },
       {
         status: 409,
         code: 'CONTENT_IN_USE',
         description:
-          'An item names an upload another review has taken. `details.position` is its place in `items`; nothing was stored. Upload the file again.',
+          'An item names a file a review already has: an upload another batch took, or a file a single review read. `details.position` is its place in `items`; nothing was stored. Upload the file again.',
       },
       {
         status: 402,

@@ -130,10 +130,11 @@ export async function prepareBatch(body: CreateBatchBody): Promise<PreparedBatch
 /**
  * Every upload the items name is this workspace's, not taken yet and not
  * past its window, or the first that is not is refused with its place in
- * `items` as `details.position`: 409 `CONTENT_IN_USE` for an upload a review
- * took, and 404 `CONTENT_NOT_FOUND` for anything else (another workspace's
- * reads as none, as every lookup here does; so does a content row that was
- * never an upload, and one past its 24 hours, deleted or not yet). The claim
+ * `items` as `details.position`: 409 `CONTENT_IN_USE` for a file a review
+ * has (an upload a batch took, or one a single review read), and 404
+ * `CONTENT_NOT_FOUND` for anything else (another workspace's reads as none,
+ * as every lookup here does; so does a pasted text's or a page's content,
+ * and an upload past its 24 hours, deleted or not yet). The claim
  * in the write is what holds; this answers the common case before the budget
  * is held.
  */

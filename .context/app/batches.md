@@ -116,10 +116,11 @@ wordCount, createdAt, expiresAt }`. No raw file is kept, so no storage
    for but whether it can be taken.
 
 **One review takes an upload, once.** The batch checks every upload it names
-before anything is held: 409 `CONTENT_IN_USE` for an upload another review took,
-and 404 `CONTENT_NOT_FOUND` for anything else: not in this workspace (another
-workspace's reads as none), a content row that was never an upload, or one past
-its `expiresAt`, deleted or not yet, each with `details.position` and `details.contentId`.
+before anything is held: 409 `CONTENT_IN_USE` for a file a review already has
+(an upload another batch took, or a file a single review read), and 404
+`CONTENT_NOT_FOUND` for anything else: not in this workspace (another
+workspace's reads as none), a pasted text's or a page's content, or an upload
+past its `expiresAt`, deleted or not yet, each with `details.position` and `details.contentId`.
 Naming one twice in a body is 400 `VALIDATION_ERROR` at the second place. The
 check answers the common case; **the claim is what holds**. The transaction
 writing the item's review clears `awaitingBatch` in a conditional update
@@ -150,8 +151,9 @@ and, by the cascade, the review just written on it.
 
 **Their own allowance.** Uploads count against **`UPLOADS_PER_HOUR`** (200, as
 many as batch items) per user. A caller with no room left is refused before the
-body is read, and each upload is counted once its body has been read, before its
-text is extracted: reading and extracting a 10 MB file is the work it bounds. The `/api/v1` section cap alone
+body is read, and each upload is counted once `readUpload` accepts its body,
+before its text is extracted (a body it refuses is bounded only by the `/api/v1`
+section cap): reading and extracting a 10 MB file is the work it bounds. The `/api/v1` section cap alone
 would allow 6,000 an hour. 429 `RATE_LIMIT_EXCEEDED` past it.
 
 An upload is the workspace's and its uploader's data as any content row is: in
