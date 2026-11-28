@@ -42,6 +42,9 @@ export function modelDocument(culture: boolean): Record<string, unknown> {
   return rest;
 }
 
+/** The model as the report parsed it, with culture on: what a ready `loadReport` carries. */
+export const REPORT_MODEL = reportModelSchema.parse(modelDocument(true));
+
 export const WRITTEN_EDITOR = {
   status: 'written',
   summary: {

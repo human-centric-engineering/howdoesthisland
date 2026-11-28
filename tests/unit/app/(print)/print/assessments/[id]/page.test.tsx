@@ -44,6 +44,7 @@ function ready(): ReportLoad {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     }),
+    model: reportModelSchema.parse(modelDocument(true)),
     projectId: null,
   };
 }
