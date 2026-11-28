@@ -85,7 +85,7 @@ import {
 export function asApiError(err: unknown): unknown {
   if (!(err instanceof AssessmentInputError)) return err;
   const { code, status } = INPUT_ERRORS[err.code];
-  return new APIError(err.message, code, status);
+  return new APIError(err.message, code, status, err.details);
 }
 
 /** Run `fn`, answering a library refusal as its `APIError`. */

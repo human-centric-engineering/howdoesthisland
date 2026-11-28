@@ -119,6 +119,8 @@ const APP_ROUTE_DIRS = [
   'comparisons',
   // Batches of reviews (t-101).
   'batches',
+  // Files uploaded for a batch (t-102).
+  'contents',
   'scan',
   'shared-reports',
   'shares',

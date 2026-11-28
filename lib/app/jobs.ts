@@ -40,6 +40,7 @@ import { purgeExpiredContent } from '@/lib/app/retention/purge';
 import { recoverRewrites } from '@/lib/app/rewrites/recover';
 import { recoverVerdicts } from '@/lib/app/comparisons/verdict';
 import { sweepFinishedEvents } from '@/lib/app/events/notify';
+import { purgeUnclaimedUploads } from '@/lib/app/batches/uploads';
 
 /** The assessment recovery job's name, as the tick logs it. */
 export const ASSESSMENT_RECOVERY_JOB = 'app:assessment-recovery';
@@ -55,6 +56,9 @@ export const FINISHED_EVENTS_JOB = 'app:finished-events';
 
 /** The retention purge's name, as the tick logs it. */
 export const RETENTION_PURGE_JOB = 'app:retention-purge';
+
+/** The unclaimed-upload purge's name, as the tick logs it. */
+export const UNCLAIMED_UPLOADS_JOB = 'app:unclaimed-uploads';
 
 export function initAppJobs(): void {
   // Re-drive assessments whose run died or never started, and give up on
@@ -112,5 +116,16 @@ export function initAppJobs(): void {
     intervalMs: 24 * 60 * 60 * 1000,
     scope: 'per-org',
     run: () => purgeExpiredContent(),
+  });
+
+  // Delete files uploaded for a batch that no batch took within 24 hours
+  // (t-102, `lib/app/batches/uploads.ts`): a workspace with no retention
+  // window would otherwise keep them forever. Per workspace; hourly, so one
+  // goes at most an hour past its `expiresAt`.
+  registerAppJob({
+    name: UNCLAIMED_UPLOADS_JOB,
+    intervalMs: 60 * 60 * 1000,
+    scope: 'per-org',
+    run: () => purgeUnclaimedUploads(),
   });
 }

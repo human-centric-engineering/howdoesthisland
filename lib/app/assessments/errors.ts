@@ -13,7 +13,11 @@ export type AssessmentInputErrorCode =
   /** The profile, or a judge in an explicit list, is unknown or switched off. */
   | 'profile_unknown'
   /** The project it is in was archived after the request was checked (t-70). */
-  | 'project_archived';
+  | 'project_archived'
+  /** An upload a batch item names (t-102) is not in this workspace, or was deleted. */
+  | 'upload_not_found'
+  /** An upload a batch item names (t-102) was taken by another review first. */
+  | 'upload_in_use';
 
 /**
  * How each refusal reaches a caller: the code and status the API answers
@@ -27,14 +31,19 @@ export const INPUT_ERRORS: Record<AssessmentInputErrorCode, { code: string; stat
   version_not_found: { code: 'FRAMEWORK_VERSION_NOT_FOUND', status: 404 },
   profile_unknown: { code: 'PROFILE_UNKNOWN', status: 400 },
   project_archived: { code: 'PROJECT_ARCHIVED', status: 409 },
+  upload_not_found: { code: 'CONTENT_NOT_FOUND', status: 404 },
+  upload_in_use: { code: 'CONTENT_IN_USE', status: 409 },
 };
 
 export class AssessmentInputError extends Error {
   readonly code: AssessmentInputErrorCode;
+  /** What the API answers as `details`: an upload's `contentId`, for its caller to place. */
+  readonly details?: Record<string, unknown>;
 
-  constructor(code: AssessmentInputErrorCode, message: string) {
+  constructor(code: AssessmentInputErrorCode, message: string, details?: Record<string, unknown>) {
     super(message);
     this.name = 'AssessmentInputError';
     this.code = code;
+    this.details = details;
   }
 }

@@ -40,6 +40,13 @@ export interface EnqueueAssessmentInput {
     sourceUrl?: string | null;
     fileName?: string | null;
     projectId?: string | null;
+    /**
+     * An upload a batch item names (t-102, `lib/app/batches/uploads.ts`): the
+     * review takes that content row, already holding its checked text, in
+     * place of writing one. `text` is then `null` and ignored; `projectId`
+     * and, when given, `title` are written onto the row as it is claimed.
+     */
+    uploadId?: string;
   };
   /** A published version's id. */
   frameworkVersionId: string;
@@ -103,7 +110,10 @@ export function severalTransaction(count: number): { maxWait: number; timeout: n
 /** One input checked as far as the store can, ready to write. */
 interface CheckedInput {
   input: EnqueueAssessmentInput;
-  /** With its hash and word count, or none of the three for a page its run will fetch. */
+  /**
+   * With its hash and word count, or none of the three for a page its run
+   * will fetch or an upload, which has them already.
+   */
   text: { text: string; textSha256: string; wordCount: number } | null;
   versionId: string;
   judges: readonly string[];
@@ -115,9 +125,14 @@ async function checkInput(
   input: EnqueueAssessmentInput,
   engineOf: (versionId: string) => Promise<LoadedEngine>
 ): Promise<CheckedInput> {
-  const raw = input.content.text;
-  if (raw === null && (input.content.sourceKind !== 'URL' || !input.content.sourceUrl)) {
-    // Only a page has an address to fetch later; anything else must come with its text.
+  const raw = input.content.uploadId ? null : input.content.text;
+  if (
+    raw === null &&
+    !input.content.uploadId &&
+    (input.content.sourceKind !== 'URL' || !input.content.sourceUrl)
+  ) {
+    // Only a page has an address to fetch later, and an upload its text
+    // already; anything else must come with its text.
     throw new AssessmentInputError('content_empty', 'There is no text to assess.');
   }
   const text = raw === null ? null : assessableText(raw);
@@ -198,21 +213,26 @@ export async function enqueueAssessments<T>(
       for (const { input, text, versionId, judges } of checked) {
         const userId = input.userId ?? null;
         const projectId = input.content.projectId ?? null;
-        const content = await tx.content.create({
-          data: {
-            orgId,
-            projectId,
-            title: input.content.title ?? null,
-            sourceKind: input.content.sourceKind,
-            sourceUrl: input.content.sourceUrl ?? null,
-            fileName: input.content.fileName ?? null,
-            text: text?.text ?? null,
-            textSha256: text?.textSha256 ?? null,
-            wordCount: text?.wordCount ?? null,
-            createdByUserId: userId,
-          },
-          select: { id: true },
-        });
+        const content = input.content.uploadId
+          ? await claimUpload(tx, orgId, input.content.uploadId, {
+              projectId,
+              title: input.content.title ?? null,
+            })
+          : await tx.content.create({
+              data: {
+                orgId,
+                projectId,
+                title: input.content.title ?? null,
+                sourceKind: input.content.sourceKind,
+                sourceUrl: input.content.sourceUrl ?? null,
+                fileName: input.content.fileName ?? null,
+                text: text?.text ?? null,
+                textSha256: text?.textSha256 ?? null,
+                wordCount: text?.wordCount ?? null,
+                createdByUserId: userId,
+              },
+              select: { id: true },
+            });
         const assessment = await tx.assessment.create({
           data: {
             orgId,
@@ -238,6 +258,46 @@ export async function enqueueAssessments<T>(
 
   noteMaintenanceWork('app:assessment-queued');
   return written;
+}
+
+/**
+ * Take an upload for the review being written (t-102): clear its
+ * `awaitingBatch` where it is still set, in this workspace, and file it in
+ * the review's project, under its label when there is one. The update's
+ * condition is what makes the claim single: a second transaction naming the
+ * same row waits for the first, and Postgres re-checks the condition on the
+ * row the first left, which no longer has it set. So does the job's delete
+ * (`lib/app/batches/uploads.ts`). Throws `upload_in_use` when it was taken,
+ * `upload_not_found` when it is not this workspace's or is gone, each with
+ * the `contentId`; the transaction then stores nothing.
+ */
+async function claimUpload(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  id: string,
+  into: { projectId: string | null; title: string | null }
+): Promise<{ id: string }> {
+  const { count } = await tx.content.updateMany({
+    where: { id, orgId, awaitingBatch: true },
+    data: {
+      awaitingBatch: false,
+      projectId: into.projectId,
+      ...(into.title !== null ? { title: into.title } : {}),
+    },
+  });
+  if (count === 1) return { id };
+  const exists = await tx.content.findFirst({ where: { id, orgId }, select: { id: true } });
+  throw exists
+    ? new AssessmentInputError(
+        'upload_in_use',
+        'This upload is already being reviewed. Upload the file again to review it in another batch.',
+        { contentId: id }
+      )
+    : new AssessmentInputError(
+        'upload_not_found',
+        'There is no such upload in this workspace. One no batch takes within 24 hours is deleted.',
+        { contentId: id }
+      );
 }
 
 /**

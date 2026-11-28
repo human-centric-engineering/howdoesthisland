@@ -35,3 +35,11 @@ export const ITEM_LABEL_MAX = 80;
  * itself; this bounds how fast one person can queue work and fetches.
  */
 export const BATCH_ITEMS_PER_HOUR = 200;
+
+/**
+ * Uploads per user per hour (t-102, `POST /api/v1/contents`): as many as
+ * {@link BATCH_ITEMS_PER_HOUR}, since an upload is only of use as a batch
+ * item. Each reads a file of up to 10 MB in the request, which is the work
+ * this bounds; the `/api/v1` section cap alone would allow 6,000 an hour.
+ */
+export const UPLOADS_PER_HOUR = BATCH_ITEMS_PER_HOUR;

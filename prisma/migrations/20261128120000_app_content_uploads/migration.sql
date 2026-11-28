@@ -1,0 +1,11 @@
+-- t-102: files uploaded for a batch (.context/app/batches.md).
+--
+-- Written by hand, as 20261128100000_app_batches was: a generated diff would
+-- carry the spurious drops B13 describes.
+--
+-- An upload is stored as a content row with its text and no review, and a
+-- batch item names it by id. The flag says it has not been taken yet: an
+-- item claims it by clearing it in a conditional update, so two batches can
+-- never both take one, and the hourly job deletes one still set after 24
+-- hours. Every existing row already has its review, so false.
+ALTER TABLE "app_content" ADD COLUMN "awaitingBatch" BOOLEAN NOT NULL DEFAULT false;

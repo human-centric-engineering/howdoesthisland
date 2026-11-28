@@ -6,10 +6,12 @@
  * comparison's, given once for every item; `context` is checked against the
  * version once it is known.
  *
- * An item is pasted text or a page's address. A page is not fetched here, or
- * anywhere in the request: its own review fetches it when it starts
- * (`lib/app/assessments/run.ts`), so a batch of addresses answers at once and
- * one slow site holds up only its own item.
+ * An item is pasted text, a page's address, or a file uploaded first
+ * (t-102, `POST /api/v1/contents`) and named by its id. A page is not
+ * fetched here, or anywhere in the request: its own review fetches it when it
+ * starts (`lib/app/assessments/run.ts`), so a batch of addresses answers at
+ * once and one slow site holds up only its own item. A file's text was read
+ * when it was uploaded (`lib/app/batches/uploads.ts`).
  */
 import { z } from 'zod';
 import {
@@ -34,9 +36,15 @@ const pageItemSchema = z.strictObject({
   label: labelField,
 });
 
-/** One item: pasted text, or a page by its address. */
-export const batchItemSchema = z.union([textItemSchema, pageItemSchema], {
-  error: 'Give each item as { text } or { url }, not both',
+const uploadItemSchema = z.strictObject({
+  /** An upload's id, as `POST /api/v1/contents` answered it; one review takes it. */
+  contentId: z.string().trim().min(1).max(64),
+  label: labelField,
+});
+
+/** One item: pasted text, a page by its address, or an upload by its id. */
+export const batchItemSchema = z.union([textItemSchema, pageItemSchema, uploadItemSchema], {
+  error: 'Give each item as one of { text }, { url } or { contentId }',
 });
 
 export type BatchItemInput = z.infer<typeof batchItemSchema>;
@@ -44,6 +52,10 @@ export type BatchItemInput = z.infer<typeof batchItemSchema>;
 /** An item given as text; otherwise a page. */
 export const isTextItem = (item: BatchItemInput): item is z.infer<typeof textItemSchema> =>
   'text' in item;
+
+/** An item naming an upload by its id. */
+export const isUploadItem = (item: BatchItemInput): item is z.infer<typeof uploadItemSchema> =>
+  'contentId' in item;
 
 /**
  * 1 to `APP_BATCH_MAX_ITEMS` items. The ceiling is the schema's own, so the
@@ -65,10 +77,30 @@ export const batchItemsField = z
         message: `Give at most ${max} items: a batch here takes up to ${max}`,
       });
     }
+    // One review takes an upload, so naming one twice could only be refused later.
+    const seen = new Set<string>();
+    for (const [position, item] of items.entries()) {
+      if (!isUploadItem(item)) continue;
+      if (seen.has(item.contentId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [position, 'contentId'],
+          message: 'Name each upload once: one review takes it',
+        });
+      }
+      seen.add(item.contentId);
+    }
   })
   .meta({
     description: `1 to \`APP_BATCH_MAX_ITEMS\` items (at most ${BATCH_MAX_ITEMS_CEILING}; 10 unless the install sets it).`,
   });
+
+/**
+ * `POST /api/v1/contents` (t-102): the `options` part beside the file, which
+ * takes nothing. The upload has no options of its own: its project and
+ * label are the batch's and the item's, given when a batch takes it.
+ */
+export const contentUploadOptionsSchema = z.strictObject({});
 
 /** POST /api/v1/batches. */
 export const createBatchSchema = z

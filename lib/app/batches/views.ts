@@ -20,7 +20,7 @@
  * Every read runs in the caller's tenant context and names `orgId`, so
  * another workspace's batch is not found.
  */
-import type { Prisma } from '@prisma/client';
+import type { ContentSourceKind, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
 import { isFinal, stateOf, type FrameworkRef } from '@/lib/app/assessments/api/views';
@@ -43,8 +43,8 @@ export type BatchItem = {
   /** Its review, to open as any other; `null` once purged. */
   assessmentId: string | null;
   status: ItemState;
-  /** Text or a page, and the page's address (where its redirects ended, once fetched). */
-  source: { kind: 'text' | 'url'; url: string | null } | null;
+  /** Text, a page or an uploaded file, and a page's address (where its redirects ended, once fetched). */
+  source: { kind: BatchItemSourceKind; url: string | null } | null;
   overall: number | null;
   band: string | null;
   /**
@@ -144,6 +144,17 @@ type HeaderRow = Prisma.AssessmentSetGetPayload<{ select: typeof headerSelect }>
 type SummaryRow = Prisma.AssessmentSetGetPayload<{ select: typeof summarySelect }>;
 type DetailRow = Prisma.AssessmentSetGetPayload<{ select: typeof detailSelect }>;
 
+/** What an item is: pasted text, a page, or an uploaded file (t-102). */
+export const BATCH_ITEM_SOURCE_KINDS = ['text', 'url', 'file'] as const;
+export type BatchItemSourceKind = (typeof BATCH_ITEM_SOURCE_KINDS)[number];
+
+/** An item's source as the API names it: pasted text, a page, or an upload (t-102). */
+const SOURCE_KIND: Record<ContentSourceKind, BatchItemSourceKind> = {
+  TEXT: 'text',
+  URL: 'url',
+  FILE: 'file',
+};
+
 function itemView(member: DetailRow['members'][number]): BatchItem {
   const review = member.assessment;
   return {
@@ -151,12 +162,8 @@ function itemView(member: DetailRow['members'][number]): BatchItem {
     label: member.label,
     assessmentId: review ? member.assessmentId : null,
     status: review ? stateOf(review.status) : 'purged',
-    // A batch item is text or a page; a file is not one it takes.
     source: review
-      ? {
-          kind: review.content.sourceKind === 'URL' ? 'url' : 'text',
-          url: review.content.sourceUrl,
-        }
+      ? { kind: SOURCE_KIND[review.content.sourceKind], url: review.content.sourceUrl }
       : null,
     overall: review?.overall ?? null,
     band: review?.band ?? null,
