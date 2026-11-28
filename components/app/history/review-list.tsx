@@ -76,6 +76,8 @@ export function reviewName(row: ReviewRow): string {
       return row.source.url;
     }
   }
+  // Pasted copy always has its count; only a page not fetched yet has none, and it has a URL.
+  if (row.wordCount === null) return 'Pasted copy';
   return `Pasted copy, ${row.wordCount.toLocaleString('en-GB')} ${row.wordCount === 1 ? 'word' : 'words'}`;
 }
 

@@ -18,6 +18,7 @@ vi.mock('@/lib/api/client', async (importOriginal) => ({
 }));
 
 import { ReviewList, reviewName } from '@/components/app/history/review-list';
+import { reviewRowSchema } from '@/components/app/history/schemas';
 import { APIClientError } from '@/lib/api/client';
 import { aReview } from '@/tests/unit/components/app/history/fixtures';
 
@@ -235,5 +236,20 @@ describe('reviewName', () => {
       )
     ).toBe('example.com/pricing');
     expect(reviewName(aReview({ title: null, wordCount: 1 }))).toBe('Pasted copy, 1 word');
+  });
+
+  it('names a page a batch has not fetched yet by its address, with no word count (t-101)', () => {
+    const pending = {
+      title: null,
+      source: { kind: 'url' as const, url: 'https://example.com/pricing', fileName: null },
+      wordCount: null,
+    };
+    expect(
+      reviewRowSchema.parse({ ...aReview(pending), createdAt: '2026-11-28T10:00:00Z' })
+    ).toMatchObject({
+      wordCount: null,
+    });
+    expect(reviewName(aReview(pending))).toBe('example.com/pricing');
+    expect(reviewName(aReview({ title: null, wordCount: null }))).toBe('Pasted copy');
   });
 });

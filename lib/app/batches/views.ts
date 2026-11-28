@@ -90,7 +90,15 @@ export function batchState(items: readonly { status: ItemState }[]): BatchState 
 
 /** How many of `items` are in each state. */
 export function countByState(items: readonly { status: ItemState }[]): Record<ItemState, number> {
-  const counts = Object.fromEntries(ITEM_STATES.map((s) => [s, 0])) as Record<ItemState, number>;
+  const counts: Record<ItemState, number> = {
+    queued: 0,
+    running: 0,
+    completed: 0,
+    partial: 0,
+    failed: 0,
+    cancelled: 0,
+    purged: 0,
+  };
   for (const item of items) counts[item.status] += 1;
   return counts;
 }

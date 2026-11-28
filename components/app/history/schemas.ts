@@ -81,7 +81,8 @@ export const reviewRowSchema = z.object({
     url: z.string().nullable(),
     fileName: z.string().nullable(),
   }),
-  wordCount: z.number(),
+  /** `null` for a page a batch has not fetched yet, or could not (t-101). */
+  wordCount: z.number().nullable(),
   overall: z.number().nullable(),
   band: z.string().nullable(),
   createdAt: z.string(),
