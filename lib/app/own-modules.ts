@@ -97,4 +97,6 @@ export const appOwnModules: readonly string[] = [
   'lib/app/events/',
   // Batches: many texts or pages reviewed the same way in one call (t-101).
   'lib/app/batches/',
+  // Coaching: a review's gaps as questions for the writer (t-108).
+  'lib/app/coaching/',
 ];
