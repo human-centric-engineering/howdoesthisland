@@ -57,19 +57,18 @@ export const LOW_APPEAL_SCORE = 40;
 /** The most gaps one review offers. The coach's turn cap bounds what it can ask anyway. */
 export const MAX_GAPS = 15;
 
-/** Words about how the model works, which no question may use. */
+/**
+ * Words that only describe how the model works, which no gap may carry.
+ * Kept to words a writer's own facts would not use: `weight`, `formula` or
+ * `judge` can be part of a real fact (a product's weight), so they are not
+ * here, and the app's own templates are held to a wider list by their test.
+ */
 export const MODEL_TERMS = [
   'rubric',
-  'weight',
-  'weights',
-  'weighting',
-  'formula',
   'dimension',
   'dimensions',
-  'lever',
-  'levers',
-  'judge',
-  'judges',
+  'weighting',
+  'weightings',
 ] as const;
 
 /** Where a gap came from: what the report shows, by its own numbering. */
@@ -77,7 +76,7 @@ export type GapSource =
   | { kind: 'placeholder'; placeholderId: string }
   | { kind: 'recommendation'; number: number }
   | { kind: 'note'; number: number }
-  | { kind: 'appeal' }
+  | { kind: 'appeal'; appeal: string }
   | { kind: 'brief'; field: BriefField };
 
 export interface Gap {
@@ -257,7 +256,13 @@ const BRIEF_ORDER: readonly BriefField[] = ['offer', 'audience', 'voice', 'marke
 
 // ─── The model's own words ──────────────────────────────────────────────────
 
-/** Every id the model names things by: what no gap's text may carry. */
+/**
+ * The model's own ids, what no gap's text may carry: those shaped like ids
+ * (`eth_borrowed`, `mv_specific_testimonial`, `judge_ethos`), with an
+ * underscore or a digit. An id that is a plain word (`audience`, `move`,
+ * `ethos`) is left out: the report shows it as a name, so it is not private,
+ * and banning it would drop a writer's fact that happens to use the word.
+ */
 export function modelVocabulary(model: ReportModel): string[] {
   const ids = [
     ...model.appeals,
@@ -272,7 +277,9 @@ export function modelVocabulary(model: ReportModel): string[] {
     ...model.judges,
     ...model.perspectives,
     ...model.perspectives.flatMap((p) => p.levers),
-  ].map((x) => x.id);
+  ]
+    .map((x) => x.id)
+    .filter((id) => /[_\d]/.test(id));
   return [...new Set(ids)];
 }
 
@@ -287,8 +294,14 @@ export function carriesVocabulary(text: string, words: readonly string[]): boole
 
 // ─── Building the list ──────────────────────────────────────────────────────
 
-/** A slot in a suggested rewrite: `[a named client like her]`. Not `[ADD: …]`, nor a link. */
+/**
+ * A slot in a suggested rewrite: `[a named client like her]`. Not `[ADD: …]`,
+ * a link's `[text](url)`, a citation (`[1]`, `[2, 3]`) or an editor's `[sic]`,
+ * which are text, not facts to ask for.
+ */
 const SLOT = /\[(?!ADD:)([^[\]\n]+)\](?!\()/gi;
+
+const NOT_A_SLOT = /^(?:[\d\s,–-]+|sic|…|\.\.\.)$/i;
 
 /** The slots in a recommendation's suggested rewrite, each once, in order. */
 export function slotsOf(rewrite: string): string[] {
@@ -297,7 +310,7 @@ export function slotsOf(rewrite: string): string[] {
   for (const m of rewrite.matchAll(SLOT)) {
     const slot = m[1].replace(/\s+/g, ' ').trim();
     const key = slot.toLowerCase();
-    if (slot === '' || seen.has(key)) continue;
+    if (slot === '' || NOT_A_SLOT.test(slot) || seen.has(key)) continue;
     seen.add(key);
     slots.push(slot);
   }
@@ -306,6 +319,8 @@ export function slotsOf(rewrite: string): string[] {
 
 /** Strength of a source, for the order: lower first. */
 const IMPACT_RANK: Readonly<Record<string, number>> = { high: 1, medium: 2, low: 3 };
+/** As the report orders them (`impactRank` in `view.ts`): any case, an unknown impact as low. */
+const impactRank = (impact: string): number => IMPACT_RANK[impact.toLowerCase()] ?? IMPACT_RANK.low;
 const NOTE_RANK = 4;
 const APPEAL_RANK = 5;
 const BRIEF_RANK = 6;
@@ -378,7 +393,7 @@ export function buildGaps({ view, rewriteDraft, known, vocabulary }: GapsInput):
   for (const r of view.recommendations) {
     const slots = slotsOf(r.rewrite);
     if (slots.length === 0) continue;
-    const rank = IMPACT_RANK[r.impact] ?? IMPACT_RANK.low;
+    const rank = impactRank(r.impact);
     const source: GapSource = { kind: 'recommendation', number: r.number };
     const topic = TOPIC_OF[r.dimensionId];
     if (topic) fromTopic(topic, source, rank, r.number, r.issue);
@@ -408,7 +423,10 @@ export function buildGaps({ view, rewriteDraft, known, vocabulary }: GapsInput):
         (low, t) => (low && low.score <= t.score ? low : t),
         null
       );
-    if (weakest) fromTopic(weakest.topic, { kind: 'appeal' }, APPEAL_RANK, i);
+    if (!weakest) continue;
+    fromTopic(weakest.topic, { kind: 'appeal', appeal: appeal.id }, APPEAL_RANK, i);
+    // The next low appeal sees this gap: one each, and none for an appeal it covers.
+    covered.add(weakest.topic);
   }
 
   // 5. The brief's empty fields, for a review in a project.
@@ -466,7 +484,7 @@ function addOwnWords(
     missing: slots.join('; '),
     question: `The review suggests: “${r.rewrite}” What would you put in the brackets?`,
     why: 'Only you know what goes there, so the review could not suggest it.',
-    found: [r.issue],
+    found: r.issue.trim() === '' ? [] : [r.issue],
     sources: [source],
     rank,
     order: r.number,

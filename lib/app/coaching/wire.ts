@@ -9,7 +9,8 @@ export const gapSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('placeholder'), placeholderId: z.string() }),
   z.object({ kind: z.literal('recommendation'), number: z.number().int() }),
   z.object({ kind: z.literal('note'), number: z.number().int() }),
-  z.object({ kind: z.literal('appeal') }),
+  /** The appeal's id, as the report's "How it lands" lists it. */
+  z.object({ kind: z.literal('appeal'), appeal: z.string() }),
   z.object({
     kind: z.literal('brief'),
     field: z.enum(['offer', 'audience', 'voice', 'markets', 'goals']),

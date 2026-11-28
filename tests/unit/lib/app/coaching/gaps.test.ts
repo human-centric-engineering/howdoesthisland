@@ -162,6 +162,28 @@ describe('recommendations', () => {
     ]);
   });
 
+  it('read impact in any case, as the report does', () => {
+    const view = blank();
+    view.recommendations = [
+      { ...rec, number: 1, impact: 'low' },
+      { ...rec, number: 2, dimensionId: 'kai_call', impact: 'High' },
+    ];
+    expect(ids(gapsOf({ view }))).toEqual(['small-ask', 'customer-proof']);
+  });
+
+  it('do not take a citation or an editor’s mark for a slot', () => {
+    expect(slotsOf('Teams cut onboarding by 30% [1], or more [2, 3] [sic] […].')).toEqual([]);
+    expect(slotsOf('We cut [a cost] by [a number] [1].')).toEqual(['a cost', 'a number']);
+  });
+
+  it('asked in their own words with no issue, quote nothing', () => {
+    const view = blank();
+    view.recommendations = [
+      { ...rec, number: 3, dimensionId: 'aud_hook', issue: '  ', rewrite: 'Open with [her news].' },
+    ];
+    expect(gapsOf({ view })[0]).toMatchObject({ id: 'recommendation-3', found: [] });
+  });
+
   it('rank by impact before the report’s order', () => {
     const view = blank();
     const low = { ...rec, number: 1, impact: 'low' };
@@ -204,7 +226,7 @@ describe('low appeals', () => {
     const rows = view.dimensions.find((g) => g.id === 'pathos')!.rows;
     for (const row of rows) row.score = row.id === 'pat_story' ? 0 : 2;
     expect(gapsOf({ view })).toEqual([
-      expect.objectContaining({ id: 'story', sources: [{ kind: 'appeal' }] }),
+      expect.objectContaining({ id: 'story', sources: [{ kind: 'appeal', appeal: 'pathos' }] }),
     ]);
   });
 
@@ -218,6 +240,21 @@ describe('low appeals', () => {
       { ...DRAFT_VIEW.copy.notes[0], number: 1, polarity: 'weakness', dimensionId: 'pat_stakes' },
     ];
     expect(ids(gapsOf({ view }))).toEqual(['reader-problem']);
+  });
+
+  it('see the gap an earlier low appeal gave, so one that shares it gives no second', () => {
+    const view = blank();
+    for (const id of ['ethos', 'logos']) view.lands.appeals.find((a) => a.id === id)!.score = 0;
+    for (const id of ['ethos', 'logos']) {
+      for (const row of view.dimensions.find((g) => g.id === id)!.rows) {
+        row.score = row.id === 'eth_integrity' || row.id === 'log_mechanism' ? 0 : 2;
+      }
+    }
+    // Ethos's weakest asks for the reader's doubt, which logos asks for too
+    // (its objections), so logos's own weakest, how it works, is not added.
+    expect(gapsOf({ view })).toEqual([
+      expect.objectContaining({ id: 'objection', sources: [{ kind: 'appeal', appeal: 'ethos' }] }),
+    ]);
   });
 });
 
@@ -304,7 +341,26 @@ const idsOf = (list: unknown): string[] =>
       })
     : [];
 
-const FORBIDDEN = [...new Set(INTERNAL.flatMap((k) => idsOf(DOCUMENT[k]))), ...MODEL_TERMS];
+/**
+ * Words about how the model works. The app's own templates are held to all of
+ * them; review text only to `MODEL_TERMS`, since a writer's fact may use the
+ * rest (a product's weight).
+ */
+const TEMPLATE_TERMS = [
+  ...MODEL_TERMS,
+  'weight',
+  'weights',
+  'formula',
+  'lever',
+  'levers',
+  'judge',
+  'judges',
+];
+/** The model's id-shaped ids: a plain-word id (`audience`) is shown in the report as a name. */
+const MODEL_IDS = [...new Set(INTERNAL.flatMap((k) => idsOf(DOCUMENT[k])))].filter((id) =>
+  /[_\d]/.test(id)
+);
+const FORBIDDEN = [...MODEL_IDS, ...TEMPLATE_TERMS];
 const textOf = (g: Gap) => [g.missing, g.question, g.why, ...g.found, g.id].join('\n');
 const leaks = (gaps: Gap[]) =>
   gaps.flatMap((g) =>
@@ -319,13 +375,7 @@ const leaks = (gaps: Gap[]) =>
 describe('no gap carries the model’s internal vocabulary', () => {
   it('checks against a real list: the model’s dimensions, moves, levers and the rest', () => {
     expect(FORBIDDEN.length).toBeGreaterThan(100);
-    for (const id of [
-      'eth_borrowed',
-      'mv_specific_testimonial',
-      'rf_hype',
-      'judge_ethos',
-      'ethos',
-    ]) {
+    for (const id of ['eth_borrowed', 'mv_specific_testimonial', 'rf_hype', 'judge_ethos']) {
       expect(FORBIDDEN).toContain(id);
     }
   });
@@ -338,6 +388,13 @@ describe('no gap carries the model’s internal vocabulary', () => {
     ];
     expect(all.length).toBeGreaterThan(10);
     expect(leaks(all)).toEqual([]);
+  });
+
+  it('keeping a writer’s fact that shares a word with a plain-word id or an ordinary word', () => {
+    // `move` is a duty's id and `audience` a group's; the report shows both as names.
+    const label = 'what would move your audience to reply, and the product’s weight';
+    const gaps = gapsOf({ view: blank(), rewriteDraft: `Hi [ADD: ${label}].` });
+    expect(gaps).toEqual([expect.objectContaining({ id: 'placeholder-p1', missing: label })]);
   });
 
   it('leaving out review text that carries it', () => {

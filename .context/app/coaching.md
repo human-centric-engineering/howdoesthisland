@@ -20,14 +20,14 @@ them (t-110), the facts it keeps (t-109) and the worked example's exchange
 It takes a browser session or an API key with the `assess` scope. It answers
 `{ assessmentId, gaps }`, and each gap is:
 
-| Field      | What it holds                                                                                                                                                    |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`       | Stable for the same review, and what an answer is keyed to: a topic (`customer-proof`), `placeholder-p1`, `recommendation-4` or `brief-offer`.                   |
-| `missing`  | What is missing, in a few words.                                                                                                                                 |
-| `question` | What to ask the writer, about their own situation, never about the model.                                                                                        |
-| `why`      | Why it matters, in a sentence.                                                                                                                                   |
-| `found`    | What the review said about it in its own words (a recommendation's issue, a note), strongest first, for the coach to quote. Empty when it said nothing usable.   |
-| `sources`  | Every place in the report that asks for it, by the report's own numbering: a placeholder's id, a recommendation's or note's number, a low appeal, a brief field. |
+| Field      | What it holds                                                                                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`       | Stable for the same review, and what an answer is keyed to: a topic (`customer-proof`), `placeholder-p1`, `recommendation-4` or `brief-offer`.                        |
+| `missing`  | What is missing, in a few words.                                                                                                                                      |
+| `question` | What to ask the writer, about their own situation, never about the model.                                                                                             |
+| `why`      | Why it matters, in a sentence.                                                                                                                                        |
+| `found`    | What the review said about it in its own words (a recommendation's issue, a note), strongest first, for the coach to quote. Empty when it said nothing usable.        |
+| `sources`  | Every place in the report that asks for it, by the report's own numbering: a placeholder's id, a recommendation's or note's number, a low appeal's id, a brief field. |
 
 Errors: 404 `NOT_FOUND` for a review not in this workspace (another
 workspace's id reads the same), and 409 `ASSESSMENT_NOT_FINISHED` for one still
@@ -48,15 +48,19 @@ own order):
    (`parsePlaceholders`, `lib/app/frameworks/placeholders.ts`) is a gap, asked
    in its own words. The editor has already said it cannot go on without it.
 2. **Recommendations whose suggested rewrite leaves a slot**, by impact: high,
-   then medium, then low. A slot is a part in brackets:
-   `We [result, with a number] for [a named client like her] last year.` It is a
-   fact the reviewer could not supply. A recommendation with no slot (cut a
-   superlative, shorten a sentence) is a change the rewrite can make alone, so
-   it is not a gap.
+   then medium, then low, read as the report reads it (`High` is high). A slot
+   is a part in brackets:
+   `We [result, with a number] for [a named client like her] last year.` It is
+   a fact the reviewer could not supply. A citation (`[1]`), `[sic]` or a link
+   is text, not a slot. A recommendation with no slot (cut a superlative,
+   shorten a sentence) is a change the rewrite can make alone, so it is not a
+   gap.
 3. **Notes on weaknesses**, where the weakness needs a fact. A note on polish,
    structure or clarity does not.
 4. **Appeals that scored low** (below 40, the model's Weak band) and have no
-   gap yet: one gap each, from the appeal's weakest part that needs a fact.
+   gap yet: one gap each, from the appeal's weakest part that needs a fact. A
+   gap one low appeal gives counts for the next, so two that share a fact are
+   asked it once.
 5. **The project's empty brief fields**, last: offer, audience, voice, markets,
    goals. Only for a review in a project.
 
@@ -86,11 +90,21 @@ Once facts are saved (t-109), they will drop gaps too.
 
 The questions are the app's own words, written per topic. Text taken from the
 review (a recommendation's issue, a note, a placeholder's label) is used only
-when it carries none of the model's ids (`modelVocabulary`: its appeals,
-dimensions, moves, levers, red flags, lenses, duties, groups and judges) and
-none of the words in `MODEL_TERMS` (rubric, weights, dimension, judge and the
-like). A `found` entry that does is left out. A placeholder or a
-recommendation that would have to be asked in such words is not asked at all.
+when it carries none of the model's ids and none of the words in
+`MODEL_TERMS` (rubric, dimension, weighting).
+
+The ids (`modelVocabulary`) are those of its appeals, dimensions, moves,
+levers, red flags, lenses, duties, groups and judges, but only the id-shaped
+ones, with an underscore or a digit: `eth_borrowed`, `mv_specific_testimonial`,
+`judge_ethos`. An id that is a plain word (`audience`, `move`, `ethos`) is shown
+in the report as a name, so it is not private, and banning it would drop a
+writer's fact that happens to use the word ("what would move your audience").
+`MODEL_TERMS` is kept as short for the same reason: a fact may mention a
+product's weight or formula. The app's own templates are held to the wider list
+(weights, formula, levers, judges as well) by their test.
+
+A `found` entry that carries one is left out. A placeholder or a recommendation
+that would have to be asked in such words is not asked at all.
 Topics are keyed by the app's own names, never the model's, so a gap's `id`
 reveals nothing either.
 
