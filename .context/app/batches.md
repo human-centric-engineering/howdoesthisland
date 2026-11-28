@@ -98,14 +98,19 @@ every item at once would only have the rest of the claims refused.
 
 ## The per-user allowance
 
-Items that call AI reviewers count against **`BATCH_ITEMS_PER_HOUR`** (200) per
-user, not the 10-a-minute cap a single review and a comparison's drafts count
-against (`AI_ASSESSMENTS_PER_MINUTE`). That cap would refuse any batch over 10
-items; counting a whole batch as one request would let a runaway script queue
-thousands of reviews an hour. 200 an hour is two full batches, about what a
-workspace works through three at a time. A batch without room is 429
-`RATE_LIMIT_EXCEEDED` and none of its items is counted. A `quick` batch calls no
-model and is not counted.
+Every item counts against **`BATCH_ITEMS_PER_HOUR`** (200) per user, not the
+10-a-minute cap a single review and a comparison's drafts count against
+(`AI_ASSESSMENTS_PER_MINUTE`). That cap would refuse any batch over 10 items;
+counting a whole batch as one request would let a runaway script queue thousands
+of reviews an hour. 200 an hour is two full batches, about what a workspace works
+through three at a time. A `quick` batch counts too: it calls no model, but each
+item is still a queued run, and each page a fetch the server makes for the caller.
+
+Room is checked before the budget is held and again after. The items are counted
+once the batch is stored (`onStored`), so a batch refused at any step, the write
+included, counts none: 429 `RATE_LIMIT_EXCEEDED` when there is no room. Two
+batches checked at the same moment can between them pass the allowance by one
+batch; it is an allowance, not a ledger.
 
 ## No verdict
 

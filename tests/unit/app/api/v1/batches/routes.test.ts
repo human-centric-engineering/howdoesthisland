@@ -621,9 +621,24 @@ describe('POST /api/v1/batches — the per-user allowance', () => {
     expect(fake.holds).toEqual([]);
   });
 
-  it('counts nothing for items that call no AI reviewer', async () => {
-    await batch({ judges: undefined, profile: 'quick', items: texts(DRAFT_A, DRAFT_B) });
+  it('counts items that call no AI reviewer too: each is still a queued run, and a page a fetch', async () => {
+    await batch({
+      judges: undefined,
+      profile: 'quick',
+      items: [...texts(DRAFT_A), { url: 'https://example.com/pricing' }],
+    });
 
+    expect(batchItemLimiter.peek(`user:${ALICE}`).remaining).toBe(BATCH_ITEMS_PER_HOUR - 2);
+  });
+
+  it('counts none of a batch the write refuses after every check passed', async () => {
+    fake.db.assessmentSet.create.mockRejectedValueOnce(new Error('the write failed'));
+
+    const res = await post({ judges: TWO, items: texts(DRAFT_A, DRAFT_B, DRAFT_C) });
+
+    expect(res.status).toBe(500);
+    expect(fake.sets).toEqual([]);
+    expect(fake.holds).toEqual([]);
     expect(batchItemLimiter.peek(`user:${ALICE}`).remaining).toBe(BATCH_ITEMS_PER_HOUR);
   });
 });

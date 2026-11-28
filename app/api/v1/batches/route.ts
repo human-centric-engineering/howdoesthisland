@@ -27,9 +27,9 @@
  * `VALIDATION_ERROR`. 402 `INSUFFICIENT_CREDITS` / `BUDGET_EXCEEDED` when the
  * workspace cannot cover every item together: nothing is stored, and no item
  * is reviewed. 429 `RATE_LIMIT_EXCEEDED` when the items would take the caller
- * past `BATCH_ITEMS_PER_HOUR` items that call AI reviewers: a batch's own
- * allowance, not the per-minute one a single review counts against; none is
- * counted when the batch is refused. 401, 403 as every route.
+ * past `BATCH_ITEMS_PER_HOUR` items: a batch's own allowance, not the
+ * per-minute one a single review counts against. Items are counted once the
+ * batch is stored, so none is counted when it is refused. 401, 403 as every route.
  *
  * GET query: `page`, `limit` (≤ 100), `projectId`. Each batch carries its
  * counts by state, not its items: that is the batch's own read. GET errors:
@@ -59,31 +59,37 @@ export const POST = withAuth(async (request: NextRequest, session) => {
   // Refused for its options, a text or the budget: nothing spent, nothing counted.
   const prepared = await prepareBatch(body);
   try {
-    if (prepared.judges.length > 0) {
-      // Every item is a review against the batch allowance. A batch without
-      // room is refused before it holds anything.
-      const key = `user:${session.user.id}`;
-      const items = body.items.length;
-      const refusedByCap = () => {
-        const room = batchItemLimiter.peek(key);
-        return room.remaining < items
-          ? createRateLimitResponse({ ...room, success: false, remaining: 0 })
-          : null;
-      };
-      const early = refusedByCap();
-      if (early) return early;
-      // Held before any item is counted, so a batch the locked budget check
-      // refuses counts none of them.
-      await holdBatchBudget(body, prepared);
-      // Room checked again and every item counted with no await between.
-      const late = refusedByCap();
-      if (late) return late;
-      for (let i = 0; i < items; i++) batchItemLimiter.check(key);
-    }
-    const batch = await createBatch(body, prepared, {
-      userId: session.user.id,
-      apiKeyId: apiKeyIdOf(session),
-    });
+    // Every item is a review against the batch allowance, `quick` ones too:
+    // each is still a queued run, and a page a fetch. A batch without room is
+    // refused before it holds anything.
+    const key = `user:${session.user.id}`;
+    const items = body.items.length;
+    const refusedByCap = () => {
+      const room = batchItemLimiter.peek(key);
+      return room.remaining < items
+        ? createRateLimitResponse({ ...room, success: false, remaining: 0 })
+        : null;
+    };
+    const early = refusedByCap();
+    if (early) return early;
+    // Holds nothing for a batch that calls no AI reviewer.
+    await holdBatchBudget(body, prepared);
+    // Room checked again after the hold, which may have waited on its lock.
+    const late = refusedByCap();
+    if (late) return late;
+    const batch = await createBatch(
+      body,
+      prepared,
+      { userId: session.user.id, apiKeyId: apiKeyIdOf(session) },
+      {
+        // Counted once stored, so a batch the write refuses (its project
+        // archived meanwhile, say) counts none. Two batches checked together
+        // can pass the allowance by one of them; it is an allowance.
+        onStored: () => {
+          for (let i = 0; i < items; i++) batchItemLimiter.check(key);
+        },
+      }
+    );
     return successResponse(batch, undefined, { status: 202 });
   } finally {
     // The budget it held, however the request ended (a no-op once stored).

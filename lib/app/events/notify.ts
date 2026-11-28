@@ -275,40 +275,40 @@ export async function sweepFinishedEvents(
     }
   }
 
-  // Comparisons and batches alike: a batch is `SKIPPED` from birth (t-101),
-  // so it is due once none of its items still runs.
-  const sets = await prisma.assessmentSet.findMany({
-    where: {
-      orgId,
-      notifiedAt: null,
-      verdictStatus: { in: ['COMPLETED', 'FAILED', 'SKIPPED'] },
-      // Not one whose drafts still run: a comparison made with too few judges
-      // is `SKIPPED` from the start, and would hold a place in every pass.
-      members: { none: { assessment: { status: { in: ['QUEUED', 'RUNNING'] } } } },
-      updatedAt: { lt: before, gte: since },
-    },
-    // Newest first, so a row whose send keeps failing cannot hold the batch.
-    orderBy: { updatedAt: 'desc' },
-    take: SWEEP_BATCH,
-    select: { id: true, kind: true },
-  });
-  let comparisons = 0;
-  let batches = 0;
-  for (const { id, kind } of sets) {
-    try {
-      if (await sendSetFinished(id, kind)) {
-        if (kind === 'BATCH') batches += 1;
-        else comparisons += 1;
-      }
-    } catch (err) {
-      failed += 1;
-      logger.warn('The sweep could not queue a finished set’s event', {
-        setId: id,
+  // Comparisons and batches, each kind with its own share of the pass, so
+  // owed batches cannot crowd out owed comparisons. A batch is `SKIPPED` from
+  // birth (t-101), so it is due once none of its items still runs.
+  const sent = { COMPARISON: 0, BATCH: 0 };
+  for (const kind of ['COMPARISON', 'BATCH'] as const) {
+    const sets = await prisma.assessmentSet.findMany({
+      where: {
+        orgId,
         kind,
-        error: err instanceof Error ? err.message : String(err),
-      });
+        notifiedAt: null,
+        verdictStatus: { in: ['COMPLETED', 'FAILED', 'SKIPPED'] },
+        // Not one whose drafts still run: a comparison made with too few judges
+        // is `SKIPPED` from the start, and would hold a place in every pass.
+        members: { none: { assessment: { status: { in: ['QUEUED', 'RUNNING'] } } } },
+        updatedAt: { lt: before, gte: since },
+      },
+      // Newest first, so a row whose send keeps failing cannot hold the batch.
+      orderBy: { updatedAt: 'desc' },
+      take: SWEEP_BATCH,
+      select: { id: true },
+    });
+    for (const { id } of sets) {
+      try {
+        if (await sendSetFinished(id, kind)) sent[kind] += 1;
+      } catch (err) {
+        failed += 1;
+        logger.warn('The sweep could not queue a finished set’s event', {
+          setId: id,
+          kind,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 
-  return { assessments, comparisons, batches, failed };
+  return { assessments, comparisons: sent.COMPARISON, batches: sent.BATCH, failed };
 }

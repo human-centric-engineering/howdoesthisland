@@ -23,14 +23,15 @@ export function batchMaxItems(): number {
 export const ITEM_LABEL_MAX = 80;
 
 /**
- * Items that call AI reviewers, per user per hour, across every batch (a
- * `quick` batch calls no model and is not counted). A batch's own allowance,
+ * Items per user per hour, across every batch. A `quick` batch's items count
+ * too: none calls a model, but each is still a queued run, and a page is a
+ * fetch the server makes on the caller's behalf. A batch's own allowance,
  * in place of the per-minute one a single review or a comparison's drafts
  * count against (`AI_ASSESSMENTS_PER_MINUTE`, 10): that one would refuse any
  * batch over 10 items, and counting a batch as one request would let a
  * runaway script queue thousands of reviews an hour. Sized to what a
  * workspace works through, three at a time (`RUNNING_PER_WORKSPACE`): two
  * full batches of 100 an hour. The budget and credit check bounds the spend
- * itself; this bounds how fast one person can queue it.
+ * itself; this bounds how fast one person can queue work and fetches.
  */
 export const BATCH_ITEMS_PER_HOUR = 200;

@@ -213,7 +213,7 @@ for). See [`webhooks.md`](./webhooks.md).
 is an existing review (t-84) is not counted here or below. The estimate is one
 review's times the drafts (`assertReviewFits` with a count), and the hold is
 taken under the workspace's lock for all of them at once
-(`reserveComparisonBudget`, `lib/app/usage/budget.ts`), one hold per draft. A
+(`reserveSetBudget`, `lib/app/usage/budget.ts`), one hold per draft. A
 workspace that cannot cover every draft is refused 402 `INSUFFICIENT_CREDITS` or
 `BUDGET_EXCEEDED` ("This comparison would cost about …"), and nothing is stored.
 Once the drafts are stored, the holds are released and each queued review holds
