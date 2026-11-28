@@ -60,13 +60,13 @@ answered too slowly, and two of the app's own senders can race (below). Use
 The routes are the workspace's settings, for its `OWNER` or `ADMIN` acting in
 it (or a platform admin who has entered it), by browser session only:
 
-| Route                                                       | What it does                                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `GET /api/v1/workspaces/{id}/event-subscriptions`           | The workspace's subscriptions. Never a secret or a header's value.                   |
-| `POST /api/v1/workspaces/{id}/event-subscriptions`          | `{ name, eventType, url, headers?, projectId?, isEnabled? }`. Answers `secret` once. |
-| `GET/PATCH/DELETE …/event-subscriptions/{subscriptionId}`   | Read, change or delete one. A `headers` change replaces them all.                    |
-| `POST …/event-subscriptions/{subscriptionId}/rotate-secret` | A new secret, answered once.                                                         |
-| `GET …/event-subscriptions/{subscriptionId}/deliveries`     | Its deliveries, newest first: status, attempts, last response, `eventId`.            |
+| Route                                                       | What it does                                                                                     |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/workspaces/{id}/event-subscriptions`           | The workspace's subscriptions, each with its `lastDelivery`. Never a secret or a header's value. |
+| `POST /api/v1/workspaces/{id}/event-subscriptions`          | `{ name, eventType, url, headers?, projectId?, isEnabled? }`. Answers `secret` once.             |
+| `GET/PATCH/DELETE …/event-subscriptions/{subscriptionId}`   | Read, change or delete one. A `headers` change replaces them all.                                |
+| `POST …/event-subscriptions/{subscriptionId}/rotate-secret` | A new secret, answered once.                                                                     |
+| `GET …/event-subscriptions/{subscriptionId}/deliveries`     | Its deliveries, newest first: status, attempts, last response, `eventId`.                        |
 
 The rules, each refused with 400 `VALIDATION_ERROR` unless it says otherwise:
 
@@ -104,7 +104,7 @@ for up to a minute. After rotating, accept both secrets for a minute.
 ### What a subscription is
 
 A core event hook (`AiEventHook`) in the workspace's org, with the app's event
-type (#465). Core signs, sends, retries (10 s, 60 s, 5 min) and records each
+type (#465). Core signs, sends, retries twice (after 10 s and 60 s; three attempts in all) and records each
 delivery, and caches hooks per org. Core's own hook routes are for platform
 admins only, including the one that rotates a secret, so the workspace's routes
 (`lib/app/events/subscriptions.ts`) do the same on core's exported helpers
@@ -115,6 +115,33 @@ Core's `loadHooks` also names the org when it reads hooks to send to, rather
 than leaving it to row isolation alone, and so does its retry pass (ledger row
 37), so at `multi` without the policies enabled one workspace's events still
 reach only its own hooks, and its retries are still pinned.
+
+## The settings page
+
+`/settings/webhooks` (t-100), linked from `/settings/workspace`, is these routes for a
+person: `components/app/settings/webhooks/webhooks-manager.tsx` over the page in
+`app/(protected)/settings/webhooks/`. It reads nothing else but `GET /api/v1/orgs` (the
+active workspace and the caller's role) and `GET /api/v1/projects` (what a webhook can be
+limited to).
+
+- **Who sees it.** The routes' rule, not one of its own: an `OWNER` or `ADMIN` of the
+  active workspace. A `MEMBER` is told who to ask and nothing is loaded for them. Not
+  found at `TENANCY_MODE=single`.
+- **No row fetches its own.** The list carries each subscription's newest delivery
+  (`lastDelivery`: one read per subscription, at most ten, in `listSubscriptions`;
+  Prisma's `distinct` would load every delivery and drop all but one in memory). Each read
+  finds the subscription's deliveries by core's `hookId` index and sorts them, since core
+  has no `(hookId, createdAt)` index; core's retention job prunes deliveries, which keeps
+  the sort small. A row's recent deliveries (the last ten) load only when someone opens
+  them.
+- **A secret is shown once**, in a dialog that holds the page's only copy: closing it
+  drops the value from state. Only its own buttons close it, not a click outside or
+  Escape, so a stray press cannot lose a secret nobody has copied. Nothing else can make a
+  secret while one is showing.
+- **Not in the page: custom headers, and changing an address or event.** The routes take
+  both; the page adds, switches, rotates and deletes. A receiver authenticates a delivery
+  by its signature, which needs no header, and a changed address is a new webhook with a
+  new secret, which is what the address's owner should hold anyway.
 
 ## Verifying a delivery
 
@@ -135,11 +162,12 @@ function verifyHowDoesThisLandWebhook(rawBody, headers, secret, nowSeconds) {
   if (!timestamp || !signature || !signature.startsWith('sha256=')) return false;
 
   const now = nowSeconds ?? Math.floor(Date.now() / 1000);
-  if (Math.abs(now - Number(timestamp)) > MAX_AGE_SECONDS) return false;
+  const sent = Number(timestamp);
+  if (!Number.isFinite(sent) || Math.abs(now - sent) > MAX_AGE_SECONDS) return false;
 
   const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
   const given = signature.slice('sha256='.length);
-  if (given.length !== expected.length) return false;
+  if (!/^[0-9a-f]{64}$/.test(given)) return false;
   return timingSafeEqual(Buffer.from(given, 'hex'), Buffer.from(expected, 'hex'));
 }
 
@@ -151,7 +179,9 @@ verify it, answer `2xx` quickly, then do the work. A non-`2xx` or a reply after 
 seconds is retried.
 
 `tests/unit/lib/app/events/verify-sample.test.ts` runs this block, as written
-here, against a body core signed.
+here, against a body core signed. The public docs show the same code at
+`/developers#webhooks` (`VERIFY_SAMPLE` in `components/app/developers/webhooks.ts`), and
+the same test fails if the two differ: change both together.
 
 ## Never lost: the outbox
 
@@ -189,3 +219,7 @@ resolves at once.
 - `tests/unit/app/api/v1/workspaces/[id]/event-subscriptions/route.test.ts`:
   who may reach the routes, what they refuse, that nothing returns a secret or a
   header value but the two answers that must, and the limit under its lock.
+- `tests/unit/components/app/settings/webhooks/webhooks-manager.test.tsx`: the page's
+  writes go through these routes only, a secret is shown once and gone once its dialog
+  closes, and deliveries render with their status. `tests/unit/app/(protected)/settings/webhooks/page.test.tsx`:
+  a `MEMBER` is kept out and nothing is loaded for them.

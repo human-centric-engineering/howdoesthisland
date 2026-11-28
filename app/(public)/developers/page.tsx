@@ -1,8 +1,8 @@
 /**
  * `/developers`: the developer docs (t-45, dp2b).
  *
- * Getting started, authentication, errors and limits, recipes, and the
- * reference. The reference is rendered from `openApiDocument()`, the document
+ * Getting started, authentication, errors and limits, recipes, webhooks
+ * (t-100), and the reference. The reference is rendered from `openApiDocument()`, the document
  * `GET /api/v1/openapi.json` serves, so the page cannot list a route the
  * document lacks; the scope table under Authentication is read from the same
  * document. Limits are read from the constants the limiters use.
@@ -35,6 +35,8 @@ import {
 } from '@/components/app/developers/operations';
 import { Prose } from '@/components/app/developers/prose';
 import { FIRST_REVIEW, RECIPES, curlFor } from '@/components/app/developers/recipes';
+import { SAMPLE_BODY, VERIFY_SAMPLE, WEBHOOK_EVENTS } from '@/components/app/developers/webhooks';
+import { WEBHOOKS_PAGE_HREF } from '@/components/app/settings/webhooks/schemas';
 
 const description =
   'How to call the HowDoesThisLand API: keys, errors and limits, recipes, and the full reference.';
@@ -50,6 +52,7 @@ const SECTIONS = [
   { id: 'authentication', title: 'Authentication' },
   { id: 'errors-and-limits', title: 'Errors and limits' },
   { id: 'recipes', title: 'Recipes' },
+  { id: 'webhooks', title: 'Webhooks' },
   { id: 'reference', title: 'Reference' },
 ] as const;
 
@@ -419,6 +422,76 @@ export default async function DevelopersPage() {
               ) : null}
             </article>
           ))}
+        </section>
+
+        <section id="webhooks" className="scroll-mt-24 space-y-4">
+          <h2 className="text-2xl font-semibold">Webhooks</h2>
+          <p>
+            Rather than asking a review again and again whether it has finished, give your workspace
+            an address to tell. A workspace&rsquo;s owners and admins add one on{' '}
+            <Link href={WEBHOOKS_PAGE_HREF} className="underline underline-offset-2">
+              Webhooks
+            </Link>
+            , in its settings. Each time a review or a comparison finishes, the address is sent a
+            signed <code>POST</code> saying which one and how it ended; read the rest from the API
+            by its id.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left">
+                  <th className="py-1 pr-4">Event</th>
+                  <th className="py-1">Sent when</th>
+                </tr>
+              </thead>
+              <tbody>
+                {WEBHOOK_EVENTS.map(([event, sentWhen]) => (
+                  <tr key={event} className="border-t align-top">
+                    <td className="py-1 pr-4 font-mono text-xs">{event}</td>
+                    <td className="py-1">
+                      <Prose>{sentWhen}</Prose>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p>
+            One event per kind, at every way it can end, with the state in the body. A message holds
+            ids, states and scores, never the copy:
+          </p>
+          <CodeBlock label="A review finished">{SAMPLE_BODY}</CodeBlock>
+          <p>
+            <code>app.comparison.finished</code> carries <code>comparisonId</code>,{' '}
+            <code>status</code>, <code>projectId</code>, <code>verdict</code> and each draft&rsquo;s{' '}
+            <code>position</code>, <code>assessmentId</code>, <code>status</code>,{' '}
+            <code>overall</code> and <code>band</code>. A webhook limited to a project is sent only
+            that project&rsquo;s work.
+          </p>
+          <h3 className="pt-2 font-semibold">Answering, and repeats</h3>
+          <p>
+            Answer with a <code>2xx</code> within 10 seconds, then do the work. Anything else is
+            tried twice more, after 10 seconds and after a minute. A message can arrive more than
+            once, so use <code>data.eventId</code> to ignore a repeat. The webhook&rsquo;s page
+            lists its recent deliveries, with the answer your receiver gave each.
+          </p>
+          <h3 className="pt-2 font-semibold">Checking the signature</h3>
+          <p>
+            Each delivery carries <code>X-Sunrise-Timestamp</code> (Unix seconds) and{' '}
+            <code>X-Sunrise-Signature: sha256=&lt;hex&gt;</code>, the HMAC-SHA256 of{' '}
+            <code>&lt;timestamp&gt;.&lt;raw body&gt;</code> keyed with the webhook&rsquo;s secret.
+            The secret is shown once, when the webhook is added or given a new one. Check the
+            signature against the raw body, before you parse it, and refuse an old timestamp. After
+            giving a webhook a new secret, accept both for a minute.
+          </p>
+          <CodeBlock label="verify.js">{VERIFY_SAMPLE}</CodeBlock>
+          <p>
+            In an Express receiver, read the body raw (
+            <code>
+              express.raw({'{'} type: &apos;application/json&apos; {'}'})
+            </code>
+            ), verify it, and answer before doing the work.
+          </p>
         </section>
 
         <section id="reference" className="scroll-mt-24 space-y-4">

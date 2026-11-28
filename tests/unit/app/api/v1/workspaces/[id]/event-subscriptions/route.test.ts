@@ -40,7 +40,7 @@ const mockPrisma = vi.hoisted(() => {
       updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
-    aiEventHookDelivery: { findMany: vi.fn(), count: vi.fn() },
+    aiEventHookDelivery: { findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
     $executeRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -160,6 +160,7 @@ beforeEach(() => {
   mockPrisma.aiEventHook.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.aiEventHook.deleteMany.mockResolvedValue({ count: 1 });
   mockPrisma.project.findFirst.mockResolvedValue({ archivedAt: null });
+  mockPrisma.aiEventHookDelivery.findFirst.mockResolvedValue(null);
 });
 
 describe('who may reach the webhook routes', () => {
@@ -245,6 +246,41 @@ describe('GET …/event-subscriptions', () => {
     const text = JSON.stringify(body);
     expect(text).not.toContain('a'.repeat(64));
     expect(text).not.toContain('receiver-token');
+  });
+
+  it('gives each hook its newest delivery in the workspace, or null before any was sent', async () => {
+    const second = 'cmhook00000000000000hook2';
+    mockPrisma.aiEventHook.findMany.mockResolvedValue([hookRow(), hookRow({ id: second })]);
+    mockPrisma.aiEventHookDelivery.findFirst.mockImplementation(
+      async ({ where }: { where: { hookId: string } }) =>
+        where.hookId === SUB
+          ? {
+              status: 'failed',
+              attempts: 2,
+              lastResponseCode: 503,
+              createdAt: new Date('2026-11-27T11:00:00Z'),
+            }
+          : null
+    );
+
+    const body = await json(await collection.GET(req(BASE), wsParams()));
+
+    expect(body.data.subscriptions.map((s: { lastDelivery: unknown }) => s.lastDelivery)).toEqual([
+      {
+        status: 'failed',
+        attempts: 2,
+        lastResponseCode: 503,
+        createdAt: '2026-11-27T11:00:00.000Z',
+      },
+      null,
+    ]);
+    expect(mockPrisma.aiEventHookDelivery.findFirst.mock.calls.map((c) => c[0])).toEqual([
+      expect.objectContaining({
+        where: { orgId: WS, hookId: SUB },
+        orderBy: { createdAt: 'desc' },
+      }),
+      expect.objectContaining({ where: { orgId: WS, hookId: second } }),
+    ]);
   });
 });
 

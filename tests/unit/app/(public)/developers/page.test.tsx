@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 /**
- * Tests: `/developers` (t-45).
+ * Tests: `/developers` (t-45, webhooks t-100).
  *
  * The page reads no session, so rendering it with nothing signed in is the
  * signed-out view. It has to carry each section the docs promise, a recipe
@@ -25,6 +25,7 @@ vi.mock('@/lib/env', () => ({ env: mockEnv }));
 
 import DevelopersPage, { metadata } from '@/app/(public)/developers/page';
 import { RECIPES } from '@/components/app/developers/recipes';
+import { VERIFY_SAMPLE } from '@/components/app/developers/webhooks';
 import { SECURITY_CONSTANTS } from '@/lib/security/constants';
 import { AI_ASSESSMENTS_PER_MINUTE } from '@/lib/app/assessments/limits';
 
@@ -45,6 +46,7 @@ describe('DevelopersPage', () => {
       ['authentication', 'Authentication'],
       ['errors-and-limits', 'Errors and limits'],
       ['recipes', 'Recipes'],
+      ['webhooks', 'Webhooks'],
       ['reference', 'Reference'],
     ]) {
       expect(screen.getByRole('heading', { level: 2, name: title })).toBeInTheDocument();
@@ -64,6 +66,20 @@ describe('DevelopersPage', () => {
     for (const link of screen.getAllByRole('link', { name: 'API keys' })) {
       expect(link).toHaveAttribute('href', '/settings/api-keys');
     }
+  });
+
+  it('documents webhooks: both events, the tested verify sample, and where to add one (t-100)', async () => {
+    const { container } = render(await DevelopersPage());
+    const section = container.querySelector('section#webhooks') as HTMLElement;
+    const scoped = within(section);
+    expect(scoped.getByText('app.assessment.finished')).toBeInTheDocument();
+    expect(scoped.getAllByText('app.comparison.finished').length).toBeGreaterThan(0);
+    const codes = [...section.querySelectorAll('pre code')].map((c) => c.textContent);
+    expect(codes).toContain(VERIFY_SAMPLE);
+    expect(scoped.getByRole('link', { name: 'Webhooks' })).toHaveAttribute(
+      'href',
+      '/settings/webhooks'
+    );
   });
 
   it('shows every recipe, with its request and its script', async () => {
