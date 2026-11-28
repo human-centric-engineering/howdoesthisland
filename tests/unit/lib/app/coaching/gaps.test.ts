@@ -32,10 +32,13 @@ import {
   REVIEWS,
 } from '@/tests/unit/lib/app/coaching/example-view';
 
+/** A finished rewrite with this draft. */
+const draft = (text: string, id = 'rw-1') => ({ id, draft: text });
+
 const gapsOf = (over: Partial<GapsInput> = {}): Gap[] =>
   buildGaps({
     view: DRAFT_VIEW,
-    rewriteDraft: null,
+    rewrite: null,
     known: { brief: null },
     vocabulary: modelVocabulary(MODEL),
     ...over,
@@ -111,15 +114,25 @@ describe('the worked example’s final draft', () => {
 describe('placeholders in the latest rewrite', () => {
   it('come first, each asked in its own words', () => {
     const gaps = gapsOf({
-      rewriteDraft:
-        'Hi Sarah,\n\n[ADD: a customer like Sarah’s] saw [ADD: the result, in hours].\n\nAgain: [ADD: a customer like Sarah’s].',
+      rewrite: draft(
+        'Hi Sarah,\n\n[ADD: a customer like Sarah’s] saw [ADD: the result, in hours].\n\nAgain: [ADD: a customer like Sarah’s].'
+      ),
     });
-    expect(ids(gaps).slice(0, 2)).toEqual(['placeholder-p1', 'placeholder-p2']);
+    expect(ids(gaps).slice(0, 2)).toEqual(['placeholder-rw-1-p1', 'placeholder-rw-1-p2']);
     expect(gaps[0]).toMatchObject({
       missing: 'a customer like Sarah’s',
       question: 'Your rewrite has a gap for a customer like Sarah’s. What should go there?',
-      sources: [{ kind: 'placeholder', placeholderId: 'p1' }],
+      sources: [{ kind: 'placeholder', rewriteId: 'rw-1', placeholderId: 'p1' }],
     });
+  });
+
+  it('are keyed to their rewrite, since a later one numbers its own from p1', () => {
+    const later = gapsOf({ rewrite: draft('[ADD: the hours saved each week]', 'rw-2') });
+    expect(later[0]).toMatchObject({
+      id: 'placeholder-rw-2-p1',
+      missing: 'the hours saved each week',
+    });
+    expect(ids(later)).not.toContain('placeholder-rw-1-p1');
   });
 
   it('give nothing with no rewrite', () => {
@@ -162,6 +175,15 @@ describe('recommendations', () => {
     ]);
   });
 
+  it('put an impact they do not know after low, as the report does', () => {
+    const view = blank();
+    view.recommendations = [
+      { ...rec, number: 1, impact: 'critical' },
+      { ...rec, number: 2, dimensionId: 'kai_call', impact: 'low' },
+    ];
+    expect(ids(gapsOf({ view }))).toEqual(['small-ask', 'customer-proof']);
+  });
+
   it('read impact in any case, as the report does', () => {
     const view = blank();
     view.recommendations = [
@@ -171,8 +193,11 @@ describe('recommendations', () => {
     expect(ids(gapsOf({ view }))).toEqual(['small-ask', 'customer-proof']);
   });
 
-  it('do not take a citation or an editor’s mark for a slot', () => {
+  it('do not take a citation, a link or an editor’s mark for a slot', () => {
     expect(slotsOf('Teams cut onboarding by 30% [1], or more [2, 3] [sic] […].')).toEqual([]);
+    expect(
+      slotsOf('See our [case study][1] and [the guide](/guide). [x] Done [emphasis added].')
+    ).toEqual([]);
     expect(slotsOf('We cut [a cost] by [a number] [1].')).toEqual(['a cost', 'a number']);
   });
 
@@ -384,7 +409,7 @@ describe('no gap carries the model’s internal vocabulary', () => {
     const all = [
       ...gapsOf(),
       ...gapsOf({ view: FINAL_VIEW }),
-      ...gapsOf({ rewriteDraft: '[ADD: a customer like Sarah’s]', known: { brief: {} } }),
+      ...gapsOf({ rewrite: draft('[ADD: a customer like Sarah’s]'), known: { brief: {} } }),
     ];
     expect(all.length).toBeGreaterThan(10);
     expect(leaks(all)).toEqual([]);
@@ -393,8 +418,8 @@ describe('no gap carries the model’s internal vocabulary', () => {
   it('keeping a writer’s fact that shares a word with a plain-word id or an ordinary word', () => {
     // `move` is a duty's id and `audience` a group's; the report shows both as names.
     const label = 'what would move your audience to reply, and the product’s weight';
-    const gaps = gapsOf({ view: blank(), rewriteDraft: `Hi [ADD: ${label}].` });
-    expect(gaps).toEqual([expect.objectContaining({ id: 'placeholder-p1', missing: label })]);
+    const gaps = gapsOf({ view: blank(), rewrite: draft(`Hi [ADD: ${label}].`) });
+    expect(gaps).toEqual([expect.objectContaining({ id: 'placeholder-rw-1-p1', missing: label })]);
   });
 
   it('leaving out review text that carries it', () => {
@@ -411,9 +436,9 @@ describe('no gap carries the model’s internal vocabulary', () => {
     ];
     const gaps = gapsOf({
       view,
-      rewriteDraft: 'Hi [ADD: proof for eth_borrowed] and [ADD: a client].',
+      rewrite: draft('Hi [ADD: proof for eth_borrowed] and [ADD: a client].'),
     });
-    expect(ids(gaps)).toEqual(['placeholder-p2', 'customer-proof']);
+    expect(ids(gaps)).toEqual(['placeholder-rw-1-p2', 'customer-proof']);
     expect(gaps[1].found).toEqual([]);
     expect(leaks(gaps)).toEqual([]);
   });

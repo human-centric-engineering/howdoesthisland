@@ -16,7 +16,7 @@
  *
  * **Where gaps come from**, strongest first (the order of the list):
  *
- * 1. **The latest rewrite's placeholders** (`[ADD: …]`,
+ * 1. **The placeholders of the rewrite that finished last** (`[ADD: …]`,
  *    `lib/app/frameworks/placeholders.ts`): the editor has already said it
  *    cannot write on without them.
  * 2. **Recommendations whose suggested rewrite has a slot in brackets**
@@ -32,7 +32,9 @@
  *
  * Several sources that need the same fact are one gap ({@link TOPICS}): a
  * note and a recommendation on borrowed credibility both ask for a customer
- * like the reader, so the writer is asked once, and the gap lists both.
+ * like the reader, so the writer is asked once, and the gap lists both. A
+ * placeholder stays its own gap: its label is free text, and matching it to a
+ * topic would take an AI call.
  *
  * **A gap already answered is dropped.** For now that is the project's
  * brief: a filled field answers its own gap, and the audience answers the
@@ -73,14 +75,18 @@ export const MODEL_TERMS = [
 
 /** Where a gap came from: what the report shows, by its own numbering. */
 export type GapSource =
-  | { kind: 'placeholder'; placeholderId: string }
+  /** A placeholder in a rewrite: that rewrite's id, and the placeholder's id in its draft. */
+  | { kind: 'placeholder'; rewriteId: string; placeholderId: string }
   | { kind: 'recommendation'; number: number }
   | { kind: 'note'; number: number }
   | { kind: 'appeal'; appeal: string }
   | { kind: 'brief'; field: BriefField };
 
 export interface Gap {
-  /** Stable for the same review: what an answer is keyed to. */
+  /**
+   * Stable while the review and its latest rewrite stay the same: what an
+   * answer is keyed to. A placeholder's names its rewrite.
+   */
   id: string;
   /** What is missing, in a few words. */
   missing: string;
@@ -106,8 +112,8 @@ export interface Known {
 
 export interface GapsInput {
   view: ReportView;
-  /** The latest finished rewrite's draft, or `null` for none. */
-  rewriteDraft: string | null;
+  /** The rewrite that finished last, or `null` for none. */
+  rewrite: { id: string; draft: string } | null;
   known: Known;
   /** The model's own ids ({@link modelVocabulary}): never in a gap's text. */
   vocabulary: readonly string[];
@@ -285,23 +291,30 @@ export function modelVocabulary(model: ReportModel): string[] {
 
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Whether `text` carries any of `words`, as a whole word, ignoring case. */
-export function carriesVocabulary(text: string, words: readonly string[]): boolean {
-  return words.some((w) =>
-    new RegExp(`(^|[^\\p{L}\\p{N}_])${escape(w)}($|[^\\p{L}\\p{N}_])`, 'iu').test(text)
+/**
+ * A test for whether a text carries any of `words`, as a whole word, ignoring
+ * case: one pattern, built once for every text a list is checked against.
+ */
+export function vocabularyTest(words: readonly string[]): (text: string) => boolean {
+  if (words.length === 0) return () => false;
+  const pattern = new RegExp(
+    `(?:^|[^\\p{L}\\p{N}_])(?:${words.map(escape).join('|')})(?:$|[^\\p{L}\\p{N}_])`,
+    'iu'
   );
+  return (text) => pattern.test(text);
 }
 
 // ─── Building the list ──────────────────────────────────────────────────────
 
 /**
  * A slot in a suggested rewrite: `[a named client like her]`. Not `[ADD: …]`,
- * a link's `[text](url)`, a citation (`[1]`, `[2, 3]`) or an editor's `[sic]`,
+ * a link's `[text](url)` or `[text][1]`, a citation (`[1]`, `[2, 3]`), a
+ * single letter (`[x]`) or an editor's `[sic]` or `[emphasis added]`,
  * which are text, not facts to ask for.
  */
-const SLOT = /\[(?!ADD:)([^[\]\n]+)\](?!\()/gi;
+const SLOT = /\[(?!ADD:)([^[\]\n]+)\](?![([])/gi;
 
-const NOT_A_SLOT = /^(?:[\d\s,–-]+|sic|…|\.\.\.)$/i;
+const NOT_A_SLOT = /^(?:[\d\s,–-]+|\p{L}|sic|…|\.\.\.|emphasis (?:added|mine|in original))$/iu;
 
 /** The slots in a recommendation's suggested rewrite, each once, in order. */
 export function slotsOf(rewrite: string): string[] {
@@ -320,7 +333,10 @@ export function slotsOf(rewrite: string): string[] {
 /** Strength of a source, for the order: lower first. */
 const IMPACT_RANK: Readonly<Record<string, number>> = { high: 1, medium: 2, low: 3 };
 /** As the report orders them (`impactRank` in `view.ts`): any case, an unknown impact as low. */
-const impactRank = (impact: string): number => IMPACT_RANK[impact.toLowerCase()] ?? IMPACT_RANK.low;
+const impactRank = (impact: string): number =>
+  IMPACT_RANK[impact.toLowerCase()] ?? UNKNOWN_IMPACT_RANK;
+/** After low, as the report puts an impact it does not know, and before every note. */
+const UNKNOWN_IMPACT_RANK = 3.5;
 const NOTE_RANK = 4;
 const APPEAL_RANK = 5;
 const BRIEF_RANK = 6;
@@ -332,9 +348,9 @@ interface Draft extends Gap {
 }
 
 /** The review's gaps, strongest first, those already answered left out. */
-export function buildGaps({ view, rewriteDraft, known, vocabulary }: GapsInput): Gap[] {
-  const forbidden = [...vocabulary, ...MODEL_TERMS];
-  const clean = (text: string): boolean => !carriesVocabulary(text, forbidden);
+export function buildGaps({ view, rewrite, known, vocabulary }: GapsInput): Gap[] {
+  const carries = vocabularyTest([...vocabulary, ...MODEL_TERMS]);
+  const clean = (text: string): boolean => !carries(text);
   const answered = (field: BriefField | undefined): boolean =>
     field !== undefined && (known.brief?.[field] ?? '').trim() !== '';
 
@@ -375,15 +391,16 @@ export function buildGaps({ view, rewriteDraft, known, vocabulary }: GapsInput):
 
   // 1. The latest rewrite's placeholders. A label carrying the model's words
   // cannot be asked about in its own words, and has no other, so it is left.
-  for (const [i, p] of parsePlaceholders(rewriteDraft ?? '').entries()) {
-    if (!clean(p.label)) continue;
+  // Keyed to their rewrite too: a later rewrite numbers its own from `p1`.
+  for (const [i, p] of rewrite ? parsePlaceholders(rewrite.draft).entries() : []) {
+    if (!rewrite || !clean(p.label)) continue;
     add({
-      id: `placeholder-${p.id}`,
+      id: `placeholder-${rewrite.id}-${p.id}`,
       missing: p.label,
       question: `Your rewrite has a gap for ${p.label}. What should go there?`,
       why: 'Only you know this, so the rewrite left it for you to fill.',
       found: [],
-      sources: [{ kind: 'placeholder', placeholderId: p.id }],
+      sources: [{ kind: 'placeholder', rewriteId: rewrite.id, placeholderId: p.id }],
       rank: 0,
       order: i,
     });

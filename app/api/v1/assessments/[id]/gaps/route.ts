@@ -4,9 +4,9 @@
  *
  * The facts only the writer knows that the review found missing, strongest
  * first, each with a plain-words question about the writer's situation and
- * why it matters. Built from what the report shows, its latest rewrite's
- * placeholders and its project's brief, with no AI call. Gaps the brief
- * already answers are left out.
+ * why it matters. Built from what the report shows, the placeholders of the
+ * rewrite that finished last, and the project's brief, with no AI call. Gaps
+ * the brief already answers are left out.
  *
  * Authentication: a browser session, or an API key with the `assess` scope.
  *

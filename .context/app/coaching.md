@@ -20,14 +20,14 @@ them (t-110), the facts it keeps (t-109) and the worked example's exchange
 It takes a browser session or an API key with the `assess` scope. It answers
 `{ assessmentId, gaps }`, and each gap is:
 
-| Field      | What it holds                                                                                                                                                         |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`       | Stable for the same review, and what an answer is keyed to: a topic (`customer-proof`), `placeholder-p1`, `recommendation-4` or `brief-offer`.                        |
-| `missing`  | What is missing, in a few words.                                                                                                                                      |
-| `question` | What to ask the writer, about their own situation, never about the model.                                                                                             |
-| `why`      | Why it matters, in a sentence.                                                                                                                                        |
-| `found`    | What the review said about it in its own words (a recommendation's issue, a note), strongest first, for the coach to quote. Empty when it said nothing usable.        |
-| `sources`  | Every place in the report that asks for it, by the report's own numbering: a placeholder's id, a recommendation's or note's number, a low appeal's id, a brief field. |
+| Field      | What it holds                                                                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`       | Stable for the same review, and what an answer is keyed to: a topic (`customer-proof`), `placeholder-<rewrite id>-p1` (a later rewrite numbers its own from `p1`), `recommendation-4` or `brief-offer`. |
+| `missing`  | What is missing, in a few words.                                                                                                                                                                        |
+| `question` | What to ask the writer, about their own situation, never about the model.                                                                                                                               |
+| `why`      | Why it matters, in a sentence.                                                                                                                                                                          |
+| `found`    | What the review said about it in its own words (a recommendation's issue, a note), strongest first, for the coach to quote. Empty when it said nothing usable.                                          |
+| `sources`  | Every place in the report that asks for it, by the report's own numbering: a placeholder's rewrite and id, a recommendation's or note's number, a low appeal's id, a brief field.                       |
 
 Errors: 404 `NOT_FOUND` for a review not in this workspace (another
 workspace's id reads the same), and 409 `ASSESSMENT_NOT_FINISHED` for one still
@@ -35,7 +35,7 @@ queued or running, or one that ended with no result (failed, or cancelled).
 
 **No AI call.** The list is computed from what the report shows
 (`buildReportView`, read through `loadReport` like every report), the review's
-latest finished rewrite, and its project's brief as it is now. It costs nothing,
+rewrite that finished last, and its project's brief as it is now. It costs nothing,
 writes nothing, and reads the same every time. The coach (t-110) rewords the
 questions conversationally; this gives it what to ask and in what order.
 
@@ -44,7 +44,7 @@ questions conversationally; this gives it what to ask and in what order.
 In order of strength, which is the order of the list (ties keep the report's
 own order):
 
-1. **The latest rewrite's placeholders.** Each `[ADD: …]` the editor left
+1. **The placeholders of the rewrite that finished last.** Each `[ADD: …]` the editor left
    (`parsePlaceholders`, `lib/app/frameworks/placeholders.ts`) is a gap, asked
    in its own words. The editor has already said it cannot go on without it.
 2. **Recommendations whose suggested rewrite leaves a slot**, by impact: high,
@@ -69,6 +69,11 @@ a dozen topics (`TOPIC_OF` and `TOPICS` in `lib/app/coaching/gaps.ts`), and a
 topic is asked once however many sources point at it. The worked example's
 draft has a recommendation and two notes all asking for a customer like Sarah;
 they make the one `customer-proof` gap, which lists all three as sources.
+
+A placeholder is its own gap, never merged into a topic. Its label is the
+editor's free text, and telling that `a customer like Sarah's` asks for the
+same fact as `customer-proof` would take an AI call. The coach can see both
+and ask once.
 
 A recommendation with a slot, on a part of the model that has no topic, is
 still a gap. It is asked in the review's own words: the suggestion, and what
@@ -136,6 +141,6 @@ than replacing, the ERP caveat, and the two-page summary.
   from the raw model file, not from `modelVocabulary()`, so a kind of id the
   code missed would fail it.
 - `tests/unit/lib/app/coaching/service.test.ts`: the workspace scoping, the 409s,
-  the latest finished rewrite, and the brief.
+  the rewrite that finished last, and the brief.
 - `tests/unit/app/api/v1/assessments/gaps.test.ts`: the route's guard (session,
   `assess` key, membership) and its refusals.

@@ -3,7 +3,7 @@
  *
  * Three reads: the report, as every report reads it (`loadReport`, through
  * the services the API answers from), which also scopes the review to the
- * workspace in context; the review's latest finished rewrite and its
+ * workspace in context; the review's rewrite that finished last and its
  * project's brief as it is now, in one query; then {@link buildGaps}. No AI
  * call, and nothing is written.
  *
@@ -51,9 +51,10 @@ export async function getGaps(id: string): Promise<GapsView> {
       project: { select: { brief: true } },
       rewrites: {
         where: { status: 'COMPLETED' },
-        orderBy: { createdAt: 'desc' },
+        // The one that finished last, as recovery reads it (`rewrites/recover.ts`).
+        orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
         take: 1,
-        select: { draft: true },
+        select: { id: true, draft: true },
       },
     },
   });
@@ -73,7 +74,7 @@ export async function getGaps(id: string): Promise<GapsView> {
     assessmentId: id,
     gaps: buildGaps({
       view: report.view,
-      rewriteDraft: row.rewrites[0]?.draft ?? null,
+      rewrite: row.rewrites[0] ?? null,
       known: { brief },
       vocabulary: modelVocabulary(report.model),
     }),

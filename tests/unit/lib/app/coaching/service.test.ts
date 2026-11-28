@@ -75,18 +75,22 @@ describe('getGaps', () => {
     await expect(getGaps('a-1')).rejects.toThrow('could not be read');
   });
 
-  it('asks only the latest finished rewrite for its placeholders', async () => {
+  it('asks only the rewrite that finished last for its placeholders', async () => {
     mocks.findFirst.mockResolvedValue({
       project: null,
-      rewrites: [{ draft: 'Hi [ADD: a customer like Sarah’s].' }],
+      rewrites: [{ id: 'rw-9', draft: 'Hi [ADD: a customer like Sarah’s].' }],
     });
     const { gaps } = await getGaps('a-1');
-    expect(gaps[0]).toMatchObject({ id: 'placeholder-p1', missing: 'a customer like Sarah’s' });
+    expect(gaps[0]).toMatchObject({
+      id: 'placeholder-rw-9-p1',
+      missing: 'a customer like Sarah’s',
+      sources: [{ kind: 'placeholder', rewriteId: 'rw-9', placeholderId: 'p1' }],
+    });
     expect(mocks.findFirst.mock.calls[0][0].select.rewrites).toEqual({
       where: { status: 'COMPLETED' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       take: 1,
-      select: { draft: true },
+      select: { id: true, draft: true },
     });
   });
 

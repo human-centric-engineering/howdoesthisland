@@ -1047,7 +1047,7 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'GET',
     path: '/api/v1/assessments/{id}/gaps',
     summary:
-      "List a finished review's gaps: the facts only the writer knows that it found missing, strongest first, each with a plain-words question about the writer's situation, why it matters, and what the review said about it. Drawn from its latest rewrite's placeholders, its recommendations that leave a slot to fill, its notes, its low appeals and its project's empty brief fields; one the brief already answers is left out. No AI call.",
+      "List a finished review's gaps: the facts only the writer knows that it found missing, strongest first, each with a plain-words question about the writer's situation, why it matters, and what the review said about it. Drawn from the placeholders of its rewrite that finished last, its recommendations that leave a slot to fill, its notes, its low appeals and its project's empty brief fields; one the brief already answers is left out. No AI call.",
     auth: ASSESS,
     request: { params: assessmentParams },
     errors: [

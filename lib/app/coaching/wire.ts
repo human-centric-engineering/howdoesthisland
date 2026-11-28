@@ -6,7 +6,11 @@ import { z } from 'zod';
 
 /** `GapSource` in `gaps.ts`: where in the report a gap came from, by the report's own numbering. */
 export const gapSourceSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('placeholder'), placeholderId: z.string() }),
+  z.object({
+    kind: z.literal('placeholder'),
+    rewriteId: z.string(),
+    placeholderId: z.string(),
+  }),
   z.object({ kind: z.literal('recommendation'), number: z.number().int() }),
   z.object({ kind: z.literal('note'), number: z.number().int() }),
   /** The appeal's id, as the report's "How it lands" lists it. */
