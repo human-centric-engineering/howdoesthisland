@@ -380,6 +380,7 @@ a new term is added here in the same PR.
 | **reader**                                        | Who the copy is written for, as the model describes them (its archetype)                      | archetype, persona, target                           |
 | **archive**, **archived**, **restore**            | Put a project aside, keeping its reviews; restore brings it back                              | delete, deactivate, disable                          |
 | **background documents**                          | A project's files and pages that explain its work: a positioning paper, a brand guide (t-74)  | context documents, knowledge base, attachments       |
+| **webhook**, **delivery**                         | Where finished reviews and comparisons are sent, and one message sent there (t-100)           | event subscription, hook, callback; dispatch         |
 
 **Settled by the owner on 2026-11-15** (open question 5): _assessment_ is **review**, the
 _judges_ are **AI reviewers**, _content type_ is **type of copy**, and the _report_ stays
