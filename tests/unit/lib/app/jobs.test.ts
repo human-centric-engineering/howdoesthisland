@@ -1,5 +1,5 @@
 /**
- * Tests: the app's maintenance jobs (t-22, t-26, t-81, t-99) — each registration runs the
+ * Tests: the app's maintenance jobs (t-22, t-26, t-81, t-99, t-102) — each registration runs the
  * work it names. Names, intervals and scopes are pinned in defaults.test.ts.
  *
  * FORK NOTE: this is HowDoesThisLand's own test of its own seam, so it reads
@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   purgeExpiredContent: vi.fn(),
   recoverRewrites: vi.fn(),
   sweepFinishedEvents: vi.fn(),
+  purgeUnclaimedUploads: vi.fn(),
+}));
+vi.mock('@/lib/app/batches/uploads', () => ({
+  purgeUnclaimedUploads: mocks.purgeUnclaimedUploads,
 }));
 vi.mock('@/lib/app/events/notify', () => ({
   sweepFinishedEvents: mocks.sweepFinishedEvents,
@@ -35,6 +39,7 @@ import {
   FINISHED_EVENTS_JOB,
   RETENTION_PURGE_JOB,
   REWRITE_RECOVERY_JOB,
+  UNCLAIMED_UPLOADS_JOB,
 } from '@/lib/app/jobs';
 import { __resetAppJobsForTests, getAppJobs } from '@/lib/orchestration/maintenance/app-jobs';
 
@@ -74,5 +79,11 @@ describe('initAppJobs', () => {
     mocks.purgeExpiredContent.mockResolvedValue(counts);
     expect(await job(RETENTION_PURGE_JOB).run()).toEqual(counts);
     expect(mocks.purgeExpiredContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the unclaimed-upload purge, returning its count', async () => {
+    mocks.purgeUnclaimedUploads.mockResolvedValue({ uploads: 2 });
+    expect(await job(UNCLAIMED_UPLOADS_JOB).run()).toEqual({ uploads: 2 });
+    expect(mocks.purgeUnclaimedUploads).toHaveBeenCalledTimes(1);
   });
 });

@@ -107,6 +107,7 @@ import {
 } from '@/lib/app/comparisons/validations';
 import {
   batchIdParamSchema,
+  contentUploadOptionsSchema,
   createBatchSchema,
   listBatchesQuerySchema,
 } from '@/lib/app/batches/validations';
@@ -792,11 +793,11 @@ const batchItemSchema = z.object({
   assessmentId: z.string().nullable(),
   status: z.enum(ITEM_STATES),
   source: z
-    .object({ kind: z.enum(['text', 'url']), url: z.string().nullable() })
+    .object({ kind: z.enum(['text', 'file', 'url']), url: z.string().nullable() })
     .nullable()
     .meta({
       description:
-        "Text or a page, and the page's address (where its redirects ended, once fetched); `null` once purged.",
+        "Text, a page or an uploaded file, and a page's address (where its redirects ended, once fetched); `null` once purged.",
     }),
   overall: z.number().nullable(),
   band: z.string().nullable(),
@@ -824,6 +825,21 @@ export const batchSummarySchema = z.object({
   counts: z
     .record(z.enum(ITEM_STATES), z.number().int())
     .meta({ description: 'How many items are in each state.' }),
+});
+
+/** `UploadView` in `lib/app/batches/uploads.ts` (t-102). */
+export const uploadSchema = z.object({
+  id: z.string().meta({ description: 'What a batch item names it by: `{ contentId }`.' }),
+  fileName: z.string(),
+  title: z.string().nullable().meta({
+    description:
+      "From the file's own metadata or first heading, else its name; an item's label replaces it.",
+  }),
+  wordCount: z.number().int(),
+  createdAt: isoDateTime,
+  expiresAt: isoDateTime.meta({
+    description: 'When it is deleted, if no batch has taken it by then: 24 hours on.',
+  }),
 });
 
 /** `BatchDetail` in `views.ts`. */
@@ -1276,10 +1292,22 @@ export const APP_ROUTES: readonly RouteContract[] = [
     method: 'POST',
     path: '/api/v1/batches',
     summary:
-      "Review many texts or pages the same way, in one call: 1 to the install's batch size (`APP_BATCH_MAX_ITEMS`, 10 unless it is set, at most 100). Every item gets the same framework version, context, project and AI reviewers, and is an ordinary review in the workspace's history, titled with its label. A page is fetched when its own review starts, not in this call, and one that cannot be read fails that item alone. Answered 202 at once; follow the batch with its GET, or subscribe to `app.batch.finished`. Items count against a batch allowance of their own per user per hour, not the per-minute limit.",
+      "Review many texts, pages or uploaded files the same way, in one call: 1 to the install's batch size (`APP_BATCH_MAX_ITEMS`, 10 unless it is set, at most 100). Each item is `{ text }`, `{ url }` or `{ contentId }` (a file uploaded first with `POST /api/v1/contents`), with an optional `label`. Every item gets the same framework version, context, project and AI reviewers, and is an ordinary review in the workspace's history, titled with its label. A page is fetched when its own review starts, not in this call, and one that cannot be read fails that item alone. Answered 202 at once; follow the batch with its GET, or subscribe to `app.batch.finished`. Items count against a batch allowance of their own per user per hour, not the per-minute limit.",
     auth: ASSESS,
     request: { body: createBatchSchema },
     errors: [
+      {
+        status: 404,
+        code: 'CONTENT_NOT_FOUND',
+        description:
+          'An item names no upload this workspace can use: not in this workspace, not an upload (a pasted text or a page), or past its `expiresAt`. `details.position` is its place in `items`; nothing was stored.',
+      },
+      {
+        status: 409,
+        code: 'CONTENT_IN_USE',
+        description:
+          'An item names a file a review already has: an upload another batch took, or a file a single review read. `details.position` is its place in `items`; nothing was stored. Upload the file again.',
+      },
       {
         status: 402,
         code: 'INSUFFICIENT_CREDITS',
@@ -1294,6 +1322,35 @@ export const APP_ROUTES: readonly RouteContract[] = [
       },
     ],
     response: { status: 202, data: batchDetailSchema },
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/contents',
+    summary:
+      "Upload one file for a batch to review (t-102): a PDF, Word document, PowerPoint deck, web page, Markdown or plain text file, as `multipart/form-data`, under the same limits and refusals as a review's upload. Its text is read now and stored with no review; name it in a batch as `{ contentId }`. One batch item takes it, and one no batch takes within 24 hours (`expiresAt`) is deleted. Uploads count against an allowance of their own per user per hour.",
+    auth: ASSESS,
+    request: { upload: contentUploadOptionsSchema },
+    errors: [
+      { status: 400, code: 'CONTENT_EMPTY', description: 'The file holds no text once trimmed.' },
+      {
+        status: 413,
+        code: 'FILE_TOO_LARGE',
+        description:
+          'The file is over the most intake reads, or the body over `MAX_UPLOAD_BODY_BYTES`, refused before it is read.',
+      },
+      {
+        status: 415,
+        code: 'INVALID_FILE_TYPE',
+        description: 'Not a format intake reads; `details.supported` lists the extensions.',
+      },
+      {
+        status: 422,
+        code: 'TEXT_TOO_LONG',
+        description:
+          'More text than a review takes. Also `TOO_MANY_PAGES`, `PDF_HAS_NO_TEXT`, `NO_TEXT` and `FILE_UNREADABLE`, for the file.',
+      },
+    ],
+    response: { status: 201, data: uploadSchema },
   },
   {
     method: 'GET',

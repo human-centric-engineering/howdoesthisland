@@ -20,10 +20,10 @@
  * Every read runs in the caller's tenant context and names `orgId`, so
  * another workspace's batch is not found.
  */
-import type { Prisma } from '@prisma/client';
+import type { ContentSourceKind, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { requireOrgId } from '@/lib/tenancy/context';
-import { isFinal, stateOf, type FrameworkRef } from '@/lib/app/assessments/api/views';
+import { isFinal, SOURCE_KIND, stateOf, type FrameworkRef } from '@/lib/app/assessments/api/views';
 import { ASSESSMENT_STATES } from '@/lib/app/assessments/api/validations';
 import type { DraftState } from '@/lib/app/comparisons/views';
 
@@ -43,8 +43,8 @@ export type BatchItem = {
   /** Its review, to open as any other; `null` once purged. */
   assessmentId: string | null;
   status: ItemState;
-  /** Text or a page, and the page's address (where its redirects ended, once fetched). */
-  source: { kind: 'text' | 'url'; url: string | null } | null;
+  /** Text, a page or an uploaded file, and a page's address (where its redirects ended, once fetched). */
+  source: { kind: (typeof SOURCE_KIND)[ContentSourceKind]; url: string | null } | null;
   overall: number | null;
   band: string | null;
   /**
@@ -151,12 +151,8 @@ function itemView(member: DetailRow['members'][number]): BatchItem {
     label: member.label,
     assessmentId: review ? member.assessmentId : null,
     status: review ? stateOf(review.status) : 'purged',
-    // A batch item is text or a page; a file is not one it takes.
     source: review
-      ? {
-          kind: review.content.sourceKind === 'URL' ? 'url' : 'text',
-          url: review.content.sourceUrl,
-        }
+      ? { kind: SOURCE_KIND[review.content.sourceKind], url: review.content.sourceUrl }
       : null,
     overall: review?.overall ?? null,
     band: review?.band ?? null,

@@ -177,6 +177,11 @@ model Content {
   text            String?
   textSha256      String?
   wordCount       Int?
+  /// An upload no batch item has taken yet (t-102, `POST /api/v1/contents`):
+  /// true from the upload until an item claims it, which clears it in the
+  /// same transaction as the review it becomes. One still set after 24 hours
+  /// is deleted (`lib/app/batches/uploads.ts`). False for every other row.
+  awaitingBatch   Boolean           @default(false)
   /// Who added it. FK → user, ON DELETE SET NULL (the workspace keeps it).
   createdByUserId String?
   createdAt       DateTime          @default(now())

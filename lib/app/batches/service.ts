@@ -2,7 +2,7 @@
  * The batches API's service (t-101, `.context/app/batches.md`): the routes
  * parse, this does.
  *
- * A batch is many texts or pages reviewed the same way, with no verdict: a
+ * A batch is many texts, pages or uploaded files reviewed the same way, with no verdict: a
  * comparison's set (`lib/app/comparisons/service.ts`) with more members and
  * nothing asked of the editor. The review options are resolved once
  * (`resolveReviewOptions`), so every item gets the same framework version,
@@ -17,6 +17,12 @@
  * workspace's history, not the text, which is why a batch of pages can be
  * checked before any page is read. Then every item's content and review, the
  * set and its members are written in one transaction.
+ *
+ * **An upload is claimed, not copied** (t-102): its content row, made by
+ * `POST /api/v1/contents` with its text already read, becomes the item's
+ * review's content in the same transaction (`enqueueAssessments`). One not
+ * in this workspace, or already taken, is refused with the item's place
+ * before anything is held, and again in the write for one taken meanwhile.
  *
  * **A page is fetched when its own review starts**, never here: its content
  * is stored with the address and no text, and its run fetches it
@@ -49,7 +55,9 @@ import {
 import { assessableText } from '@/lib/app/assessments/text';
 import { RUNNING_PER_WORKSPACE } from '@/lib/app/assessments/limits';
 import { cancelAssessment } from '@/lib/app/assessments/run';
+import { AssessmentInputError } from '@/lib/app/assessments/errors';
 import {
+  asApiError,
   refusingAsApi,
   requestedViaOf,
   resolveReviewOptions,
@@ -64,8 +72,14 @@ import {
   type ReviewRate,
 } from '@/lib/app/usage/budget';
 import type { VerdictSkipReason } from '@/lib/app/comparisons/verdict';
-import { isTextItem, type CreateBatchBody } from '@/lib/app/batches/validations';
+import {
+  isTextItem,
+  isUploadItem,
+  type BatchItemInput,
+  type CreateBatchBody,
+} from '@/lib/app/batches/validations';
 import { readBatch, type BatchDetail } from '@/lib/app/batches/views';
+import { UPLOAD_CLAIM_WINDOW_MS } from '@/lib/app/batches/limits';
 
 /** A request checked as far as it can be without writing anything. */
 export interface PreparedBatch extends ResolvedReviewOptions {
@@ -82,7 +96,8 @@ export interface PreparedBatch extends ResolvedReviewOptions {
 
 /**
  * Everything that can be refused before anything is held or written: the
- * options (as a single review's), each pasted text, and every item's
+ * options (as a single review's), each pasted text, each upload named
+ * ({@link checkUploads}), and every item's
  * estimate together against the workspace's credits and monthly budget
  * (402). A page's address is checked by the schema; whether it can be read
  * is its own review's to find out. Holds nothing: once this has passed, the
@@ -101,6 +116,7 @@ export async function prepareBatch(body: CreateBatchBody): Promise<PreparedBatch
       throw err;
     }
   }
+  await checkUploads(body.items);
   const rate = await assertReviewFits(
     requireOrgId(),
     storedProfileName(options.profile),
@@ -109,6 +125,55 @@ export async function prepareBatch(body: CreateBatchBody): Promise<PreparedBatch
     body.items.length
   );
   return { ...options, holds: [], rate };
+}
+
+/**
+ * Every upload the items name is this workspace's, not taken yet and not
+ * past its window, or the first that is not is refused with its place in
+ * `items` as `details.position`: 409 `CONTENT_IN_USE` for a file a review
+ * has (an upload a batch took, or one a single review read), and 404
+ * `CONTENT_NOT_FOUND` for anything else (another workspace's reads as none,
+ * as every lookup here does; so does a pasted text's or a page's content,
+ * and an upload past its 24 hours, deleted or not yet). The claim
+ * in the write is what holds; this answers the common case before the budget
+ * is held.
+ */
+async function checkUploads(items: readonly BatchItemInput[]): Promise<void> {
+  const ids = items.flatMap((item) => (isUploadItem(item) ? [item.contentId] : []));
+  if (ids.length === 0) return;
+  const rows = await prisma.content.findMany({
+    where: { orgId: requireOrgId(), id: { in: ids } },
+    select: { id: true, awaitingBatch: true, sourceKind: true, createdAt: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const oldest = Date.now() - UPLOAD_CLAIM_WINDOW_MS;
+  for (const [position, item] of items.entries()) {
+    if (!isUploadItem(item)) continue;
+    const row = byId.get(item.contentId);
+    if (row?.awaitingBatch && row.createdAt.getTime() > oldest) continue;
+    const taken = row?.sourceKind === 'FILE' && !row.awaitingBatch;
+    throw asApiError(
+      new AssessmentInputError(
+        taken ? 'upload_in_use' : 'upload_not_found',
+        taken
+          ? 'This upload is already being reviewed. Upload the file again to review it in another batch.'
+          : 'There is no such upload in this workspace. One no batch takes within 24 hours is deleted.',
+        { contentId: item.contentId, position }
+      )
+    );
+  }
+}
+
+/**
+ * An upload's refusal from the write (`claimUpload`), placed at the item
+ * naming it, as {@link checkUploads} places one.
+ */
+function placedAtItem(err: unknown, items: readonly BatchItemInput[]): unknown {
+  if (!(err instanceof APIError) || typeof err.details?.contentId !== 'string') return err;
+  const contentId = err.details.contentId;
+  const position = items.findIndex((item) => isUploadItem(item) && item.contentId === contentId);
+  if (position >= 0) err.details = { ...err.details, position };
+  return err;
 }
 
 /**
@@ -162,14 +227,23 @@ export async function createBatch(
                 sourceKind: 'TEXT' as const,
                 projectId: prepared.projectId,
               }
-            : {
-                // Fetched when its review starts (`run.ts`); titled by the page then, unless labelled.
-                text: null,
-                title: item.label ?? null,
-                sourceKind: 'URL' as const,
-                sourceUrl: item.url,
-                projectId: prepared.projectId,
-              },
+            : isUploadItem(item)
+              ? {
+                  // Claimed with its text; titled by the file unless labelled.
+                  text: null,
+                  title: item.label ?? null,
+                  sourceKind: 'FILE' as const,
+                  uploadId: item.contentId,
+                  projectId: prepared.projectId,
+                }
+              : {
+                  // Fetched when its review starts (`run.ts`); titled by the page then, unless labelled.
+                  text: null,
+                  title: item.label ?? null,
+                  sourceKind: 'URL' as const,
+                  sourceUrl: item.url,
+                  projectId: prepared.projectId,
+                },
           frameworkVersionId: prepared.resolved.version.id,
           profile: prepared.profile,
           context,
@@ -208,7 +282,9 @@ export async function createBatch(
         },
         { several: true }
       )
-    );
+    ).catch((err: unknown) => {
+      throw placedAtItem(err, body.items);
+    });
   } finally {
     // Stored, each review is held in its place; refused, nothing is. Before
     // the runs are claimed, whose check would count these holds against the

@@ -716,6 +716,7 @@ const SEAM_DEFAULTS: SeamDefault[] = [
         ['app:comparison-verdict-recovery', 15 * 60 * 1000, 'per-org'],
         ['app:finished-events', 15 * 60 * 1000, 'per-org'],
         ['app:retention-purge', 24 * 60 * 60 * 1000, 'per-org'],
+        ['app:unclaimed-uploads', 60 * 60 * 1000, 'per-org'],
       ]);
     },
   },
