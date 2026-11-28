@@ -315,7 +315,7 @@ async function fetchPendingPage(row: ReadRow, token: string): Promise<Assessment
       data: { error: null },
     });
     if (count === 0) return false;
-    await tx.content.updateMany({
+    const written = await tx.content.updateMany({
       where: { id: row.content.id, text: null },
       data: {
         text,
@@ -326,10 +326,17 @@ async function fetchPendingPage(row: ReadRow, token: string): Promise<Assessment
         title: row.content.title ?? page.title,
       },
     });
-    return true;
+    if (written.count === 1) return { text, sourceUrl: page.url };
+    // Its text was written meanwhile (nothing in the app does, under the
+    // lease above): score the stored copy, which the report places notes in.
+    const kept = await tx.content.findUnique({
+      where: { id: row.content.id },
+      select: { text: true, sourceUrl: true },
+    });
+    return kept?.text ? { text: kept.text, sourceUrl: kept.sourceUrl } : false;
   });
   if (!stored) return await lostTo(row.id);
-  return { ...row, content: { text, sourceUrl: page.url } };
+  return { ...row, content: stored };
 }
 
 const STOPPED_ON_ERROR = 'Its run stopped on an error that was not a judge’s.';
@@ -381,26 +388,40 @@ export function startNextQueued(orgId: string, finished?: string): void {
         ...(finished ? { id: { not: finished } } : {}),
         OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
       };
-      const inBatch = { set: { kind: 'BATCH' as const } };
-      for (const setMembers of [{ none: inBatch }, { some: inBatch }]) {
-        const queued = await prisma.assessment.findMany({
-          where: { ...due, setMembers },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: RUNNING_PER_WORKSPACE,
-          select: { id: true },
-        });
-        for (const { id } of queued) {
-          const run = await beginAssessment(id);
-          if (run) {
-            await run.done;
-            return;
-          }
+      for (const id of await inTurn(due, RUNNING_PER_WORKSPACE)) {
+        const run = await beginAssessment(id);
+        if (run) {
+          await run.done;
+          return;
         }
       }
     },
     'app: next queued assessment',
     { orgId }
   );
+}
+
+/**
+ * The ids of at most `take` reviews matching `where`, in the order they take
+ * a free place (t-101): those in no batch first, then batch items, each
+ * oldest first and by id on a tie. Shared by {@link startNextQueued} and the
+ * recovery job (`recover.ts`), so a place freed either way goes to the same
+ * review.
+ */
+export async function inTurn(where: Prisma.AssessmentWhereInput, take: number): Promise<string[]> {
+  const inBatch = { set: { kind: 'BATCH' as const } };
+  const ids: string[] = [];
+  for (const setMembers of [{ none: inBatch }, { some: inBatch }]) {
+    if (ids.length >= take) break;
+    const rows = await prisma.assessment.findMany({
+      where: { ...where, setMembers },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: take - ids.length,
+      select: { id: true },
+    });
+    ids.push(...rows.map((r) => r.id));
+  }
+  return ids;
 }
 
 type AssessmentRow = {
@@ -971,7 +992,14 @@ async function finish(
  * Cancel an assessment that has not finished. Answers whether it was
  * cancelled: `false` when it is already final, or not this workspace's.
  */
-export async function cancelAssessment(assessmentId: string): Promise<boolean> {
+export async function cancelAssessment(
+  assessmentId: string,
+  /**
+   * Cancel it only if no run has claimed it (a deleted batch's items that
+   * have not started, t-101): one running is left to finish.
+   */
+  { queuedOnly = false }: { queuedOnly?: boolean } = {}
+): Promise<boolean> {
   const orgId = requireOrgId();
   const open = { id: assessmentId, orgId, status: { in: ['QUEUED' as const, 'RUNNING' as const] } };
   const now = new Date();
@@ -988,6 +1016,7 @@ export async function cancelAssessment(assessmentId: string): Promise<boolean> {
       await chargeEndedReview(tx, assessmentId);
       return 'idle' as const;
     }
+    if (queuedOnly) return null;
     const { count } = await tx.assessment.updateMany({
       where: open,
       // The token and lease stay: the run that held them can still save the

@@ -48,6 +48,7 @@ import {
 } from '@/lib/app/assessments/enqueue';
 import { assessableText } from '@/lib/app/assessments/text';
 import { RUNNING_PER_WORKSPACE } from '@/lib/app/assessments/limits';
+import { cancelAssessment } from '@/lib/app/assessments/run';
 import {
   refusingAsApi,
   requestedViaOf,
@@ -235,13 +236,36 @@ export async function getBatch(id: string): Promise<BatchDetail> {
 
 /**
  * Delete a batch: the set and its items' places, not their reviews, which
- * stay in the workspace's history and are deleted as any review is. Items
- * still queued or running carry on.
+ * stay in the workspace's history and are deleted as any review is.
+ *
+ * **Its items that have not started are cancelled** (charged for nothing,
+ * since nothing ran), and those running finish. Deleting is the one way to
+ * stop a batch short of cancelling each item, and an item left queued would
+ * otherwise run and be charged for work its caller abandoned, as a review in
+ * no batch, ahead of reviews people are waiting for (`inTurn`).
  */
 export async function removeBatch(id: string): Promise<{ deleted: true }> {
+  const orgId = requireOrgId();
+  // Read before the delete, which takes the members with it.
+  const members = await prisma.assessmentSetMember.findMany({
+    where: { orgId, setId: id, set: { kind: 'BATCH' } },
+    select: { assessmentId: true },
+  });
   const { count } = await prisma.assessmentSet.deleteMany({
-    where: { id, orgId: requireOrgId(), kind: 'BATCH' },
+    where: { id, orgId, kind: 'BATCH' },
   });
   if (count === 0) throw new NotFoundError('Batch not found');
+  const queued = await prisma.assessment.findMany({
+    where: {
+      orgId,
+      id: { in: members.flatMap((m) => m.assessmentId ?? []) },
+      status: 'QUEUED',
+    },
+    select: { id: true },
+  });
+  // One at a time: each is its own short transaction, and a batch is at most a hundred.
+  for (const { id: assessmentId } of queued) {
+    await cancelAssessment(assessmentId, { queuedOnly: true });
+  }
   return { deleted: true };
 }

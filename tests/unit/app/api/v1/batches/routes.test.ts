@@ -163,6 +163,7 @@ import { runAsOrg } from '@/lib/tenancy/context';
 import { recoverVerdicts } from '@/lib/app/comparisons/verdict';
 import { sweepFinishedEvents } from '@/lib/app/events/notify';
 import { purgeExpiredContent } from '@/lib/app/retention/purge';
+import { recoverAssessments } from '@/lib/app/assessments/recover';
 import { BATCH_FINISHED } from '@/lib/app/events/types';
 
 const WS_A = 'org-a';
@@ -715,6 +716,28 @@ describe('POST /api/v1/batches — sharing the places with someone waiting', () 
   });
 });
 
+describe('the recovery job and a batch', () => {
+  it('re-drives a stalled review in no batch before older batch items', async () => {
+    const old = new Date(Date.now() - 60 * 60_000);
+    const items = Array.from({ length: 4 }, () =>
+      fake.seed({ orgId: WS_A, judges: TWO, createdAt: old })
+    );
+    const { id: setId } = await fake.db.assessmentSet.create({
+      data: { orgId: WS_A, kind: 'BATCH', verdictStatus: 'SKIPPED', judges: TWO },
+    });
+    await fake.db.assessmentSetMember.createMany({
+      data: items.map((a, position) => ({ orgId: WS_A, setId, assessmentId: a.id, position })),
+    });
+    const waiting = fake.seed({ orgId: WS_A, judges: TWO });
+
+    const result = await runAsOrg(WS_A, () => recoverAssessments());
+
+    expect(result.redriven).toBe(RUNNING_PER_WORKSPACE);
+    expect(waiting.attempts).toBe(1);
+    expect(items.filter((a) => a.attempts === 1)).toHaveLength(RUNNING_PER_WORKSPACE - 1);
+  });
+});
+
 describe('a batch and the verdict machinery', () => {
   it('is never asked for a verdict: it stays settled, and recovery finds nothing due', async () => {
     const { id } = await batch({ items: texts(DRAFT_A, DRAFT_B, DRAFT_C) });
@@ -855,6 +878,36 @@ describe('GET and DELETE', () => {
     const set = fake.sets.find((s) => s.id === id);
     if (set) set.kind = 'COMPARISON';
     expect((await getOne(id)).status).toBe(404);
+  });
+
+  it('cancels the items a deleted batch has not started, letting those running finish', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mocks.runJudge.mockImplementation(async (slot: string) => {
+      await gate;
+      return reply(slot);
+    });
+    const { id, items } = await batch({
+      items: texts(DRAFT_A, DRAFT_B, DRAFT_C, DRAFT_D, DRAFT_E),
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    const before = new Map(fake.assessments.map((a) => [a.id, a.status]));
+    expect([...before.values()].filter((s) => s === 'QUEUED')).toHaveLength(2);
+
+    expect((await del(id)).status).toBe(200);
+    release();
+    await settle();
+
+    const after = items.map((i) => fake.assessments.find((a) => a.id === i.assessmentId)?.status);
+    // The three that had started ran to the end; the two waiting were cancelled.
+    expect(after.filter((s) => s === 'COMPLETED')).toHaveLength(3);
+    expect(after.filter((s) => s === 'CANCELLED')).toHaveLength(2);
+    for (const item of items) {
+      if (before.get(String(item.assessmentId)) === 'QUEUED') {
+        expect(fake.assessments.find((a) => a.id === item.assessmentId)?.status).toBe('CANCELLED');
+      }
+    }
+    expect(fake.assessments).toHaveLength(5);
   });
 
   it('deletes the batch and its items’ places, keeping their reviews', async () => {

@@ -98,7 +98,8 @@ every item at once would only have the rest of the claims refused.
 
 **A batch takes the places nobody else is waiting for.** When a place frees, the
 next review to start is the workspace's oldest in no batch, then its oldest batch
-item, by id on a tie. A batch is bulk work its caller follows by its event; a
+item, by id on a tie (`inTurn` in `lib/app/assessments/run.ts`). The recovery
+job re-drives stalled reviews in the same order. A batch is bulk work its caller follows by its event; a
 review pasted in the workbench, or a comparison's draft, is someone waiting. So a
 person who pastes one review after a 100-page batch waits for one place to free,
 not for 97 batch items. A batch only waits while the workspace is busy with work
@@ -159,7 +160,11 @@ assessmentId, status, overall, band }]`: no labels and no page addresses.
 ## Deleting and purging
 
 Deleting a batch deletes the set and its items' places; their reviews stay in
-the workspace's history. Deleting or purging a review leaves its item's place,
+the workspace's history. **Its items that have not started are cancelled**, and
+those running finish (`cancelAssessment` with `queuedOnly`). Deleting is the one
+way to stop a batch short of cancelling each item, and an item left queued would
+run and be charged for work its caller abandoned, as a review in no batch, ahead
+of reviews people are waiting for. Deleting or purging a review leaves its item's place,
 read as `purged`, and the batch is not failed for it. The retention purge takes
 the set once it is past the content window and none of its items has a review
 left, as it does a comparison's.

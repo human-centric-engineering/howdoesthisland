@@ -1316,7 +1316,8 @@ export const APP_ROUTES: readonly RouteContract[] = [
   {
     method: 'DELETE',
     path: '/api/v1/batches/{id}',
-    summary: "Delete a batch. Its items' reviews stay in the workspace's history.",
+    summary:
+      "Delete a batch. Its items' reviews stay in the workspace's history; those not started yet are cancelled, and those running finish.",
     auth: ASSESS,
     request: { params: batchIdParamSchema },
     response: { status: 200, data: assessmentDeletedSchema },

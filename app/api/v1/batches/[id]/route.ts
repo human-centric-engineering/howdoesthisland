@@ -6,7 +6,8 @@
  *        failed with a code, the code. An item whose review was deleted or
  *        purged reads as `purged`.
  * DELETE /api/v1/batches/{id} — delete the batch; its items' reviews stay in
- *        the workspace's history, and any still running carry on.
+ *        the workspace's history. Items not started yet are cancelled; those
+ *        running finish.
  *
  * Authentication: a browser session, or an API key with the `assess` scope.
  *
