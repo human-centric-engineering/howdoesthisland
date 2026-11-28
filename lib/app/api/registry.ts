@@ -100,6 +100,7 @@ import {
 } from '@/lib/app/workspaces/validations';
 import { monthUsageSchema, reviewRefusalDetailsSchema } from '@/lib/app/usage/wire';
 import { rewriteEventSchema, rewriteSchema } from '@/lib/app/rewrites/wire';
+import { gapsSchema } from '@/lib/app/coaching/wire';
 import {
   comparisonIdParamSchema,
   createComparisonSchema,
@@ -1040,6 +1041,24 @@ export const APP_ROUTES: readonly RouteContract[] = [
     auth: ASSESS,
     request: { params: assessmentParams },
     response: { status: 200, data: assessmentEventSchema, stream: 'sse' },
+  },
+  // Coaching (t-108).
+  {
+    method: 'GET',
+    path: '/api/v1/assessments/{id}/gaps',
+    summary:
+      "List a finished review's gaps: the facts only the writer knows that it found missing, strongest first, each with a plain-words question about the writer's situation, why it matters, and what the review said about it. Drawn from the placeholders of its rewrite that finished last, its recommendations that leave a slot to fill, its notes, its low appeals and its project's empty brief fields; one the brief already answers is left out. No AI call.",
+    auth: ASSESS,
+    request: { params: assessmentParams },
+    errors: [
+      {
+        status: 409,
+        code: 'ASSESSMENT_NOT_FINISHED',
+        description:
+          'The review is still queued or running, or it ended with no result (failed or cancelled).',
+      },
+    ],
+    response: { status: 200, data: gapsSchema },
   },
   {
     method: 'GET',

@@ -12,7 +12,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReportLoad } from '@/lib/app/reports/load';
 import { buildReportView } from '@/lib/app/reports/view';
 import { reportModelSchema, reportResultSchema } from '@/lib/app/reports/input';
-import { apiAssessment, modelDocument } from '@/tests/unit/lib/app/reports/fixtures';
+import { apiAssessment, modelDocument, REPORT_MODEL } from '@/tests/unit/lib/app/reports/fixtures';
 import { anAssessCatalogue } from '@/tests/unit/components/app/workbench/fixtures';
 import { FakeEventSource } from '@/tests/unit/components/app/workbench/fake-event-source';
 
@@ -68,7 +68,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
+    loadReport.mockResolvedValue({ kind: 'ready', view, model: REPORT_MODEL, projectId: null });
     const { container } = render(await ReportPage({ params }));
     // Read through the API, as the signed-in reader.
     expect(loadReport).toHaveBeenCalledWith('asm_1', apiReportSource);
@@ -83,7 +83,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
+    loadReport.mockResolvedValue({ kind: 'ready', view, model: REPORT_MODEL, projectId: null });
     render(await ReportPage({ params }));
     const link = screen.getByRole('link', { name: 'Download PDF' });
     expect(link.getAttribute('href')).toBe('/api/v1/assessments/asm_1/report.pdf');
@@ -98,7 +98,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
+    loadReport.mockResolvedValue({ kind: 'ready', view, model: REPORT_MODEL, projectId: null });
     render(await ReportPage({ params }));
     const rewrite = screen.getByRole('button', { name: 'Rewrite' });
     expect(rewrite.closest('[data-print="hide"]')).not.toBeNull();
@@ -178,7 +178,7 @@ describe('/assessments/[id]', () => {
       result: reportResultSchema.parse(a.result),
       model: reportModelSchema.parse(modelDocument(true)),
     });
-    loadReport.mockResolvedValue({ kind: 'ready', view, projectId: null });
+    loadReport.mockResolvedValue({ kind: 'ready', view, model: REPORT_MODEL, projectId: null });
     render(await ReportPage({ params }));
     expect(loadServerData).not.toHaveBeenCalled();
   });
@@ -191,7 +191,7 @@ describe('/assessments/[id]', () => {
         result: reportResultSchema.parse(a.result),
         model: reportModelSchema.parse(modelDocument(true)),
       });
-      return { kind: 'ready', view, projectId };
+      return { kind: 'ready', view, model: REPORT_MODEL, projectId };
     };
     const project = (brief: Record<string, string>) => ({
       id: 'prj_1',

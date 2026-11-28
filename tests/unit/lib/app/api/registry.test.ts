@@ -88,6 +88,8 @@ import type {
 import type { PaginationMeta } from '@/types/api';
 import type { RewriteEvent } from '@/lib/app/rewrites/service';
 import type { RewriteView } from '@/lib/app/rewrites/views';
+import type { GapsView } from '@/lib/app/coaching/service';
+import { gapsSchema } from '@/lib/app/coaching/wire';
 import type { ComparisonDetail, ComparisonSummary } from '@/lib/app/comparisons/views';
 import type { FrameworkCalibration, StartedRun } from '@/lib/app/calibration/admin';
 import { frameworkCalibrationSchema, startedRunSchema } from '@/lib/app/calibration/wire';
@@ -394,6 +396,7 @@ describe('response schemas match what the services return', () => {
     expectTypeOf<z.infer<typeof removedDocumentSchema>>().toEqualTypeOf<Wire<RemovedDocument>>();
     expectTypeOf<z.infer<typeof reportShareSchema>>().toEqualTypeOf<Wire<ReportShareView>>();
     expectTypeOf<z.infer<typeof rewriteSchema>>().toEqualTypeOf<Wire<RewriteView>>();
+    expectTypeOf<z.infer<typeof gapsSchema>>().toEqualTypeOf<Wire<GapsView>>();
     expectTypeOf<z.infer<typeof rewriteEventSchema>>().toEqualTypeOf<Wire<RewriteEvent>>();
     expectTypeOf<z.infer<typeof comparisonSummarySchema>>().toEqualTypeOf<
       Wire<ComparisonSummary>

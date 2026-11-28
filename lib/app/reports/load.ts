@@ -27,6 +27,7 @@ import {
   reportModelSchema,
   reportResultSchema,
   type ReportAssessment,
+  type ReportModel,
 } from '@/lib/app/reports/input';
 import { asOnTheWire, loadModelDocument } from '@/lib/app/reports/pdf/print-source';
 import { buildReportView, type ReportView } from '@/lib/app/reports/view';
@@ -36,6 +37,8 @@ export type ReportLoad =
   | {
       kind: 'ready';
       view: ReportView;
+      /** The model version it ran on, as the view was built from it (the coach's gaps read its ids, t-108). */
+      model: ReportModel;
       /** Its project, or `null` for none (or a share link's, which does not say). */
       projectId: string | null;
     }
@@ -147,6 +150,7 @@ export async function loadReport(
   return {
     kind: 'ready',
     view: buildReportView({ assessment: readable, result: result.data, model: model.data }),
+    model: model.data,
     projectId: a.projectId ?? null,
   };
 }
