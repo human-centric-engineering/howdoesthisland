@@ -20,14 +20,14 @@ them (t-110), the facts it keeps (t-109) and the worked example's exchange
 It takes a browser session or an API key with the `assess` scope. It answers
 `{ assessmentId, gaps }`, and each gap is:
 
-| Field      | What it holds                                                                                                                                                                                           |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`       | Stable for the same review, and what an answer is keyed to: a topic (`customer-proof`), `placeholder-<rewrite id>-p1` (a later rewrite numbers its own from `p1`), `recommendation-4` or `brief-offer`. |
-| `missing`  | What is missing, in a few words.                                                                                                                                                                        |
-| `question` | What to ask the writer, about their own situation, never about the model.                                                                                                                               |
-| `why`      | Why it matters, in a sentence.                                                                                                                                                                          |
-| `found`    | What the review said about it in its own words (a recommendation's issue, a note), strongest first, for the coach to quote. Empty when it said nothing usable.                                          |
-| `sources`  | Every place in the report that asks for it, by the report's own numbering: a placeholder's rewrite and id, a recommendation's or note's number, a low appeal's id, a brief field.                       |
+| Field      | What it holds                                                                                                                                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`       | Stable while the review and its latest rewrite stay the same, and what an answer is keyed to: a topic (`customer-proof`), `placeholder-<rewrite id>-p1` (a later rewrite numbers its own from `p1`), `recommendation-4` or `brief-offer`. |
+| `missing`  | What is missing, in a few words.                                                                                                                                                                                                          |
+| `question` | What to ask the writer, about their own situation, never about the model.                                                                                                                                                                 |
+| `why`      | Why it matters, in a sentence.                                                                                                                                                                                                            |
+| `found`    | What the review said about it in its own words (a recommendation's issue, a note), strongest first, for the coach to quote. Empty when it said nothing usable.                                                                            |
+| `sources`  | Every place in the report that asks for it, by the report's own numbering: a placeholder's rewrite and id, a recommendation's or note's number, a low appeal's id, a brief field.                                                         |
 
 Errors: 404 `NOT_FOUND` for a review not in this workspace (another
 workspace's id reads the same), and 409 `ASSESSMENT_NOT_FINISHED` for one still
@@ -35,8 +35,8 @@ queued or running, or one that ended with no result (failed, or cancelled).
 
 **No AI call.** The list is computed from what the report shows
 (`buildReportView`, read through `loadReport` like every report), the review's
-rewrite that finished last, and its project's brief as it is now. It costs nothing,
-writes nothing, and reads the same every time. The coach (t-110) rewords the
+rewrite that finished last, and its project's brief as it is now. It costs
+nothing, writes nothing, and reads the same every time. The coach (t-110) rewords the
 questions conversationally; this gives it what to ask and in what order.
 
 ### Where gaps come from
@@ -44,9 +44,9 @@ questions conversationally; this gives it what to ask and in what order.
 In order of strength, which is the order of the list (ties keep the report's
 own order):
 
-1. **The placeholders of the rewrite that finished last.** Each `[ADD: …]` the editor left
-   (`parsePlaceholders`, `lib/app/frameworks/placeholders.ts`) is a gap, asked
-   in its own words. The editor has already said it cannot go on without it.
+1. **The placeholders of the rewrite that finished last.** Each `[ADD: …]` the
+   editor left (`parsePlaceholders`, `lib/app/frameworks/placeholders.ts`) is a
+   gap, asked in its own words. The editor has already said it cannot go on without it.
 2. **Recommendations whose suggested rewrite leaves a slot**, by impact: high,
    then medium, then low, read as the report reads it (`High` is high). A slot
    is a part in brackets:
@@ -108,9 +108,9 @@ writer's fact that happens to use the word ("what would move your audience").
 product's weight, formula or dimensions. The app's own templates are held to the
 wider list (dimensions, weights, formula, levers, judges as well) by their test.
 
-A `found` entry that carries one is left out. A placeholder or a recommendation
-that would have to be asked in such words is not asked at all.
-Topics are keyed by the app's own names, never the model's, so a gap's `id`
+A `found` entry carrying one of those ids or terms is left out. A placeholder
+or a recommendation that would have to be asked in such words is not asked at
+all. Topics are keyed by the app's own names, never the model's, so a gap's `id`
 reveals nothing either.
 
 **When a model changes.** `TOPIC_OF` names the 0.5.x dimensions. A version that
