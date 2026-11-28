@@ -154,8 +154,8 @@ beforeEach(() => {
   mockPrisma.aiEventHook.findMany.mockResolvedValue([hookRow()]);
   mockPrisma.aiEventHook.findFirst.mockResolvedValue(hookRow());
   mockPrisma.aiEventHook.count.mockResolvedValue(0);
-  mockPrisma.aiEventHook.create.mockImplementation(async ({ data }: { data: object }) =>
-    hookRow(data)
+  mockPrisma.aiEventHook.create.mockImplementation(
+    async ({ data }: { data: Record<string, unknown> }) => hookRow(data)
   );
   mockPrisma.aiEventHook.updateMany.mockResolvedValue({ count: 1 });
   mockPrisma.aiEventHook.deleteMany.mockResolvedValue({ count: 1 });

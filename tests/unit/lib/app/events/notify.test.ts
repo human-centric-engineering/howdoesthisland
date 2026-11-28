@@ -96,14 +96,15 @@ function hook(orgId: string, eventType: string, url: string, secret: string, fil
 }
 
 type Post = { url: string; body: string; headers: Record<string, string> };
+const fetchCall = z.tuple([
+  z.string(),
+  z.object({ body: z.string(), headers: z.record(z.string(), z.string()) }).loose(),
+]);
 const posts = (): Post[] =>
-  mocks.fetch.mock.calls.map(
-    ([url, init]: [string, { body: string; headers: Record<string, string> }]) => ({
-      url: String(url),
-      body: init.body,
-      headers: init.headers,
-    })
-  );
+  mocks.fetch.mock.calls.map((call) => {
+    const [url, init] = fetchCall.parse(call);
+    return { url, body: init.body, headers: init.headers };
+  });
 const sentBody = z.object({ data: z.record(z.string(), z.unknown()) });
 const dataOf = (post: Post): Row => sentBody.parse(JSON.parse(post.body)).data;
 const settle = () => new Promise((r) => setTimeout(r, 30));
