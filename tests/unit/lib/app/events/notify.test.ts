@@ -290,7 +290,7 @@ describe('a finished review', () => {
     expect(row.notifiedAt).toBeNull();
 
     const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());
-    expect(swept).toEqual({ assessments: 1, comparisons: 0, failed: 0 });
+    expect(swept).toEqual({ assessments: 1, comparisons: 0, batches: 0, failed: 0 });
     await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
     expect(row.notifiedAt).toBeInstanceOf(Date);
   });
@@ -407,7 +407,7 @@ describe('the sweep', () => {
     await vi.waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
     await settle();
 
-    expect(swept).toEqual({ assessments: 1, comparisons: 1, failed: 0 });
+    expect(swept).toEqual({ assessments: 1, comparisons: 1, batches: 0, failed: 0 });
     expect(
       posts()
         .map((p) => dataOf(p).eventId)
@@ -451,7 +451,7 @@ describe('the sweep', () => {
     const other = review('COMPLETED', { orgId: ORG_B });
     const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());
     await settle();
-    expect(swept).toEqual({ assessments: 0, comparisons: 0, failed: 0 });
+    expect(swept).toEqual({ assessments: 0, comparisons: 0, batches: 0, failed: 0 });
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(other.notifiedAt).toBeNull();
   });
@@ -483,7 +483,7 @@ describe('when a send fails', () => {
     const owedSet = comparison([review('COMPLETED', { notifiedAt: new Date() })]);
     mocks.deliveryCreate.mockRejectedValue(new Error('database away'));
     const swept = await runAsOrg(ORG_A, () => sweepFinishedEvents());
-    expect(swept).toEqual({ assessments: 0, comparisons: 0, failed: 2 });
+    expect(swept).toEqual({ assessments: 0, comparisons: 0, batches: 0, failed: 2 });
     expect(owed.notifiedAt).toBeNull();
     expect(owedSet.notifiedAt).toBeNull();
   });

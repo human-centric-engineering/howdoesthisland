@@ -297,6 +297,19 @@ async function batch(body: Record<string, unknown>) {
     throw new Error(`expected 202, got ${res.status}: ${JSON.stringify(env)}`);
   return batchDetailSchema.parse(env.data);
 }
+/**
+ * Wait until the batch has ended, as a caller polling it would: a fixed pause
+ * is too short for five reviews through three places on a loaded machine.
+ */
+async function untilEnded(id: string, deadlineMs = 5_000) {
+  const until = Date.now() + deadlineMs;
+  for (;;) {
+    const res = await getOne(id);
+    const body = batchDetailSchema.parse((await json(res)).data);
+    if (body.status !== 'running' || Date.now() > until) return body;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
 /** GET a batch, parsed as the registry declares it. */
 async function readBack(id: string) {
   const res = await getOne(id);
@@ -475,9 +488,8 @@ describe('POST /api/v1/batches', () => {
         { url: 'https://example.com/pricing' },
       ],
     });
-    await settle();
 
-    const done = await readBack(id);
+    const done = await untilEnded(id);
     expect(done.items.map((i) => [i.status, i.errorCode])).toEqual([
       ['completed', null],
       ['failed', 'FETCH_FAILED'],
@@ -641,9 +653,7 @@ describe('POST /api/v1/batches — more items than running places', () => {
     await new Promise((r) => setTimeout(r, 1));
     expect(fake.assessments.filter((a) => a.status === 'QUEUED')).toHaveLength(5);
 
-    await new Promise((r) => setTimeout(r, 300));
-
-    const done = await readBack(id);
+    const done = await untilEnded(id);
     expect(done.status).toBe('completed');
     expect(done.counts.completed).toBe(8);
     expect(most).toBeLessThanOrEqual(RUNNING_PER_WORKSPACE * TWO.length);

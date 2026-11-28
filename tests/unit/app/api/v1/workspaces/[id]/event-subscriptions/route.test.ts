@@ -232,7 +232,9 @@ describe('GET …/event-subscriptions', () => {
     const body = await json(res);
     expect(mockPrisma.aiEventHook.findMany.mock.calls[0]?.[0].where).toEqual({
       orgId: WS,
-      eventType: { in: ['app.assessment.finished', 'app.comparison.finished'] },
+      eventType: {
+        in: ['app.assessment.finished', 'app.comparison.finished', 'app.batch.finished'],
+      },
     });
     expect(body.data.subscriptions).toEqual([
       expect.objectContaining({
@@ -390,7 +392,9 @@ describe('PATCH and DELETE …/event-subscriptions/{subscriptionId}', () => {
     expect(call.where).toEqual({
       id: SUB,
       orgId: WS,
-      eventType: { in: ['app.assessment.finished', 'app.comparison.finished'] },
+      eventType: {
+        in: ['app.assessment.finished', 'app.comparison.finished', 'app.batch.finished'],
+      },
     });
     expect(call.data.action).toEqual({
       type: 'webhook',

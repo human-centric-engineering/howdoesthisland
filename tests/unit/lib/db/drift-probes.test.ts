@@ -459,6 +459,8 @@ describe('shipped lib/app/db-drift.ts scaffold', () => {
       'app_rewrite_createdByUserId_fkey (hand-written FK → user)',
       // FORK (HowDoesThisLand): a comparison's maker (t-87).
       'app_assessment_set_createdByUserId_fkey (hand-written FK → user)',
+      // FORK (HowDoesThisLand): a content row with no text only for a page not yet fetched (t-101).
+      'app_content_text_pending_fetch (text missing only for a page not yet fetched)',
     ]);
   });
 });

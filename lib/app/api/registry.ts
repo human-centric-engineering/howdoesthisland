@@ -489,7 +489,7 @@ export const assessmentSummarySchema = z.object({
     .int()
     .nullable()
     .describe(
-      '`null` for a page a batch has not fetched yet, or could not fetch (its address is `source.url`).'
+      '`null` for a page a batch has not fetched yet, or could not read; its address is `source.url`.'
     ),
   overall: z.number().nullable(),
   band: z.string().nullable(),
@@ -555,7 +555,7 @@ export const assessmentDetailSchema = assessmentSummarySchema.extend({
     .string()
     .nullable()
     .describe(
-      "The copy assessed; the result's offsets point into it. `null` for a page a batch has not fetched yet, or could not fetch (`source.url`)."
+      "The copy assessed; the result's offsets point into it. `null` for a page a batch has not fetched yet, or could not read; its address is `source.url`."
     ),
   context: assessmentContextField,
   overlay: assessmentOverlayField,
