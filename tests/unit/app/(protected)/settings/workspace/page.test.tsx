@@ -214,6 +214,10 @@ describe('WorkspaceSettingsPage', () => {
       expect(screen.getByText('bob@example.com')).toBeInTheDocument();
       expect(screen.getByTestId('invite-form')).toHaveAttribute('data-org', 'org-1');
       expect(screen.queryByTestId('core-invite-form')).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Manage webhooks' })).toHaveAttribute(
+        'href',
+        '/settings/webhooks'
+      );
     }
   );
 
@@ -226,6 +230,7 @@ describe('WorkspaceSettingsPage', () => {
     expect(m.loadServerData).not.toHaveBeenCalledWith('/api/v1/orgs/org-1/members');
     expect(screen.queryByTestId('invite-form')).not.toBeInTheDocument();
     expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Manage webhooks' })).not.toBeInTheDocument();
   });
 
   it('shows a member their invitations', async () => {

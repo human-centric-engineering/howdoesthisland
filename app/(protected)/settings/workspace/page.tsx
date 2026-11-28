@@ -13,7 +13,8 @@
  * both and answers the same either way. Judge models are the app's
  * `GET /api/v1/workspaces/[id]/judges`, shown by `JudgeModels`. MCP keys are
  * the app's `GET /api/v1/workspaces/[id]/mcp-keys`, shown by `McpKeysManager`
- * (t-95). Support access is core's `GET /api/v1/orgs/[id]/support-grants`,
+ * (t-95). Webhooks have a page of their own, `/settings/webhooks` (t-100),
+ * linked from here. Support access is core's `GET /api/v1/orgs/[id]/support-grants`,
  * shown by `WorkspaceSupportAccess` over core's support-access components
  * (t-97).
  *
@@ -27,6 +28,7 @@
  * platform admin manages its users on `/admin/users`.
  */
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth/utils';
 import { API } from '@/lib/api/endpoints';
@@ -46,6 +48,8 @@ import { McpKeysManager } from '@/components/app/settings/mcp-keys/mcp-keys-mana
 import { mcpKeyListSchema, mcpKeysEndpoint } from '@/components/app/settings/mcp-keys/schemas';
 import type { McpKeyRow } from '@/components/app/settings/mcp-keys/schemas';
 import type { JudgeModelChoiceView } from '@/components/app/settings/schemas';
+import { WEBHOOKS_PAGE_HREF } from '@/components/app/settings/webhooks/schemas';
+import { Button } from '@/components/ui/button';
 import {
   myInvitationsSchema,
   supportGrantsSchema,
@@ -124,7 +128,7 @@ export default async function WorkspaceSettingsPage() {
         <h1 className="text-2xl font-bold">{active.name}</h1>
         <p className="text-muted-foreground">
           Who is in this workspace, their roles, inviting people in, the models its judges use, its
-          AI assistant keys, and support access.
+          AI assistant keys, its webhooks, and support access.
         </p>
       </div>
 
@@ -157,6 +161,18 @@ export default async function WorkspaceSettingsPage() {
           ) : (
             <LoadFailedNotice what="the AI assistant keys" />
           )}
+          <section aria-labelledby="webhooks-heading" className="space-y-3">
+            <h2 id="webhooks-heading" className="text-lg font-semibold">
+              Webhooks
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Send a signed message to your own systems, such as a CMS, each time a review or a
+              comparison in this workspace finishes.
+            </p>
+            <Button asChild variant="outline">
+              <Link href={WEBHOOKS_PAGE_HREF}>Manage webhooks</Link>
+            </Button>
+          </section>
           <WorkspaceSupportAccess
             orgId={active.id}
             orgRole={active.role}
