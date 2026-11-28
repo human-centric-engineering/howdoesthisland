@@ -9,9 +9,11 @@
  * and `GET /api/v1/projects` for the projects one can be limited to.
  * `WebhooksManager` does the writes, through t-99's routes only.
  *
- * This page adds no rule of its own: the routes admit a workspace's `OWNER`
- * or `ADMIN` and nobody else. A `MEMBER` is told who to ask, and the
- * webhooks are never loaded for them. Not found at `TENANCY_MODE=single`,
+ * Like `/settings/workspace`, it reads the active workspace from the caller's
+ * own memberships (`GET /api/v1/orgs`), so it serves the workspace's `OWNER`
+ * and `ADMIN`. A `MEMBER` is told who to ask, and the webhooks are never
+ * loaded for them. A platform admin who entered a workspace they are not a
+ * member of is not served here; the routes still admit them. Not found at `TENANCY_MODE=single`,
  * where the routes answer `WORKSPACES_UNAVAILABLE`.
  */
 import type { Metadata } from 'next';

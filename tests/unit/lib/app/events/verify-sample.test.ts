@@ -8,6 +8,7 @@
  * drift from a scheme that works. It is signed by core's own `signHookPayload`,
  * the function the dispatcher signs every delivery with.
  */
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -78,6 +79,13 @@ describe('the webhook verification sample', () => {
     expect(verify(BODY, headersFor(BODY, 'd'.repeat(64)), SECRET, NOW)).toBe(false);
     expect(verify(BODY, {}, SECRET, NOW)).toBe(false);
     expect(verify(BODY, headersFor(BODY, SECRET, NOW - 301), SECRET, NOW)).toBe(false);
+  });
+
+  it('refuses a timestamp that is not a number, so the age check cannot be skipped', () => {
+    // Validly signed over "abc.<body>": only the timestamp check can refuse it.
+    const hex = createHmac('sha256', SECRET).update(`abc.${BODY}`).digest('hex');
+    const headers = { 'x-sunrise-timestamp': 'abc', 'x-sunrise-signature': `sha256=${hex}` };
+    expect(verify(BODY, headers, SECRET, NOW)).toBe(false);
   });
 
   it('refuses a signature that is not hex, rather than throwing', () => {

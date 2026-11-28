@@ -50,7 +50,8 @@ function verifyHowDoesThisLandWebhook(rawBody, headers, secret, nowSeconds) {
   if (!timestamp || !signature || !signature.startsWith('sha256=')) return false;
 
   const now = nowSeconds ?? Math.floor(Date.now() / 1000);
-  if (Math.abs(now - Number(timestamp)) > MAX_AGE_SECONDS) return false;
+  const sent = Number(timestamp);
+  if (!Number.isFinite(sent) || Math.abs(now - sent) > MAX_AGE_SECONDS) return false;
 
   const expected = createHmac('sha256', secret).update(\`\${timestamp}.\${rawBody}\`).digest('hex');
   const given = signature.slice('sha256='.length);
