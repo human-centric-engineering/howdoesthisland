@@ -188,6 +188,20 @@ export interface EventDelivery {
   createdAt: Date;
 }
 
+/** The newest delivery of a subscription, for the list's "last delivery" column. */
+export interface LastDelivery {
+  status: string;
+  attempts: number;
+  lastResponseCode: number | null;
+  createdAt: Date;
+}
+
+/** A subscription as the list reads it: with its newest delivery, so no row fetches its own. */
+export interface EventSubscriptionListItem extends EventSubscription {
+  /** `null` before anything has been sent to it. */
+  lastDelivery: LastDelivery | null;
+}
+
 const HOOK_SELECT = {
   id: true,
   name: true,
@@ -237,14 +251,29 @@ const ours = (orgId: string, id?: string): Prisma.AiEventHookWhereInput => ({
 
 // --- Reads ------------------------------------------------------------------
 
-/** The workspace's subscriptions, newest first. */
-export async function listSubscriptions(orgId: string): Promise<EventSubscription[]> {
+/**
+ * The workspace's subscriptions, newest first, each with its newest delivery.
+ *
+ * One indexed read per subscription for that delivery, at most
+ * {@link MAX_SUBSCRIPTIONS_PER_WORKSPACE} of them: Prisma's `distinct` would
+ * load every delivery of every subscription and drop all but one in memory.
+ */
+export async function listSubscriptions(orgId: string): Promise<EventSubscriptionListItem[]> {
   const rows = await prisma.aiEventHook.findMany({
     where: ours(orgId),
     orderBy: { createdAt: 'desc' },
     select: HOOK_SELECT,
   });
-  return rows.map(toView);
+  const latest = await Promise.all(
+    rows.map((row) =>
+      prisma.aiEventHookDelivery.findFirst({
+        where: { orgId, hookId: row.id },
+        orderBy: { createdAt: 'desc' },
+        select: { status: true, attempts: true, lastResponseCode: true, createdAt: true },
+      })
+    )
+  );
+  return rows.map((row, i) => ({ ...toView(row), lastDelivery: latest[i] ?? null }));
 }
 
 /** One of the workspace's subscriptions. Another workspace's, or none, is not found. */

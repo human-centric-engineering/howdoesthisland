@@ -396,6 +396,18 @@ export const eventSubscriptionSchema = z.object({
   createdByName: z.string().nullable(),
 });
 
+/** `EventSubscriptionListItem` in `lib/app/events/subscriptions.ts`: one with its newest delivery. */
+export const eventSubscriptionListItemSchema = eventSubscriptionSchema.extend({
+  lastDelivery: z
+    .object({
+      status: z.string(),
+      attempts: z.number().int(),
+      lastResponseCode: z.number().int().nullable(),
+      createdAt: isoDateTime,
+    })
+    .nullable(),
+});
+
 /** `EventDelivery` in `lib/app/events/subscriptions.ts`. */
 export const eventDeliverySchema = z.object({
   id: z.string(),
@@ -1317,10 +1329,14 @@ export const APP_ROUTES: readonly RouteContract[] = [
   {
     method: 'GET',
     path: '/api/v1/workspaces/{id}/event-subscriptions',
-    summary: "List the workspace's webhooks, newest first. Never a secret or a header's value.",
+    summary:
+      "List the workspace's webhooks, newest first, each with its last delivery. Never a secret or a header's value.",
     auth: WORKSPACE_ADMIN_ENTERED,
     request: { params: orgIdParamSchema },
-    response: { status: 200, data: z.object({ subscriptions: z.array(eventSubscriptionSchema) }) },
+    response: {
+      status: 200,
+      data: z.object({ subscriptions: z.array(eventSubscriptionListItemSchema) }),
+    },
   },
   {
     method: 'POST',
